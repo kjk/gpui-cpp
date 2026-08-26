@@ -143,17 +143,12 @@ El* Sheet::IntoEl(WinSize win) {
         backdrop =
             Div(a)->Absolute()->Top(0)->Left(0)->W(win.dipW)->H(win.dipH)->Bg(
                 Rgba8(0, 0, 0, 40));
-        if (onClose.IsValid()) {
-            backdrop->OnClick(onClose)
-                ->Click(HashClickId(StrL("sheet-overlay")));
-        }
     }
-    El* root =
-        gpui::Sheet::New(cx)->Overlay(backdrop)->Surface(surface)->IntoEl();
-    // sheet.rs binds escape to Cancel in the "Sheet" context, which runs the
-    // same close the backdrop and the x carry.
-    CancelBindKeys(cx, root, "Sheet", StrL("sheet"), onClose);
-    return root;
+    return gpui::Sheet::New(cx)
+        ->Overlay(backdrop)
+        ->Surface(surface)
+        ->OnClose(onClose)
+        ->IntoEl();
 }
 
 } // namespace component

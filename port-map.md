@@ -120,6 +120,9 @@ The important non-mechanical mappings are encoded in the audit:
   resolve checked/pressed/selected before disabled over each instance style.
   Tabs and disabled toggles also stop the left mouse-down bubble through a
   hitbox flag, matching their callback-free Rust propagation handlers.
+- Base Sheet owns its pinned host focus trap, transparent overlay capture,
+  cutoff, Escape binding and request-then-notify close order. Its listeners
+  persist in keyed state after the frame builder is consumed.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -150,7 +153,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 350 declaration spellings still reported in partial modules,
+  2. Review the 349 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

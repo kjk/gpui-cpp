@@ -6881,3 +6881,31 @@ that right-button events still bubble.
 Radio, Toggle and Tabs are full, moving the audit to 66 full, 55 partial, 8
 adapters and 2 exclusions. Their three style declarations reduce the partial
 report to 350 unresolved spellings. MSVC release passes 19,106 checks.
+
+## Sheet owns the modal lifecycle rather than only its geometry
+
+Base Sheet previously exposed the upstream three-way overlay rule as a pure
+function, but its element builder never used it. Overlay presses could not
+honor `overlay_interactive`, `overlay_closable` or `dismiss_before_y`; the
+request-close/on-close ordering did not exist; Escape was left to themed
+callers; and the focus trap was attached to the surface even though Rust
+tracks and traps the host.
+
+The frame builder now stores all input state and both listeners in a keyed
+`SheetState`. It builds Rust's child order — visual overlay, transparent input
+capture, surface — and the capture stops every interactive press while only a
+closable left press runs the close path. In C++, the cutoff is also the top of
+that transparent hitbox so the simpler single-chain hit tester can truly
+reach the title bar behind it, rather than merely propagating within the
+sheet's own sibling tree. Closing constructs the same default `ClickEvent`
+and calls the controlled request before the notification for both overlay and
+Escape. The host owns the `Sheet` key context, non-tab-stop focus handle and
+trap, and Escape explicitly propagates after closing as upstream specifies.
+
+The themed Sheet and standalone showcase now hand overlay dismissal to Base,
+so the transparent capture cannot mask an older click callback below it.
+Tests inspect the real element order and trap, invoke the actual keyed
+listeners, pin callback order and Escape propagation, and cover non-closable,
+non-interactive and cutoff construction. Base Sheet is full: the audit is 67
+full, 54 partial, 8 adapters and 2 exclusions with 349 unresolved spellings.
+MSVC release passes 19,123 checks.

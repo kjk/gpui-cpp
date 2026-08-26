@@ -60,7 +60,6 @@ const partialBase = new Set([
   "number_input",
   "resizable",
   "scrollbar",
-  "sheet",
   "styled",
   "switch",
   "text_selection",
@@ -339,6 +338,7 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     spellings: ["kPopupPriority"],
   },
   "base/select.rs::fn init": { spellings: ["SelectInitKeys"] },
+  "base/sheet.rs::fn init": { spellings: ["SheetInitKeys"] },
   "base/slider.rs::enum SliderEvent": {
     spellings: ["SliderEvent"],
     targets: ["src/gpui/gpui.h", "src/gpui/window_common.cpp"],

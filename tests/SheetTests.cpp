@@ -41,9 +41,130 @@ static void EscapeClosesASheet() {
     utassert(!SheetClosesOnKey(KeyTab));
 }
 
+namespace {
+struct SheetRecorder {
+    int events[8] = {};
+    int n = 0;
+
+    static void Request(SheetRecorder* self, Ctx*, const ClickEvent*) {
+        self->events[self->n++] = 1;
+    }
+    static void Closed(SheetRecorder* self, Ctx*, const ClickEvent*) {
+        self->events[self->n++] = 2;
+    }
+};
+} // namespace
+
+static ActionSlot* FindSheetAction(El* root) {
+    for (ActionSlot* slot = root ? root->actions : nullptr; slot;
+         slot = slot->next) {
+        if (slot->action == action::Cancel()) {
+            return slot;
+        }
+    }
+    return nullptr;
+}
+
+static void TheBuiltSheetOwnsDismissalAndFocus() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Entity<SheetRecorder> recorder = EntityNewState<SheetRecorder>(&app);
+    Ctx cx = {&app, win, a, recorder.id};
+
+    El* overlay = Div(a)->Bg(Rgb(1, 2, 3));
+    El* surface = Div(a)->W(80);
+    El* root = Sheet::New(&cx)
+                   ->Overlay(overlay)
+                   ->Surface(surface)
+                   ->RequestClose(Listen(&cx, &SheetRecorder::Request))
+                   ->OnClose(Listen(&cx, &SheetRecorder::Closed))
+                   ->IntoEl();
+
+    int trap = FocusTrapId(StrL("sheet"));
+    utassert(root->style.focusId == trap && root->style.trapId == trap);
+    utassert(!root->style.tabStop && !root->style.focusRing);
+    utassert(surface->style.focusId == 0 && surface->style.trapId == 0);
+    utassert(win->pendingTrap == trap && win->pendingTrapHost == trap);
+
+    // overlay, transparent capture, surface: the surface remains above the
+    // capture while a press beside it reaches the capture.
+    El* capture = overlay->next;
+    utassert(capture && capture->next == surface);
+    utassert(capture->onMouseDown.IsValid());
+    MouseDownEvent press = {};
+    press.button = MouseButton::Left;
+    press.y = 80;
+    ListenerCall(&app, win, capture->onMouseDown, &press);
+    SheetRecorder* seen = recorder.Get(&app);
+    utassert(seen->n == 2 && seen->events[0] == 1 && seen->events[1] == 2);
+    utassert(win->stopPropagation);
+
+    seen->n = 0;
+    win->stopPropagation = false;
+    ActionSlot* cancel = FindSheetAction(root);
+    utassert(cancel && cancel->fn.IsValid());
+    ActionEvent ev = {};
+    ev.action = action::Cancel();
+    ListenerCall(&app, win, cancel->fn, &ev);
+    utassert(ev.propagate);
+    utassert(seen->n == 2 && seen->events[0] == 1 && seen->events[1] == 2);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
+static void SheetOverlayOptionsChangeTheActualCapture() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+
+    El* visual = Div(a);
+    El* surface = Div(a);
+    Sheet::New(&cx)
+        ->Overlay(visual)
+        ->Surface(surface)
+        ->DismissBeforeY(50)
+        ->OverlayClosable(false)
+        ->IntoEl();
+    El* capture = visual->next;
+    utassert(capture && capture->next == surface);
+    utassertnear(capture->style.absTop, 50.f);
+    MouseDownEvent press = {};
+    press.button = MouseButton::Left;
+    press.y = 80;
+    ListenerCall(&app, win, capture->onMouseDown, &press);
+    utassert(win->stopPropagation);
+
+    El* passiveVisual = Div(a);
+    El* passiveSurface = Div(a);
+    El* passive = Sheet::New(&cx)
+                      ->Overlay(passiveVisual)
+                      ->Surface(passiveSurface)
+                      ->OverlayInteractive(false)
+                      ->IntoEl();
+    // No transparent capture child is present when pointer interaction is
+    // disabled; the visual overlay is followed directly by the surface.
+    utassert(passive->first == passiveVisual);
+    utassert(passiveVisual->next == passiveSurface);
+    utassert(passiveSurface->next == nullptr);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestSheet() {
     TestSuite("sheet");
     ASheetOverlayPressHasThreeOutcomes();
     ThePressCutoffLeavesTheBandAboveAlone();
     EscapeClosesASheet();
+    TheBuiltSheetOwnsDismissalAndFocus();
+    SheetOverlayOptionsChangeTheActualCapture();
 }
