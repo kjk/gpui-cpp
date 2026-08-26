@@ -304,6 +304,37 @@ static void MouseExited(Window* win) {
     WindowDispatchInput(win, &in);
 }
 
+// gpui_windows/util.rs `system_appearance`. The caption bar is drawn by the
+// OS, so it follows the OS's setting rather than the theme the application
+// paints with: Rust puts a light caption over a dark client area when Windows
+// is in light mode, and so does this.
+//
+// Rust asks WinRT -- `UISettings::GetColorValue(Foreground)`, dark when the
+// text colour is light. There is no WinRT here, so this reads the value that
+// setting writes. It is the other route the page Rust cites gives
+// (learn.microsoft.com/windows/apps/desktop/modernize/apply-windows-themes):
+// AppsUseLightTheme under Themes\Personalize, which is the *apps* setting,
+// the one UISettings' foreground colour reflects, and not SystemUsesLightTheme
+// next to it, which is the taskbar's. A missing value means light, which is
+// what Windows shows before anyone has touched the setting.
+static bool SystemIsDarkMode() {
+    DWORD light = 1;
+    DWORD size = sizeof(light);
+    LSTATUS st = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+    return st == ERROR_SUCCESS && light == 0;
+}
+
+// util.rs `configure_dwm_dark_mode`, called where Rust calls it: once as the
+// window is created, and again on every ImmersiveColorSet.
+static void ConfigureDwmDarkMode(HWND hwnd) {
+    BOOL dark = SystemIsDarkMode() ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark,
+                          sizeof(dark));
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam) {
     Window* win = (Window*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -451,6 +482,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     return HTCLIENT;
             }
         }
+        case WM_SETTINGCHANGE:
+            // events.rs `handle_system_settings_changed`: wParam 0 is the
+            // string-named half of this message, and one string out of the
+            // many it arrives for is the theme having changed.
+            if (wParam == 0 && lParam &&
+                wcscmp((const wchar_t*)lParam, L"ImmersiveColorSet") == 0) {
+                ConfigureDwmDarkMode(hwnd);
+            }
+            return 0;
         case WM_SIZE:
             win->paint.dpi = HostDpi(hwnd);
             InvalidateRect(hwnd, nullptr, FALSE);
@@ -1220,9 +1260,7 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
         return nullptr;
     }
 
-    BOOL dark = TRUE;
-    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark,
-                          sizeof(dark));
+    ConfigureDwmDarkMode(hwnd);
     if (ClientDecorated(win)) {
         // Creation only asks WM_NCCALCSIZE the wParam == FALSE question,
         // which cannot say where the client area goes. SWP_FRAMECHANGED is

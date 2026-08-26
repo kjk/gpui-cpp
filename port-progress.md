@@ -6313,3 +6313,37 @@ printed — the object-group prefix test, the include-resolution candidates, the
 is-this-the-mac-amalgam comparison, and the source list they are compared
 against. One spelling is the only safe number when the same string is both a
 key and a path.
+
+## The caption bar belongs to the OS
+
+`DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, TRUE)` on every
+window, unconditionally, since the day the window was written. So every
+example that lets Windows draw its caption had a black one on a machine in
+light mode, where the Rust build's is white.
+
+`gpui_windows/util.rs` is `configure_dwm_dark_mode(hwnd, system_appearance())`
+— the caption is the OS's, so it follows the OS's setting and not the theme
+the application paints with. A light caption over a dark client area is the
+right answer and what Rust shows.
+
+Rust asks WinRT: `UISettings::GetColorValue(Foreground)`, dark when the text
+colour is light. There is no WinRT here, so `SystemIsDarkMode` reads the value
+that setting writes — `AppsUseLightTheme` under `Themes\Personalize`, the
+other route the page Rust cites gives. The *apps* one, which is what
+UISettings' foreground colour reflects, not `SystemUsesLightTheme` beside it,
+which is the taskbar's. A missing value means light, which is what Windows
+shows before anyone has touched the setting.
+
+It is called where Rust calls it: once at creation, and again on
+`WM_SETTINGCHANGE` when `wParam` is 0 and the string is `ImmersiveColorSet`,
+which is `events.rs handle_system_theme_changed`.
+
+Verified by reading the attribute back off a live showcase window with
+`DwmGetWindowAttribute`, since this session cannot screenshot a caption — it
+is DWM-drawn, so `PrintWindow` does not capture it, and the desktop is locked.
+At launch under a light OS the window reports 0. Setting the registry to dark
+and sending it `ImmersiveColorSet` reports 1; setting it back and sending
+again reports 0. Worth writing down for whoever tests this next: poking the
+registry alone changes nothing, because Windows only broadcasts
+`WM_SETTINGCHANGE` when the toggle goes through the Settings app. The first
+attempt looked like a broken handler and was a broken test.
