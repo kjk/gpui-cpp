@@ -35,11 +35,25 @@
 #include <eventtoken.h>
 #include <objbase.h>
 #include <objidl.h>
-#include <shlwapi.h>
 
-// shlwapi.h is here for SHCreateMemStream and brings a `#define StrDup
-// StrDupW` with it, which would rename base's own StrDup at every call.
-#undef StrDup
+// SHCreateMemStream, declared rather than reached through <shlwapi.h>. That
+// header brings its string functions with it, and under UNICODE each is a
+// macro: StrDup -> StrDupW, StrCmpI -> StrCmpIW, StrCmpNI -> StrCmpNIW. base
+// declares all three names itself, so every call to one of ours inside the
+// header's reach is renamed to a wide-char function it does not match.
+//
+// A local #undef was enough while the include stood in this file. It is not
+// in the amalgam: cmd/update-dist.ts lifts each chunk's top-level includes to
+// the top of gpui.cpp, which puts <shlwapi.h> above every Windows source
+// while the #undef stays down here with wry, so the renaming reached all of
+// them. src/gpui/paintgpu_win.cpp's `StrCmpI(buf, "gpu")` is where the
+// compiler noticed.
+//
+// This file already transcribes the whole WebView2 ABI on the principle that
+// one declaration beats a header; the same answer serves here, and
+// shlwapi.lib is linked for it either way.
+extern "C" __declspec(dllimport) IStream* STDAPICALLTYPE
+SHCreateMemStream(const BYTE* pInit, UINT cbInit);
 
 namespace wry {
 
