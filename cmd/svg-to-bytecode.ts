@@ -69,13 +69,38 @@ type SvgIcon = {
   vbH: number;
   strokeW: number;
   filled: boolean;
+  stroked: boolean;
   hasOwnColors: boolean;
   ops: SvgOp[];
   shapes: SvgShape[];
 };
 
+// Which of the three path ops says "fill this", "stroke this", or both. A
+// path that is neither filled nor stroked would draw nothing, and an icon
+// that says so is a mistake rather than an instruction, so it is stroked.
+function pathOp(filled: boolean, stroked: boolean): number {
+  if (filled && stroked) return OP_FILL_STROKE_PATH;
+  return filled ? OP_FILL_PATH : OP_STROKE_PATH;
+}
+
 function newIcon(): SvgIcon {
-  return { vbX: 0, vbY: 0, vbW: 24, vbH: 24, strokeW: 2, filled: false, hasOwnColors: false, ops: [], shapes: [] };
+  return {
+    vbX: 0,
+    vbY: 0,
+    vbW: 24,
+    vbH: 24,
+    strokeW: 2,
+    // SVG's own defaults, which are what GPUI's renderer applies: fill black,
+    // stroke none. So an icon that names neither -- github.svg is the one
+    // here -- is filled and not stroked, a Lucide icon says fill="none"
+    // stroke="currentColor" and is stroked and not filled, and a solid
+    // variant (star-fill) says currentColor for both and is both.
+    filled: true,
+    stroked: false,
+    hasOwnColors: false,
+    ops: [],
+    shapes: [],
+  };
 }
 
 function addOp(ic: SvgIcon, cmd: number, x = 0, y = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0): void {
@@ -722,6 +747,8 @@ function parseSvg(xml: string): SvgIcon {
       if (sw > 0) ic.strokeW = sw;
       const fill = getAttr(tag, "fill");
       if (fill !== null) ic.filled = fill.toLowerCase() !== "none";
+      const rootStroke = getAttr(tag, "stroke");
+      if (rootStroke !== null) ic.stroked = rootStroke.toLowerCase() !== "none";
       continue;
     }
     if (startsWithI(xml, tagStart, "path")) {
@@ -823,7 +850,7 @@ function encodeIcon(ic: SvgIcon): number[] {
   w.f(ic.strokeW > 0 ? ic.strokeW : 2);
   if (!ic.hasOwnColors) {
     emitOps(w, ic, 0, ic.ops.length);
-    w.op(ic.filled ? OP_FILL_STROKE_PATH : OP_STROKE_PATH);
+    w.op(pathOp(ic.filled, ic.stroked));
     w.op(OP_END);
     return w.bytes;
   }
@@ -847,7 +874,7 @@ function encodeIcon(ic: SvgIcon): number[] {
     if (sh.fill !== null || sh.stroke !== null) continue;
     // Named no colour of its own: the caller's.
     emitOps(w, ic, sh.start, sh.start + sh.count);
-    w.op(ic.filled ? OP_FILL_PATH : OP_STROKE_PATH);
+    w.op(pathOp(ic.filled, ic.stroked));
   }
   w.op(OP_END);
   return w.bytes;

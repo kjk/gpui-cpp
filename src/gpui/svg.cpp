@@ -70,9 +70,14 @@ struct SvgGradient {
 struct SvgIcon {
     float vbX = 0, vbY = 0, vbW = 24, vbH = 24;
     float strokeW = 2;
-    // fill="currentColor" on the root: the solid variants (star-fill, ...) are
-    // filled and stroked, everything else is stroke only.
-    bool filled = false;
+    // What the root said to do with the one path. SVG's own defaults, which
+    // are what GPUI's renderer applies: fill black, stroke none. So an icon
+    // that names neither -- github.svg is the one here -- is filled and not
+    // stroked, a Lucide icon says fill="none" stroke="currentColor" and is
+    // stroked and not filled, and a solid variant (star-fill) says
+    // currentColor for both and is both.
+    bool filled = true;
+    bool stroked = false;
     // Whether any shape named a colour. False is every Lucide icon, and the
     // whole file is then one path in the caller's colour, as it always was.
     bool hasOwnColors = false;
@@ -1015,7 +1020,11 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->vbW = 24;
     ic->vbH = 24;
     ic->strokeW = 2;
-    ic->filled = false;
+    // The same defaults the struct declares -- SVG's own: fill black, stroke
+    // none. ParseSvg is reached with an icon that has been used before, so
+    // every field it reads has to be put back here as well as declared there.
+    ic->filled = true;
+    ic->stroked = false;
     ic->hasOwnColors = false;
     ic->hasText = false;
     ic->gradients.Reset();
@@ -1207,6 +1216,10 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             if (GetAttr(tag, "fill", fill, 64)) {
                 ic->filled = !StrEqI(Str(fill), StrL("none"));
             }
+            char stroke[64];
+            if (GetAttr(tag, "stroke", stroke, 64)) {
+                ic->stroked = !StrEqI(Str(stroke), StrL("none"));
+            }
             continue;
         }
         if (StartsWithI(tagStart, end, "path")) {
@@ -1302,12 +1315,22 @@ static void EmitOps(DrawOpsBuilder* b, const SvgIcon* ic, int from, int to) {
 // colours is a picture, not an icon: each shape is painted on its own, so it
 // keeps the colour it asked for and the ones that named none still take the
 // caller's.
+// Which of the three path ops says "fill this", "stroke this", or both. A
+// path that is neither filled nor stroked would draw nothing, and an icon
+// that says so is a mistake rather than an instruction, so it is stroked.
+static DrawOp PathOp(bool filled, bool stroked) {
+    if (filled && stroked) {
+        return kOpFillStrokePath;
+    }
+    return filled ? kOpFillPath : kOpStrokePath;
+}
+
 static void EncodeIcon(const SvgIcon* ic, DrawOpsBuilder* b) {
     b->ViewBox(ic->vbX, ic->vbY, ic->vbW, ic->vbH);
     b->StrokeWidth(ic->strokeW > 0 ? ic->strokeW : 2.f);
     if (!ic->hasOwnColors) {
         EmitOps(b, ic, 0, ic->ops.len);
-        b->Op(ic->filled ? kOpFillStrokePath : kOpStrokePath);
+        b->Op(PathOp(ic->filled, ic->stroked));
         b->End();
         return;
     }
@@ -1345,7 +1368,7 @@ static void EncodeIcon(const SvgIcon* ic, DrawOpsBuilder* b) {
         // Named no colour of its own: the caller's, the way every shape in a
         // plain icon is drawn.
         EmitOps(b, ic, sh.start, sh.start + sh.count);
-        b->Op(ic->filled ? kOpFillPath : kOpStrokePath);
+        b->Op(PathOp(ic->filled, ic->stroked));
     }
     b->End();
 }
