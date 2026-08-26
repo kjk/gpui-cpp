@@ -2079,6 +2079,34 @@ bool AppAnyWindowOpen(App* app) {
     return false;
 }
 
+// A field and the window it is focused in point at each other, and either one
+// can be destroyed first. ~InputState clears the window's half; this clears
+// the field's, so neither order leaves a dangling pointer.
+//
+// WindowClosed does it properly, through InputBlur, for a window the platform
+// closes. This is the backstop for the paths that do not go through there:
+// AppShutdown deletes its windows outright, and gets away with it today only
+// because EntityDropAll happens to run first — which covers a field an entity
+// owns and no other. A field that is a plain member of something the app
+// holds, focused when the process comes down, would reach into the freed
+// window from its own destructor.
+//
+// The `focusWin == this` test matters: a field that has since been focused in
+// another window is still listed here, and its live registration is that
+// other window's to clear, not ours.
+Window::~Window() {
+    if (input && input->focusWin == this) {
+        input->focusWin = nullptr;
+        input->focused = false;
+    }
+    if (prevInput && prevInput->focusWin == this) {
+        prevInput->focusWin = nullptr;
+        prevInput->focused = false;
+    }
+    input = nullptr;
+    prevInput = nullptr;
+}
+
 void WindowClosed(Window* win) {
     if (!win) {
         return;

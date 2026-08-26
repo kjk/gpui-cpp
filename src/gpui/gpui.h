@@ -4430,6 +4430,10 @@ struct Window {
     uint64_t frameSeq = 0;
 
     Window() = default;
+    // Drops the focus registration a field is still holding on this window.
+    // The mirror of ~InputState, which drops the one this window is holding
+    // on the field; see window_common.cpp.
+    ~Window();
 };
 
 // ─── context ──────────────────────────────────────────────────────────────
