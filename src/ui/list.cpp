@@ -210,11 +210,24 @@ El* List::IntoEl() {
         s->self = state.id;
     }
 
+    // Two elements, because Rust has two views. `List::render` is
+    // `div().id("list").role(List).refine_style(&self.style).child(state)`,
+    // and the state's own render is the `v_flex().id("list-state")` that
+    // declares the key context, tracks the focus and holds the query row and
+    // the rows. The outer one is what the caller styles: the p_8, the border
+    // and the radius here are the story's.
+    El* root = Div(a)
+                   ->PathClick(id)
+                   ->FlexCol()
+                   ->W(kFill)
+                   ->Pad(8)
+                   ->Radius(th.radius)
+                   ->Border(1, th.border);
     // `v_flex().size_full().relative().overflow_hidden()`: no gap between the
     // query row and the rows under it — the row's own bottom border is what
-    // separates them. The p_8, the border and the radius are the story's.
-    El* root = Div(a)->FlexCol()->W(kFill)->Pad(8)->Radius(th.radius)->Border(
-        1, th.border);
+    // separates them.
+    El* inner = Div(a)->FlexCol()->W(kFill);
+    root->Child(inner);
     if (search) {
         // list.rs: `div().px_2().border_b_1().child(Input::new(..)
         // .prefix(Icon::new(Search)).cleanable(true).p_0().appearance(false))`
@@ -237,7 +250,7 @@ El* List::IntoEl() {
                 ->Prefix(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg))
                 ->OnFocus(onSearchFocus)
                 ->IntoEl()));
-        root->Child(searchRow);
+        inner->Child(searchRow);
     }
     if (!s) {
         return root;
@@ -247,18 +260,18 @@ El* List::IntoEl() {
     s->viewportH = h;
 
     if (s->loading) {
-        root->Child(loading ? loading : ListLoadingView(cx, h));
+        inner->Child(loading ? loading : ListLoadingView(cx, h));
         return root;
     }
     // render_initial: what the list shows before anything has been searched
     // for. Rust asks for it only while the query field is empty, which is the
     // one place it could be reached from.
     if (initial && (!search || search->text.len == 0)) {
-        root->Child(initial);
+        inner->Child(initial);
         return root;
     }
     if (s->count == 0) {
-        root->Child(empty ? empty : DefaultEmpty(cx, h));
+        inner->Child(empty ? empty : DefaultEmpty(cx, h));
         return root;
     }
 
@@ -369,7 +382,7 @@ El* List::IntoEl() {
                             : (float)(total - range.end) * s->rowH;
         body->Child(Div(a)->W(kFill)->Shrink0()->H(after));
     }
-    root->Child(body);
+    inner->Child(body);
 
     // load_more: coming within the threshold of the end asks the caller for
     // more rows. Rust runs it as a background task; here it is a listener the
@@ -378,16 +391,19 @@ El* List::IntoEl() {
         ListEvent ev = {ListEventKind::Select, s->count, false};
         ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
     }
-    // list.rs declares the "List" context on the element it tracks focus on,
-    // and `div().id("list")` makes that element a hit target — which is what
-    // puts it on the chain a press walks, so a press on a row is a press on
+    // list.rs declares the "List" context on the element it tracks focus on
+    // — `list-state`, not `list` — and both are hit targets, which is what
+    // puts them on the chain a press walks, so a press on a row is a press on
     // the list and the list is what takes the focus.
     // list.rs `self.focus_handle(cx).focus(window, cx)` on a row press.
     if (!s->focus.IsValid()) {
         s->focus = FocusHandleNew(cx);
     }
-    root->PathClick(id)->TrackFocus(s->focus)->FocusRing(false)->FocusOnPress();
-    ListBindKeys(cx, root, state);
+    inner->PathClick(StrL("list-state"))
+        ->TrackFocus(s->focus)
+        ->FocusRing(false)
+        ->FocusOnPress();
+    ListBindKeys(cx, inner, state);
     return root;
 }
 
