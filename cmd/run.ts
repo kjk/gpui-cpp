@@ -867,12 +867,15 @@ async function runNative(a: RunArgs): Promise<never> {
   if (!a.noBuild) {
     await build({ names: [a.target], plat: a.plat, flags: a.flags, fail: die, quiet: true });
   }
-  const dir = outDir(a.plat, a.flags);
   const exe = outFilePath(a.plat, a.flags, a.target);
   if (!existsSync(exe)) {
     die(a.noBuild ? `Missing ${repoPath(exe)}. Drop -no-build to compile it.` : `Missing ${repoPath(exe)} after build`);
   }
-  const cwd = join(root, dir);
+  // Both sides run from the repo root rather than from wherever each binary
+  // landed -- the C++ one in out/, the rust one under .work/ -- so a relative
+  // path means the same file to both, and a comparison run is comparing the
+  // programs and not their working directories.
+  const cwd = root;
 
   if (a.plat === "linux" && !process.env["DISPLAY"] && !process.env["WAYLAND_DISPLAY"]) {
     console.error("DISPLAY is not set: there is no X server to open a window on.");
@@ -899,7 +902,7 @@ async function runNative(a: RunArgs): Promise<never> {
     // The debugger owns this terminal, so nothing can be placed beside it.
     if (rustExe) {
       console.log(`Launching rust ${formatCmd([rustExe])}`);
-      launchDetached([rustExe], rustTreeDir(root));
+      launchDetached([rustExe], cwd);
     }
     console.log(`Launching ${dbg.kind} ${formatCmd([exe])}`);
     process.exit(run(cppCmd, cwd));
@@ -918,14 +921,14 @@ async function runNative(a: RunArgs): Promise<never> {
   if (a.plat === "mac") {
     const placer = ensureMacWindowPlacer();
     console.log(`Launching rust ${formatCmd([rustExe])} (left)`);
-    launchDetached([rustExe], rustTreeDir(root), macPlacerEnv(placer, "left"));
+    launchDetached([rustExe], cwd, macPlacerEnv(placer, "left"));
     launchDetached(cppCmd, cwd, macPlacerEnv(placer, "right"));
     process.exit(0);
   }
   // Linux has no window placement here; the window manager decides.
   launchDetached(cppCmd, cwd);
   console.log(`Launching rust ${formatCmd([rustExe])}`);
-  launchDetached([rustExe], rustTreeDir(root));
+  launchDetached([rustExe], cwd);
   process.exit(0);
 }
 
@@ -948,7 +951,7 @@ async function placeWindowsPair(cppCmd: string[], cwd: string, rustExe: string, 
   setProcessDpiAware();
   const existingCpp = new Set(findVisibleClassWindows(cppWndClass));
   console.log(`Launching rust ${formatCmd([rustExe])}`);
-  const rustProc = launchDetached([rustExe], rustTreeDir(root));
+  const rustProc = launchDetached([rustExe], cwd);
   console.log(`Launching c++ (will wait for ${cppWndClass})`);
   launchDetached(cppCmd, cwd);
   // A debugger stops at the initial break first, so its window takes longer.
