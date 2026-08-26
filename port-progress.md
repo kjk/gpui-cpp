@@ -6837,3 +6837,22 @@ horizontal flips, corner placement, 80 children, and client-inset addition.
 Positioner is full, moving the audit to 62 full, 59 partial, 8 adapters and 2
 exclusions. Its four declarations leave 354 unresolved spelling reports in
 the remaining partial modules. MSVC release passes 19,092 checks.
+
+## Slider's runtime-owned event is explicit in the ledger
+
+The declaration pass reported `SliderEvent` missing only because the event
+and `SliderState` are consumed by window input dispatch in `gpui.h` and
+`window_common.cpp`, while the audit's default module targets stop at
+`base/slider.*`. That placement is now an explicit mapping rather than a
+comment-dependent accidental match. It is the repository's standard entity
+adapter: Rust emits Change and Release from the state entity; the runtime
+delivers the same `SliderEvent { kind, value }` through its generational
+listener after pointer, drag, arrow-key and accessibility mutations.
+
+The rest of the pinned module was already present: single/range values,
+clamping and ordered ends, linear/logarithmic conversion, steps, measured
+track bounds, nearer-thumb selection, one Release after interaction, all four
+unstyled element parts, orientation and range accessibility. The deliberate
+no-exception logarithmic-limit nudge remains documented in the source and
+test. Slider is full, so the audit is 63 full, 58 partial, 8 adapters and 2
+exclusions with 353 unresolved partial-module spellings.

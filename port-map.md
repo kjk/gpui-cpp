@@ -112,6 +112,10 @@ The important non-mechanical mappings are encoded in the audit:
   measures an unbounded flex child group, supports corner and four-side
   strategies, and shares one resolver with runtime layout and the pure test
   API. Client-decorated window insets join the requested viewport margin.
+- Base Slider's state, values, scale and `SliderEvent` live in the runtime
+  because pointer, keyboard and accessibility dispatch all mutate the same
+  object there. The audit records that placement explicitly; the Base
+  Slider/Track/Indicator/Thumb elements are the public presentation layer.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -142,7 +146,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 354 declaration spellings still reported in partial modules,
+  2. Review the 353 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.
