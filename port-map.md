@@ -6,18 +6,26 @@ from the pinned `crates/base` and `crates/ui` module trees into `src/base` and
 
 ```
 bun cmd/audit-port.ts
+bun cmd/audit-port.ts -surface  # print every upstream re-export/test mapping
 ```
 
 The audit always checks the pinned SHA and every declared C++ destination. If
-`.work/gpui-component` exists it also reads both Rust `lib.rs` files and fails
-when an upstream module is not classified. This makes a pin update introduce
-an explicit mapping decision rather than silently widening the gap.
+`.work/gpui-component` exists it reads the complete Rust source trees, not
+just `lib.rs`: all 272 `pub use` statements and all 1,047 real tests are
+inventoried. Every item must belong to a classified module, every tested
+module names existing C++ suites that own its behavioral coverage, and stable
+content hashes fail when an export or test is added, removed or renamed at the
+pinned checkout. (`#[test]` in a doc comment is deliberately not a test.) This
+makes a pin update introduce explicit surface and test-mapping decisions
+rather than silently widening the gap. `-surface` prints the item-by-item
+status and destinations.
 
 Statuses mean:
 
 - `full`: no concrete structural or behavioral gap is currently known in the
-  module surface used by upstream examples and stories. This is not a claim
-  that every Rust symbol has already been checked.
+  module surface used by upstream examples and stories. All public re-export
+  statements are inventoried, but this is not yet a claim that every public
+  declaration inside every module has a one-to-one C++ spelling.
 - `partial`: a destination exists but its public surface, ownership, runtime
   placement, accessibility, or tests still differ.
 - `adapter`: the repository's C++ runtime or hard dependency rules require a
@@ -80,19 +88,25 @@ The important non-mechanical mappings are encoded in the audit:
 - input content types project the same specialized phone, email, URL,
   password, date and date-time roles as Rust, secret values stay out of the
   tree, and developer accessibility ids remain distinct from element ids.
+- the audit inventories every public re-export and upstream test below module
+  granularity. Base currently contributes 113 re-export statements and 569
+  tests across 46 tested module families; UI contributes 159 and 478 across
+  38. Test destinations are validated even when CI deliberately omits the
+  Rust reference checkout, while the pinned content hashes are checked
+  whenever that checkout is present.
 
 ## Next fidelity order
 
-  1. Extend `cmd/audit-port.ts` below module granularity: inventory every
-     upstream `pub use` and test, requiring `full`, `adapter` or `excluded` plus
-     a C++ symbol/test destination.
-  2. Export the portable accessibility tree through UI Automation, AT-SPI and
+  1. Export the portable accessibility tree through UI Automation, AT-SPI and
      NSAccessibility. This is GPUI platform-adapter work; Base/UI semantics no
      longer depend on it.
+  2. Extend the surface inventory from re-exports to every public declaration,
+     using explicit spelling overrides where Rust traits or snake_case
+     functions project into C++ builders.
 
   The theme layering item is complete: `src/ui/theme.h` owns the component
   palette, `src/base/theme.h` owns Base's semantic/behavior theme, and GPUI
   consumes only the projected `RuntimeStyle` fields its renderer needs.
 
-`port-progress.md` remains the detailed behavioral log until item 3 makes the
-ledger symbol-complete.
+`port-progress.md` remains the detailed behavioral log while the declaration
+inventory makes the ledger symbol-complete.

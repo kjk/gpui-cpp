@@ -2,7 +2,8 @@
 // The Rust checkout is optional in CI; when present, its module declarations
 // are checked against the pinned ledger as well as the C++ destinations.
 
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 type CrateName = "base" | "ui";
@@ -27,7 +28,9 @@ measure motion number_input otp_input pagination popover popup positioner
 progress radio radio_group resizable scrollbar select sheet slider state_style
 styled switch table tabs text_boundary text_selection theme theme_tokens toast
 toggle toggle_group tooltip tree virtual_list
-`.trim().split(/\s+/);
+`
+  .trim()
+  .split(/\s+/);
 
 const uiModules = `
 async_util component_traits element_ext global_state icon index_path inspector
@@ -38,24 +41,21 @@ group_box highlighter history hover_card input kbd label link list menu
 native_menu notification pagination plot popover progress radio rating
 resizable scroll searchable_list select separator setting sheet sidebar skeleton
 slider spinner status_bar stepper switch tab table tag text theme tooltip tree
-`.trim().split(/\s+/);
+`
+  .trim()
+  .split(/\s+/);
 
-const partialBase = new Set([
-  "global_state", "input", "macos_accessibility", "scrollbar", "styled",
-  "text_selection",
-]);
+const partialBase = new Set(["global_state", "input", "macos_accessibility", "scrollbar", "styled", "text_selection"]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
-const partialUi = new Set([
-  "global_state", "input", "inspector", "text", "theme",
-]);
-const adapterUi = new Set([
-  "async_util", "component_traits", "element_ext", "highlighter", "styled",
-]);
+const partialUi = new Set(["global_state", "input", "inspector", "text", "theme"]);
+const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
 const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
-  "base/input": "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
-  "base/macos_accessibility": "the portable semantic tree exists; only the native macOS hit-test forwarding seam is connected",
+  "base/input":
+    "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
+  "base/macos_accessibility":
+    "the portable semantic tree exists; only the native macOS hit-test forwarding seam is connected",
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
   "base/styled": "StyleRefinement is represented by the runtime El builder surface",
   "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
@@ -80,14 +80,15 @@ const adapterReasons: Record<string, string> = {
 const baseOverrides: Record<string, string[]> = {
   async_util: [],
   dock: [
-    "src/base/dock.h", "src/base/dock.cpp", "src/base/dock_area.cpp",
-    "src/base/dock_state.h", "src/base/dock_state.cpp",
-    "src/base/tiles.h", "src/base/tiles.cpp",
+    "src/base/dock.h",
+    "src/base/dock.cpp",
+    "src/base/dock_area.cpp",
+    "src/base/dock_state.h",
+    "src/base/dock_state.cpp",
+    "src/base/tiles.h",
+    "src/base/tiles.cpp",
   ],
-  input: [
-    "src/base/input.h", "src/base/input.cpp",
-    "src/base/input_keys.h", "src/base/input_keys.cpp",
-  ],
+  input: ["src/base/input.h", "src/base/input.cpp", "src/base/input_keys.h", "src/base/input_keys.cpp"],
   macos_accessibility: ["src/gpui/window_mac.cpp"],
 };
 
@@ -100,30 +101,20 @@ const uiOverrides: Record<string, string[]> = {
   index_path: ["src/ui/index_path.h", "src/base/index_path.h", "src/base/index_path.cpp"],
   styled: ["src/ui/styled.h", "src/base/styled.h", "src/ui/sizing.h"],
   dock: ["src/ui/dock.h", "src/ui/dock.cpp", "src/ui/tiles.h", "src/ui/tiles.cpp"],
-  highlighter: [
-    "src/ui/highlighter.h", "src/ui/highlighter.cpp",
-    "src/ui/syntax.h", "src/ui/syntax.cpp",
-  ],
+  highlighter: ["src/ui/highlighter.h", "src/ui/highlighter.cpp", "src/ui/syntax.h", "src/ui/syntax.cpp"],
   list: ["src/ui/list.h", "src/ui/list.cpp", "src/base/list.h", "src/base/list.cpp"],
-  menu: [
-    "src/ui/menu.h", "src/ui/menu.cpp", "src/ui/popup_menu.h",
-    "src/base/popup_menu.h", "src/base/popup_menu.cpp",
-  ],
+  menu: ["src/ui/menu.h", "src/ui/menu.cpp", "src/ui/popup_menu.h", "src/base/popup_menu.h", "src/base/popup_menu.cpp"],
   plot: ["src/ui/plot.h", "src/ui/plot.cpp", "src/ui/sankey.h", "src/base/sankey.h", "src/base/sankey.cpp"],
-  resizable: [
-    "src/ui/resizable.h", "src/ui/resizable.cpp",
-    "src/base/resizable.h", "src/base/resizable.cpp",
-  ],
-  text: [
-    "src/ui/text.h", "src/ui/text.cpp", "src/ui/html.h", "src/ui/html.cpp",
-  ],
+  resizable: ["src/ui/resizable.h", "src/ui/resizable.cpp", "src/base/resizable.h", "src/base/resizable.cpp"],
+  text: ["src/ui/text.h", "src/ui/text.cpp", "src/ui/html.h", "src/ui/html.cpp"],
   table: [
-    "src/ui/table.h", "src/ui/table.cpp", "src/ui/data_table.h",
-    "src/base/data_table.h", "src/base/data_table.cpp",
+    "src/ui/table.h",
+    "src/ui/table.cpp",
+    "src/ui/data_table.h",
+    "src/base/data_table.h",
+    "src/base/data_table.cpp",
   ],
-  theme: [
-    "src/ui/theme.h", "src/ui/theme.cpp", "src/ui/theme_data.cpp",
-  ],
+  theme: ["src/ui/theme.h", "src/ui/theme.cpp", "src/ui/theme_data.cpp"],
 };
 
 function defaultTargets(crate: CrateName, module: string): string[] {
@@ -147,15 +138,207 @@ function entriesFor(crate: CrateName, modules: string[]): Entry[] {
       module,
       status,
       targets: module in overrides ? overrides[module] : defaultTargets(crate, module),
-      reason: module === "async_util"
-        ? "async is a standing repository non-goal"
-        : partialReasons[key] ?? adapterReasons[key],
+      reason:
+        module === "async_util"
+          ? "async is a standing repository non-goal"
+          : (partialReasons[key] ?? adapterReasons[key]),
     };
   });
 }
 
 const entries = [...entriesFor("base", baseModules), ...entriesFor("ui", uiModules)];
 const errors: string[] = [];
+
+// A Rust test does not need a line-for-line C++ twin, but it does need a
+// named suite that owns the same behavior. Every discovered test below is
+// projected through this table individually; the digest then makes additions,
+// removals and renames at the pinned checkout deliberate review events.
+const testTargets: Record<string, string[]> = {
+  "base/accordion": ["tests/AccessibilityTests.cpp", "tests/BuilderCapacityTests.cpp"],
+  "base/actions": ["tests/ClickTests.cpp", "tests/FocusTrapTests.cpp"],
+  "base/alert_dialog": ["tests/DialogTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/animation": ["tests/MotionTests.cpp"],
+  "base/auto_scroll": ["tests/AutoScrollTests.cpp"],
+  "base/avatar": ["tests/AvatarTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/button": ["tests/ButtonGroupTests.cpp", "tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/calendar": ["tests/CalendarTests.cpp"],
+  "base/checkbox": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/collapsible": ["tests/AccessibilityTests.cpp"],
+  "base/color_picker": ["tests/ColorPickerTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/combobox": ["tests/SelectTests.cpp"],
+  "base/component_traits": ["tests/StyleEqTests.cpp"],
+  "base/dialog": ["tests/DialogTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/dock": ["tests/DockTests.cpp", "tests/DockStateTests.cpp", "tests/TilesTests.cpp"],
+  "base/global_state": ["tests/AppGlobalTests.cpp"],
+  "base/history": ["tests/HistoryTests.cpp"],
+  "base/hover_card": ["tests/HoverCardTests.cpp"],
+  "base/index_path": ["tests/IndexPathTests.cpp"],
+  "base/input": [
+    "tests/InputStateTests.cpp",
+    "tests/TextBoundaryTests.cpp",
+    "tests/TextSelectionTests.cpp",
+    "tests/FoldMapTests.cpp",
+    "tests/SearchMatcherTests.cpp",
+    "tests/RopeTests.cpp",
+    "tests/MaskPatternTests.cpp",
+    "tests/UndoManagerTests.cpp",
+  ],
+  "base/link": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/motion": ["tests/MotionTests.cpp"],
+  "base/number_input": ["tests/NumberInputTests.cpp"],
+  "base/otp_input": ["tests/OtpInputTests.cpp"],
+  "base/pagination": ["tests/PaginationTests.cpp"],
+  "base/popover": ["tests/PopupTests.cpp"],
+  "base/popup": ["tests/PopupTests.cpp"],
+  "base/positioner": ["tests/PositionerTests.cpp", "tests/AnchorTests.cpp"],
+  "base/progress": ["tests/AccessibilityTests.cpp"],
+  "base/radio": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/resizable": ["tests/ResizableTests.cpp"],
+  "base/scrollbar": ["tests/ScrollbarTests.cpp"],
+  "base/select": ["tests/SelectTests.cpp"],
+  "base/sheet": ["tests/SheetTests.cpp"],
+  "base/slider": ["tests/SliderTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/state_style": ["tests/StateStyleTests.cpp"],
+  "base/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/table": ["tests/DataTableTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/tabs": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/text_selection": ["tests/TextSelectionTests.cpp"],
+  "base/theme": ["tests/ThemeSettingsTests.cpp"],
+  "base/toast": ["tests/ToastTests.cpp"],
+  "base/toggle": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/tooltip": ["tests/PopupTests.cpp"],
+  "base/tree": ["tests/TreeTests.cpp"],
+  "base/virtual_list": ["tests/VirtualListTests.cpp"],
+  "ui/accordion": ["tests/AccessibilityTests.cpp"],
+  "ui/avatar": ["tests/AvatarTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/button": ["tests/ButtonGroupTests.cpp", "tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/chart": ["tests/BuilderCapacityTests.cpp", "tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
+  "ui/checkbox": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/collapsible": ["tests/AccessibilityTests.cpp"],
+  "ui/combobox": ["tests/SelectTests.cpp", "tests/SearchableListTests.cpp"],
+  "ui/command": ["tests/CommandTests.cpp"],
+  "ui/description_list": ["tests/BuilderCapacityTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/dock": ["tests/DockTests.cpp", "tests/DockStateTests.cpp", "tests/TilesTests.cpp"],
+  "ui/group_box": ["tests/AccessibilityTests.cpp"],
+  "ui/highlighter": ["tests/SyntaxTests.cpp"],
+  "ui/index_path": ["tests/IndexPathTests.cpp"],
+  "ui/input": [
+    "tests/InputStateTests.cpp",
+    "tests/TextBoundaryTests.cpp",
+    "tests/TextSelectionTests.cpp",
+    "tests/MaskPatternTests.cpp",
+  ],
+  "ui/inspector": ["tests/InspectorTests.cpp"],
+  "ui/kbd": ["tests/KbdTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/label": ["tests/AccessibilityTests.cpp"],
+  "ui/link": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/list": ["tests/ListTests.cpp"],
+  "ui/menu": ["tests/PopupMenuTests.cpp", "tests/AppMenuTests.cpp"],
+  "ui/native_menu": ["tests/NativeMenuTests.cpp"],
+  "ui/notification": ["tests/NotificationTests.cpp"],
+  "ui/plot": ["tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
+  "ui/popover": ["tests/PopupTests.cpp"],
+  "ui/root": ["tests/RootTests.cpp"],
+  "ui/scroll": ["tests/ScrollbarTests.cpp", "tests/AutoScrollTests.cpp"],
+  "ui/select": ["tests/SelectTests.cpp"],
+  "ui/sidebar": ["tests/SidebarTests.cpp", "tests/BuilderCapacityTests.cpp"],
+  "ui/sizing": ["tests/StyleEqTests.cpp"],
+  "ui/slider": ["tests/SliderTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/tab": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/text": ["tests/TextViewTests.cpp", "tests/MarkdownTests.cpp"],
+  "ui/theme": ["tests/ThemeColorTests.cpp", "tests/ThemeRegistryTests.cpp", "tests/ThemeSettingsTests.cpp"],
+  "ui/time": ["tests/CalendarTests.cpp", "tests/DatePickerTests.cpp"],
+  "ui/title_bar": ["tests/TitleBarTests.cpp"],
+  "ui/tree": ["tests/TreeTests.cpp"],
+  "ui/virtual_list": ["tests/VirtualListTests.cpp"],
+};
+
+type SurfaceKind = "pub-use" | "test";
+type SurfaceItem = {
+  crate: CrateName;
+  kind: SurfaceKind;
+  path: string;
+  name: string;
+};
+
+function rustFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const name of readdirSync(dir).sort()) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) files.push(...rustFiles(path));
+    else if (name.endsWith(".rs")) files.push(path);
+  }
+  return files;
+}
+
+function sourceModule(path: string): string | null {
+  const first = path.split("/")[0]!;
+  const module = first.endsWith(".rs") ? first.slice(0, -3) : first;
+  return module === "lib" ? null : module;
+}
+
+function surfaceItems(crate: CrateName, src: string): SurfaceItem[] {
+  const items: SurfaceItem[] = [];
+  for (const path of rustFiles(src)) {
+    const rel = path.slice(src.length + 1).replaceAll("\\", "/");
+    const lines = readFileSync(path, "utf8").split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*pub\s+use\b/.test(lines[i]!)) {
+        let statement = "";
+        for (; i < lines.length; i++) {
+          const part = lines[i]!.replace(/\/\/.*$/, "").trim();
+          statement += (statement ? " " : "") + part;
+          if (part.includes(";")) break;
+        }
+        items.push({ crate, kind: "pub-use", path: rel, name: statement.replace(/\s+/g, " ") });
+        continue;
+      }
+      if (!/^\s*#\[(?:gpui::)?test(?:\([^\]]*\))?\]\s*$/.test(lines[i]!)) continue;
+      let name = "";
+      for (let j = i + 1; j < lines.length && j <= i + 20; j++) {
+        const match = lines[j]!.match(/^\s*(?:async\s+)?fn\s+([A-Za-z0-9_]+)/);
+        if (match) {
+          name = match[1]!;
+          break;
+        }
+      }
+      if (!name) errors.push(`${crate}/${rel}:${i + 1}: test has no following function`);
+      else items.push({ crate, kind: "test", path: rel, name });
+    }
+  }
+  return items.sort((a, b) => `${a.kind}\t${a.path}\t${a.name}`.localeCompare(`${b.kind}\t${b.path}\t${b.name}`));
+}
+
+function surfaceDigest(items: SurfaceItem[], kind: SurfaceKind): string {
+  const text = items
+    .filter((item) => item.kind === kind)
+    .map((item) => `${item.path}\t${item.name}`)
+    .join("\n");
+  return createHash("sha256").update(text).digest("hex");
+}
+
+// Counts and content hashes for the exact pinned tree. Unlike line numbers,
+// these survive unrelated edits; a changed export or renamed test changes the
+// hash and forces this ledger to be reviewed with the pin update.
+const surfacePins: Record<CrateName, Record<SurfaceKind, { count: number; sha256: string }>> = {
+  base: {
+    "pub-use": { count: 113, sha256: "56ab53255f342a78397752cf9ed85e4a4e9cfb53f453ffb988ecbccc3bbc8123" },
+    test: { count: 569, sha256: "085c090f4bfe3010b0a1afd9a55b9202f8edf5b013a52da55defa6998e9d8708" },
+  },
+  ui: {
+    "pub-use": { count: 159, sha256: "88c4d5ccda0c8301b0ee1bb07a352ec0f51feef66043a73711d63c879603b37f" },
+    test: { count: 478, sha256: "94908e35450b3fb1c72567b42241cf2c36d54b3d38921bfeb1f6ef7177e277ff" },
+  },
+};
+
+for (const [key, targets] of Object.entries(testTargets)) {
+  const entry = entries.find((candidate) => `${candidate.crate}/${candidate.module}` === key);
+  if (!entry) errors.push(`${key}: test destination belongs to no module ledger entry`);
+  for (const target of targets) {
+    if (!existsSync(join(root, target))) errors.push(`${key}: missing test destination ${target}`);
+  }
+}
 
 for (const entry of entries) {
   if (entry.status !== "excluded" && entry.targets.length === 0) {
@@ -173,8 +356,7 @@ for (const entry of entries) {
 
 function modulesIn(path: string): string[] {
   const text = readFileSync(path, "utf8");
-  const found = [...text.matchAll(/^\s*(?:pub\s+)?mod\s+([a-zA-Z0-9_]+)/gm)]
-    .map((m) => m[1]);
+  const found = [...text.matchAll(/^\s*(?:pub\s+)?mod\s+([a-zA-Z0-9_]+)/gm)].map((m) => m[1]);
   return [...new Set(found)].sort();
 }
 
@@ -189,6 +371,69 @@ const rustRoot = join(root, ".work", "gpui-component", "crates");
 if (existsSync(rustRoot)) {
   sameMembers("base", modulesIn(join(rustRoot, "base", "src", "lib.rs")), baseModules);
   sameMembers("ui", modulesIn(join(rustRoot, "ui", "src", "lib.rs")), uiModules);
+
+  const byModule = new Map(entries.map((entry) => [`${entry.crate}/${entry.module}`, entry]));
+  const verboseSurface = Bun.argv.includes("-surface");
+  for (const crate of ["base", "ui"] as const) {
+    const items = surfaceItems(crate, join(rustRoot, crate, "src"));
+    for (const kind of ["pub-use", "test"] as const) {
+      const selected = items.filter((item) => item.kind === kind);
+      const expected = surfacePins[crate][kind];
+      const digest = surfaceDigest(items, kind);
+      if (selected.length !== expected.count || digest !== expected.sha256) {
+        errors.push(
+          `${crate} ${kind} inventory differs: ` +
+            `count ${selected.length}, sha256 ${digest}; ` +
+            `ledger has ${expected.count}, ${expected.sha256}`,
+        );
+      }
+    }
+
+    const testedModules = new Set<string>();
+    for (const item of items) {
+      const module = sourceModule(item.path);
+      let status: Status | "facade" = "facade";
+      let targets = [`src/${crate}/lib.h`];
+      if (module) {
+        const entry = byModule.get(`${crate}/${module}`);
+        if (!entry) {
+          errors.push(`${crate}/${item.path}: ${item.kind} belongs to unclassified module ${module}`);
+          continue;
+        }
+        status = entry.status;
+        targets = entry.targets;
+      }
+
+      if (item.kind === "test") {
+        if (!module) {
+          errors.push(`${crate}/${item.path}: root test ${item.name} has no module owner`);
+          continue;
+        }
+        const key = `${crate}/${module}`;
+        testedModules.add(key);
+        targets = testTargets[key] ?? [];
+        if (targets.length === 0) {
+          errors.push(`${key}: upstream test ${item.name} has no C++ test destination`);
+        }
+      }
+      if (verboseSurface) {
+        console.log(
+          `${crate} ${item.kind} ${item.path} :: ${item.name} -> ` +
+            `${status} ${targets.length ? targets.join(", ") : "(standing exclusion)"}`,
+        );
+      }
+    }
+
+    for (const key of Object.keys(testTargets).filter((key) => key.startsWith(`${crate}/`))) {
+      if (!testedModules.has(key)) errors.push(`${key}: test destination ledger has no upstream tests`);
+    }
+    const uses = items.filter((item) => item.kind === "pub-use").length;
+    const tests = items.filter((item) => item.kind === "test").length;
+    console.log(
+      `port surface: ${crate} ${uses} pub-use statements and ${tests} tests ` +
+        `across ${testedModules.size} tested modules`,
+    );
+  }
 }
 
 const runText = readFileSync(join(root, "cmd", "run.ts"), "utf8");
@@ -213,8 +458,7 @@ if (/\bstruct\s+Theme(?:Tokens)?\b/.test(gpuiHeader)) {
 if (/\bTheme(?:Now|Light|Dark|Install|SemanticTokens)\s*\(/.test(gpuiSources)) {
   errors.push("theme layering: GPUI runtime reads the component palette directly");
 }
-if (!/\bstruct\s+Theme\b/.test(uiThemeHeader) ||
-    !/\bstruct\s+ThemeTokens\b/.test(uiThemeHeader)) {
+if (!/\bstruct\s+Theme\b/.test(uiThemeHeader) || !/\bstruct\s+ThemeTokens\b/.test(uiThemeHeader)) {
   errors.push("theme layering: ui/theme.h does not own both component theme types");
 }
 if (/\bThemeSemanticTokens\s*\(/.test(baseThemeTokens)) {
@@ -225,24 +469,29 @@ if (/\bThemeSemanticTokens\s*\(/.test(baseThemeTokens)) {
 // projected after layout beside focus/hit state. Actions must route back
 // through the same listener/state seams as pointer and keyboard input.
 for (const marker of [
-  "struct AccessibilityInfo", "struct AccessibilityNode",
-  "Vec<AccessibilityNode> accessibility", "AccessibilityCollect(El* root",
-  "OnAccessibilityIncrement", "AccessibilityActionSetValue",
+  "struct AccessibilityInfo",
+  "struct AccessibilityNode",
+  "Vec<AccessibilityNode> accessibility",
+  "AccessibilityCollect(El* root",
+  "OnAccessibilityIncrement",
+  "AccessibilityActionSetValue",
 ]) {
   if (!gpuiHeader.includes(marker)) {
     errors.push(`accessibility runtime: missing ${marker}`);
   }
 }
-if (!windowCommon.includes("AccessibilityCollect(root, &win->accessibility)") ||
-    !windowCommon.includes("WindowAccessibilityPerform(")) {
+if (
+  !windowCommon.includes("AccessibilityCollect(root, &win->accessibility)") ||
+  !windowCommon.includes("WindowAccessibilityPerform(")
+) {
   errors.push("accessibility runtime: frame projection or action dispatch is not wired");
 }
 
 const counts = (status: Status) => entries.filter((e) => e.status === status).length;
 console.log(
   `port audit: ${entries.length} modules at ${pinnedGpuiComponent.slice(0, 12)} ` +
-  `(${counts("full")} full, ${counts("partial")} partial, ` +
-  `${counts("adapter")} adapters, ${counts("excluded")} excluded)`,
+    `(${counts("full")} full, ${counts("partial")} partial, ` +
+    `${counts("adapter")} adapters, ${counts("excluded")} excluded)`,
 );
 if (!existsSync(rustRoot)) console.log("port audit: Rust checkout absent; checked pinned ledger and C++ destinations");
 

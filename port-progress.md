@@ -6613,3 +6613,21 @@ Automation, Linux AT-SPI and macOS NSAccessibility. The portable frame tree is
 the shared source those platform adapters need; `base/macos_accessibility`
 remains partial because only its existing AppKit hit-test forwarding seam is
 connected today.
+
+## The audit now tracks public re-exports and upstream tests
+
+The structural audit continues below modules. It walks every Rust file in the
+pinned Base/UI crates and inventories 272 public re-export statements and
+1,047 actual tests (113/569 in Base, 159/478 in UI). Each item is projected
+through the module ledger, every tested module names existing C++ suites that
+own its coverage, and count plus SHA-256 pins make an upstream add, removal or
+rename fail locally. `bun cmd/audit-port.ts -surface` prints every item, its
+status and destinations. A `#[test]` mention in a dock doc comment is correctly
+excluded from the test count.
+
+CI deliberately omits the Rust reference tree, so there it validates the pin,
+module ledger and all test destination paths. A checkout with
+`.work/gpui-component` additionally recomputes both complete inventories. This
+closes the re-export/test gate. Public declarations that are not re-exported
+are the next audit-depth step rather than being silently called
+symbol-complete.
