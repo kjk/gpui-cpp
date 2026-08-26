@@ -623,6 +623,12 @@ El* Highlighter::IntoEl() {
         if (!searchable) {
             return box;
         }
+        // `v_flex().size_full().children(search_panel)` -- the bar is a
+        // sibling of the editor under a box that names itself nothing, and
+        // upstream's `.id("search-panel")` is a bare constant because the
+        // panel is a view of its own and rendering an entity pushes its
+        // identity on the stack. The port has no entity to push, so the
+        // editor's name is what stands in for it.
         return Div(a)
             ->FlexCol()
             ->W(kFill)

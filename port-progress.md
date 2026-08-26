@@ -5959,3 +5959,56 @@ panel menu.
 Verified: 107 pages and seven interactions for the middle round, nine shots
 for the date picker, five for the accordion. Everything identical to the build
 before except the skeleton and the spinner, which differ from themselves.
+
+## The last of the ids, and what turned out to be right already
+
+Reading upstream for each of the remaining sites settled most of them without
+a change, and turned one into a real structural fix.
+
+**The colour picker had its nesting inverted.** `color_picker.rs` is
+`BaseColorPicker::new(id).child(Popover::new("popover").trigger(..))` — the
+picker is the outer element and the popover is inside it. The port had the
+popover wrapping the picker, which is what left it as the outermost element
+with nothing named above it, and made it spell the picker's name out. Turning
+the two the right way up gives the popover a plain `popover` for free.
+
+**Three were faithful already.** `ContextMenuExt::context_menu` builds its own
+id as `format!("context-menu-{:?}", id)` off the element it wraps — the same
+hand-fold the table does, for the same reason, since the wrapper sits above
+what it wraps. The select's open list is `("select-popup", cx.entity_id())`:
+deferred out of the tree, so Rust qualifies it with an identity rather than
+leaning on the stack. And the code editor's search bar is a sibling of the
+editor under an anonymous box; upstream's `.id("search-panel")` is a bare
+constant only because the panel is a view of its own, and rendering an entity
+pushes its identity. The port has no entity to push, so the editor's name
+stands in for one. All three are commented with the citation now rather than
+left reading as unfinished work.
+
+**The resizable's panels were anonymous.** `div().id(("resizable-panel",
+panel_ix))`, with `resize_handle(("resizable-handle", ix), axis)` drawn from
+inside it. The port had the handle carrying the group's name folded with the
+index by hand and the panel carrying nothing. Nothing reads the handle's
+number back mid-frame — the drag comes off `s->dragging` — so it moved onto
+the fold as it stood.
+
+**Scroll regions can take their identity from the tree.**
+`El::ScrollFromPath`, beside `PathId`, `PathClick` and `PathFocus`. A
+scrolling box was found by a number hashed out of a name, which is the click
+ids' problem again: the name had to be unique across the window, so each one
+spelled its widget's name out. Rust does not name what scrolls at all — a
+`ScrollHandle` lives on the view and the box that uses it is identified by
+being that box. The flag leaves `id` alone, so an element can be named for one
+thing and scroll as another: the table's two bodies are `body-fixed` and
+`body`, and each scrolls as itself. Both table bodies, the list's, the tree's,
+the tiles area's and the textarea's have moved. The popup menu's scrolling
+rows and base's `Scrollbar` box are left — neither names itself yet.
+
+Eight `%s-` sites remain: four documented as faithful above, the dialog's
+layer index, the switch's `track` (a tuple ElementId upstream too), and the
+dock's two, which are still waiting on the same thing they were.
+
+Verified: 107 pages and twelve interactions for the resizable and scroll work
+— three handle drags and seven wheels over a table, a list, a tree, a textarea
+and a virtual list — plus six for the colour picker. Everything identical to
+the build before except the skeleton, the spinner and the introduction, each
+of which differs from itself.
