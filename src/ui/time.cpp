@@ -542,9 +542,12 @@ El* DatePicker::IntoEl() {
     }
     // Both halves of the picker take focus — the outer element and the
     // trigger inside it — so the opt-out has to reach both.
-    El* root =
-        gpui::DatePicker::New(cx, id)->FocusRing(focusRing)->W(width)->Child(
-            Popup::New(cx, StrL("pop"), trigger)->Content(popup)->IntoEl());
+    El* root = gpui::DatePicker::New(cx, id)
+                   ->FocusRing(focusRing)
+                   ->W(width)
+                   ->Child(Popup::New(cx, StrL("pop"), trigger)
+                               ->Content(DropdownPlaceContent(popup))
+                               ->IntoEl());
     // date_picker.rs::init binds enter, escape and the two delete keys in the
     // picker's context; the toggle and the clear the caller gave are what
     // they run, which is what Rust's on_action handlers reach for too.

@@ -475,11 +475,14 @@ El* DropdownMenu::IntoEl() {
         wrap->Child(trigger);
     }
     if (menu && st && st->open) {
-        // `dropdown_positioner`: side placement, so a menu with no room
-        // under its trigger opens above it rather than being clamped.
+        // `anchored().anchor(TopLeft).snap_to_window_with_margin(px(8.))`:
+        // every menu upstream is placed this way -- the dropdown menu through
+        // Popover, the app menu bar and the context menu directly -- and
+        // `anchored` clamps into the window rather than taking the other
+        // side. `dropdown_positioner`, which does flip, is reached by the
+        // three dropdowns and by nothing else.
         El* el = DropdownOpen(cx, menu->IntoEl(), MotionName(cx, StrL("open")))
                      ->AnchorBelow(gap)
-                     ->AnchorFlip()
                      ->Deferred();
         if (anchorRight) {
             el->Right(0);
@@ -606,12 +609,8 @@ El* AppMenuBar::IntoEl() {
         if (on && menus[i]) {
             // The menu of the open title hangs under it, over everything the
             // frame drew after it.
-            wrap->Child(menus[i]
-                            ->IntoEl()
-                            ->AnchorBelow(2)
-                            ->AnchorFlip()
-                            ->Left(0)
-                            ->Deferred());
+            wrap->Child(
+                menus[i]->IntoEl()->AnchorBelow(2)->Left(0)->Deferred());
         }
         bar->Child(wrap);
     }

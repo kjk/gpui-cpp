@@ -28,6 +28,13 @@ El* DropdownOpen(Ctx* cx, El* surface, uint32_t key) {
     return surface;
 }
 
+El* DropdownPlaceContent(El* content, float gap) {
+    if (!content) {
+        return content;
+    }
+    return PopupPlaceContent(content, PopupAnchor::TopLeft, gap)->AnchorFlip();
+}
+
 Popover* Popover::New(Ctx* cx) {
     Arena* a = cx->a;
     Popover* p = ArenaNew<Popover>(a);

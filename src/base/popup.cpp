@@ -37,10 +37,13 @@ El* PopupPlaceContent(El* content, PopupAnchor anchor, float gap) {
             content->AnchorBelow(gap);
             break;
     }
-    // The dropdowns — Select, Combobox, DatePicker — are placed from their
-    // trigger with `Positioner::side`, so they flip rather than clamp; that is
-    // the popup positioning fix in gpui-component 81305ef4.
-    content->AnchorFlip();
+    // No flip. `Popup::render` places its content with `Positioner::corner`,
+    // which clamps into the window and never takes the other side -- an
+    // anchor names a corner of the trigger, and a popup that jumped to the
+    // opposite one would not be at the corner it was asked for. The
+    // dropdowns are the ones that flip, and they say so themselves:
+    // `dropdown_positioner` in ui/popover.rs is `Positioner::side`, and it is
+    // reached by Select, Combobox and DatePicker alone.
     switch (anchor) {
         case PopupAnchor::TopRight:
         case PopupAnchor::BottomRight:

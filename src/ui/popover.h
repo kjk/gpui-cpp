@@ -39,6 +39,16 @@ const float kDropdownEnterOffset = -8.f;
 // shadow to ramp.
 El* DropdownOpen(Ctx* cx, El* surface, uint32_t key);
 
+// `dropdown_positioner`: where a dropdown surface goes, which is the one
+// place upstream reaches for `Positioner::side` rather than the corner
+// placement every other popup uses. Side placement is what flips -- a select
+// with no room below its trigger opens above it instead of being clamped
+// against the window's edge, which would leave it over the trigger it came
+// from. Select, Combobox and DatePicker are the three that ask for it.
+//
+// The surface is placed here, so `Popup::Content` leaves it as it is.
+El* DropdownPlaceContent(El* content, float gap = 4);
+
 struct Popover {
     Arena* a = nullptr;
     Ctx* cx = nullptr;

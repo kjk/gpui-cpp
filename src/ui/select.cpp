@@ -314,7 +314,7 @@ El* Select::IntoEl() {
     // leaning on the stack. The picker's id is what stands for the entity
     // here, so the spelled-out name is the faithful one.
     El* wrap = Popup::New(cx, StrDup(a, fmt("%s-popup", id)), root)
-                   ->Content(menu)
+                   ->Content(DropdownPlaceContent(menu))
                    ->IntoEl();
     // The five bindings, on the element that holds both the trigger and the
     // popup: the trigger is focusable and so is the query field inside the
