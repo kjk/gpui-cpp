@@ -17,9 +17,12 @@
    -> Dialog` — unnecessary: a view with a Render is the same thing, and this
    tree already has one.
 
-   Not here: `remove_notification::<T>`, which keys on a Rust type; the four
-   deprecated text-selection methods, which are `TextSelection*` already. */
+   C++ extension traits are subsystem-prefixed free functions. The complete
+   WindowExt behavior is here; generic builders hand over an Entity whose
+   Render is the retained Rust closure, and typed notification ids use the
+   no-RTTI token declared by notification.h. */
 
+#include "base/text_selection.h"
 #include "ui/notification.h"
 #include "ui/sheet.h"
 
@@ -38,6 +41,8 @@ struct WindowLayer {
 // Root's `active_dialogs`, `active_sheet` and `notification`, kept on the
 // window rather than on a view, since that is whose they are.
 struct WindowLayers {
+    App* app = nullptr;
+    Window* win = nullptr;
     // As many as are open, in the order they were opened.
     Vec<WindowLayer> dialogs;
     WindowLayer sheet = {};
@@ -47,7 +52,7 @@ struct WindowLayers {
     Entity<component::NotificationListState> notifications = {};
     int notifyTimer = 0;
 
-    ~WindowLayers() { dialogs.Reset(); }
+    ~WindowLayers();
 };
 
 // The store for this window, created on first ask. Null only for a null
@@ -65,6 +70,17 @@ template <typename T>
 inline void WindowOpenDialog(Ctx* cx, Entity<T> e, bool overlay = true) {
     WindowOpenDialog(cx, e.id, overlay);
 }
+// open_alert_dialog: the entity's Render builds the opinionated AlertDialog
+// surface, replacing Rust's retained build closure.
+inline void WindowOpenAlertDialog(Ctx* cx, EntityId view,
+                                  bool overlay = true) {
+    WindowOpenDialog(cx, view, overlay);
+}
+template <typename T>
+inline void WindowOpenAlertDialog(Ctx* cx, Entity<T> e,
+                                  bool overlay = true) {
+    WindowOpenDialog(cx, e.id, overlay);
+}
 bool WindowHasActiveDialog(Ctx* cx);
 int WindowDialogCount(Ctx* cx);
 // close_dialog: the topmost one. close_all_dialogs: the lot.
@@ -76,6 +92,12 @@ void WindowCloseAllDialogs(Ctx* cx);
 // Rust. The sheet's entity is the layer's, the way a dialog's is.
 void WindowOpenSheetAt(Ctx* cx, EntityId view,
                        component::SheetPlacement placement, float size);
+template <typename T>
+inline void WindowOpenSheetAt(Ctx* cx, Entity<T> e,
+                              component::SheetPlacement placement,
+                              float size) {
+    WindowOpenSheetAt(cx, e.id, placement, size);
+}
 // open_sheet: Placement::Right, which is the default Rust picks.
 inline void WindowOpenSheet(Ctx* cx, EntityId view, float size) {
     WindowOpenSheetAt(cx, view, component::SheetPlacement::Right, size);
@@ -99,11 +121,35 @@ int WindowPushNotification(Ctx* cx, component::NotificationKind kind,
                            Str message);
 void WindowClearNotifications(Ctx* cx);
 int WindowNotificationCount(Ctx* cx);
+void WindowRemoveNotifications(Ctx* cx,
+                               component::NotificationTypeId type);
+void WindowRemoveNotification1(Ctx* cx,
+                               component::NotificationTypeId type,
+                               uint32_t key);
+template <typename T>
+inline void WindowRemoveNotification(Ctx* cx) {
+    WindowRemoveNotifications(cx, component::NotificationTypeOf<T>());
+}
+template <typename T>
+inline void WindowRemoveNotification1(Ctx* cx, uint32_t key) {
+    WindowRemoveNotification1(cx, component::NotificationTypeOf<T>(), key);
+}
+template <typename T>
+inline void WindowRemoveNotification1(Ctx* cx, Str key) {
+    WindowRemoveNotification1<T>(cx, (uint32_t)HashClickId(key));
+}
 
 // focused_input / has_focused_input. Rust's Root tracks the focused
 // `AnyInputState`; the window here already routes keys to one, so this is
 // that field under the name Rust gives it.
 InputState* WindowFocusedInput(Ctx* cx);
 bool WindowHasFocusedInput(Ctx* cx);
+
+// The deprecated WindowExt forwarding methods remain source-compatible with
+// the names Rust publishes; Base owns the actual per-window selection.
+int WindowSelectedText(Ctx* cx, char* out, int cap);
+bool WindowHasTextSelection(Ctx* cx);
+void WindowClearTextSelection(Ctx* cx);
+void WindowEndTextSelection(Ctx* cx);
 
 } // namespace gpui

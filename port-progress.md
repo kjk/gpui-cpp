@@ -7051,3 +7051,34 @@ Tests cover replacement, distinct keys, exact-key removal, broad removal and
 system-registry cleanup. This closes the notification-identity prerequisite
 for WindowExt without changing module counts. MSVC release passes 19,358
 checks.
+
+## WindowExt owns and exposes the complete window-layer lifecycle
+
+The retained window store already handled dialog stacks, one replacing sheet,
+notifications and focused input, but its public surface stopped short of the
+pinned trait: alert-dialog convenience, type/key removal, notification access
+and deprecated text-selection forwarding were incomplete. More seriously,
+the store reset only its `Vec` and did not drop the entity handles it had
+adopted when the window went away.
+
+`WindowLayers` now remembers its App and Window and releases every remaining
+dialog, sheet and notification-list entity, cancels its tick timer, retracts
+system notifications and frees its vector at teardown. The free-function
+surface covers both sheet placements, dialogs and alert dialogs, active/count
+queries, clear and typed/keyed notification removal, notification entity
+access, focused-input queries, and all four deprecated selection forwarders.
+Rust's retained builder closures project to owned Entity views: their Render
+builds the layer and dropping the layer drops the entity.
+
+`focused_input` now performs the same stale-registration check as Rust. A state
+must still be focused in this window and occur in the last frame's input hit
+records; removing a focused input from the tree lazily blurs and unregisters
+it on the first query. Tests cover stack order and closure, sheet replacement,
+window-teardown ownership, typed removal, focus staleness and selection
+forwarding.
+
+C++ cannot add a Rust extension trait to `Window`, so the declaration ledger
+records the complete `Window*` free-function family as the deliberate trait
+collapse. UI WindowExt is full: the audit moves to 71 full, 50 partial, 8
+adapters and 2 exclusions with 339 unresolved spellings. MSVC release passes
+19,379 checks.

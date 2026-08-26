@@ -99,7 +99,6 @@ const partialUi = new Set([
   "theme",
   "time",
   "window_border",
-  "window_ext",
 ]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
@@ -374,6 +373,10 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   },
   "ui/title_bar.rs::const TITLE_BAR_HEIGHT": {
     spellings: ["kTitleBarHeight"],
+  },
+  "ui/window_ext.rs::trait WindowExt": {
+    collapse:
+      "C++ cannot extend Window with a trait; the complete surface is exposed as Window-prefixed free functions, with retained Rust build closures represented by owned Entity views",
   },
 };
 

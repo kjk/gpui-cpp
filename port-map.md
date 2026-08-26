@@ -138,6 +138,10 @@ The important non-mechanical mappings are encoded in the audit:
   decoration state. Dialog and Sheet fixed layers use its visible-frame origin
   and size, and Linux native resize hit testing uses the component's inset,
   tiling and configurable band rather than the outer X11 edge.
+- UI WindowExt's complete behavior is available through `Window*`-prefixed
+  free functions: owned dialog/sheet entities, alert-dialog convenience,
+  typed notification removal, focused-input validation and the deprecated
+  selection forwarders. The audit records the trait-to-free-function collapse.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -168,7 +172,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 340 declaration spellings still reported in partial modules,
+  2. Review the 339 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

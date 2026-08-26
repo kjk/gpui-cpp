@@ -129,6 +129,7 @@ int GpuiMain(int argc, char** argv) {
     TestButtonGroup();
     TestIcon();
     TestKeyedState();
+    TestWindowExt();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

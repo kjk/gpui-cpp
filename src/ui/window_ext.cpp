@@ -2,6 +2,27 @@
 
 namespace gpui {
 
+WindowLayers::~WindowLayers() {
+    if (app) {
+        for (int i = 0; i < dialogs.len; i++) {
+            EntityDrop(app, dialogs[i].view);
+        }
+        if (hasSheet) {
+            EntityDrop(app, sheet.view);
+        }
+        if (notifications.IsValid()) {
+            EntityDrop(app, notifications.id);
+        }
+    }
+    if (win) {
+        if (notifyTimer) {
+            WindowCancelTimer(win, notifyTimer);
+        }
+        component::NotificationSystemDismissAll(win);
+    }
+    dialogs.Reset();
+}
+
 WindowLayers* WindowLayersOf(Window* win) {
     if (!win) {
         return nullptr;
@@ -11,7 +32,12 @@ WindowLayers* WindowLayersOf(Window* win) {
     uint32_t key = (uint32_t)HashClickId(StrL("gpui-window-layers"));
     void* p = WindowKeyedState(win, key, new WindowLayers(),
                                &EntityDropT<WindowLayers>);
-    return (WindowLayers*)p;
+    WindowLayers* layers = (WindowLayers*)p;
+    if (layers && !layers->win) {
+        layers->app = win->app;
+        layers->win = win;
+    }
+    return layers;
 }
 
 static WindowLayers* LayersOf(Ctx* cx) {
@@ -171,14 +197,75 @@ int WindowNotificationCount(Ctx* cx) {
     return st ? st->items.len : 0;
 }
 
+void WindowRemoveNotifications(Ctx* cx,
+                               component::NotificationTypeId type) {
+    WindowLayers* l = LayersOf(cx);
+    if (!l || !l->notifications.IsValid()) {
+        return;
+    }
+    if (component::NotificationListState* st = l->notifications.Get(cx)) {
+        component::NotificationDismissByType(st, cx, type);
+        Notify(cx);
+    }
+}
+
+void WindowRemoveNotification1(Ctx* cx,
+                               component::NotificationTypeId type,
+                               uint32_t key) {
+    WindowLayers* l = LayersOf(cx);
+    if (!l || !l->notifications.IsValid()) {
+        return;
+    }
+    if (component::NotificationListState* st = l->notifications.Get(cx)) {
+        component::NotificationDismissByTypeKey(st, cx, type, key);
+        Notify(cx);
+    }
+}
+
 // ─── the focused input ───────────────────────────────────────────────────
 
 InputState* WindowFocusedInput(Ctx* cx) {
-    return cx && cx->win ? cx->win->input : nullptr;
+    if (!cx || !cx->win || !cx->win->input) {
+        return nullptr;
+    }
+    Window* win = cx->win;
+    InputState* input = win->input;
+    bool registered = input->focused && input->focusWin == win;
+    for (int i = 0; registered && i < win->paint.hits.len; i++) {
+        if (win->paint.hits[i].input == input) {
+            return input;
+        }
+    }
+    // Rust drops a focused_input registration lazily when its focus handle
+    // is no longer present. The frame's input hit records are that live
+    // registration here; a focused state removed from the tree is blurred
+    // on the first WindowExt query.
+    InputBlur(input, cx->app, win);
+    return nullptr;
 }
 
 bool WindowHasFocusedInput(Ctx* cx) {
     return WindowFocusedInput(cx) != nullptr;
+}
+
+int WindowSelectedText(Ctx* cx, char* out, int cap) {
+    return cx && cx->win ? WindowSelectionText(cx->win, out, cap) : 0;
+}
+
+bool WindowHasTextSelection(Ctx* cx) {
+    return cx && cx->win && WindowSelectionHas(cx->win);
+}
+
+void WindowClearTextSelection(Ctx* cx) {
+    if (cx && cx->win) {
+        WindowSelectionClear(cx->win);
+    }
+}
+
+void WindowEndTextSelection(Ctx* cx) {
+    if (cx && cx->win) {
+        WindowSelectionRelease(cx->win);
+    }
 }
 
 } // namespace gpui
