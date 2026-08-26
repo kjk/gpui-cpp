@@ -531,6 +531,10 @@ for (const marker of [
   "IRangeValueProvider",
   "IExpandCollapseProvider",
   "ISelectionItemProvider",
+  "IGridProvider",
+  "IGridItemProvider",
+  "ITableProvider",
+  "ITableItemProvider",
   "UiaRaiseStructureChangedEvent",
   "UIA_AutomationFocusChangedEventId",
 ]) {

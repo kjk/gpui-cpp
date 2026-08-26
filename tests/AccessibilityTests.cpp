@@ -326,6 +326,9 @@ static void TablesKeepCountsAndOneBasedIndices() {
                    ->Child(TextEl(f.arena, StrL("Ada"))));
     body->Child(row);
     table->Child(body);
+    table->Child(TableHeader::New(&f.cx, StrL("header"))
+                     ->Child(TableHead::New(&f.cx, StrL("name"), 2)
+                                 ->AriaLabel(StrL("Name"))));
     AccessibilityCollect(table, &f.win->accessibility);
 
     const AccessibilityNode* tableNode =
@@ -343,6 +346,12 @@ static void TablesKeepCountsAndOneBasedIndices() {
     utassert(cellNode && cellNode->parent == 2 &&
              cellNode->info.columnIndex == 2);
     utassert(cellNode && SameText(cellNode->info.label, StrL("Ada")));
+#if GPUI_OS_WINDOWS
+    if (tableNode && cellNode) {
+        utassert(AccessibilityWinSmokeTest(f.win, tableNode->id));
+        utassert(AccessibilityWinSmokeTest(f.win, cellNode->id));
+    }
+#endif
     FreeAccessibilityFrame(&f);
 }
 

@@ -6660,9 +6660,21 @@ advertised pattern, runtime ids, fragment-root linkage and stale-provider
 lifetime. Release and debug suites pass 19,029 checks. Linux AT-SPI and the
 full macOS NSAccessibility element adapter remain; the existing macOS window
 hit-test forwarder alone does not export the tree. Windows still exposes
-editable text through Value rather than UIA Text, and tables through roles and
-row/column metadata rather than Grid/Table and selection-container patterns;
-those are adapter-depth gaps, not omissions in the portable semantic tree.
+editable text through Value rather than UIA Text and does not expose a
+selection-container pattern; those are adapter-depth gaps, not omissions in
+the portable semantic tree.
+
+Grid metadata is now a real UIA table. A semantic Table with row and column
+counts supplies Grid and Table; a Cell takes its one-based row index from the
+ancestor Row and its column index from itself, then supplies GridItem and
+TableItem with the zero-based values UIA requires. `GetItem` resolves a
+currently rendered cell, while a valid but virtualized-away row answers
+`UIA_E_ELEMENTNOTAVAILABLE` because the portable frame contains no provider to
+return. Column-header arrays are built from the Table's ColumnHeader
+descendants and cells return the header for their own column. Row-header arrays
+are honestly empty: the AccessKit role set used by the pinned crates has no row
+header role. The Windows COM probe now checks pattern discovery, counts,
+lookup, ancestry and header arrays; release tests pass 19,031 checks.
 
 ## The surface gate sees declarations, not only re-exports
 

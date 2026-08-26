@@ -100,8 +100,9 @@ The important non-mechanical mappings are encoded in the audit:
   tree, and developer accessibility ids remain distinct from element ids.
 - Windows publishes that live tree through a raw UI Automation fragment
   provider reached from `WM_GETOBJECT`. Roles, names, bounds, focus and
-  Invoke, Toggle, Value, RangeValue, ExpandCollapse and SelectionItem patterns
-  resolve current frame nodes; semantic and focus changes raise native events.
+  Invoke, Toggle, Value, RangeValue, ExpandCollapse, SelectionItem, Grid,
+  GridItem, Table and TableItem patterns resolve current frame nodes; semantic
+  and focus changes raise native events.
 - the audit inventories every module-level public declaration, public
   re-export and upstream test below module granularity. Base currently
   contributes 359 declarations, 113 re-export statements and 569 tests across
@@ -113,8 +114,8 @@ The important non-mechanical mappings are encoded in the audit:
 ## Next fidelity order
 
   1. Export the portable accessibility tree through Linux AT-SPI and macOS
-     NSAccessibility, then deepen Windows with Text, Grid/Table and selection-
-     container patterns. Windows already has the core fragment/action export;
+     NSAccessibility, then deepen Windows with Text and selection-container
+     patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
   2. Turn the public-declaration spelling diagnostic into a hard gate, adding
