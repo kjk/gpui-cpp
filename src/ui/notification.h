@@ -55,11 +55,26 @@ const int kNotificationMaxItems = 10;
 // How often the list is advanced. Rust spawns a task that ticks at this rate.
 const int kNotificationTickMs = 50;
 
+// std::any::TypeId without RTTI: every template specialization owns one
+// writable byte whose address is unique for the life of the process. It is
+// identity only and is never dereferenced through this value.
+using NotificationTypeId = uintptr_t;
+template <typename T>
+inline NotificationTypeId NotificationTypeOf() {
+    static uint8_t tag = 0;
+    return (NotificationTypeId)&tag;
+}
+
 // One notification in the list. Rust's is an entity with its own render; the
 // content here is what the card shows, and a caller that wants more puts an
 // element in `content`.
 struct NotificationItem {
     int id = 0;
+    // NotificationId::Id(type) / IdAndElementId(type, key). A zero type uses
+    // the older explicit integer id above; generated ids have neither.
+    NotificationTypeId identityType = 0;
+    uint32_t identityKey = 0;
+    bool identityHasKey = false;
     NotificationKind kind = NotificationKind::None;
     Str title = {};
     Str message = {};
@@ -69,7 +84,31 @@ struct NotificationItem {
     // NotificationSettings::delivery, which is what `hasDelivery` says.
     bool hasDelivery = false;
     NotificationDelivery delivery = NotificationDelivery::InApp;
+
+    template <typename T>
+    NotificationItem& Id() {
+        id = 0;
+        identityType = NotificationTypeOf<T>();
+        identityKey = 0;
+        identityHasKey = false;
+        return *this;
+    }
+    template <typename T>
+    NotificationItem& Id1(uint32_t key) {
+        id = 0;
+        identityType = NotificationTypeOf<T>();
+        identityKey = key;
+        identityHasKey = true;
+        return *this;
+    }
+    template <typename T>
+    NotificationItem& Id1(Str key) {
+        return Id1<T>((uint32_t)HashClickId(key));
+    }
 };
+
+bool NotificationIdentitySame(const NotificationItem& a,
+                              const NotificationItem& b);
 
 // NotificationList: the notifications on screen, when each of them goes away,
 // and which corner they stack in. The lifecycle is the toast stack's, so a
@@ -127,6 +166,12 @@ int NotificationPush(NotificationListState* s, Ctx* cx, NotificationItem item,
 // system counterpart. Rust does the second unconditionally: a system-only
 // notification has no toast to dismiss and must still be taken back.
 void NotificationDismiss(NotificationListState* s, Ctx* cx, int id);
+// close_by_type: the broad form matches both Id(type) and every Id1(type,
+// key); the keyed form matches exactly one Id1 pair.
+void NotificationDismissByType(NotificationListState* s, Ctx* cx,
+                               NotificationTypeId type);
+void NotificationDismissByTypeKey(NotificationListState* s, Ctx* cx,
+                                  NotificationTypeId type, uint32_t key);
 // clear().
 void NotificationClear(NotificationListState* s, Ctx* cx);
 // advance(): move every notification on by `deltaMs`, dropping the ones that
@@ -149,6 +194,9 @@ const int kNotificationSystemMax = 100;
 
 struct NotificationSystemEntry {
     int id = 0;
+    NotificationTypeId identityType = 0;
+    uint32_t identityKey = 0;
+    bool identityHasKey = false;
     EntityId list = {};
     Window* win = nullptr;
     Listener onClick = {};
@@ -169,6 +217,9 @@ void NotificationSystemInsert(const NotificationSystemEntry& e);
 // `win`: another window that pushed the same id owns the tag now, and this
 // window's dismiss must not take back its notification.
 void NotificationSystemDismiss(int id, Window* win);
+void NotificationSystemDismissByType(NotificationTypeId type, Window* win);
+void NotificationSystemDismissByTypeKey(NotificationTypeId type,
+                                         uint32_t key, Window* win);
 // Retract every system notification posted from `win`.
 void NotificationSystemDismissAll(Window* win);
 const NotificationSystemEntry* NotificationSystemFind(int id, Window* win);

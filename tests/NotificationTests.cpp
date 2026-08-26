@@ -220,6 +220,85 @@ static void MaxItemsLimitsVisibilityWithoutEvictingMountedToasts() {
     utassert(s.items.len == 3);
 }
 
+namespace {
+struct BuildNotice {};
+struct DeployNotice {};
+} // namespace
+
+static ToastStatus StatusOf(const NotificationListState& s, int id) {
+    for (int i = 0; i < s.stack.entries.len; i++) {
+        if (s.stack.entries[i].id == id) {
+            return s.stack.entries[i].status;
+        }
+    }
+    return ToastStatus::Ending;
+}
+
+static void TypedIdentityReplacesAndRemovesLikeRust() {
+    NotificationListState s;
+    NotificationItem first = Item(0, "build one");
+    first.Id1<BuildNotice>(1);
+    int firstId = NotificationPush(&s, nullptr, first, 0);
+
+    NotificationItem replacement = Item(0, "build one again");
+    replacement.Id1<BuildNotice>(1);
+    int replacementId = NotificationPush(&s, nullptr, replacement, 0);
+    utassert(replacementId == firstId);
+    utassert(s.items.len == 1);
+
+    NotificationItem second = Item(0, "build two");
+    second.Id1<BuildNotice>(2);
+    int secondId = NotificationPush(&s, nullptr, second, 0);
+    NotificationItem broad = Item(0, "all builds");
+    broad.Id<BuildNotice>();
+    int broadId = NotificationPush(&s, nullptr, broad, 0);
+    NotificationItem other = Item(0, "deploy");
+    other.Id<DeployNotice>();
+    int otherId = NotificationPush(&s, nullptr, other, 0);
+    utassert(s.items.len == 4);
+    utassert(NotificationTypeOf<BuildNotice>() !=
+             NotificationTypeOf<DeployNotice>());
+
+    NotificationDismissByTypeKey(&s, nullptr,
+                                 NotificationTypeOf<BuildNotice>(), 2);
+    utassert(StatusOf(s, secondId) == ToastStatus::Ending);
+    utassert(StatusOf(s, firstId) != ToastStatus::Ending);
+    utassert(StatusOf(s, broadId) != ToastStatus::Ending);
+
+    NotificationDismissByType(&s, nullptr, NotificationTypeOf<BuildNotice>());
+    utassert(StatusOf(s, firstId) == ToastStatus::Ending);
+    utassert(StatusOf(s, broadId) == ToastStatus::Ending);
+    utassert(StatusOf(s, otherId) != ToastStatus::Ending);
+}
+
+static void SystemRegistryBroadRemovalIncludesEveryKey() {
+    NotificationSystemDismissAll(kWinA);
+    NotificationSystemEntry one;
+    one.id = 81;
+    one.win = kWinA;
+    one.identityType = NotificationTypeOf<BuildNotice>();
+    one.identityHasKey = true;
+    one.identityKey = 1;
+    NotificationSystemInsert(one);
+    NotificationSystemEntry two = one;
+    two.id = 82;
+    two.identityKey = 2;
+    NotificationSystemInsert(two);
+    NotificationSystemEntry other = one;
+    other.id = 83;
+    other.identityType = NotificationTypeOf<DeployNotice>();
+    NotificationSystemInsert(other);
+
+    NotificationSystemDismissByTypeKey(NotificationTypeOf<BuildNotice>(), 1,
+                                       kWinA);
+    utassert(NotificationSystemFind(81, kWinA) == nullptr);
+    utassert(NotificationSystemFind(82, kWinA) != nullptr);
+    NotificationSystemDismissByType(NotificationTypeOf<BuildNotice>(), kWinA);
+    utassert(NotificationSystemFind(82, kWinA) == nullptr);
+    utassert(NotificationSystemFind(83, kWinA) != nullptr);
+    NotificationSystemDismissAll(kWinA);
+}
+
 void TestNotification() {
     TestSuite("notification");
     gNotificationWinA.app = &gNotificationApp;
@@ -235,5 +314,7 @@ void TestNotification() {
     SystemOnlyDeliveryShowsNoCard();
     AutohideExpiryDoesNotRetractTheSystemHalf();
     MaxItemsLimitsVisibilityWithoutEvictingMountedToasts();
+    TypedIdentityReplacesAndRemovesLikeRust();
+    SystemRegistryBroadRemovalIncludesEveryKey();
     AppGlobalClear(&gNotificationApp);
 }

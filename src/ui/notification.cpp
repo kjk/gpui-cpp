@@ -203,6 +203,33 @@ static void SysDismissTag(int id) {
     SysNotifyDismiss(NotificationSystemTag(buf, (int)sizeof(buf), id));
 }
 
+static bool SystemIdentityMatches(const NotificationSystemEntry& e,
+                                  NotificationTypeId type, bool hasKey,
+                                  uint32_t key) {
+    return e.identityType == type &&
+           (!hasKey || (e.identityHasKey && e.identityKey == key));
+}
+
+static int NotificationSystemIdentityId(const NotificationItem& item,
+                                        Window* win) {
+    if (!item.identityType) {
+        return 0;
+    }
+    NotificationSystemState* state = SysState(win);
+    if (!state) {
+        return 0;
+    }
+    for (int i = 0; i < state->entries.len; i++) {
+        const NotificationSystemEntry& e = state->entries[i];
+        if (e.win == win && e.identityType == item.identityType &&
+            e.identityHasKey == item.identityHasKey &&
+            (!e.identityHasKey || e.identityKey == item.identityKey)) {
+            return e.id;
+        }
+    }
+    return 0;
+}
+
 void NotificationSystemDismiss(int id, Window* win) {
     NotificationSystemState* state = SysState(win);
     if (!state) {
@@ -215,6 +242,33 @@ void NotificationSystemDismiss(int id, Window* win) {
             return;
         }
     }
+}
+
+static void NotificationSystemDismissIdentity(NotificationTypeId type,
+                                              bool hasKey, uint32_t key,
+                                              Window* win) {
+    NotificationSystemState* state = SysState(win);
+    if (!state || !type) {
+        return;
+    }
+    for (int i = state->entries.len - 1; i >= 0; i--) {
+        if (state->entries[i].win != win ||
+            !SystemIdentityMatches(state->entries[i], type, hasKey, key)) {
+            continue;
+        }
+        int id = state->entries[i].id;
+        SysEntryRemoveAt(state, i);
+        SysDismissTag(id);
+    }
+}
+
+void NotificationSystemDismissByType(NotificationTypeId type, Window* win) {
+    NotificationSystemDismissIdentity(type, false, 0, win);
+}
+
+void NotificationSystemDismissByTypeKey(NotificationTypeId type,
+                                         uint32_t key, Window* win) {
+    NotificationSystemDismissIdentity(type, true, key, win);
 }
 
 void NotificationSystemDismissAll(Window* win) {
@@ -308,6 +362,26 @@ int NotificationIndexOf(const NotificationListState* s, int id) {
     return -1;
 }
 
+bool NotificationIdentitySame(const NotificationItem& a,
+                              const NotificationItem& b) {
+    if (a.identityType || b.identityType) {
+        return a.identityType != 0 && a.identityType == b.identityType &&
+               a.identityHasKey == b.identityHasKey &&
+               (!a.identityHasKey || a.identityKey == b.identityKey);
+    }
+    return a.id != 0 && a.id == b.id;
+}
+
+static int NotificationIndexOfIdentity(const NotificationListState* s,
+                                       const NotificationItem& item) {
+    for (int i = 0; i < s->items.len; i++) {
+        if (NotificationIdentitySame(s->items[i], item)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static void NotificationRemoveAt(NotificationListState* s, int ix) {
     ToastRemove(&s->stack, s->items[ix].id);
     for (int i = ix; i < s->items.len - 1; i++) {
@@ -343,6 +417,9 @@ static void NotificationPushSystem(NotificationListState* s, Ctx* cx,
     }
     NotificationSystemEntry e;
     e.id = item.id;
+    e.identityType = item.identityType;
+    e.identityKey = item.identityKey;
+    e.identityHasKey = item.identityHasKey;
     e.list = s->self;
     e.win = cx->win;
     e.onClick = item.onClick;
@@ -353,19 +430,24 @@ int NotificationPush(NotificationListState* s, Ctx* cx, NotificationItem item,
                      int timeoutMs) {
     // A push with an id already in the list replaces that one: Rust keys its
     // notifications by NotificationId, so the same one never stacks twice.
-    if (item.id != 0) {
-        int at = NotificationIndexOf(s, item.id);
-        if (at >= 0) {
-            NotificationRemoveAt(s, at);
+    int at = NotificationIndexOfIdentity(s, item);
+    if (at >= 0) {
+        if (item.id == 0) {
+            item.id = s->items[at].id;
         }
-    } else {
+        NotificationRemoveAt(s, at);
+    }
+    NotificationDelivery delivery =
+        item.hasDelivery ? item.delivery : s->delivery;
+    if (item.id == 0 && cx && NotificationDeliveryIncludesSystem(delivery)) {
+        item.id = NotificationSystemIdentityId(item, cx->win);
+    }
+    if (item.id == 0) {
         item.id = s->nextId++;
     }
     // The id has to be settled before this: it is what the system tag names,
     // and what makes a second push with the same id replace the first there
     // as well.
-    NotificationDelivery delivery =
-        item.hasDelivery ? item.delivery : s->delivery;
     if (cx && NotificationDeliveryIncludesSystem(delivery)) {
         NotificationPushSystem(s, cx, item);
     }
@@ -398,6 +480,47 @@ void NotificationDismiss(NotificationListState* s, Ctx* cx, int id) {
             return;
         }
     }
+}
+
+static void NotificationDismissIdentity(NotificationListState* s, Ctx* cx,
+                                        NotificationTypeId type, bool hasKey,
+                                        uint32_t key) {
+    if (!s || !type) {
+        return;
+    }
+    if (cx) {
+        if (hasKey) {
+            NotificationSystemDismissByTypeKey(type, key, cx->win);
+        } else {
+            NotificationSystemDismissByType(type, cx->win);
+        }
+    }
+    for (int i = 0; i < s->items.len; i++) {
+        const NotificationItem& item = s->items[i];
+        bool matches = item.identityType == type &&
+                       (!hasKey || (item.identityHasKey &&
+                                    item.identityKey == key));
+        if (!matches) {
+            continue;
+        }
+        for (int j = 0; j < s->stack.entries.len; j++) {
+            if (s->stack.entries[j].id == item.id) {
+                s->stack.entries[j].status = ToastStatus::Ending;
+                s->stack.entries[j].elapsedMs = 0;
+                break;
+            }
+        }
+    }
+}
+
+void NotificationDismissByType(NotificationListState* s, Ctx* cx,
+                               NotificationTypeId type) {
+    NotificationDismissIdentity(s, cx, type, false, 0);
+}
+
+void NotificationDismissByTypeKey(NotificationListState* s, Ctx* cx,
+                                  NotificationTypeId type, uint32_t key) {
+    NotificationDismissIdentity(s, cx, type, true, key);
 }
 
 void NotificationClear(NotificationListState* s, Ctx* cx) {

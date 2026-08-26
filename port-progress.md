@@ -7029,3 +7029,25 @@ later calls delete the unused candidate, and window teardown invokes the stored
 drop function. A lifecycle seam test pins construction, reuse and exact
 destruction. This is a prerequisite for WindowExt ownership rather than a
 module-status change. MSVC release passes 19,344 checks.
+
+## Notification identity preserves Rust's type and keyed removal
+
+WindowExt's two notification-removal methods depend on the distinction Rust
+stores in `NotificationId`: a type-only id and the same type paired with an
+element key are different unique notifications, while broad removal by type
+must match both forms. The C++ notification item previously retained only its
+integer toast handle, so that behavior could not be expressed.
+
+`NotificationItem::Id<T>` and `Id1<T>` now attach a POD identity consisting of
+a no-RTTI per-template type token and an optional integer or hashed string key.
+The integer remains the renderer/system tag handle. Replacement compares the
+structured identity and reuses its settled handle, including for system-only
+notifications, while unrelated keys coexist. Both the in-app stack and system
+registry expose broad type and exact type/key dismissal; the broad form begins
+closing the type-only entry and every keyed entry of that type, exactly as the
+pinned `close_by_type` does.
+
+Tests cover replacement, distinct keys, exact-key removal, broad removal and
+system-registry cleanup. This closes the notification-identity prerequisite
+for WindowExt without changing module counts. MSVC release passes 19,358
+checks.
