@@ -89,7 +89,6 @@ const partialUi = new Set([
   "setting",
   "sheet",
   "sidebar",
-  "sizing",
   "tab",
   "table",
   "text",
@@ -301,7 +300,7 @@ const testTargets: Record<string, string[]> = {
   "ui/scroll": ["tests/ScrollbarTests.cpp", "tests/AutoScrollTests.cpp"],
   "ui/select": ["tests/SelectTests.cpp"],
   "ui/sidebar": ["tests/SidebarTests.cpp", "tests/BuilderCapacityTests.cpp"],
-  "ui/sizing": ["tests/StyleEqTests.cpp"],
+  "ui/sizing": ["tests/SizingTests.cpp", "tests/StyleEqTests.cpp"],
   "ui/slider": ["tests/SliderTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/tab": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
@@ -377,6 +376,23 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   },
   "ui/group_box.rs::trait GroupBoxVariants": {
     spellings: ["WithVariant", "Normal", "Fill", "Outline"],
+  },
+  "ui/sizing.rs::enum Size": {
+    spellings: ["UiSize"],
+  },
+  "ui/sizing.rs::trait Sizable": {
+    collapse:
+      "C++ components expose WithSize(UiSize) directly; fluent trait extension needs no inheritance wrapper",
+  },
+  "ui/sizing.rs::trait StyleSized": {
+    spellings: [
+      "UiInputTextSize",
+      "UiInputSize",
+      "UiListSize",
+      "UiSizeWith",
+      "UiTableCellSize",
+      "UiButtonTextSize",
+    ],
   },
   "ui/window_ext.rs::trait WindowExt": {
     collapse:

@@ -7170,3 +7170,32 @@ builders, 40 children, ids, title elements, variant structure and all three
 refinement targets. UI Group Box is full: the audit moves to 74 full, 47
 partial, 8 adapters and 2 exclusions with 335 unresolved spellings. MSVC
 release passes 19,492 checks, and the release story build passes.
+
+## Sizing retains custom pixels and the complete style projection
+
+The shared UI size was a four-value `enum class`, so Rust's fifth
+`Size::Size(Pixels)` payload could not cross the C++ component boundary. The
+module also exposed only table padding/height plus two unrelated convenience
+tables; the `Sizable` and `StyleSized` behaviors used throughout upstream had
+no common implementation, inviting each widget to invent its own constants.
+
+`UiSize` is now a trivially-copyable tagged value with named XSmall, Small,
+Medium and Large constants plus `Custom(px)`. Its constant proxy preserves all
+existing switch/comparison/overload syntax without allowing a named size to
+silently choose a float overload. String parsing/names, smaller/larger,
+custom-pixel scaling, and Rust's deliberately inverted `max`/`min` semantics
+are ported directly. Table row height and icon/font helpers now retain custom
+pixels where the source does.
+
+The complete `StyleSized` surface projects into free `El` refinements:
+input text/padding/height and their compound, list padding/size, square size,
+table-cell font/padding, and button text size. Every XSmall/Small/Medium/Large
+and custom fallback constant comes from the pinned matches. `Sizable` remains
+the natural C++ convention already used by components—their `WithSize(UiSize)`
+methods—rather than an inheritance hierarchy.
+
+All four upstream test groups are ported, with additional assertions over
+custom stepping and every style projection. UI Sizing is full: the audit moves
+to 75 full, 46 partial, 8 adapters and 2 exclusions with 332 unresolved
+spellings. MSVC and clang-cl release pass 19,557 checks, and all 26 release
+targets build.

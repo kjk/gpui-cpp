@@ -644,7 +644,7 @@ static UiSize DropdownSize(const DropdownButton& d) {
     if (d.hasSize) {
         return d.size;
     }
-    return d.button ? d.button->size : UiSize::Medium;
+    return d.button ? d.button->size : UiSize(UiSize::Medium);
 }
 
 El* DropdownButton::IntoEl() {

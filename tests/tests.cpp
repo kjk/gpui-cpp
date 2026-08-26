@@ -133,6 +133,7 @@ int GpuiMain(int argc, char** argv) {
     TestDescriptionList();
     TestLabel();
     TestGroupBox();
+    TestSizing();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

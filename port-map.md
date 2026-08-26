@@ -151,6 +151,9 @@ The important non-mechanical mappings are encoded in the audit:
 - UI Group Box exposes the Normal/Fill/Outline variant vocabulary and exact
   string conversions, independent root/title/content refinements, arbitrary
   children, optional element titles and the pinned wrapper/content structure.
+- UI Sizing's `UiSize` is the POD payload projection of Rust `Size`, including
+  custom pixels, parsing, stepping and inverted min/max semantics; every
+  `StyleSized` transform is available as an exact free `El` refinement.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -181,7 +184,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 335 declaration spellings still reported in partial modules,
+  2. Review the 332 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

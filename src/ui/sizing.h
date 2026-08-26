@@ -7,15 +7,178 @@
 
 namespace gpui {
 
-enum class UiSize : uint8_t {
-    XSmall,
-    Small,
-    Medium,
-    Large
+// crates/ui's payload enum Size. `Kind` is deliberately unscoped inside the
+// struct so existing C++ reads and switches keep the concise UiSize::Small
+// spelling while Custom(px) retains Rust's Size::Size(Pixels) payload.
+struct UiSize {
+    enum class Kind : uint8_t {
+        Size,
+        XSmall,
+        Small,
+        Medium,
+        Large
+    };
+
+    struct Constant {
+        Kind kind;
+        constexpr operator Kind() const { return kind; }
+    };
+
+    static constexpr Constant Size{Kind::Size};
+    static constexpr Constant XSmall{Kind::XSmall};
+    static constexpr Constant Small{Kind::Small};
+    static constexpr Constant Medium{Kind::Medium};
+    static constexpr Constant Large{Kind::Large};
+
+    Kind kind = Kind::Medium;
+    float pixels = 0;
+
+    constexpr UiSize() = default;
+    constexpr UiSize(Kind value) : kind(value) {}
+    constexpr UiSize(Constant value) : kind(value.kind) {}
+    static constexpr UiSize Custom(float value) {
+        UiSize out(Kind::Size);
+        out.pixels = value;
+        return out;
+    }
+    constexpr operator Kind() const { return kind; }
+    UiSize& operator=(Kind value) {
+        kind = value;
+        pixels = 0;
+        return *this;
+    }
+    UiSize& operator=(Constant value) { return *this = value.kind; }
 };
+
+constexpr bool operator==(UiSize a, UiSize b) {
+    return a.kind == b.kind &&
+           (a.kind != UiSize::Kind::Size || a.pixels == b.pixels);
+}
+constexpr bool operator!=(UiSize a, UiSize b) { return !(a == b); }
+constexpr bool operator==(UiSize a, UiSize::Constant b) {
+    return a.kind == b.kind;
+}
+constexpr bool operator==(UiSize::Constant a, UiSize b) { return b == a; }
+constexpr bool operator!=(UiSize a, UiSize::Constant b) { return !(a == b); }
+constexpr bool operator!=(UiSize::Constant a, UiSize b) { return !(a == b); }
+constexpr bool operator<(UiSize a, UiSize::Constant b) {
+    return (uint8_t)a.kind < (uint8_t)b.kind;
+}
+constexpr bool operator<(UiSize::Constant a, UiSize b) {
+    return (uint8_t)a.kind < (uint8_t)b.kind;
+}
+constexpr bool operator>(UiSize a, UiSize::Constant b) {
+    return (uint8_t)a.kind > (uint8_t)b.kind;
+}
+constexpr bool operator>(UiSize::Constant a, UiSize b) {
+    return (uint8_t)a.kind > (uint8_t)b.kind;
+}
+
+inline float UiSizeAsF32(UiSize s) {
+    switch (s) {
+        case UiSize::Size:
+            return s.pixels;
+        case UiSize::XSmall:
+            return 0;
+        case UiSize::Small:
+            return 1;
+        case UiSize::Large:
+            return 3;
+        default:
+            return 2;
+    }
+}
+
+inline Str UiSizeAsStr(UiSize s) {
+    switch (s) {
+        case UiSize::Size:
+            return StrL("custom");
+        case UiSize::XSmall:
+            return StrL("xs");
+        case UiSize::Small:
+            return StrL("sm");
+        case UiSize::Large:
+            return StrL("lg");
+        default:
+            return StrL("md");
+    }
+}
+
+inline UiSize UiSizeFromStr(Str text) {
+    if (StrEqI(text, StrL("xs")) || StrEqI(text, StrL("xsmall"))) {
+        return UiSize::XSmall;
+    }
+    if (StrEqI(text, StrL("sm")) || StrEqI(text, StrL("small"))) {
+        return UiSize::Small;
+    }
+    if (StrEqI(text, StrL("lg")) || StrEqI(text, StrL("large"))) {
+        return UiSize::Large;
+    }
+    return UiSize::Medium;
+}
+
+inline UiSize UiSizeSmaller(UiSize s) {
+    switch (s) {
+        case UiSize::Size:
+            return UiSize::Custom(s.pixels * 0.2f);
+        case UiSize::Small:
+            return UiSize::XSmall;
+        case UiSize::Medium:
+            return UiSize::Small;
+        case UiSize::Large:
+            return UiSize::Medium;
+        default:
+            return UiSize::XSmall;
+    }
+}
+
+inline UiSize UiSizeLarger(UiSize s) {
+    switch (s) {
+        case UiSize::Size:
+            return UiSize::Custom(s.pixels * 1.2f);
+        case UiSize::XSmall:
+            return UiSize::Small;
+        case UiSize::Small:
+            return UiSize::Medium;
+        case UiSize::Medium:
+            return UiSize::Large;
+        default:
+            return UiSize::Large;
+    }
+}
+
+// These names follow the pinned implementation, whose max chooses the
+// visually smaller size and min chooses the visually larger one.
+inline UiSize UiSizeMax(UiSize a, UiSize b) {
+    if (a.kind == UiSize::Kind::Size && b.kind == UiSize::Kind::Size) {
+        return UiSize::Custom(std::min(a.pixels, b.pixels));
+    }
+    if (a.kind == UiSize::Kind::Size) {
+        return a;
+    }
+    if (b.kind == UiSize::Kind::Size) {
+        return b;
+    }
+    return UiSizeAsF32(a) < UiSizeAsF32(b) ? a : b;
+}
+
+inline UiSize UiSizeMin(UiSize a, UiSize b) {
+    if (a.kind == UiSize::Kind::Size && b.kind == UiSize::Kind::Size) {
+        return UiSize::Custom(std::max(a.pixels, b.pixels));
+    }
+    if (a.kind == UiSize::Kind::Size) {
+        return a;
+    }
+    if (b.kind == UiSize::Kind::Size) {
+        return b;
+    }
+    return UiSizeAsF32(a) > UiSizeAsF32(b) ? a : b;
+}
 
 inline float UiSizePx(UiSize s) {
     switch (s) {
+        case UiSize::Size:
+            return s.pixels;
         case UiSize::XSmall:
             return 20;
         case UiSize::Small:
@@ -31,6 +194,8 @@ inline float UiSizePx(UiSize s) {
 // Not the control-height scale above — an icon inside a Medium control is 16.
 inline float UiIconPx(UiSize s) {
     switch (s) {
+        case UiSize::Size:
+            return s.pixels;
         case UiSize::XSmall:
             return 12;
         case UiSize::Small:
@@ -64,6 +229,8 @@ inline Edges UiTableCellPadding(UiSize s) {
 // Size::table_row_height: 26 / 30 / 32 / 40.
 inline float UiTableRowHeight(UiSize s) {
     switch (s) {
+        case UiSize::Size:
+            return s.pixels;
         case UiSize::XSmall:
             return 26;
         case UiSize::Small:
@@ -77,6 +244,8 @@ inline float UiTableRowHeight(UiSize s) {
 
 inline float UiFontPx(UiSize s) {
     switch (s) {
+        case UiSize::Size:
+            return s.pixels * 0.875f;
         case UiSize::XSmall:
             return 11;
         case UiSize::Small:
@@ -86,6 +255,133 @@ inline float UiFontPx(UiSize s) {
         default:
             return 14;
     }
+}
+
+inline float UiInputPadX(UiSize s) {
+    switch (s) {
+        case UiSize::Large:
+            return 12;
+        case UiSize::Medium:
+            return 10;
+        case UiSize::Small:
+            return 8;
+        case UiSize::XSmall:
+            return 4;
+        default:
+            return 8;
+    }
+}
+
+inline float UiInputFontPx(UiSize s) {
+    switch (s) {
+        case UiSize::Size:
+            return s.pixels * 0.875f;
+        case UiSize::XSmall:
+            return 12;
+        case UiSize::Small:
+        case UiSize::Medium:
+            return 14;
+        default:
+            return 16;
+    }
+}
+
+inline float UiInputPadY(UiSize s) {
+    switch (s) {
+        case UiSize::Large:
+            return 10;
+        case UiSize::Medium:
+            return 8;
+        case UiSize::Small:
+            return 2;
+        case UiSize::XSmall:
+            return 0;
+        default:
+            return 2;
+    }
+}
+
+inline float UiInputHeight(UiSize s) {
+    switch (s) {
+        case UiSize::Large:
+            return 44;
+        case UiSize::Medium:
+            return 32;
+        case UiSize::Small:
+            return 24;
+        case UiSize::XSmall:
+            return 20;
+        default:
+            return 24;
+    }
+}
+
+inline float UiListPadX(UiSize s) {
+    return s == UiSize::Small ? 8.f : 12.f;
+}
+
+inline float UiListPadY(UiSize s) {
+    switch (s) {
+        case UiSize::Large:
+            return 8;
+        case UiSize::Small:
+            return 2;
+        default:
+            return 4;
+    }
+}
+
+inline float UiSizeWithPx(UiSize s) {
+    switch (s) {
+        case UiSize::Size:
+            return s.pixels;
+        case UiSize::Large:
+            return 44;
+        case UiSize::Medium:
+            return 32;
+        case UiSize::Small:
+            return 20;
+        default:
+            return 16;
+    }
+}
+
+// StyleSized<T> projects to free El refinements because C++ puts the fluent
+// style vocabulary on El itself rather than using a blanket extension trait.
+inline El* UiInputTextSize(El* e, UiSize s) {
+    return e->Font(UiInputFontPx(s));
+}
+inline El* UiInputPadL(El* e, UiSize s) { return e->PadL(UiInputPadX(s)); }
+inline El* UiInputPadR(El* e, UiSize s) { return e->PadR(UiInputPadX(s)); }
+inline El* UiInputPadX(El* e, UiSize s) { return e->PadX(UiInputPadX(s)); }
+inline El* UiInputPadY(El* e, UiSize s) { return e->PadY(UiInputPadY(s)); }
+inline El* UiInputH(El* e, UiSize s) { return e->H(UiInputHeight(s)); }
+inline El* UiInputSize(El* e, UiSize s) {
+    return UiInputH(UiInputPadY(UiInputPadX(e, s), s), s);
+}
+inline El* UiListPadX(El* e, UiSize s) { return e->PadX(UiListPadX(s)); }
+inline El* UiListPadY(El* e, UiSize s) { return e->PadY(UiListPadY(s)); }
+inline El* UiListSize(El* e, UiSize s) {
+    return UiInputTextSize(UiListPadY(UiListPadX(e, s), s), s);
+}
+inline El* UiSizeWith(El* e, UiSize s) {
+    float px = UiSizeWithPx(s);
+    return e->W(px)->H(px);
+}
+inline El* UiTableCellSize(El* e, UiSize s) {
+    Edges pad = UiTableCellPadding(s);
+    if (s == UiSize::XSmall || s == UiSize::Small) {
+        e->Font(14);
+    }
+    return e->PadL(pad.left)
+        ->PadR(pad.right)
+        ->PadT(pad.top)
+        ->PadB(pad.bottom);
+}
+inline El* UiButtonTextSize(El* e, UiSize s) {
+    float font = s == UiSize::XSmall ? 12.f :
+                 (s == UiSize::Small ? 14.f : 16.f);
+    return e->Font(font);
 }
 
 namespace component {

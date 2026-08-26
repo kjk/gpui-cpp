@@ -130,3 +130,4 @@ void TestWindowExt();
 void TestDescriptionList();
 void TestLabel();
 void TestGroupBox();
+void TestSizing();
