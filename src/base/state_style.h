@@ -56,7 +56,13 @@ struct StateStyle {
     StateStyle& ActiveBg(Background c);
     StateStyle& Opacity(float v);
 
-    bool Has(StateField f) const { return (set & (uint32_t)f) != 0; }
+    // Some fields name a value and its shared colour bit. All of the bits
+    // must be present: testing for any bit makes BorderL look like BorderB
+    // merely because both carry BorderColor.
+    bool Has(StateField f) const {
+        uint32_t bits = (uint32_t)f;
+        return (set & bits) == bits;
+    }
 };
 
 // StyleRefinement::refine: `over` wins for the fields it names, and only those.

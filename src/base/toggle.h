@@ -1,8 +1,16 @@
 /* Unstyled toggle — crates/base/src/toggle.rs */
 
-#include "gpui/gpui.h"
+#include "base/state_style.h"
 
 namespace gpui {
+
+struct ToggleStyles {
+    StateStyle pressed = {};
+    StateStyle disabled = {};
+
+    ToggleStyles& Pressed(const StateStyle& style);
+    ToggleStyles& Disabled(const StateStyle& style);
+};
 
 // Rust's `Toggle::new(id).pressed(..).disabled(..).on_change(..)`: a
 // controlled toggle button that owns identity, focus and activation and
@@ -12,6 +20,7 @@ namespace gpui {
 // disabled toggle keeps its element id but takes neither focus nor the click.
 struct Toggle {
     static El* New(Ctx* cx, Str id, bool pressed = false, bool disabled = false,
-                   Listener onChange = {});
+                   Listener onChange = {}, const ToggleStyles* styles = nullptr,
+                   const StateStyle* instance = nullptr);
 };
 } // namespace gpui

@@ -1398,6 +1398,10 @@ El* El::StopClick() {
     stopClick = true;
     return this;
 }
+El* El::StopMouseDown() {
+    stopMouseDown = true;
+    return this;
+}
 El* El::SuppressTextSelection() {
     suppressTextSelection = true;
     return this;
@@ -4895,7 +4899,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
         e->onMouseDownOut.IsValid() || e->onMouseUpOut.IsValid() ||
         e->drag.IsValid() || e->onDrop.IsValid() ||
-        e->cursor != CursorKind::Arrow || e->slider ||
+        e->cursor != CursorKind::Arrow || e->slider || e->stopMouseDown ||
         e->suppressTextSelection) {
         HitRect hr;
         hr.id = e->clickId;
@@ -4923,6 +4927,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.sliderAxis = e->sliderAxis;
         hr.input = e->input;
         hr.stopClick = e->stopClick;
+        hr.stopMouseDown = e->stopMouseDown;
         hr.suppressTextSelection = e->suppressTextSelection;
         ctx->hits.Append(hr);
         // Everything under this element names it as the ancestor its events

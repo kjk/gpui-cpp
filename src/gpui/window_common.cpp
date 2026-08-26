@@ -1478,7 +1478,7 @@ static void HitChain(Window* win, float x, float y, Vec<int>* out) {
 // `pick` answers the handler an element registered, or an invalid Listener.
 template <typename Ev, typename Pick>
 static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
-                          Pick pick) {
+                          Pick pick, bool stopMouseDown = false) {
     win->stopPropagation = false;
     for (int k = chain.len - 1; k >= 0 && !win->stopPropagation; k--) {
         const HitRect& hr = win->paint.hits[chain[k]];
@@ -1496,6 +1496,9 @@ static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
             ev->phase = DispatchPhase::Bubble;
             ev->el = hr.bounds;
             ListenerCall(win->app, win, l, ev);
+        }
+        if (stopMouseDown && hr.stopMouseDown && ev->IsFocusing()) {
+            win->stopPropagation = true;
         }
     }
     win->stopPropagation = false;
@@ -1543,7 +1546,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         DispatchChain(
             win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
-            });
+            }, true);
         chain.Reset();
         DispatchMouseDownOut(win, in);
         ClearPendingClick(win);
@@ -1634,7 +1637,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         DispatchChain(
             win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
-            });
+            }, true);
         chain.Reset();
     }
     DispatchMouseDownOut(win, in);

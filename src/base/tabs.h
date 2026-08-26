@@ -1,8 +1,16 @@
 /* Unstyled tabs — crates/base/src/tabs.rs */
 
-#include "gpui/gpui.h"
+#include "base/state_style.h"
 
 namespace gpui {
+
+struct TabStyles {
+    StateStyle selected = {};
+    StateStyle disabled = {};
+
+    TabStyles& Selected(const StateStyle& style);
+    TabStyles& Disabled(const StateStyle& style);
+};
 
 // A collection root for tabs. Selection and activation live on the children,
 // so the root is identity and nothing else.
@@ -21,6 +29,7 @@ struct Tab {
     static El* New(Ctx* cx, Str id, bool disabled = false,
                    Listener onClick = {}, bool selected = false,
                    Str accessibilityLabel = {}, int positionInSet = 0,
-                   int sizeOfSet = 0);
+                   int sizeOfSet = 0, const TabStyles* styles = nullptr,
+                   const StateStyle* instance = nullptr);
 };
 } // namespace gpui

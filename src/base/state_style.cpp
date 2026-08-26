@@ -85,6 +85,18 @@ void StateStyleRefine(StateStyle* into, const StateStyle& over) {
     if (over.Has(StateFieldBorder)) {
         into->Border(over.style.border, over.style.borderColor);
     }
+    if (over.Has(StateFieldBorderL)) {
+        into->BorderL(over.style.borderL, over.style.borderColor);
+    }
+    if (over.Has(StateFieldBorderR)) {
+        into->BorderR(over.style.borderR, over.style.borderColor);
+    }
+    if (over.Has(StateFieldBorderT)) {
+        into->BorderT(over.style.borderT, over.style.borderColor);
+    }
+    if (over.Has(StateFieldBorderB)) {
+        into->BorderB(over.style.borderB, over.style.borderColor);
+    }
     if (over.Has(StateFieldRadius)) {
         into->Radius(over.style.radius);
     }

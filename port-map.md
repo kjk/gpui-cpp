@@ -116,6 +116,10 @@ The important non-mechanical mappings are encoded in the audit:
   because pointer, keyboard and accessibility dispatch all mutate the same
   object there. The audit records that placement explicitly; the Base
   Slider/Track/Indicator/Thumb elements are the public presentation layer.
+- Base Radio, Toggle and Tab expose their pinned semantic style structs and
+  resolve checked/pressed/selected before disabled over each instance style.
+  Tabs and disabled toggles also stop the left mouse-down bubble through a
+  hitbox flag, matching their callback-free Rust propagation handlers.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -146,7 +150,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 353 declaration spellings still reported in partial modules,
+  2. Review the 350 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

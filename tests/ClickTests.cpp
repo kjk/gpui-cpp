@@ -94,6 +94,57 @@ static void FocusThatMovedBetweenTheHalvesTakesTheClick() {
     utassert(!ClickFromKeyRelease(true, 4, 3, KeySpace, false));
 }
 
+namespace {
+struct MouseDownRecorder {
+    int calls = 0;
+
+    static void OnDown(MouseDownRecorder* self, Ctx*,
+                       const MouseDownEvent*) {
+        self->calls++;
+    }
+};
+} // namespace
+
+// Tab::render and a disabled Toggle install a left-button mouse-down handler
+// that only calls cx.stop_propagation(). The port represents that handler on
+// the hitbox so it does not need to invent a widget-owned callback entity.
+static void AControlCanOwnThePressWithoutACallback() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<MouseDownRecorder> recorder =
+        EntityNewState<MouseDownRecorder>(&app);
+
+    HitRect outer = {};
+    outer.bounds = {0, 0, 100, 100};
+    outer.onMouseDown = ListenTo(recorder, &MouseDownRecorder::OnDown);
+    win->paint.hits.Append(outer);
+
+    HitRect inner = {};
+    inner.bounds = {10, 10, 50, 50};
+    inner.parent = 0;
+    inner.stopMouseDown = true;
+    win->paint.hits.Append(inner);
+
+    PlatformInput press = {};
+    press.kind = PlatformInputKind::MouseDown;
+    press.mouseDown.button = MouseButton::Left;
+    press.mouseDown.x = 20;
+    press.mouseDown.y = 20;
+    WindowDispatchInput(win, &press);
+    utassert(recorder.Get(&app)->calls == 0);
+
+    // Rust registers the barrier for MouseButton::Left, not every pointer
+    // button. A right press still bubbles to the enclosing element.
+    press.mouseDown.button = MouseButton::Right;
+    WindowDispatchInput(win, &press);
+    utassert(recorder.Get(&app)->calls == 1);
+
+    win->paint.hits.Reset();
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestClick() {
     TestSuite("click");
     AReleaseOnTheElementThatTookThePressIsAClick();
@@ -105,4 +156,5 @@ void TestClick() {
     AnotherKeyComingUpIsNoClick();
     AModifierMakesItAShortcutRatherThanAnActivation();
     FocusThatMovedBetweenTheHalvesTakesTheClick();
+    AControlCanOwnThePressWithoutACallback();
 }

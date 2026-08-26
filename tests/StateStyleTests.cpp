@@ -63,6 +63,59 @@ static void AStateOnlyOverridesWhatItNames() {
     utassertnear(out.style.radius, 8.f);
 }
 
+// The per-edge builders are refinements too. They used to set the right mask
+// but StateStyleRefine failed to copy their values, which made semantic style
+// builders silently lose a border edge.
+static void EdgeRefinementsCopyEachNamedEdge() {
+    StateStyle instance;
+    instance.BorderB(3, kInstance);
+    StateStyle selected;
+    selected.BorderL(2, kSelected);
+    const StateStyle* states[] = {&selected};
+    StateStyle out = StateStyleResolve(instance, states, 1);
+    utassert(out.Has(StateFieldBorderL));
+    utassert(out.Has(StateFieldBorderB));
+    utassertnear(out.style.borderL, 2.f);
+    utassertnear(out.style.borderB, 3.f);
+    utassert(Same(out.style.borderColor, kSelected));
+}
+
+static void SemanticControlStylesFollowTheSharedPriority() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+
+    StateStyle instance;
+    instance.Opacity(.9f);
+    RadioStyles radioStyles;
+    radioStyles.Checked(StateStyle().Opacity(.8f))
+        .Disabled(StateStyle().Opacity(.5f));
+    El* radio = Radio::New(&cx, StrL("radio"), true, true, {}, &radioStyles,
+                           &instance);
+    utassert(radio->refineSet & StateFieldOpacity);
+    utassertnear(radio->refine.opacity, .5f);
+
+    ToggleStyles toggleStyles;
+    toggleStyles.Pressed(StateStyle().Opacity(.8f))
+        .Disabled(StateStyle().Opacity(.5f));
+    El* toggle = Toggle::New(&cx, StrL("toggle"), true, false, {},
+                             &toggleStyles, &instance);
+    utassertnear(toggle->refine.opacity, .8f);
+
+    TabStyles tabStyles;
+    tabStyles.Selected(StateStyle().Opacity(.8f))
+        .Disabled(StateStyle().Opacity(.5f));
+    El* tab = Tab::New(&cx, StrL("tab"), true, {}, true, {}, 0, 0,
+                       &tabStyles, &instance);
+    utassertnear(tab->refine.opacity, .5f);
+    utassert(tab->stopMouseDown);
+    utassert(Toggle::New(&cx, StrL("disabled-toggle"), false, true)
+                 ->stopMouseDown);
+    utassert(!Toggle::New(&cx, StrL("enabled-toggle"))->stopMouseDown);
+
+    ArenaDelete(a);
+}
+
 // button.rs disabled_style_applies_only_while_disabled_and_then_wins: a state
 // that is not active is left out of the list rather than resolved to nothing.
 static void ADisabledStyleOnlyAppliesWhileDisabled() {
@@ -290,6 +343,8 @@ void TestStateStyle() {
     AnActiveStateOverridesTheInstance();
     LaterStatesOverrideEarlierOnes();
     AStateOnlyOverridesWhatItNames();
+    EdgeRefinementsCopyEachNamedEdge();
+    SemanticControlStylesFollowTheSharedPriority();
     ADisabledStyleOnlyAppliesWhileDisabled();
     SelectedAndDisabledFollowTheSharedPriority();
     AResolvedStyleGoesOntoTheElement();

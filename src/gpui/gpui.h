@@ -1555,6 +1555,10 @@ struct El {
     bool clickFromPath = false;
     // El::StopClick — see HitRect::stopClick.
     bool stopClick = false;
+    // cx.stop_propagation() on the left-button mouse-down bubble. Tab and a
+    // disabled Toggle use this without needing a callback entity of their
+    // own; their press must not activate an enclosing control.
+    bool stopMouseDown = false;
     // The press belongs to a control with selection behavior of its own.
     // Base's window-level text selection waits until mouse-down bubbling has
     // finished and then consults this through GlobalState.
@@ -1912,6 +1916,7 @@ struct El {
     El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
     El* OnMouseDownOut(Listener l);
     El* OnMouseUpOut(Listener l);
+    El* StopMouseDown();
     // cx.stop_propagation() for the click this element takes.
     El* StopClick();
     El* SuppressTextSelection();
@@ -2093,6 +2098,7 @@ struct HitRect {
     // it. A field's clear button is the case: pressing the × must not also be
     // a press on the trigger it sits in.
     bool stopClick = false;
+    bool stopMouseDown = false;
     bool suppressTextSelection = false;
 };
 

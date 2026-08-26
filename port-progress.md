@@ -6856,3 +6856,28 @@ unstyled element parts, orientation and range accessibility. The deliberate
 no-exception logarithmic-limit nudge remains documented in the source and
 test. Slider is full, so the audit is 63 full, 58 partial, 8 adapters and 2
 exclusions with 353 unresolved partial-module spellings.
+
+## Radio, Toggle and Tab regain semantic state surfaces
+
+The three small controlled primitives were behaviorally usable but still
+flattened Rust's application-owned state styling out of their C++ factories.
+`RadioStyles`, `ToggleStyles` and `TabStyles` now directly represent the
+pinned checked/pressed/selected and disabled refinements. Repeated builder
+calls refine instead of replace, and each primitive resolves the instance
+style first, its value state next and disabled last, preserving the shared
+`state_style.rs` priority. This also found a real shared bug: per-edge border
+refinements set the right masks but `StateStyleRefine` never copied their
+values, while its composite-bit `Has` check mistook one edge for every edge.
+Both halves are fixed and covered.
+
+The event half now matches the two upstream `stop_propagation` sites as well.
+Every Tab owns a left-button mouse-down without becoming keyboard-focusable,
+and a disabled Toggle owns that press so it cannot activate a control around
+it. A hitbox-level mouse-down barrier represents Rust's callback that has no
+widget state to capture; the ordinary capture/bubble dispatcher observes it
+only for the focusing button. Tests drive the real input dispatcher and pin
+that right-button events still bubble.
+
+Radio, Toggle and Tabs are full, moving the audit to 66 full, 55 partial, 8
+adapters and 2 exclusions. Their three style declarations reduce the partial
+report to 350 unresolved spellings. MSVC release passes 19,106 checks.

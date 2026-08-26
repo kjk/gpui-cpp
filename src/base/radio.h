@@ -1,8 +1,18 @@
 /* Unstyled radio — crates/base/src/radio.rs */
 
-#include "gpui/gpui.h"
+#include "base/state_style.h"
 
 namespace gpui {
+
+// Semantic root styles supported by Radio. Calls refine the existing state,
+// matching repeated `.styles(|styles| ...)` builders in Rust.
+struct RadioStyles {
+    StateStyle checked = {};
+    StateStyle disabled = {};
+
+    RadioStyles& Checked(const StateStyle& style);
+    RadioStyles& Disabled(const StateStyle& style);
+};
 
 // Rust's `Radio::new(id).checked(..).disabled(..).on_change(..)`. Selection is
 // the caller's; activating an unchecked radio asks for `true` through
@@ -12,6 +22,7 @@ namespace gpui {
 // element id and takes neither.
 struct Radio {
     static El* New(Ctx* cx, Str id, bool checked = false, bool disabled = false,
-                   Listener onChange = {});
+                   Listener onChange = {}, const RadioStyles* styles = nullptr,
+                   const StateStyle* instance = nullptr);
 };
 } // namespace gpui
