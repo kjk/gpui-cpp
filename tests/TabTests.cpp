@@ -134,11 +134,10 @@ static void TwoBarsHaveTwoOverflowMenus() {
     page->Child(left)->Child(right);
     IdsCollect(page);
 
-    // DropdownMenu names its trigger `trigger` among the dropdown's own
-    // parts, so the button's name is the one the caller asked for and this
-    // is the one that reaches the tree.
-    El* btnL = FindNamedTab(left, "trigger");
-    El* btnR = FindNamedTab(right, "trigger");
+    // The dropdown takes the trigger as it is, so the name the bar asked
+    // for is the one in the tree.
+    El* btnL = FindNamedTab(left, "more-btn");
+    El* btnR = FindNamedTab(right, "more-btn");
     utassert(btnL && btnR);
     if (btnL && btnR) {
         utassert(btnL->clickId != 0 && btnR->clickId != 0);

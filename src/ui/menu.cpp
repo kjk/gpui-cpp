@@ -452,12 +452,21 @@ El* DropdownMenu::IntoEl() {
         // The trigger opens and closes the menu it holds; a caller that wants
         // to know can subscribe to the menu itself.
         if (st) {
+            // `self.base.child(self.trigger)`: Rust's Popup takes the trigger
+            // as it is. It arrives with a name of its own -- a Button carries
+            // the id its caller gave it -- and renaming it here threw that
+            // away, so a caller's name never reached the tree. Only a trigger
+            // that came without one is named, and `trigger` is the name its
+            // place in the dropdown asks for.
+            if (!trigger->clickId && !trigger->clickFromPath) {
+                trigger->PathClick(StrL("trigger"));
+            }
             // The menu as this frame has it goes with the handler, the way
             // Rust's Popover captures `open` at render time and hands it to
             // the trigger's press.
-            BindClick(trigger, StrL("trigger"),
-                      ListenTo(menu->state, &PopupMenuState::OnTriggerClick,
-                               (intptr_t)st->open));
+            trigger
+                ->OnClick(ListenTo(menu->state, &PopupMenuState::OnTriggerClick,
+                                   (intptr_t)st->open));
         }
         wrap->Child(trigger);
     }
