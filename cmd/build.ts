@@ -70,6 +70,19 @@ export function amalgamIsWork(): boolean {
 }
 
 /**
+ * A file in the amalgam directory, repo-relative: `.work/gpui.cpp` here,
+ * plain `gpui.cpp` in gpui-cpp-dist, where the directory is the repo root.
+ * Joining by hand would make that one `./gpui.cpp`, which compiles the same
+ * and reads like a path that got away from somebody -- and these strings are
+ * matched against each other as well as printed, so one spelling is the only
+ * safe number of spellings.
+ */
+export function amalgamPath(name: string): string {
+  const dir = amalgamDir();
+  return dir === "." ? name : `${dir}/${name}`;
+}
+
+/**
  * How to spell one of these scripts on a command line from the repo root:
  * `cmd/run.ts` here, `run.ts` in gpui-cpp-dist. Only usage text needs it, but
  * usage text that tells a reader to type a path that is not there is worse
@@ -334,7 +347,7 @@ export function outFilePath(plat: Platform, f: BuildFlags, name: string): string
 
 /** The whole library, platform halves included; one file, see cmd/update-dist.ts. */
 function amalgamSrc(): string[] {
-  return [`${amalgamDir()}/gpui.cpp`];
+  return [amalgamPath("gpui.cpp")];
 }
 
 function cppDir(rel: string): string[] {
@@ -367,7 +380,7 @@ function objGroup(f: string): string {
   if (f.startsWith("ext/")) {
     return "ext";
   }
-  if (f.startsWith(`${amalgamDir()}/gpui`) || f.startsWith("src/gpui/")) {
+  if (f.startsWith(amalgamPath("gpui")) || f.startsWith("src/gpui/")) {
     return "gpui";
   }
   if (f.startsWith("examples/showcase/")) {
@@ -414,7 +427,7 @@ function quotedIncludes(rel: string, memo: Map<string, string[]>): string[] {
   let m: RegExpExecArray | null;
   while ((m = includeRe.exec(text))) {
     const inc = m[1]!.replaceAll("\\", "/");
-    const candidates = [`${dir}/${inc}`, `${amalgamDir()}/${inc}`, `src/${inc}`];
+    const candidates = [`${dir}/${inc}`, amalgamPath(inc), `src/${inc}`];
     for (const raw of candidates) {
       const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
       if (!existsSync(join(root, norm))) {
@@ -975,7 +988,7 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
 const objcFlags = ["-x", "objective-c++", "-fobjc-arc"];
 
 function isMacAmalgam(srcFile: string): boolean {
-  return srcFile === `${amalgamDir()}/gpui.cpp`;
+  return srcFile === amalgamPath("gpui.cpp");
 }
 
 /**
@@ -1065,13 +1078,15 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
   for (const f of ["gpui.h", "gpui.cpp"]) {
     const abs = join(root, amalgamDir(), f);
     if (!existsSync(abs)) {
-      fail(`missing ${amalgamDir()}/${f}`);
+      fail(`missing ${amalgamPath(f)}`);
     }
     const text = readFileSync(abs, "utf8");
     bytes += Buffer.byteLength(text, "utf8");
     lines += text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
   }
-  console.log(`amalgam ${amalgamDir()}/gpui.h + ${amalgamDir()}/gpui.cpp (as published, ${amalgamSize(bytes, lines)})`);
+  console.log(
+    `amalgam ${amalgamPath("gpui.h")} + ${amalgamPath("gpui.cpp")} (as published, ${amalgamSize(bytes, lines)})`,
+  );
 }
 
 // ─── assets ───────────────────────────────────────────────────────────────
