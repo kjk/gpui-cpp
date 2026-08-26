@@ -1515,9 +1515,19 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
                         ->OnOk(Listen(cx, &ConfirmGoTo))
                         ->IntoEl(win));
     }
-    // ToggleFpsMonitor: the HUD places itself over the top right corner.
+    // ToggleFpsMonitor: the HUD places itself in the top right corner of
+    // whatever it is put in, so what it is put in is a strip that starts
+    // under the title bar -- `div().absolute().top(TITLE_BAR_HEIGHT).left_0()
+    // .right_0()` in StoryRoot::render. Without it the HUD is laid over the
+    // caption's own buttons. A window with no title bar of its own, like the
+    // fps_monitor example, hands it the whole window and it sits at the top.
     if (self->fpsMonitor) {
-        root->Child(FpsMonitorEl(cx));
+        root->Child(Div(a)
+                        ->Absolute()
+                        ->Top(component::kTitleBarHeight)
+                        ->Left(0)
+                        ->Right(0)
+                        ->Child(FpsMonitorEl(cx)));
     }
     // Bordered only where the window is client-decorated; a system frame
     // draws its own.
