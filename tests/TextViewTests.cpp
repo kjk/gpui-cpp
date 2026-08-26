@@ -228,6 +228,31 @@ static void TestHtmlWhitespace(Arena* a) {
 static void TestHtmlEntities(Arena* a) {
     MdNode* doc = HtmlParse(a, StrL("<p>a &amp; b &lt;c&gt; &#65; &nope;</p>"));
     utassert(TextIs(a, Child(doc, 0), "a & b <c> A &nope;"));
+
+    // The longest HTML5 entity name is well beyond the former twelve-byte
+    // lexer window.
+    MdNode* longName = HtmlParse(
+        a, StrL("<p>&CounterClockwiseContourIntegral;</p>"));
+    utassert(TextIs(a, Child(longName, 0), "\xE2\x88\xB3"));
+}
+
+static void TestHtmlNestingHasNoPortLimit(Arena* a) {
+    StrBuilder source;
+    for (int i = 0; i < 100; i++) {
+        source.Append(StrL("<div>"));
+    }
+    source.Append(StrL("<p>deep</p>"));
+    for (int i = 0; i < 100; i++) {
+        source.Append(StrL("</div>"));
+    }
+    Str html = source.TakeStr();
+    MdNode* node = HtmlParse(a, html);
+    for (int i = 0; i < 100; i++) {
+        node = Child(node, 0);
+        utassert(node && node->kind == MdKind::Group);
+    }
+    utassert(TextIs(a, Child(node, 0), "deep"));
+    StrFree(html);
 }
 
 static void TestHtmlList(Arena* a) {
@@ -691,6 +716,122 @@ static void TestTableToMarkdown(Arena* a) {
 
 #endif // GPUI_MARKDOWN_FULL
 
+static int CountByte(Str s, char needle) {
+    int n = 0;
+    for (int i = 0; i < s.len; i++) {
+        n += s.s[i] == needle ? 1 : 0;
+    }
+    return n;
+}
+
+static int gTableActionCols = 0;
+static int gTableActionRows = 0;
+
+static El* CaptureLargeTable(Ctx* cx, void* data, const TableData* table) {
+    (void)cx;
+    (void)data;
+    gTableActionCols = table->cols;
+    gTableActionRows = table->rowCount;
+    return nullptr;
+}
+
+static bool NeverClaimPlugin(Ctx* cx, MdNode* node, Str text, void* data,
+                             MdPluginNode* out) {
+    (void)cx;
+    (void)node;
+    (void)text;
+    (void)data;
+    (void)out;
+    return false;
+}
+
+static El* NeverRenderPlugin(Ctx* cx, const MdPluginNode* node, void* data) {
+    (void)cx;
+    (void)node;
+    (void)data;
+    return nullptr;
+}
+
+static int ElementTextBytes(El* e) {
+    int n = e ? e->text.len : 0;
+    for (El* child = e ? e->first : nullptr; child; child = child->next) {
+        n += ElementTextBytes(child);
+    }
+    return n;
+}
+
+static Str HtmlTableSource(int rows, int cols) {
+    StrBuilder source;
+    source.Append(StrL("<table>"));
+    for (int r = 0; r < rows; r++) {
+        source.Append(StrL("<tr>"));
+        for (int c = 0; c < cols; c++) {
+            source.Append(r == 0 ? StrL("<th>x</th>") : StrL("<td>x</td>"));
+        }
+        source.Append(StrL("</tr>"));
+    }
+    source.Append(StrL("</table>"));
+    return source.TakeStr();
+}
+
+static void TestTextCollectionsGrowWithTheDocument(Arena* a) {
+    Ctx cx = {};
+    App app;
+    cx.app = &app;
+    cx.a = a;
+
+    TextView* plugins = TextView::New(&cx, StrL("plain"));
+    for (int i = 0; i < 20; i++) {
+        plugins->Plugin(StrL("test"), &NeverClaimPlugin, &NeverRenderPlugin,
+                        (void*)(intptr_t)(i + 1));
+    }
+    utassert(plugins->plugins.len == 20);
+    utassert(plugins->plugins[19].data == (void*)(intptr_t)20);
+
+    // A marked word and a highlighted code token both used 512-byte scratch
+    // arrays. Render enough bytes to cross those arrays and count the text in
+    // the resulting element tree.
+    StrBuilder markedSource;
+    markedSource.Append(StrL("<p><b>"));
+    for (int i = 0; i < 700; i++) {
+        markedSource.Append(StrL("x"));
+    }
+    markedSource.Append(StrL("</b></p>"));
+    Str marked = markedSource.TakeStr();
+    El* markedEl = TextView::NewHtml(&cx, marked)->IntoEl();
+    utassert(ElementTextBytes(markedEl) == 700);
+    StrFree(marked);
+
+    StrBuilder codeSource;
+    codeSource.Append(StrL("<pre><code class='language-cpp'>"));
+    for (int i = 0; i < 700; i++) {
+        codeSource.Append(StrL("x"));
+    }
+    codeSource.Append(StrL("</code></pre>"));
+    Str code = codeSource.TakeStr();
+    El* codeEl = TextView::NewHtml(&cx, code)->IntoEl();
+    utassert(ElementTextBytes(codeEl) == 700);
+    StrFree(code);
+
+    // Forty columns cross the old column cap; seventy rows also cross the
+    // old table-actions cell cap. Serialization and rendering see all of it.
+    Str tableSource = HtmlTableSource(70, 40);
+    MdNode* table = Child(HtmlParse(a, tableSource), 0);
+    utassert(table && table->kind == MdKind::Table);
+    utassert(Children(Child(table, 0)) == 40);
+    Str markdown = MdTableToMarkdown(a, table);
+    utassert(CountByte(markdown, '|') == 41 * 71);
+
+    gTableActionCols = 0;
+    gTableActionRows = 0;
+    TextView::NewHtml(&cx, tableSource)
+        ->TableActions(&CaptureLargeTable)
+        ->IntoEl();
+    utassert(gTableActionCols == 40);
+    utassert(gTableActionRows == 69);
+    StrFree(tableSource);
+}
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
@@ -707,6 +848,7 @@ void TestTextView() {
     TestHtmlNestedMarks(a);
     TestHtmlWhitespace(a);
     TestHtmlEntities(a);
+    TestHtmlNestingHasNoPortLimit(a);
     TestHtmlList(a);
     TestHtmlPre(a);
     TestHtmlTable(a);
@@ -728,6 +870,7 @@ void TestTextView() {
     TestSourceImage();
     TestSourceImageAtTheEnds();
     TestSourceIgnoresPlainRuns();
+    TestTextCollectionsGrowWithTheDocument(a);
 #if GPUI_MARKDOWN_FULL
     TestMarkdownTaskList(a);
 #endif

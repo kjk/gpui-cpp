@@ -226,10 +226,8 @@ struct TextView {
     TableActionsFn tableActions = nullptr;
     void* tableActionsData = nullptr;
     void* codeActionsData = nullptr;
-    // As many as a view registers; upstream's own example has three.
-    static const int kMaxPlugins = 8;
-    MdPlugin plugins[kMaxPlugins] = {};
-    int nPlugins = 0;
+    // Rust stores plugins in a Vec and offers them in registration order.
+    ArenaVec<MdPlugin> plugins = {};
     // node.rs min_w_16: the floor a table column shrinks to. Above the floor
     // a column's width is a fraction of the table, proportional to the length
     // of its content, the way render_wrap_table distributes the space.

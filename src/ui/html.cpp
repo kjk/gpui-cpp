@@ -35,32 +35,38 @@ static char HtmlLower(char c) {
     return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
 }
 
+static bool HtmlNamesEqual(Str a, Str b) {
+    if (a.len != b.len) {
+        return false;
+    }
+    for (int i = 0; i < a.len; i++) {
+        if (HtmlLower(a.s[i]) != HtmlLower(b.s[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 struct HtmlLex {
     Str src = {};
     int at = 0;
     HtmlTok tok = HtmlTok::End;
     // Text: the raw source slice, entities and all.
     Str text = {};
-    // Start / Close: the tag name, lowercased, pointing at `nameBuf`.
+    // Start / Close: the tag name as a source slice. Comparisons fold ASCII
+    // case, so no fixed lowercase scratch buffer limits its length.
     Str name = {};
     // Start: everything between the name and the '>'.
     Str attrs = {};
     bool selfClose = false;
-    // A tag name longer than this is not one we know; truncating it only
-    // means it lands in the same "unknown tag" arm.
-    char nameBuf[32] = {};
 };
 
 static void HtmlLexName(HtmlLex* l) {
-    int n = 0;
+    int start = l->at;
     while (l->at < l->src.len && HtmlIsNameChar(l->src.s[l->at])) {
-        char c = HtmlLower(l->src.s[l->at++]);
-        if (n < (int)sizeof(l->nameBuf) - 1) {
-            l->nameBuf[n++] = c;
-        }
+        l->at++;
     }
-    l->nameBuf[n] = 0;
-    l->name = Str(l->nameBuf, n);
+    l->name = Str(l->src.s + start, l->at - start);
 }
 
 // From the name to the '>', with quoted values passed over so that a '>'
@@ -172,8 +178,7 @@ static void HtmlLexSkipRaw(HtmlLex* l, Str name) {
             int save = l->at;
             l->at += 2;
             HtmlLexName(l);
-            if (l->name.len == name.len &&
-                memcmp(l->name.s, name.s, (size_t)name.len) == 0) {
+            if (HtmlNamesEqual(l->name, name)) {
                 while (l->at < l->src.len && l->src.s[l->at] != '>') {
                     l->at++;
                 }
@@ -192,8 +197,7 @@ static void HtmlLexSkipRaw(HtmlLex* l, Str name) {
 // ─── attributes and text ──────────────────────────────────────────────────
 
 static bool HtmlNameIs(Str n, const char* s) {
-    int len = (int)strlen(s);
-    return n.len == len && memcmp(n.s, s, (size_t)len) == 0;
+    return HtmlNamesEqual(n, Str(s));
 }
 
 // The raw slice of one attribute's value, or an empty Str. A valueless
@@ -285,8 +289,7 @@ static Str HtmlDecodeText(Arena* a, Str s, bool raw) {
         }
         if (c == '&') {
             int j = i + 1;
-            while (j < s.len && j - i < 12 && s.s[j] != ';' &&
-                   !HtmlIsSpace(s.s[j])) {
+            while (j < s.len && s.s[j] != ';' && !HtmlIsSpace(s.s[j])) {
                 j++;
             }
             if (j < s.len && s.s[j] == ';') {
@@ -323,7 +326,8 @@ static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
     *level = 0;
     if (HtmlNameIs(n, "p")) {
         *kind = MdKind::Paragraph;
-    } else if (n.len == 2 && n.s[0] == 'h' && n.s[1] >= '1' && n.s[1] <= '6') {
+    } else if (n.len == 2 && HtmlLower(n.s[0]) == 'h' && n.s[1] >= '1' &&
+               n.s[1] <= '6') {
         *kind = MdKind::Heading;
         *level = (uint8_t)(n.s[1] - '0');
     } else if (HtmlNameIs(n, "blockquote")) {
@@ -534,10 +538,9 @@ struct HtmlBuild {
     Str href = {};
     bool inHead = false;
     bool raw = false;
-    // Deep enough for any document a reader view shows; past it the tags are
-    // still tokenized, they just stop nesting.
-    HtmlOpen stack[64];
-    int depth = 0;
+    // html5ever's open-element stack is a Vec. Arena-backed segments keep the
+    // same shape here without imposing a port-only nesting depth.
+    ArenaVec<HtmlOpen> stack = {};
 };
 
 static MdNode* HtmlNewNode(HtmlBuild* b, MdKind k) {
@@ -554,11 +557,10 @@ static MdNode* HtmlNewNode(HtmlBuild* b, MdKind k) {
 }
 
 static void HtmlPush(HtmlBuild* b, MdNode* n, Str name) {
-    if (b->depth >= (int)(sizeof(b->stack) / sizeof(b->stack[0]))) {
+    if (!b->stack.Append(b->a, HtmlOpen{})) {
         return;
     }
-    HtmlOpen& o = b->stack[b->depth++];
-    o = HtmlOpen{};
+    HtmlOpen& o = b->stack[b->stack.len - 1];
     o.node = n;
     o.name = name;
     if (n) {
@@ -668,9 +670,8 @@ static void HtmlText(HtmlBuild* b, Str raw) {
 
 static void HtmlClose(HtmlBuild* b, Str name) {
     int found = -1;
-    for (int i = b->depth - 1; i >= 0; i--) {
-        if (b->stack[i].name.len == name.len &&
-            memcmp(b->stack[i].name.s, name.s, (size_t)name.len) == 0) {
+    for (int i = b->stack.len - 1; i >= 0; i--) {
+        if (HtmlNamesEqual(b->stack[i].name, name)) {
             found = i;
             break;
         }
@@ -678,7 +679,7 @@ static void HtmlClose(HtmlBuild* b, Str name) {
     if (found < 0) {
         return;
     }
-    for (int i = b->depth - 1; i >= found; i--) {
+    for (int i = b->stack.len - 1; i >= found; i--) {
         HtmlOpen& o = b->stack[i];
         if (o.node) {
             b->cur = o.node->parent ? o.node->parent : b->cur;
@@ -697,7 +698,7 @@ static void HtmlClose(HtmlBuild* b, Str name) {
             b->raw = o.prevRaw;
         }
     }
-    b->depth = found;
+    b->stack.Truncate(found);
 }
 
 // <ol start="3">. A value that is not a number leaves the list at 1, the way
@@ -743,8 +744,8 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
         // exactly as MD_BLOCK_THEAD does on the markdown side.
         bool head = HtmlNameIs(l->name, "thead");
         HtmlPush(b, nullptr, name);
-        if (b->depth > 0) {
-            HtmlOpen& o = b->stack[b->depth - 1];
+        if (b->stack.len > 0) {
+            HtmlOpen& o = b->stack[b->stack.len - 1];
             o.head = true;
             o.prevHead = b->inHead;
         }
@@ -756,7 +757,7 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
         // <p>text<div>..</div> is not nesting: an open paragraph gives way to
         // the block that follows it.
         if (b->cur->kind == MdKind::Paragraph) {
-            for (int i = b->depth - 1; i >= 0; i--) {
+            for (int i = b->stack.len - 1; i >= 0; i--) {
                 if (b->stack[i].node == b->cur) {
                     HtmlClose(b, b->stack[i].name);
                     break;
@@ -777,8 +778,8 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
             }
         }
         HtmlPush(b, n, name);
-        if (kind == MdKind::Code && b->depth > 0) {
-            HtmlOpen& o = b->stack[b->depth - 1];
+        if (kind == MdKind::Code && b->stack.len > 0) {
+            HtmlOpen& o = b->stack[b->stack.len - 1];
             o.raw = true;
             o.prevRaw = b->raw;
             b->raw = true;
@@ -804,10 +805,10 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
     uint8_t mark = HtmlInlineMark(l->name);
     bool link = HtmlNameIs(l->name, "a");
     HtmlPush(b, nullptr, name);
-    if (b->depth <= 0) {
+    if (b->stack.len <= 0) {
         return;
     }
-    HtmlOpen& o = b->stack[b->depth - 1];
+    HtmlOpen& o = b->stack[b->stack.len - 1];
     if (link) {
         o.mark = MdLink;
         o.hadHref = true;

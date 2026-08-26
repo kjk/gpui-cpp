@@ -6489,3 +6489,29 @@ passes 18,789 checks. Base input remains partial for structural reasons — its
 providers are synchronous function-pointer adapters and its document is a
 flat buffer rather than Rust's tasks, trait objects and Rope — no longer for
 silently bounded collection results.
+
+## UI text and HTML no longer truncate document structure
+
+The dependency-free `ui/text` and `ui/html` implementation still deliberately
+supports the reader-oriented tag vocabulary the tree needs instead of
+porting html5ever, but its result is no longer a function of C++ scratch-array
+sizes. The HTML open-element stack is an `ArenaVec`, tag names remain full
+source slices compared with ASCII case folding, and entity scanning reaches
+the semicolon rather than stopping after twelve bytes. A hundred nested block
+elements and `&CounterClockwiseContourIntegral;`, the longest HTML5 entity
+name, are regression cases.
+
+`TextView` plugins now use the same arena-backed Vec shape as upstream. Marked
+inline runs and syntax-coloured code lines allocate scratch for the actual
+source length, replacing two 512-byte arrays that silently lost the end of a
+long word or token. Both paths are covered at 700 bytes.
+
+Markdown and HTML tables now measure their row and column counts first and
+allocate alignment, width and cell arrays from the frame arena. The old 32
+column, 2,048 table-action cell and 8,192 serialization cell boundaries are
+gone; only integer-overflow checks at the Arena allocator seam remain.
+Coverage renders and serializes a 70 by 40 table and verifies that the table
+action receives all 40 columns and 69 body rows. `bun cmd/test.ts` passes
+18,900 checks. `ui/text` stays partial because the handwritten HTML vocabulary
+and scanner-backed highlighting are smaller dependency-rule adapters, not
+because long valid input is truncated.

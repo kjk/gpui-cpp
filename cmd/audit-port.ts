@@ -68,7 +68,7 @@ const partialReasons: Record<string, string> = {
   "base/theme": "the projected Base theme is complete; the UI palette still lives in gpui runtime",
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/inspector": "the inspector is intentionally smaller than GPUI's debug inspector",
-  "ui/text": "HTML/highlighting are dependency-free adapters with documented parser limits",
+  "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
   "ui/theme": "registry/projection are app-owned; the large palette type still lives in gpui runtime",
 };
 

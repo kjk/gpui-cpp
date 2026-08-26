@@ -1118,7 +1118,16 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
     }
     El* col = Div(a)->FlexCol()->W(kFill);
     El* row = AlignRow(Div(a)->FlexRow()->FlexWrap()->W(kFill), align);
-    char word[512];
+    int wordCap = 1;
+    for (MdRun* r = n->runFirst; r; r = r->next) {
+        if (r->text.len > 0) {
+            wordCap += r->text.len;
+        }
+    }
+    char* word = (char*)Alloc(a, wordCap);
+    if (!word) {
+        return col;
+    }
     int len = 0;
     uint8_t marks = 0;
     Str href = {};
@@ -1147,9 +1156,7 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
                 row = AlignRow(Div(a)->FlexRow()->FlexWrap()->W(kFill), align);
                 continue;
             }
-            if (len < (int)sizeof(word) - 1) {
-                word[len++] = c;
-            }
+            word[len++] = c;
             if (c == ' ') {
                 flush();
             }
@@ -1242,35 +1249,72 @@ static Str TableToMarkdown(Arena* a, MdNode* n, const Str* cells, int cols,
     return StrDup(a, out.TakeStr());
 }
 
+static void TableDimensions(MdNode* table, int* rowsOut, int* colsOut) {
+    int rows = 0;
+    int cols = 0;
+    for (MdNode* r = table ? table->first : nullptr; r; r = r->next) {
+        rows++;
+        int rowCols = 0;
+        for (MdNode* c = r->first; c; c = c->next) {
+            rowCols++;
+        }
+        if (rowCols > cols) {
+            cols = rowCols;
+        }
+    }
+    if (rowsOut) {
+        *rowsOut = rows;
+    }
+    if (colsOut) {
+        *colsOut = cols;
+    }
+}
+
+// Arena::Alloc takes an int byte count. Reject only a shape that cannot be
+// represented by that allocator; this is an overflow guard, not a content
+// limit like the old 32-column/8,192-cell tables.
+template <typename T>
+static T* TextArenaArray(Arena* a, int count) {
+    if (count <= 0 || count > 0x7fffffff / (int)sizeof(T)) {
+        return nullptr;
+    }
+    T* out = (T*)Alloc(a, count * (int)sizeof(T));
+    if (out) {
+        memset(out, 0, (size_t)count * sizeof(T));
+    }
+    return out;
+}
+
+static int TableCellCount(int rows, int cols) {
+    if (rows <= 0 || cols <= 0 || rows > 0x7fffffff / cols) {
+        return 0;
+    }
+    return rows * cols;
+}
+
 Str MdTableToMarkdown(Arena* a, MdNode* table) {
-    enum {
-        kMaxCols = 32,
-        kMaxCells = 32 * 256
-    };
     if (!table) {
         return {};
     }
     int rows = 0;
     int cols = 0;
-    uint8_t align[kMaxCols] = {};
+    TableDimensions(table, &rows, &cols);
+    int cellCount = TableCellCount(rows, cols);
+    if (cellCount <= 0) {
+        return {};
+    }
+    uint8_t* align = TextArenaArray<uint8_t>(a, cols);
+    Str* cells = TextArenaArray<Str>(a, cellCount);
+    if (!align || !cells) {
+        return {};
+    }
     for (MdNode* r = table->first; r; r = r->next) {
-        rows++;
         int ix = 0;
-        for (MdNode* c = r->first; c && ix < kMaxCols; c = c->next, ix++) {
+        for (MdNode* c = r->first; c; c = c->next, ix++) {
             if (align[ix] == MdAlignDefault) {
                 align[ix] = c->align;
             }
-            if (ix + 1 > cols) {
-                cols = ix + 1;
-            }
         }
-    }
-    if (rows <= 0 || cols <= 0 || rows * cols > kMaxCells) {
-        return {};
-    }
-    Str* cells = (Str*)Alloc(a, (int)sizeof(Str) * rows * cols);
-    if (!cells) {
-        return {};
     }
     int ri = 0;
     for (MdNode* r = table->first; r; r = r->next, ri++) {
@@ -1287,17 +1331,13 @@ El* TextView::TableActionsRow(MdNode* n, int nCols, const uint8_t* colAlign) {
     if (!tableActions || nCols <= 0) {
         return nullptr;
     }
-    enum {
-        kMaxCells = 32 * 64
-    };
     int rows = 0;
-    for (MdNode* r = n->first; r; r = r->next) {
-        rows++;
-    }
-    if (rows <= 0 || rows * nCols > kMaxCells) {
+    TableDimensions(n, &rows, nullptr);
+    int cellCount = TableCellCount(rows, nCols);
+    if (cellCount <= 0) {
         return nullptr;
     }
-    Str* cells = (Str*)Alloc(a, (int)sizeof(Str) * rows * nCols);
+    Str* cells = TextArenaArray<Str>(a, cellCount);
     if (!cells) {
         return nullptr;
     }
@@ -1392,7 +1432,10 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
     El* row = Div(a)->FlexRow()->H(lineH);
     // The run being gathered: adjacent tokens of one color are one element,
     // which keeps a line of code down to a handful.
-    char piece[512];
+    char* piece = (char*)Alloc(a, code.len + 1);
+    if (!piece) {
+        return col;
+    }
     int len = 0;
     Rgba color = th.foreground;
     auto flush = [&]() {
@@ -1432,9 +1475,7 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
                 flush();
                 color = c;
             }
-            if (len < (int)sizeof(piece) - 1) {
-                piece[len++] = ch;
-            }
+            piece[len++] = ch;
         }
     }
     flush();
@@ -1462,9 +1503,6 @@ static void OnMdTableScroll(MdTableScroll* st, Ctx* cx, const ScrollEvent* ev) {
 }
 
 El* TextView::ScrollTable(MdNode* n) {
-    enum {
-        kMaxCols = 32
-    };
     // px_2 either side, the border every column but the last draws, and the
     // track's own border on both sides.
     const float kCellPad = 16.f;
@@ -1481,17 +1519,22 @@ El* TextView::ScrollTable(MdNode* n) {
 
     const Theme& th = cx->theme();
     PaintCtx* paint = cx->win ? &cx->win->paint : nullptr;
-    float colW[kMaxCols] = {};
-    uint8_t colAlign[kMaxCols] = {};
+    int rows = 0;
     int nCols = 0;
+    TableDimensions(n, &rows, &nCols);
+    if (rows <= 0 || nCols <= 0) {
+        return Div(a);
+    }
+    float* colW = TextArenaArray<float>(a, nCols);
+    uint8_t* colAlign = TextArenaArray<uint8_t>(a, nCols);
+    if (!colW || !colAlign) {
+        return Div(a);
+    }
     for (MdNode* r = n->first; r; r = r->next) {
         int ix = 0;
-        for (MdNode* c = r->first; c && ix < kMaxCols; c = c->next, ix++) {
+        for (MdNode* c = r->first; c; c = c->next, ix++) {
             if (colAlign[ix] == MdAlignDefault) {
                 colAlign[ix] = c->align;
-            }
-            if (ix + 1 > nCols) {
-                nCols = ix + 1;
             }
             if (colW[ix] < kCellMin) {
                 colW[ix] = kCellMin;
@@ -1507,17 +1550,17 @@ El* TextView::ScrollTable(MdNode* n) {
             } else {
                 w = (float)RunsLen(c) * baseFont * 0.5f;
             }
-            w += kCellPad + (ix + 1 < kMaxCols ? kCellBorder : 0);
+            w += kCellPad + (ix + 1 < nCols ? kCellBorder : 0);
             if (w > colW[ix]) {
                 colW[ix] = w;
             }
         }
     }
-    if (nCols == 0) {
+    float minTotal = kTableBorder;
+    float* colMin = TextArenaArray<float>(a, nCols);
+    if (!colMin) {
         return Div(a);
     }
-    float minTotal = kTableBorder;
-    float colMin[kMaxCols] = {};
     for (int i = 0; i < nCols; i++) {
         float floorW = colW[i] / kWrapLines;
         if (floorW < kWrapMin) {
@@ -1607,17 +1650,24 @@ El* TextView::ScrollTable(MdNode* n) {
 // header cell's, which is how a markdown table says it once.
 El* TextView::Table(MdNode* n) {
     enum {
-        kMaxCols = 32,
         // node.rs MAX_LENGTH: one long cell must not starve the rest.
         kMaxLen = 150
     };
     const Theme& th = cx->theme();
-    int colLen[kMaxCols] = {};
-    uint8_t colAlign[kMaxCols] = {};
+    int rows = 0;
     int nCols = 0;
+    TableDimensions(n, &rows, &nCols);
+    if (rows <= 0 || nCols <= 0) {
+        return Div(a);
+    }
+    int* colLen = TextArenaArray<int>(a, nCols);
+    uint8_t* colAlign = TextArenaArray<uint8_t>(a, nCols);
+    if (!colLen || !colAlign) {
+        return Div(a);
+    }
     for (MdNode* r = n->first; r; r = r->next) {
         int ix = 0;
-        for (MdNode* c = r->first; c && ix < kMaxCols; c = c->next, ix++) {
+        for (MdNode* c = r->first; c; c = c->next, ix++) {
             if (colAlign[ix] == MdAlignDefault) {
                 colAlign[ix] = c->align;
             }
@@ -1627,9 +1677,6 @@ El* TextView::Table(MdNode* n) {
             }
             if (len > colLen[ix]) {
                 colLen[ix] = len;
-            }
-            if (ix + 1 > nCols) {
-                nCols = ix + 1;
             }
         }
     }
@@ -1791,11 +1838,11 @@ Str TextView::BlockText(MdNode* n) {
 
 // Every registered plugin is offered the block, in the order they were added.
 El* TextView::PluginBlock(MdNode* n) {
-    if (nPlugins <= 0) {
+    if (plugins.len <= 0) {
         return nullptr;
     }
     Str text = BlockText(n);
-    for (int i = 0; i < nPlugins; i++) {
+    for (int i = 0; i < plugins.len; i++) {
         MdPluginNode node;
         node.name = plugins[i].name;
         if (!plugins[i].parse(cx, n, text, plugins[i].data, &node)) {
@@ -1972,14 +2019,10 @@ TextView* TextView::CodeBlockActions(CodeBlockActionsFn fn, void* data) {
 
 TextView* TextView::Plugin(Str name, MdPluginParseFn parse,
                            MdPluginRenderFn render, void* data) {
-    if (nPlugins >= kMaxPlugins || !parse || !render) {
+    if (!parse || !render) {
         return this;
     }
-    MdPlugin& p = plugins[nPlugins++];
-    p.name = name;
-    p.parse = parse;
-    p.render = render;
-    p.data = data;
+    plugins.Append(a, MdPlugin{name, parse, render, data});
     return this;
 }
 
