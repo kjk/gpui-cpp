@@ -84,10 +84,12 @@ El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
     } else {
         box->ClipX();
     }
-    // The id and the listener together are what make the box a scroll region
-    // the wheel can find; without the listener it is only a clip, and the
+    // `div().id(root_id)` over `div().id((id, "area")).track_scroll(..)`:
+    // the port's clip and scroll area are one box, so the name goes on it and
+    // the scroll handle's identity is that box's place in the tree. The
+    // listener is the other half -- without it the box is only a clip and the
     // wheel falls through to whatever is behind it.
-    box->ScrollId(HashClickId(id.s ? id : StrL("scrollbar")));
+    box->Id(id.s ? id : StrL("scrollbar"))->ScrollFromPath();
     if (onScroll.IsValid()) {
         box->OnScroll(onScroll);
     }

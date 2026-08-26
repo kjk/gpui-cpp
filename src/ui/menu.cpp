@@ -240,7 +240,11 @@ El* PopupMenu::IntoEl() {
     // `popover_style`: a menu floats over the page, so it takes the one popup
     // surface rather than the window's. Both default themes give them the
     // same colour.
-    El* root = PopoverSurface(cx, Div(a)->FlexCol()->W(menuW));
+    // `v_flex().id("popup-menu")` over `v_flex().id("items")`. Upstream's
+    // menu is a view, so rendering it pushes its identity and a bare
+    // `popup-menu` is enough; the port has no entity to push, so the menu's
+    // own name stands in for one.
+    El* root = PopoverSurface(cx, Div(a)->Id(id)->FlexCol()->W(menuW));
     // The menu's own name, so a row is `("item", ix)` and two menus on one
     // page do not have to be told apart by their rows' spelling.
     root->Id(id);
@@ -287,12 +291,12 @@ El* PopupMenu::IntoEl() {
         row.href = it.href;
         PopupMenuAddRow(s, row);
     }
-    El* rows = Div(a)->FlexCol()->W(kFill)->Pad(4)->Gap(2);
+    El* rows = Div(a)->Id(StrL("items"))->FlexCol()->W(kFill)->Pad(4)->Gap(2);
     if (scrollable) {
         rows->ClipY()
             ->MaxH(maxH)
             ->ScrollY(s ? s->scrollY : 0)
-            ->ScrollId(HashClickId(id))
+            ->ScrollFromPath()
             ->OnScroll(ListenTo(state, &PopupMenuState::OnScroll));
     }
     Listener click = ListenTo(state, &PopupMenuState::OnItemClick, 0);
