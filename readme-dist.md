@@ -4,6 +4,18 @@ The single-file build of [gpui-cpp](https://github.com/kjk/gpui-cpp): `gpui.h` a
 amalgamated from that repo's `src/**` by its `cmd/update-dist.ts`. Nothing
 here is written by hand, so issues and pull requests belong in the source repo.
 
+## Try it
+
+First install [bun](https://bun.sh/). On Windows, install Visual Studio 2026
+(the free community edition is fine).
+
+Run: `bun run.ts story`
+
+This runs a comprehensive showcase of the available functionality
+([examples/story](./examples/story)).
+
+Run `bun run.ts` to see all the options.
+
 ## Use it
 
 Drop both files into your tree, `#include "gpui.h"` where you need the API,
