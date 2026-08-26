@@ -6012,3 +6012,42 @@ Verified: 107 pages and twelve interactions for the resizable and scroll work
 and a virtual list — plus six for the colour picker. Everything identical to
 the build before except the skeleton, the spinner and the introduction, each
 of which differs from itself.
+
+## The dock, and the thing that was blocking it
+
+The dock was the last widget off the fold, and the split handle was why. It
+hashed its own name and then looked that number up in `win->pressedId` and
+`win->hoverId` while the frame was being built. A folded id does not exist
+until the tree does, so nothing in the dock could move until the handle
+stopped asking.
+
+Neither question needed the window. Rust keeps `ResizeHandleState { active }`
+on the handle itself and sets it from the press; the port's handle has no
+state of its own, so the *area's* records which handle is being dragged — one
+int, set where `resizing` already was. And the pointer being over the strip is
+`group_hover` on what the appearance callback returns, which is why
+`ResizeHandleContext` carries only `axis` and `active` upstream. The port's
+`hovered` field is gone.
+
+That needed the other half of `group_hover`. The port had only
+`GroupHoverVisible` — a box that is not drawn until the group is hovered —
+and no way to say "this fill while the group is hovered", which is what a
+strip that lights under the pointer wants. `El::GroupHoverBg` is that, asked
+only when the element's own hover and active have nothing to say.
+
+With the two reads gone, every bound element goes on the fold and `DockElId`
+drops the area's name: a tab is `tab-{node}-{ix}`, a handle is
+`split-{node}-{ix}`, the tab strip scrolls as itself, and the panel menu is
+`menu-{node}` under the area's scope.
+
+**Two gaps worth writing down.** Hover cannot be tested in this environment at
+all — `shot.ts` says "the pointer could not be placed (the session is probably
+locked); hover states will not show" — so every `-hover` shot taken here is
+inert, and the `group_hover` half of this is covered by reading only. And no
+coordinate drags a centre split handle, on this build or the one before it: a
+per-pixel sweep of both dock pages found none, so the handle is covered by the
+new test, which checks that two areas' handles fold apart.
+
+Everything else held: 107 pages, and sixteen dock interactions — tabs in three
+groups, both ⋯ menus, zoom, close, the dock toggle, the bottom dock's resize
+strip and a tab dragged from one group into another.
