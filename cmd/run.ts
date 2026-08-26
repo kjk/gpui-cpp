@@ -203,6 +203,17 @@ function parseArgs(argv: string[]): RunArgs {
       die("-compare launches two desktop apps side by side, which the wasm target has no way to do.");
     }
   }
+  // A port-only example has nothing to put on the other half of the screen.
+  // Here rather than in buildRustTwin, for the reason below: this is a thing
+  // you asked for that cannot happen, and finding that out should not cost a
+  // compile of our side first.
+  if (compare && !rustTwin(target)) {
+    die(
+      `-compare has nothing to compare ${target} against: it is a port-only ` +
+        "example, with no counterpart in gpui-component at the pinned SHA.\n\n" +
+        "Drop -compare to launch just this one.",
+    );
+  }
   // Before the build, not after it: naming the wrong platform's debugger is a
   // typo, and a typo should not cost a compile first.
   if (dbgr && dbgr !== "any") {
@@ -687,32 +698,97 @@ function findCargo(): string | null {
   return fromPath;
 }
 
-function rustBuildArgs(target: string, debug: boolean): string[] {
-  const prof = debug ? [] : ["--release"];
+/**
+ * Where a port target's twin lives in the Rust tree at the pinned SHA. Three
+ * shapes, and one target with no twin at all:
+ *
+ *  - a workspace member under `examples/`, where the package name, the binary
+ *    it builds and our name for it are all the same string;
+ *  - an example of a crate: the eight under `crates/story/examples/`, and the
+ *    showcase, which is `crates/base/examples/components.rs`;
+ *  - `crates/story` itself, which is a binary rather than an example.
+ *
+ * This replaces a plain `-p <target>`, which was right for the first shape and
+ * wrong for the other nine: `cargo build -p editor` asks for a package that
+ * does not exist, and said so.
+ */
+type RustTwin = { pkg: string; example?: string };
+
+/** examples/<name>/ in the Rust tree; package, binary and our name agree. */
+const rustExamplePkgs = new Set([
+  "app_assets",
+  "dialog_overlay",
+  "focus_trap",
+  "fps_monitor",
+  "hello_world",
+  "input",
+  "markdown_table",
+  "root_borderless",
+  "sidebar",
+  "system_monitor",
+  "table_in_scrollable",
+  "text_selection",
+  "tooltip_top_edge",
+  "webview",
+  "window_title",
+]);
+
+/**
+ * crates/story/examples/<file>.rs. Only one file is spelled differently from
+ * the port's name for it, and cargo keeps that spelling in the binary it
+ * writes -- dashes become underscores in a *library* crate name and nowhere
+ * else.
+ */
+const rustStoryExamples: Record<string, string> = {
+  brush: "brush",
+  dock: "dock",
+  editor: "editor",
+  html: "html",
+  large_text: "large-text",
+  markdown: "markdown",
+  stream_markdown: "stream_markdown",
+  tiles: "tiles",
+};
+
+/** null when the port wrote this example and gpui-component has no such thing. */
+function rustTwin(target: string): RustTwin | null {
   if (target === "showcase") {
-    return ["build", ...prof, "-p", "gpui-base", "--example", "components"];
+    return { pkg: "gpui-base", example: "components" };
   }
   if (target === "story") {
-    return ["build", ...prof, "-p", "gpui-component-story"];
+    return { pkg: "gpui-component-story" };
   }
-  return ["build", ...prof, "-p", target];
+  if (rustExamplePkgs.has(target)) {
+    return { pkg: target };
+  }
+  const example = rustStoryExamples[target];
+  return example ? { pkg: "gpui-component-story", example } : null;
 }
 
-function rustExePath(target: string, debug: boolean): string {
+function rustBuildArgs(twin: RustTwin, debug: boolean): string[] {
+  const prof = debug ? [] : ["--release"];
+  const example = twin.example ? ["--example", twin.example] : [];
+  return ["build", ...prof, "-p", twin.pkg, ...example];
+}
+
+function rustExePath(twin: RustTwin, debug: boolean): string {
   const prof = debug ? "debug" : "release";
   const dir = rustTreeDir(root);
   const ext = process.platform === "win32" ? ".exe" : "";
-  if (target === "showcase") {
-    return join(dir, "target", prof, "examples", `components${ext}`);
+  if (twin.example) {
+    return join(dir, "target", prof, "examples", `${twin.example}${ext}`);
   }
-  if (target === "story") {
-    return join(dir, "target", prof, `gpui-component-story${ext}`);
-  }
-  return join(dir, "target", prof, `${target}${ext}`);
+  return join(dir, "target", prof, `${twin.pkg}${ext}`);
 }
 
 /** cargo-build the Rust twin and return its binary, or exit saying why not. */
 function buildRustTwin(target: string, debug: boolean): string {
+  const twin = rustTwin(target);
+  if (!twin) {
+    // parseArgs has already refused this, so reaching here is a bug rather
+    // than a typo; say which, so it is not mistaken for the other.
+    die(`internal: no rust twin for ${target}`);
+  }
   let rustRoot: string;
   try {
     // The only thing in this tree that clones .work/gpui-component. A plain
@@ -728,7 +804,7 @@ function buildRustTwin(target: string, debug: boolean): string {
         "Install Rust (https://rustup.rs), or drop -compare to launch only the C++ port.",
     );
   }
-  const args = rustBuildArgs(target, debug);
+  const args = rustBuildArgs(twin, debug);
   // Two things the echoed line cannot say for itself: it runs in the spec
   // tree rather than in this repo, and its `cargo` is whichever one was
   // found -- off PATH, or the one in ~/.cargo/bin that is not always on it.
@@ -739,7 +815,7 @@ function buildRustTwin(target: string, debug: boolean): string {
   if (rc !== 0) {
     process.exit(rc);
   }
-  const exe = rustExePath(target, debug);
+  const exe = rustExePath(twin, debug);
   if (!existsSync(exe)) {
     die(`Missing rust binary after cargo build: ${exe}`);
   }

@@ -6347,3 +6347,33 @@ again reports 0. Worth writing down for whoever tests this next: poking the
 registry alone changes nothing, because Windows only broadcasts
 `WM_SETTINGCHANGE` when the toggle goes through the Settings app. The first
 attempt looked like a broken handler and was a broken test.
+
+## Ten of the twenty-six had no twin to compare against
+
+`-compare` built the Rust side with `cargo build -p <our name for it>`, with
+`showcase` and `story` special-cased. That is right for exactly the fifteen
+examples that are workspace members under `examples/` in the Rust tree, where
+the package, the binary it builds and our name for it are all the same string.
+For the other nine it asked cargo for a package that does not exist:
+
+  error: package ID specification `editor` did not match any packages
+  help: a package with a similar name exists: `ctor`
+
+Those nine are examples of a crate rather than packages —
+`crates/story/examples/{brush,dock,editor,html,large-text,markdown,
+stream_markdown,tiles}.rs` — so they are `-p gpui-component-story --example
+<name>`, which is the shape `showcase` was already special-cased into
+(`crates/base/examples/components.rs`). `large-text` is the one file whose
+name is not ours, and cargo writes the binary under the name the file has:
+dashes become underscores in a *library* crate name and nowhere else.
+
+The tenth is `rich_text`, which the port wrote and gpui-component has no
+counterpart for. `-compare` now says so and stops before compiling our side,
+where the wrong-platform-debugger check already stops, and for the same
+reason: a thing you asked for that cannot happen should not cost a build
+first.
+
+Checked: every one of the 26 targets resolves to a file that exists in the
+tree at the pinned SHA, `-compare editor` runs end to end onto the size table,
+and `cargo build -p gpui-component-story --example editor --example large-text`
+produces `editor.exe` and `large-text.exe` where `rustExePath` looks for them.
