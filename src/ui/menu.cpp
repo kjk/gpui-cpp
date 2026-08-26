@@ -330,7 +330,12 @@ El* PopupMenu::IntoEl() {
         if (lit) {
             row->Bg(th.tokens.accent);
         }
-        Rgba fg = it.disabled ? th.mutedFg : th.foreground;
+        // `PopupMenuItem::Label(..) => this.disabled(true).cursor_default()`:
+        // a heading is a disabled row, which is what makes it read lighter
+        // than the rows under it. Nothing else about a Label differs — the
+        // gutter keeps its width so the labels still line up.
+        bool muted = it.disabled || it.kind == MenuItemKind::Label;
+        Rgba fg = muted ? th.mutedFg : th.foreground;
         El* left = Div(a)->FlexRow()->Flex1()->Gap(4)->ItemsCenter();
         if (leftGutter) {
             // The gutter is the icon's, or the check's, or empty — but it is
