@@ -21,21 +21,22 @@ in a doc comment is deliberately not a test.) This makes a pin update
 introduce explicit surface and test-mapping decisions rather than silently
 widening the gap. `-surface` prints the item-by-item status and destinations.
 
-`-missing-declarations` additionally reports declarations in modules marked
-full whose Rust spelling (or a direct PascalCase conversion for a free
-function) is absent from that module's C++ targets. It is deliberately a
-diagnostic, not a pass/fail rule: Rust permits a public item under a private
-submodule, and traits and functions frequently project into a C++ builder or
-function table under another spelling. Each reported family still needs an
-explicit spelling or deliberate-collapse decision before this comparison can
-become a hard gate.
+For every module marked full, the ordinary audit now also requires each
+declaration's Rust spelling (or the direct PascalCase form of a free function)
+in its C++ targets. The small `declarationMappings` table records intentional
+placements and spellings such as `init` to `BaseInit`, `locale` to
+`LocaleNow`, and the runtime-owned `AutoScroll`. `-missing-declarations`
+prints the unresolved names in partial modules. Rust permits a public item
+under a private submodule, and traits and functions frequently project into a
+C++ builder or function table, so each of those results still needs an
+explicit mapping or deliberate-collapse decision.
 
 Statuses mean:
 
 - `full`: no concrete structural or behavioral gap is currently known in the
-  module surface used by upstream examples and stories. All module-level
-  public declarations and re-export statements are inventoried, but this is
-  not yet a claim that each has a one-to-one C++ spelling.
+  module surface used by upstream examples and stories. Every module-level
+  public declaration has a direct C++ spelling or an explicit mapping, and
+  all public re-export statements are inventoried.
 - `partial`: a destination exists but its public surface, ownership, runtime
   placement, accessibility, or tests still differ.
 - `adapter`: the repository's C++ runtime or hard dependency rules require a
@@ -118,9 +119,10 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Turn the public-declaration spelling diagnostic into a hard gate, adding
-     explicit mappings where Rust traits or snake_case functions project into
-     C++ builders and marking deliberate private-submodule collapses.
+  2. Review the 362 declaration spellings still reported in partial modules,
+     adding explicit mappings where Rust traits or snake_case functions
+     project into C++ builders, recording private-submodule collapses, and
+     implementing the genuine omissions before promoting a module to full.
 
   The theme layering item is complete: `src/ui/theme.h` owns the component
   palette, `src/base/theme.h` owns Base's semantic/behavior theme, and GPUI

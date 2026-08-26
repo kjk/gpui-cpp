@@ -6686,12 +6686,22 @@ content hashes, so an upstream pin cannot silently add or remove a public
 declaration even when `lib.rs` itself is unchanged. `-surface` shows the C++
 module destination for each declaration.
 
-`-missing-declarations` is the next-depth diagnostic. For modules currently
-called full it reports a Rust name that is absent from their C++ targets,
-accepting the direct PascalCase form of a snake_case free function. It is not
-yet a failure because two classes of result require judgment: `pub` inside a
-private Rust submodule is not necessarily exported API, and a trait or helper
-often becomes a builder convention or function table here. Making this hard
-requires an explicit spelling/collapse table; until then the digest is the
-hard addition/removal gate and the module status/reason remains the fidelity
-claim.
+The first name pass stripped comments and string literals before comparing a
+Rust name with the module's C++ targets. It found that 44 modules previously
+called full had unresolved public spellings; a second pass found another
+eight that comments had accidentally hidden. All 52 are now partial instead
+of leaving the ledger overconfident. The audit is consequently 58 full, 63
+partial, 8 adapters and 2 exclusions.
+
+For the remaining full modules and both crate façades the spelling check is a
+hard failure. A direct PascalCase conversion handles the ordinary free
+function shape, while `declarationMappings` records reviewed differences:
+`init` is `BaseInit` / `component::Init`, Rust's locale accessors are
+`LocaleNow` / `LocaleSet`, Base select initialization is `SelectInitKeys`, the
+title-bar constant is `kTitleBarHeight`, and `AutoScroll` deliberately lives
+with the input runtime state in `gpui.h`. `-missing-declarations` now reports
+the 362 unresolved names only in partial modules. Those are not automatically
+omissions: `pub` below a private Rust module is not exported API, and traits
+often become builders or function tables here. Each nevertheless needs an
+explicit mapping/collapse record or an implementation before its module can
+return to full.

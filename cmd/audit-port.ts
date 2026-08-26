@@ -45,9 +45,74 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
   .trim()
   .split(/\s+/);
 
-const partialBase = new Set(["global_state", "input", "macos_accessibility", "scrollbar", "styled", "text_selection"]);
+const partialBase = new Set([
+  "animation",
+  "calendar",
+  "checkbox",
+  "color_picker",
+  "dialog",
+  "dock",
+  "focus_trap",
+  "geometry",
+  "global_state",
+  "history",
+  "input",
+  "macos_accessibility",
+  "motion",
+  "number_input",
+  "popup",
+  "positioner",
+  "radio",
+  "resizable",
+  "scrollbar",
+  "sheet",
+  "slider",
+  "styled",
+  "switch",
+  "tabs",
+  "text_selection",
+  "theme",
+  "theme_tokens",
+  "toast",
+  "toggle",
+  "tooltip",
+  "tree",
+  "virtual_list",
+]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
-const partialUi = new Set(["global_state", "input", "inspector", "text", "theme"]);
+const partialUi = new Set([
+  "button",
+  "chart",
+  "combobox",
+  "description_list",
+  "dialog",
+  "dock",
+  "form",
+  "global_state",
+  "group_box",
+  "icon",
+  "input",
+  "inspector",
+  "label",
+  "list",
+  "menu",
+  "notification",
+  "plot",
+  "scroll",
+  "searchable_list",
+  "select",
+  "setting",
+  "sheet",
+  "sidebar",
+  "sizing",
+  "tab",
+  "table",
+  "text",
+  "theme",
+  "time",
+  "window_border",
+  "window_ext",
+]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
 const partialReasons: Record<string, string> = {
@@ -76,6 +141,9 @@ const adapterReasons: Record<string, string> = {
   "ui/highlighter": "tree-sitter/syntect are excluded; a dependency-free scanner is used",
   "ui/styled": "fluent traits are C++ builders and the shared sizing vocabulary",
 };
+
+const declarationReviewReason =
+  "public-declaration spelling review has unresolved items; each needs a C++ mapping or deliberate-collapse record";
 
 const baseOverrides: Record<string, string[]> = {
   async_util: [],
@@ -141,7 +209,8 @@ function entriesFor(crate: CrateName, modules: string[]): Entry[] {
       reason:
         module === "async_util"
           ? "async is a standing repository non-goal"
-          : (partialReasons[key] ?? adapterReasons[key]),
+          : (partialReasons[key] ?? adapterReasons[key] ??
+            (status === "partial" ? declarationReviewReason : undefined)),
     };
   });
 }
@@ -254,6 +323,33 @@ const testTargets: Record<string, string[]> = {
   "ui/virtual_list": ["tests/VirtualListTests.cpp"],
 };
 
+type DeclarationMapping = { spellings: string[]; targets?: string[] };
+
+// Rust's crate façade uses free snake_case functions. The C++ façade keeps
+// the same operation but follows this tree's subsystem-prefix convention.
+// This table grows as -missing-declarations is reviewed; putting a spelling
+// here is an explicit structural decision, not a fuzzy match.
+const declarationMappings: Record<string, DeclarationMapping> = {
+  "base/auto_scroll.rs::struct AutoScroll": {
+    spellings: ["AutoScroll"],
+    targets: ["src/gpui/gpui.h"],
+  },
+  "base/lib.rs::fn init": { spellings: ["BaseInit"] },
+  "base/select.rs::fn init": { spellings: ["SelectInitKeys"] },
+  "ui/lib.rs::fn init": { spellings: ["Init"] },
+  "ui/lib.rs::fn locale": {
+    spellings: ["LocaleNow"],
+    targets: ["src/ui/i18n.h", "src/ui/i18n.cpp"],
+  },
+  "ui/lib.rs::fn set_locale": {
+    spellings: ["LocaleSet"],
+    targets: ["src/ui/i18n.h", "src/ui/i18n.cpp"],
+  },
+  "ui/title_bar.rs::const TITLE_BAR_HEIGHT": {
+    spellings: ["kTitleBarHeight"],
+  },
+};
+
 type SurfaceKind = "declaration" | "pub-use" | "test";
 type SurfaceItem = {
   crate: CrateName;
@@ -334,6 +430,15 @@ function surfaceDigest(items: SurfaceItem[], kind: SurfaceKind): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+function declarationSourceText(targets: string[]): string {
+  return targets
+    .map((target) => readFileSync(join(root, target), "utf8"))
+    .join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/.*$/gm, " ")
+    .replace(/"(?:\\.|[^"\\])*"/g, " ");
+}
+
 // Counts and content hashes for the exact pinned tree. Unlike line numbers,
 // these survive unrelated edits; a changed export or renamed test changes the
 // hash and forces this ledger to be reviewed with the pin update.
@@ -393,6 +498,7 @@ if (existsSync(rustRoot)) {
   const byModule = new Map(entries.map((entry) => [`${entry.crate}/${entry.module}`, entry]));
   const verboseSurface = Bun.argv.includes("-surface");
   const missingDeclarations = Bun.argv.includes("-missing-declarations");
+  const seenDeclarations = new Set<string>();
   for (const crate of ["base", "ui"] as const) {
     const items = surfaceItems(crate, join(rustRoot, crate, "src"));
     for (const kind of ["declaration", "pub-use", "test"] as const) {
@@ -435,17 +541,29 @@ if (existsSync(rustRoot)) {
           errors.push(`${key}: upstream test ${item.name} has no C++ test destination`);
         }
       }
-      if (item.kind === "declaration" && missingDeclarations && status === "full") {
+      const declarationKey = `${crate}/${item.path}::${item.name}`;
+      if (item.kind === "declaration") seenDeclarations.add(declarationKey);
+      if (
+        item.kind === "declaration" &&
+        status !== "excluded" &&
+        status !== "adapter" &&
+        (missingDeclarations || status === "full" || status === "facade")
+      ) {
         const [kind, name] = item.name.split(" ");
         if (kind !== "mod") {
-          const cpp = targets.map((target) => readFileSync(join(root, target), "utf8")).join("\n");
+          const mapping = declarationMappings[declarationKey];
+          const searchTargets = mapping?.targets ?? targets;
+          const cpp = declarationSourceText(searchTargets);
           const pascal = name!
             .split("_")
             .map((part) => part.length ? part[0]!.toUpperCase() + part.slice(1) : "")
             .join("");
-          const spellings = kind === "fn" ? [name!, pascal] : [name!];
+          const spellings = mapping?.spellings ?? (kind === "fn" ? [name!, pascal] : [name!]);
           if (!spellings.some((spelling) => new RegExp(`\\b${spelling}\\b`).test(cpp))) {
-            console.log(`${crate} missing ${item.path} :: ${item.name} -> ${targets.join(", ")}`);
+            const message =
+              `${crate} ${status} missing ${item.path} :: ${item.name} -> ${searchTargets.join(", ")}`;
+            if (status === "full" || status === "facade") errors.push(message);
+            else if (missingDeclarations) console.log(message);
           }
         }
       }
@@ -467,6 +585,11 @@ if (existsSync(rustRoot)) {
       `port surface: ${crate} ${declarations} declarations, ${uses} pub-use statements and ${tests} tests ` +
         `across ${testedModules.size} tested modules`,
     );
+  }
+  for (const key of Object.keys(declarationMappings)) {
+    if (!seenDeclarations.has(key)) {
+      errors.push(`public declaration mapping has no pinned Rust declaration: ${key}`);
+    }
   }
 }
 
