@@ -88,6 +88,12 @@ WindowBorder* WindowBorder::Tiling(WindowTiling v) {
 
 El* WindowBorder::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
+    // window.set_client_inset(platform_inset). Rust keeps the full platform
+    // inset even when tiling suppresses the visual shadow on one or all
+    // edges, so Positioner never places a popup under the resize frame.
+    if (cx->win) {
+        cx->win->paint.clientInset = shadowSize;
+    }
     // A window tiled on every side keeps its platform inset but draws no
     // shadow: there is nothing for one to fall on.
     float visualShadow = tiling.AllTiled() ? 0.f : shadowSize;

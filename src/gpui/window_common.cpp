@@ -323,6 +323,9 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // stays on screen until the next click or keystroke.
     win->paint.viewW = dipW;
     win->paint.viewH = dipH;
+    // Root/WindowBorder writes the client-decorated inset while rendering.
+    // Clear the last frame first so removing that wrapper removes the inset.
+    win->paint.clientInset = 0;
     if (!PaintTargetBegin(&win->paint, native, pxW, pxH)) {
         return;
     }

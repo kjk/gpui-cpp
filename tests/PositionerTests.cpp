@@ -101,6 +101,119 @@ static void CornerPositioningClampsButDoesNotFlip() {
     utassertnear(p.bounds.Bottom(), kViewH - kMargin);
 }
 
+static El* LayoutPositioner(Positioner* positioner, Arena* a, PaintCtx* paint,
+                            float viewW = kViewW, float viewH = kViewH) {
+    El* placed = positioner->IntoEl();
+    El* root = Div(a)->W(viewW)->H(viewH)->Child(placed);
+    paint->viewW = viewW;
+    paint->viewH = viewH;
+    LayoutEl(paint, root, 0, 0, viewW, viewH, 14, Rgba{});
+    return placed;
+}
+
+static void PublicPositionerMeasuresAndPlacesItsChildGroup() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    PaintCtx paint = {};
+
+    El* placed = LayoutPositioner(
+        Positioner::Side(&cx, Trigger(200, 200, 40, 20))
+            ->Placement(Placement::Bottom)
+            ->Align(Align::Start)
+            ->Offset(8)
+            ->Margin(kMargin)
+            ->Child(Div(a)->W(40)->H(30)),
+        a, &paint);
+    utassertnear(placed->x, 200.f);
+    utassertnear(placed->y, 228.f);
+    utassertnear(placed->w, 40.f);
+    utassertnear(placed->h, 30.f);
+
+    ArenaDelete(a);
+}
+
+static void PublicPositionerFlipsAllFourSidesAfterMeasurement() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    PaintCtx paint = {};
+
+    El* vertical = LayoutPositioner(
+        Positioner::Side(&cx, Trigger(200, 10, 40, 20))
+            ->Placement(Placement::Top)
+            ->Child(Div(a)->W(80)->H(60)),
+        a, &paint);
+    utassertnear(vertical->y, 30.f);
+
+    El* horizontal = LayoutPositioner(
+        Positioner::Side(&cx, Trigger(260, 60, 32, 32))
+            ->Placement(Placement::Right)
+            ->Align(Align::Center)
+            ->Child(Div(a)->W(240)->H(30)),
+        a, &paint, 300, 200);
+    utassertnear(horizontal->x, 20.f);
+    utassertnear(horizontal->y, 61.f);
+
+    ArenaDelete(a);
+}
+
+static void PublicCornerPositionerUsesTheMeasuredGroupCorner() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    PaintCtx paint = {};
+
+    El* placed = LayoutPositioner(
+        Positioner::Corner(&cx, Anchor::BottomRight, {100, 100})
+            ->Margin(kMargin)
+            ->Child(Div(a)->W(40)->H(30)),
+        a, &paint);
+    utassertnear(placed->x, 60.f);
+    utassertnear(placed->y, 70.f);
+
+    ArenaDelete(a);
+}
+
+static void PublicPositionerChildrenHaveNoPortOnlyCapacity() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    PaintCtx paint = {};
+    Positioner* positioner =
+        Positioner::Corner(&cx, Anchor::TopLeft, {20, 20});
+    for (int i = 0; i < 80; i++) {
+        positioner->Child(Div(a)->W(1)->H(2));
+    }
+    El* placed = LayoutPositioner(positioner, a, &paint);
+    utassertnear(placed->x, 20.f);
+    utassertnear(placed->y, 20.f);
+    utassertnear(placed->w, 80.f);
+    utassertnear(placed->h, 2.f);
+
+    PositionerState state = {};
+    int stateSize = (int)sizeof(state);
+    utassert(stateSize > 0);
+    ArenaDelete(a);
+}
+
+static void PublicPositionerAddsTheWindowClientInsetToItsMargin() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    PaintCtx paint = {};
+    paint.clientInset = 20;
+
+    El* placed = LayoutPositioner(
+        Positioner::Corner(&cx, Anchor::TopLeft, {0, 0})
+            ->Margin(kMargin)
+            ->Child(Div(a)->W(40)->H(30)),
+        a, &paint);
+    utassertnear(placed->x, 24.f);
+    utassertnear(placed->y, 24.f);
+    ArenaDelete(a);
+}
+
 // ─── migrated from the tooltip module ─────────────────────────────────────
 //
 // These passed unchanged across that move, which is what proves the merge
@@ -197,6 +310,11 @@ void TestPositioner() {
     CornerPositioningPlacesTheNamedCornerAndNeverReportsASide();
     CornerPositioningSupportsGpuisWholeAnchorVocabulary();
     CornerPositioningClampsButDoesNotFlip();
+    PublicPositionerMeasuresAndPlacesItsChildGroup();
+    PublicPositionerFlipsAllFourSidesAfterMeasurement();
+    PublicCornerPositionerUsesTheMeasuredGroupCorner();
+    PublicPositionerChildrenHaveNoPortOnlyCapacity();
+    PublicPositionerAddsTheWindowClientInsetToItsMargin();
 
     TestSuite("positioner/tooltip");
     PrefersAboveWhenSpaceAllows();

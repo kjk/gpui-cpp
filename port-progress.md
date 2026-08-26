@@ -6807,3 +6807,33 @@ adapter, and verifies that a non-closable surface registers no outside
 observer. Base Popover returns to full: the audit is 61 full, 60 partial, 8
 adapters and 2 exclusions, with the unrelated 358 partial-module declaration
 spellings unchanged. MSVC release passes 19,076 checks.
+
+## Positioner is a measured public element again
+
+Base Positioner previously exposed only `PositionSide` and `PositionCorner`:
+its placement math was present, but the pinned public `Align`, `Positioner`,
+`PositionerState`, and `ResolvedPosition` structure was absent. Those names
+and roles are now direct C++ declarations. `PopupAlign` and `Positioned` stay
+as compatibility aliases, while the runtime's unrelated flex cross-axis enum
+is now explicitly `FlexAlign` so Base can own the exact `Align` name.
+
+`Positioner::Side` and `Positioner::Corner` are frame-arena builders with the
+pinned placement, alignment, offset, margin and child vocabulary. The builder
+uses an `ArenaVec`, measures all children as one flex group, and positions that
+measured group during the shared post-layout pass. Both element layout and the
+pure resolver API call the same dependency-neutral resolver, preventing the
+actual widget path from drifting away from its unit tests. The runtime covers
+all four sides, preferred/opposite/roomier fallback, Start/Center/End
+alignment, corner anchoring, viewport clamping and the pinned rounded offset.
+
+Rust adds `window.client_inset()` to every Positioner margin. The portable
+paint context now carries that value; `WindowBorder` writes the full platform
+shadow inset while building and frame setup clears it when the wrapper is no
+longer present. Popup, dropdown and standalone Positioner clamping therefore
+stay out of the Linux client shadow just as the pinned implementation does.
+
+Tests exercise the public builder after real child measurement, vertical and
+horizontal flips, corner placement, 80 children, and client-inset addition.
+Positioner is full, moving the audit to 62 full, 59 partial, 8 adapters and 2
+exclusions. Its four declarations leave 354 unresolved spelling reports in
+the remaining partial modules. MSVC release passes 19,092 checks.

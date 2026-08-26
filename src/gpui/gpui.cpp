@@ -622,22 +622,22 @@ El* El::PadB(float v) {
 }
 El* El::ItemsCenter() {
     style.display = Display::Flex;
-    style.align = Align::Center;
+    style.align = FlexAlign::Center;
     return this;
 }
 El* El::ItemsStart() {
     style.display = Display::Flex;
-    style.align = Align::Start;
+    style.align = FlexAlign::Start;
     return this;
 }
 El* El::ItemsEnd() {
     style.display = Display::Flex;
-    style.align = Align::End;
+    style.align = FlexAlign::End;
     return this;
 }
 El* El::ItemsStretch() {
     style.display = Display::Flex;
-    style.align = Align::Stretch;
+    style.align = FlexAlign::Stretch;
     return this;
 }
 El* El::JustifyBetween() {
@@ -2674,14 +2674,14 @@ static taffy::Overflow ToTaffyOverflow(Overflow o) {
     }
 }
 
-static taffy::OptAlignItems ToTaffyAlignItems(Align a) {
+static taffy::OptAlignItems ToTaffyAlignItems(FlexAlign a) {
     using K = taffy::AlignItemsKeyword;
     switch (a) {
-        case Align::Start:
+        case FlexAlign::Start:
             return taffy::OptAlignItems(taffy::AlignItems{K::Start});
-        case Align::Center:
+        case FlexAlign::Center:
             return taffy::OptAlignItems(taffy::AlignItems{K::Center});
-        case Align::End:
+        case FlexAlign::End:
             return taffy::OptAlignItems(taffy::AlignItems{K::End});
         default:
             return taffy::OptAlignItems(taffy::AlignItems{K::Stretch});
@@ -3321,16 +3321,131 @@ static void WriteBackEl(LayoutCache* lc, PaintCtx* ctx, El* e, float originX,
     WriteBackChildren(lc, ctx, e);
 }
 
+static float PositionMax(float a, float b) {
+    return a > b ? a : b;
+}
+
+static Bounds AnchoredClamp(Bounds b, Size view, float margin) {
+    float rightLimit = PositionMax(view.w - margin, margin);
+    float bottomLimit = PositionMax(view.h - margin, margin);
+    if (b.Right() > rightLimit) {
+        b.x -= b.Right() - rightLimit;
+    }
+    if (b.x < margin) {
+        b.x = margin;
+    }
+    if (b.Bottom() > bottomLimit) {
+        b.y -= b.Bottom() - bottomLimit;
+    }
+    if (b.y < margin) {
+        b.y = margin;
+    }
+    return b;
+}
+
+AnchoredPosition AnchoredSideResolve(Bounds trigger, Size popup, Size view,
+                                     float margin, int preferred, int align,
+                                     float offset) {
+    float rightLimit = PositionMax(view.w - margin, margin);
+    float bottomLimit = PositionMax(view.h - margin, margin);
+    float availLeft = PositionMax(trigger.x - margin, 0.f);
+    float availRight = PositionMax(rightLimit - trigger.Right(), 0.f);
+    float availAbove = PositionMax(trigger.y - margin, 0.f);
+    float availBelow = PositionMax(bottomLimit - trigger.Bottom(), 0.f);
+
+    // Placement ordinals: Top 0, Bottom 1, Left 2, Right 3. The arms are in
+    // positioner.rs order: preferred, opposite, then the roomier side.
+    int placed = 0;
+    if (preferred == 3) {
+        placed = popup.w <= availRight
+                     ? 3
+                     : (popup.w <= availLeft
+                            ? 2
+                            : (availRight >= availLeft ? 3 : 2));
+    } else if (preferred == 2) {
+        placed = popup.w <= availLeft
+                     ? 2
+                     : (popup.w <= availRight
+                            ? 3
+                            : (availLeft >= availRight ? 2 : 3));
+    } else if (preferred == 1) {
+        placed = popup.h <= availBelow
+                     ? 1
+                     : (popup.h <= availAbove
+                            ? 0
+                            : (availBelow >= availAbove ? 1 : 0));
+    } else {
+        placed = popup.h <= availAbove
+                     ? 0
+                     : (popup.h <= availBelow
+                            ? 1
+                            : (availBelow >= availAbove ? 1 : 0));
+    }
+
+    float alignedX = trigger.x;
+    float alignedY = trigger.y;
+    if (align == 1) { // Center
+        alignedX = trigger.CenterX() - popup.w * 0.5f;
+        alignedY = trigger.CenterY() - popup.h * 0.5f;
+    } else if (align == 2) { // End
+        alignedX = trigger.Right() - popup.w;
+        alignedY = trigger.Bottom() - popup.h;
+    }
+
+    Bounds bounds = {0, 0, popup.w, popup.h};
+    if (placed == 0) {
+        bounds.x = alignedX;
+        bounds.y = trigger.y - popup.h - offset;
+    } else if (placed == 1) {
+        bounds.x = alignedX;
+        bounds.y = trigger.Bottom() + offset;
+    } else if (placed == 2) {
+        bounds.x = trigger.x - popup.w - offset;
+        bounds.y = alignedY;
+    } else {
+        bounds.x = trigger.Right() + offset;
+        bounds.y = alignedY;
+    }
+
+    AnchoredPosition out = {};
+    out.bounds = AnchoredClamp(bounds, view, margin);
+    out.placement = (int8_t)placed;
+    return out;
+}
+
+AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
+                                       Size view, float margin) {
+    Bounds bounds = BoundsAt(at, popup);
+    if (anchor == Anchor::TopCenter || anchor == Anchor::BottomCenter) {
+        bounds.x -= popup.w * 0.5f;
+    } else if (anchor == Anchor::TopRight ||
+               anchor == Anchor::BottomRight ||
+               anchor == Anchor::RightCenter) {
+        bounds.x -= popup.w;
+    }
+    if (anchor == Anchor::BottomLeft || anchor == Anchor::BottomCenter ||
+        anchor == Anchor::BottomRight) {
+        bounds.y -= popup.h;
+    } else if (anchor == Anchor::LeftCenter ||
+               anchor == Anchor::RightCenter) {
+        bounds.y -= popup.h * 0.5f;
+    }
+    AnchoredPosition out = {};
+    out.bounds = AnchoredClamp(bounds, view, margin);
+    return out;
+}
+
 // The positioning rules gpui-component has and CSS does not: an overlay
 // anchored under or over its trigger, one centred on it, and the
 // `relative(f)` half of a left/right inset. Each moves a subtree that taffy
 // has already sized and placed.
-static void PlaceAnchored(El* e, float viewW, float viewH) {
+static void PlaceAnchored(El* e, float viewW, float viewH,
+                          float clientInset) {
     for (El* c = e->first; c; c = c->next) {
-        PlaceAnchored(c, viewW, viewH);
+        PlaceAnchored(c, viewW, viewH, clientInset);
         const Style& s = c->style;
         bool anchored = s.anchorBelow || s.anchorAbove || s.anchorCenterX ||
-                        s.anchorCorner;
+                        s.anchorCorner || s.explicitPositioner;
         if (!anchored && (c->style.fixed || !c->style.absolute)) {
             continue;
         }
@@ -3430,24 +3545,47 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
             }
             ay += s.anchorGap;
         }
+        if (s.explicitPositioner) {
+            float margin = s.anchorMargin + clientInset;
+            AnchoredPosition resolved =
+                s.positionerCorner
+                    ? AnchoredCornerResolve(s.anchor, s.positionerPoint,
+                                            {c->w, c->h}, {viewW, viewH},
+                                            margin)
+                    : AnchoredSideResolve(
+                          s.positionerTrigger, {c->w, c->h}, {viewW, viewH},
+                          margin, s.positionerPlacement, s.positionerAlign,
+                          s.anchorGap);
+            ax = resolved.bounds.x;
+            ay = resolved.bounds.y;
+        }
         // positioner.rs `clamp`: whatever the corner worked out, the popup is
         // then pulled back inside the viewport with WINDOW_MARGIN to spare.
         // It never flips — that is the side strategy's job — so a popup with
         // nowhere to go simply sits against the edge.
         if (anchored && viewW > 0 && viewH > 0) {
-            float m = s.anchorMargin;
-            if (ax + c->w > viewW - m) {
-                ax = viewW - m - c->w;
+            float m = s.anchorMargin + clientInset;
+            float rightLimit = viewW - m > m ? viewW - m : m;
+            float bottomLimit = viewH - m > m ? viewH - m : m;
+            if (ax + c->w > rightLimit) {
+                ax = rightLimit - c->w;
             }
             if (ax < m) {
                 ax = m;
             }
-            if (ay + c->h > viewH - m) {
-                ay = viewH - m - c->h;
+            if (ay + c->h > bottomLimit) {
+                ay = bottomLimit - c->h;
             }
             if (ay < m) {
                 ay = m;
             }
+        }
+        if (s.explicitPositioner) {
+            // positioner.rs rounds the offset it installs for prepaint. The
+            // C++ element itself is moved instead, so rounding its resolved
+            // window origin is the equivalent for this absolute group.
+            ax = roundf(ax);
+            ay = roundf(ay);
         }
         MoveEl(c, ax, ay);
     }
@@ -3542,7 +3680,8 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
     for (int i = 0; i < gLayoutFixed.len; i++) {
         WriteBackEl(lc, ctx, gLayoutFixed[i], 0, 0);
     }
-    PlaceAnchored(e, ctx ? ctx->viewW : 0.f, ctx ? ctx->viewH : 0.f);
+    PlaceAnchored(e, ctx ? ctx->viewW : 0.f, ctx ? ctx->viewH : 0.f,
+                  ctx ? ctx->clientInset : 0.f);
 }
 
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,

@@ -714,7 +714,10 @@ enum class FlexDir : uint8_t {
     RowReverse,
     ColReverse
 };
-enum class Align : uint8_t {
+// Flex-box cross-axis alignment. Named apart from Base Positioner's public
+// `Align`, which is the leading/center/trailing alignment of an overlay along
+// whichever side it resolved to.
+enum class FlexAlign : uint8_t {
     Start,
     Center,
     End,
@@ -1117,10 +1120,24 @@ enum class Anchor : uint8_t {
     RightCenter
 };
 
+// Dependency-neutral result used by Base Positioner and the runtime's
+// post-layout element path. `placement` uses Base Placement's stable
+// Top/Bottom/Left/Right ordinals and is -1 for corner positioning.
+struct AnchoredPosition {
+    Bounds bounds = {};
+    int8_t placement = -1;
+};
+
+AnchoredPosition AnchoredSideResolve(Bounds trigger, Size popup, Size view,
+                                     float margin, int preferred,
+                                     int align, float offset);
+AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
+                                       Size view, float margin);
+
 struct Style {
     Display display = Display::Block;
     FlexDir dir = FlexDir::Row;
-    Align align = Align::Stretch;
+    FlexAlign align = FlexAlign::Stretch;
     Justify justify = Justify::Start;
     Overflow overflowY = Overflow::Visible;
     Overflow overflowX = Overflow::Visible;
@@ -1224,6 +1241,17 @@ struct Style {
     Anchor anchor = Anchor::TopLeft;
     float anchorGap = 0;
     float anchorMargin = 4;
+    // Base Positioner's standalone element path. Unlike AnchorCorner and
+    // AnchorBelow, which derive the anchor from the parent El, this carries
+    // the captured window-coordinate bounds/point Rust gives Positioner.
+    // placement is Placement's Top/Bottom/Left/Right ordinal, or -1 for its
+    // default Top preference; align is Positioner Align's ordinal.
+    bool explicitPositioner = false;
+    bool positionerCorner = false;
+    Bounds positionerTrigger = {};
+    Point positionerPoint = {};
+    int8_t positionerPlacement = -1;
+    uint8_t positionerAlign = 1;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
     // left(relative(f)) / right(relative(f)): the offset is that fraction of
     // the parent's width, added to the pixel one. A stepper's connector needs
@@ -2284,6 +2312,10 @@ struct PaintCtx {
     float dpi = 96;
     float viewW = 0;
     float viewH = 0;
+    // Window::client_inset. A client-decorated Root writes its shadow inset
+    // while building; every shared Positioner adds it to its requested edge
+    // margin, matching the window-coordinate viewport Rust resolves against.
+    float clientInset = 0;
     int hoverId = 0;
     // Which drop target the pointer is over and what is being dragged, so a
     // `DragOver` refinement can be resolved beside the hover one. GPUI reads

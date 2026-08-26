@@ -58,7 +58,6 @@ const partialBase = new Set([
   "macos_accessibility",
   "motion",
   "number_input",
-  "positioner",
   "radio",
   "resizable",
   "scrollbar",

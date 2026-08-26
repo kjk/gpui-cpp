@@ -106,6 +106,12 @@ The important non-mechanical mappings are encoded in the audit:
   lifetime, Escape, per-element outside-press dismissal and a two-direction
   open-change callback. The themed facade forwards the same controls while
   retaining its older close-only callback as a compatibility adapter.
+- Base `Positioner` again has the pinned public element shape rather than only
+  free resolver functions: `Align`, `ResolvedPosition`, `Positioner`, and its
+  doc-hidden `PositionerState` are direct C++ declarations. The arena builder
+  measures an unbounded flex child group, supports corner and four-side
+  strategies, and shares one resolver with runtime layout and the pure test
+  API. Client-decorated window insets join the requested viewport margin.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -136,7 +142,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 358 declaration spellings still reported in partial modules,
+  2. Review the 354 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

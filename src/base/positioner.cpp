@@ -2,151 +2,97 @@
 
 namespace gpui {
 
-static float MaxF(float a, float b) {
-    return a > b ? a : b;
-}
-
-// resolve_placement. The arms are in Rust's order, which matters: the second
-// arm of each side is the flip, and the third is the "neither fits, take the
-// roomier one" fallback.
-static Placement ResolvePlacement(Bounds trigger, Size popup, Size view,
-                                  float margin, const Placement* preferred) {
-    float rightLimit = MaxF(view.w - margin, margin);
-    float bottomLimit = MaxF(view.h - margin, margin);
-    float availLeft = MaxF(trigger.x - margin, 0.f);
-    float availRight = MaxF(rightLimit - trigger.Right(), 0.f);
-    float availAbove = MaxF(trigger.y - margin, 0.f);
-    float availBelow = MaxF(bottomLimit - trigger.Bottom(), 0.f);
-
-    if (preferred && *preferred == Placement::Right) {
-        if (popup.w <= availRight) {
-            return Placement::Right;
-        }
-        if (popup.w <= availLeft) {
-            return Placement::Left;
-        }
-        return availRight >= availLeft ? Placement::Right : Placement::Left;
-    }
-    if (preferred && *preferred == Placement::Left) {
-        if (popup.w <= availLeft) {
-            return Placement::Left;
-        }
-        if (popup.w <= availRight) {
-            return Placement::Right;
-        }
-        return availLeft >= availRight ? Placement::Left : Placement::Right;
-    }
-    if (preferred && *preferred == Placement::Bottom) {
-        if (popup.h <= availBelow) {
-            return Placement::Bottom;
-        }
-        if (popup.h <= availAbove) {
-            return Placement::Top;
-        }
-        return availBelow >= availAbove ? Placement::Bottom : Placement::Top;
-    }
-    // Top, and no preference at all: above is the default.
-    if (popup.h <= availAbove) {
-        return Placement::Top;
-    }
-    if (popup.h <= availBelow) {
-        return Placement::Bottom;
-    }
-    return availBelow >= availAbove ? Placement::Bottom : Placement::Top;
-}
-
-// side_origin. Align picks the edge along the side; offset is the gap between
-// the trigger and the popup.
-static Bounds SideOrigin(Bounds trigger, Size popup, Placement placement,
-                         PopupAlign align, float offset) {
-    float alignedX = trigger.x;
-    float alignedY = trigger.y;
-    if (align == PopupAlign::Center) {
-        alignedX = trigger.CenterX() - popup.w * 0.5f;
-        alignedY = trigger.CenterY() - popup.h * 0.5f;
-    } else if (align == PopupAlign::End) {
-        alignedX = trigger.Right() - popup.w;
-        alignedY = trigger.Bottom() - popup.h;
-    }
-
-    Bounds b = {0, 0, popup.w, popup.h};
-    switch (placement) {
-        case Placement::Top:
-            b.x = alignedX;
-            b.y = trigger.y - popup.h - offset;
-            break;
-        case Placement::Bottom:
-            b.x = alignedX;
-            b.y = trigger.Bottom() + offset;
-            break;
-        case Placement::Left:
-            b.x = trigger.x - popup.w - offset;
-            b.y = alignedY;
-            break;
-        case Placement::Right:
-            b.x = trigger.Right() + offset;
-            b.y = alignedY;
-            break;
-    }
-    return b;
-}
-
-// clamp. The far edge is pulled in first and the near edge second, so a popup
-// larger than the viewport ends up flush against the near edge rather than
-// hanging off both.
-static Bounds ClampToViewport(Bounds b, Size view, float margin) {
-    float rightLimit = MaxF(view.w - margin, margin);
-    float bottomLimit = MaxF(view.h - margin, margin);
-    if (b.Right() > rightLimit) {
-        b.x -= b.Right() - rightLimit;
-    }
-    if (b.x < margin) {
-        b.x = margin;
-    }
-    if (b.Bottom() > bottomLimit) {
-        b.y -= b.Bottom() - bottomLimit;
-    }
-    if (b.y < margin) {
-        b.y = margin;
-    }
-    return b;
-}
-
-Positioned PositionSide(Bounds trigger, Size popup, Size view, float margin,
-                        const Placement* preferred, PopupAlign align,
-                        float offset) {
-    Placement placement =
-        ResolvePlacement(trigger, popup, view, margin, preferred);
-    Bounds b = SideOrigin(trigger, popup, placement, align, offset);
-    Positioned out;
-    out.bounds = ClampToViewport(b, view, margin);
-    out.placement = placement;
+ResolvedPosition PositionSide(Bounds trigger, Size popup, Size view,
+                              float margin, const Placement* preferred,
+                              Align align, float offset) {
+    AnchoredPosition resolved = AnchoredSideResolve(
+        trigger, popup, view, margin,
+        preferred ? (int)*preferred : -1, (int)align, offset);
+    ResolvedPosition out = {};
+    out.bounds = resolved.bounds;
+    out.placement = (Placement)resolved.placement;
     out.hasPlacement = true;
     return out;
 }
 
-Positioned PositionCorner(Anchor anchor, Point at, Size popup, Size view,
-                          float margin) {
-    // Bounds::from_anchor_and_size.
-    Bounds b = BoundsAt(at, popup);
-    if (anchor == Anchor::TopCenter || anchor == Anchor::BottomCenter) {
-        b.x = at.x - popup.w * 0.5f;
-    } else if (anchor == Anchor::TopRight ||
-               anchor == Anchor::BottomRight ||
-               anchor == Anchor::RightCenter) {
-        b.x = at.x - popup.w;
-    }
-    if (anchor == Anchor::BottomLeft || anchor == Anchor::BottomCenter ||
-        anchor == Anchor::BottomRight) {
-        b.y = at.y - popup.h;
-    } else if (anchor == Anchor::LeftCenter ||
-               anchor == Anchor::RightCenter) {
-        b.y = at.y - popup.h * 0.5f;
-    }
-    Positioned out;
-    out.bounds = ClampToViewport(b, view, margin);
+ResolvedPosition PositionCorner(Anchor anchor, Point at, Size popup,
+                                Size view, float margin) {
+    AnchoredPosition resolved =
+        AnchoredCornerResolve(anchor, at, popup, view, margin);
+    ResolvedPosition out = {};
+    out.bounds = resolved.bounds;
     out.hasPlacement = false;
     return out;
+}
+
+Positioner* Positioner::Side(Ctx* cx, Bounds trigger) {
+    Positioner* p = ArenaNew<Positioner>(cx->a);
+    p->a = cx->a;
+    p->strategy = Strategy::Side;
+    p->trigger = trigger;
+    return p;
+}
+
+Positioner* Positioner::Corner(Ctx* cx, Anchor anchor, Point point) {
+    Positioner* p = ArenaNew<Positioner>(cx->a);
+    p->a = cx->a;
+    p->strategy = Strategy::Corner;
+    p->anchor = anchor;
+    p->point = point;
+    return p;
+}
+
+Positioner* Positioner::Placement(gpui::Placement value) {
+    if (strategy == Strategy::Side) {
+        placement = value;
+        hasPlacement = true;
+    }
+    return this;
+}
+
+Positioner* Positioner::Align(gpui::Align value) {
+    if (strategy == Strategy::Side) {
+        align = value;
+    }
+    return this;
+}
+
+Positioner* Positioner::Offset(float value) {
+    if (strategy == Strategy::Side) {
+        offset = value;
+    }
+    return this;
+}
+
+Positioner* Positioner::Margin(float value) {
+    margin = value;
+    return this;
+}
+
+Positioner* Positioner::Child(El* child) {
+    if (child) {
+        children.Append(a, child);
+    }
+    return this;
+}
+
+El* Positioner::IntoEl() {
+    El* group = Div(a)->Flex()->Absolute();
+    for (El* child : children) {
+        group->Child(child);
+    }
+    Style& s = group->style;
+    s.explicitPositioner = true;
+    s.positionerCorner = strategy == Strategy::Corner;
+    s.positionerTrigger = trigger;
+    s.positionerPoint = point;
+    s.positionerPlacement =
+        hasPlacement ? (int8_t)placement : (int8_t)-1;
+    s.positionerAlign = (uint8_t)align;
+    s.anchor = anchor;
+    s.anchorGap = offset;
+    s.anchorMargin = margin > 0 ? margin : 0;
+    return group;
 }
 
 } // namespace gpui
