@@ -1076,6 +1076,7 @@ function copyAsanDll(tc: Toolchain, dir: string): void {
 // ─── build one target ─────────────────────────────────────────────────────
 
 function buildOne(name: string, tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): void {
+  const started = performance.now();
   const src = sourcesFor(name);
   if (!src) {
     fail(`Unknown target: ${name}`);
@@ -1155,7 +1156,19 @@ function buildOne(name: string, tc: Toolchain, f: BuildFlags, fail: (msg: string
   if (tc.plat !== "wasm") {
     copyAssets(dir);
   }
-  console.log(`Built ${tc.plat === "win" ? outFile.replaceAll("/", "\\") : outFile}`);
+  // What it cost and what it came to, on the line that says it is done: the
+  // size table below is the same numbers, but it only shows up once at the
+  // end, and under -all that is 26 builds away from the one you were watching.
+  // The time is this target's alone; `elapsed` at the end is the whole run.
+  const shown = tc.plat === "win" ? outFile.replaceAll("/", "\\") : outFile;
+  const took = formatElapsed(performance.now() - started);
+  const abs = join(root, outFile);
+  if (!existsSync(abs)) {
+    console.log(`Built ${shown} in ${took}`);
+    return;
+  }
+  const size = statSync(abs).size;
+  console.log(`Built ${shown} in ${took} size: ${formatHumanBytes(size)} ${formatExactBytes(size)}`);
 }
 
 function link(
