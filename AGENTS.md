@@ -314,7 +314,29 @@ objects go to their own `out/*_dist` tree), rewrites its readme with the
 gpui-cpp commit it came from and a compare link showing what it is behind by,
 then commits and pushes it. Never regenerate a published copy as part of a
 build, a test run or a commit; `buildDist()` takes a required `outDir` so an
-automatic caller has to say `.work` out loud. The two differ in what they do
+automatic caller has to say `.work` out loud. A checkout that is dirty or not
+on `main` is removed and cloned again rather than repaired: the script writes
+the whole of it and commits whatever `git status` reports, so a stray file
+would be published.
+
+The snapshot is a checkout, not two files. Beside the pair go every example,
+`assets/`, `web/shell.html`, `build.ts` and `run.ts` at the top level, and
+`winapi.ts` + `mac-window-place.m` because `run.ts -compare` reaches for them
+by name — so `bun run.ts story` works in a fresh clone of it. Its `.gitignore`
+is written from here too, since `-compare` clones the Rust tree *into* the
+snapshot. `readme-dist.md` in this repo is the published readme, copied over
+with `<checkin-sha1>` filled in; edit it here, never there.
+
+`build.ts` and `run.ts` are copied verbatim rather than forked, and discover
+which tree they are in at startup: `isDist` is `existsSync(scriptDir +
+"/gpui.h")`, and the repo root, `amalgamDir()`, the `out/` layout, the target
+list and the usage text all hang off it. Two rules follow. `cmd/update-dist.ts`
+must be imported *dynamically* — it does not exist over there, and a static
+import fails at load, which is why `ensureAmalgam` and `build()` are async.
+And anything either script reaches for by path must be resolved against
+`scriptDir`, not `<root>/cmd/`. Keep both runnable in both trees; `bun
+cmd/update-dist.ts` builds every example against the snapshot, which is the
+check that catches it. The two differ in what they do
 with the text: the published copy is read as a document, so the comments come
 out, runs of blank lines collapse, and the `#include` lines are lifted to the
 top of `gpui.cpp` and de-duplicated — the portable ones first, then one guarded block
@@ -568,6 +590,12 @@ Neither script downloads what the build does not need: the Rust spec tree
 under `.work/` is cloned only by `cmd/run.ts -compare`, and emscripten is
 only looked for with `-wasm`.
 
+Every compile and link is echoed with a `> ` in front, the tool spelled as
+its bare name — the command as written runs in a shell where that tool is on
+PATH, which on Windows means a Developer Command Prompt. What the line leaves
+out is printed once above it: the directory it runs from, and `Using <full
+path>` for the compiler.
+
 No example name (or a flag last) prints the valid example list. The example is the last argument.
 
 Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/` on Windows). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/` on Windows). Clean rebuild of that dir: add `-clean`. Linux and macOS write under `out/linux/` and `out/mac/`, so building the same checkout for multiple platforms never clobbers another platform's output.
@@ -580,6 +608,8 @@ Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/` on Windows). Re
   installed is an error carrying the command that installs it, never a quiet
   fallback to a different one. `-dbg` is still the debug *build*, not this.
 - `-compare` cargo-builds and launches the Rust twin beside ours.
+- `-versions` prints the upstream pins, syncs `.work/gpui-component` to the
+  pinned SHA, and exits. The pins live at the top of `cmd/run.ts`.
 - `-wasm` serves the page and opens a tab; `-no-open` and `-port N` steer that.
 - `-no-build` launches what is already in `out/`.
 
@@ -708,8 +738,11 @@ cmd/imgdiff.ts         compare two shots, or two directories of them, and exit 1
                        takes -gpui-* out of argv before the example parses it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
-cmd/update-dist.ts      amalgamate src/** into gpui.h + gpui.cpp
-                       (`.work/` for builds; run by hand to publish gpui-cpp-dist)
+cmd/update-dist.ts     amalgamate src/** into gpui.h + gpui.cpp (`.work/` for
+                       builds; run by hand to publish gpui-cpp-dist, which also
+                       carries the examples, assets/, web/ and both scripts)
+readme-dist.md         the published snapshot's readme, `<checkin-sha1>` filled
+                       in on the way over; the dist copy is overwritten each run
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
 cmd/bench.ts           build bench/ and run it (-small, -large, -n=<count>)

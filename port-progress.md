@@ -6265,3 +6265,51 @@ import the pins from `run.ts` — which meant guarding `run.ts`'s main behind
 placed on the two halves of the screen, and `run.ts` reaches for them by name.
 Both are found relative to the script's own directory now rather than at
 `<root>/cmd/`, which is the same fix as everything else here.
+
+## What the build says while it works
+
+Four things the build knew and did not print.
+
+**The command.** It named each file it was compiling and nothing about how,
+so when a diagnostic is about a flag — a warning that is on, an include path
+that is not — the one thing you wanted was the one thing off screen. Every
+compile and link now goes out with a `> ` in front, from `spawnOrExit`, which
+they all pass through; `cmd/run.ts` echoes the cargo build of the Rust twin
+and the macOS window placer the same way.
+
+The tool is its bare name. `cl.exe`, not the 96 characters of Visual Studio
+install path that were most of the line and identical on every one of them.
+That is still runnable, because the environment these lines already ask for is
+one where the tool is on PATH. `formatCmd` quotes only the arguments that need
+it — a line where every token is quoted is unreadable, and being read is the
+point — with double quotes, which cmd.exe and a POSIX shell agree on and a
+Windows path's backslashes survive inside in both. Verified by doing it: the
+printed compile and link lines for hello_world, taken verbatim off the
+terminal, both run to exit 0 in a Developer Command Prompt at the repo root.
+
+**Where it runs, and which compiler.** Neither fits on the line. Both are
+printed once per build instead: the root, and `Using <full path>` — which
+cl.exe out of however many are installed, and for cargo whether it came off
+PATH or out of `~/.cargo/bin`, which is not always on it.
+
+**What a target cost and came to.** `Built out\rel\dock.exe` and nothing else,
+with the size table 26 builds away at the end of an `-all`. It is `Built
+out\rel\dock.exe in 11s 785ms size: 1.0 MB 1,008,128 b` now. The time is that
+target's alone; `elapsed` is still the whole run. The size is stat'd off the
+file rather than remembered from the link, so an incremental build that skips
+the link reports it too.
+
+**How big the amalgam is.** The line counted the pieces that went in — 165
+headers, 169 + 33 sources — and not what came out, which is the number that
+moves when you add a file. Both halves together, since one translation unit is
+what the build makes of them, and a published pair reports the same two read
+off the files.
+
+Also here, and the reason the last of these was worth doing carefully: a file
+in the amalgam directory now goes through `amalgamPath(name)`, which drops the
+`.` instead of leaving `./gpui.cpp` in front of it. Cosmetic on the echoed
+line, less so in the four places those strings are matched rather than
+printed — the object-group prefix test, the include-resolution candidates, the
+is-this-the-mac-amalgam comparison, and the source list they are compared
+against. One spelling is the only safe number when the same string is both a
+key and a path.
