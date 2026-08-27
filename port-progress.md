@@ -9258,3 +9258,9 @@ resolves its installed path and applies the same compatibility floor. No new
 library or minimum OS is introduced: systems without the package-graph APIs
 continue through the registry paths, while MSIX/App Installer deployments can
 now find the runtime Wry's linked loader would activate.
+
+The framework-package fallback now also follows an unusable legacy registry
+entry, not only an absent one. An incompatible `pv`, missing client DLL or
+overlong derived path no longer prevents the matching package from satisfying
+that channel; this is the same candidate-by-candidate fallthrough as the
+pinned loader.

@@ -1578,9 +1578,10 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
         if (!IsCompatibleInstalledRuntime(version)) {
             continue;
         }
-        swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
-                   ArchFolder());
-        if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+        int written = swprintf_s(out->clientDll,
+                                 L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
+                                 ArchFolder());
+        if (written < 0 || GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
             continue;
         }
         wcscpy_s(out->version, version);
@@ -1601,12 +1602,13 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
         return FindPackagedRuntime(channel, out);
     }
     if (!IsCompatibleInstalledRuntime(version)) {
-        return false;
+        return FindPackagedRuntime(channel, out);
     }
-    swprintf_s(out->clientDll, L"%s\\%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", location,
-               version, ArchFolder());
-    if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
-        return false;
+    int written = swprintf_s(out->clientDll,
+                             L"%s\\%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", location,
+                             version, ArchFolder());
+    if (written < 0 || GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+        return FindPackagedRuntime(channel, out);
     }
     wcscpy_s(out->version, version);
     if (channel->name[0] != 0) {
