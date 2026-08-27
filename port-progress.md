@@ -9228,3 +9228,10 @@ is skipped so Beta, Dev or Canary can still satisfy Wry, rather than selecting
 the first existing client and failing environment creation later. As in the
 real loader, an explicitly selected fixed-version folder is checked for its
 client DLL but is not filtered by this installed-runtime floor.
+
+Windows environment creation now includes the pinned loader's other retry
+boundary too. A synchronous failure returned directly by
+`CreateWebViewEnvironmentWithOptionsInternal` is attempted once more, while
+the completion wrapper still independently retries one asynchronous failure.
+The two paths had been conflated, leaving transient failures before callback
+registration observable in the C++ port but not in Wry.

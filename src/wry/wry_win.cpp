@@ -1723,6 +1723,11 @@ static HRESULT CreateEnvironmentWithOptions(
     HRESULT hr = retry->userDataFolder
                      ? create(TRUE, rt.runtimeType, retry->userDataFolder, options, retry)
                      : E_OUTOFMEMORY;
+    // This is separate from the completion handler's asynchronous retry:
+    // WebView2LoaderStatic also repeats one synchronously rejected call.
+    if (FAILED(hr) && retry->userDataFolder) {
+        hr = create(TRUE, rt.runtimeType, retry->userDataFolder, options, retry);
+    }
     retry->Release();
     // WebView2LoaderStatic releases its loader reference when this export is
     // present. The client pins its own module for asynchronous work and live
