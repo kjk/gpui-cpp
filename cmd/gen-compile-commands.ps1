@@ -70,8 +70,12 @@ $baseFlags = @(
     	# Explicit MSVC architecture + version so the STL headers don't emit
     	# STL1003 "Unexpected compiler" under clangd's clang-cl driver.
     	"/D_M_X64",
-    	"/D_MSC_VER=1930",
-    	"/W4",
+	"/D_MSC_VER=1930",
+	"/W4",
+	# Force C++ mode for all files, including .h headers.
+	# Without this, clangd defaults .h to C and C++ syntax (namespaces, templates)
+	# produces errors like "unknown type name 'namespace'".
+	"/TP",
     "/WX",
     "/wd4996",
     "/Z7",

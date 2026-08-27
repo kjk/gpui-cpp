@@ -10,8 +10,13 @@
 #   3. Optionally run: powershell -File cmd/gen-compile-commands.ps1
 
 CompileFlags:
-  # Project-wide defines and includes (matching cflagsFor in cmd/build.ts)
+  # All sources in this tree are C++. Without this, clangd treats .h as C
+  # and C++ syntax (namespace, class, templates, auto) fails to parse.
+  # /TP is MSVC/clang-cl spelling; -x c++ is the clang spelling.
   Add:
+    - "/TP"
+    - "-x"
+    - "c++"
     - "-std=c++20"
     - "-DUNICODE"
     - "-D_UNICODE"
