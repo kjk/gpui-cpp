@@ -7955,3 +7955,42 @@ partial, 8 adapters and 2 exclusions with 271 unresolved partial-module
 spellings and no full-module errors. MSVC debug/release, clang-cl release and
 MSVC ASan pass 20,047 checks; wasm passes its 19,342 applicable checks. The
 release story build also compiles the gallery's form uses unchanged.
+
+## UI select restores its state entity and committed-selection contract
+
+The trigger and searchable list already rendered most of the component, but
+the port collapsed Rust's `SelectState` into `SearchableListState`. That lost
+the Select event-emitter boundary, made a source-shaped state impossible to
+subscribe to, left search query ownership with every caller, and meant the
+source `Caret` and `SelectEvent` types did not exist. It also let an already
+open trigger toggle itself closed even though the pinned trigger only accepts
+the opening click, and confirm/escape did not consistently return focus.
+
+`SelectState` is now its own generational entity. It owns the reusable list
+state as its first member, the internal query input, select-only options and
+the emitter identity; `SelectListEntity` gives the nested list listeners a
+typed view of that same entity lifetime. The state exposes item replacement,
+flat and grouped `IndexPath` selection, value lookup, selected value/index,
+searchability, focus, open and clean operations. Programmatic value selection
+clears the active query and searches the full delegate again, matching all
+four pinned unit-test cases. Confirm emits `SelectEvent` with the optional
+value and grouped path; clean emits its empty form.
+
+The source-sized `Caret` now owns the chevron mapping (12/14/16 px), and the
+builder projects icon, prefix, focus-ring and list options into its Select
+state. Open triggers no longer bind the opening click, auto-width menus add
+the source two pixels, an outside press closes the restored state entity, and
+click/keyboard confirmation plus Escape restore trigger focus. Select pages
+in the story gallery now use `Entity<SelectState>`; the overload accepting a
+bare `SearchableListState` remains temporarily as the compatibility path used
+by Combobox and Settings, whose distinct source states are tracked in their
+own partial modules.
+
+Tests cover the complete key-action table, content focus tracking, caret
+sizes/color, first-member entity rebinding, grouped selection, query clearing,
+event emission, clean and builder-to-state projection. UI select is full: the
+audit moves to 99 full, 22 partial, 8 adapters and 2 exclusions with 268
+unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 20,076 checks; wasm passes
+its 19,371 applicable checks. The release story build compiles the migrated
+SelectState users and the two explicit compatibility users.

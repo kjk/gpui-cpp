@@ -336,10 +336,9 @@ static void BuildItems(int which, const char* const* names, int n) {
 }
 
 struct SelectStory {
-    // SelectState is an entity in Rust too — it is the SearchableList under
-    // the trigger, and it holds the selection, the query and whether the list
-    // is open.
-    Entity<component::SearchableListState> sel[SelCount] = {};
+    // SelectState is an entity in Rust too. It owns the SearchableList under
+    // the trigger while keeping the committed select and its events distinct.
+    Entity<component::SelectState> sel[SelCount] = {};
     bool disabled = false;
     InputState phone;
     // One query per searchable select: three of them are `.searchable(true)`,
@@ -369,14 +368,14 @@ static void SelToolbarAct(SelectStory* self, Ctx* cx, const ClickEvent*,
 static void ToggleSel(SelectStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t which) {
     for (int i = 0; i < SelCount; i++) {
-        component::SearchableListState* s = self->sel[i].Get(cx);
+        component::SelectState* s = self->sel[i].Get(cx);
         if (!s) {
             continue;
         }
         if (i == (int)which) {
             component::SelectToggleOpen(s, cx);
         } else {
-            s->open = false;
+            s->state.open = false;
         }
     }
     Notify(cx);
@@ -431,7 +430,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
         }
         for (int i = 0; i < SelCount; i++) {
             self->sel[i] =
-                EntityNewState<component::SearchableListState>(cx->app);
+                component::SelectState::New(cx->app);
         }
         BuildCountries();
         BuildItems(SelFruit, kFruits, (int)(sizeof(kFruits) / sizeof(char*)));
@@ -444,16 +443,16 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
         // The three selects Rust seeds with `Some(IndexPath::default())`
         // open with a value already picked: the country, and the two that
         // carry a title prefix.
-        component::SearchableListState* country = self->sel[SelCountry].Get(cx);
+        component::SelectState* country = self->sel[SelCountry].Get(cx);
         if (country) {
             // IndexPath::default().row(8).section(2): the ninth name of the
             // third run, which is Argentina.
-            component::SearchableListSelectOnly(country, 10);
+            component::SearchableListSelectOnly(country->List(), 10);
         }
         for (int which : {SelUi1, SelMenuH, SelAppearance}) {
-            component::SearchableListState* st = self->sel[which].Get(cx);
+            component::SelectState* st = self->sel[which].Get(cx);
             if (st) {
-                component::SearchableListSelectOnly(st, 0);
+                component::SearchableListSelectOnly(st->List(), 0);
             }
         }
     }
@@ -592,15 +591,15 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     const char* labels[] = {"Country", "fruit", "UI", "Language"};
     int slots[] = {SelCountry, SelFruit, SelUi1, SelLanguage};
     for (int i = 0; i < 4; i++) {
-        component::SearchableListState* s = self->sel[slots[i]].Get(cx);
+        component::SelectState* s = self->sel[slots[i]].Get(cx);
         const component::SearchableItem* items =
             slots[i] == SelCountry ? gCountryItems : gItems[slots[i]];
         Str line = StoryFmt(cx, "%s: None", labels[i]);
-        if (s && s->selected.len > 0) {
+        if (s && s->state.selected.len > 0) {
             // selected_value(): the item's value, which for a country is its
             // code rather than its name.
             line = StoryFmt(cx, "%s: Some(\"%s\")", labels[i],
-                            items[s->selected[0]].value);
+                            items[s->state.selected[0]].value);
         }
         valueCol->Child(StoryTxt(cx, line, 16, th.foreground));
     }

@@ -15,7 +15,7 @@ static const component::SearchableItem kNamePrefixes[] = {
 };
 
 struct FormStory {
-    Entity<component::SearchableListState> namePrefix = {};
+    Entity<component::SelectState> namePrefix = {};
     InputState name;
     InputState email;
     // TextareaState: the same engine, told it spans more than one line.
@@ -67,9 +67,9 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
     if (!self->seeded) {
         self->seeded = true;
         self->namePrefix =
-            EntityNewState<component::SearchableListState>(cx->app);
-        if (component::SearchableListState* st = self->namePrefix.Get(cx)) {
-            component::SearchableListSelectOnly(st, 0);
+            component::SelectState::New(cx->app);
+        if (component::SelectState* st = self->namePrefix.Get(cx)) {
+            component::SearchableListSelectOnly(st->List(), 0);
         }
         InputSetValue(&self->name, StrL("Jason Lee"));
         self->bio.kind = InputKind::Textarea;

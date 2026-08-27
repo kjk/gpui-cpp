@@ -107,6 +107,123 @@ static void TheListInsideASelectIsTheContentHandle() {
     EntityDropAll(&app);
 }
 
+static void CaretKeepsTheSourceSizeScale() {
+    using namespace gpui::component;
+    utassertnear(Caret::New(UiSize::XSmall).IconSize(), 12.f);
+    utassertnear(Caret::New(UiSize::Small).IconSize(), 14.f);
+    utassertnear(Caret::New(UiSize::Medium).IconSize(), 16.f);
+    utassertnear(Caret::New(UiSize::Large).IconSize(), 16.f);
+
+    Arena* a = ArenaNew();
+    Rgba color = Rgba{10, 20, 30, 255};
+    El* icon = Caret::New(UiSize::Small).TextColor(color).IntoEl(a);
+    utassert(StrSame(icon->iconPath, StrL("icons/chevron-down.svg")));
+    utassertnear(icon->style.width, 14.f);
+    utassert(icon->style.hasColor);
+    utassert(icon->style.color.g == 20);
+    ArenaDelete(a);
+}
+
+struct SelectEventSink {
+    int count = 0;
+    component::SelectEvent last = {};
+
+    static void OnConfirm(SelectEventSink* self, Ctx*,
+                          const component::SelectEvent* event) {
+        self->count++;
+        self->last = *event;
+    }
+};
+
+static void SelectStateOwnsCommittedSelectionAndEvents() {
+    using namespace gpui::component;
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+
+    Entity<SelectState> state = SelectState::New(&app);
+    SelectState* s = state.Get(&app);
+    utassert(s != nullptr);
+    Entity<SearchableListState> list = SelectListEntity(state);
+    utassert(list.Get(&app) == s->List());
+
+    SearchableItem items[] = {
+        {StrL("Rust"), StrL("rust"), 0},
+        {StrL("C++"), StrL("cpp"), 0},
+        {StrL("Swift"), StrL("swift"), 2},
+    };
+    s->SetItems(items, 3);
+    IndexPath swift = IndexPathNew(0).Section(2);
+    s->SetSelectedIndex(&swift, &cx);
+    IndexPath selected;
+    utassert(s->SelectedIndex(&selected));
+    utassert(selected == swift);
+    utassert(StrSame(s->SelectedValue(), StrL("swift")));
+
+    s->SetSelectedValue(StrL("cpp"), &cx);
+    utassert(s->SelectedIndex(&selected));
+    utassert(selected == IndexPathNew(1));
+
+    s->Searchable(true);
+    InputSetValue(&s->queryInput, StrL("Swift"));
+    SearchableListSearch(s->List(), items, 3, InputValue(&s->queryInput));
+    utassert(s->state.matches.len == 1);
+    s->SetSelectedValue(StrL("rust"), &cx);
+    utassert(InputValue(&s->queryInput).len == 0);
+    utassert(s->state.matches.len == 3);
+
+    Entity<SelectEventSink> sink = EntityNewState<SelectEventSink>(&app);
+    SubscribeTo(&app, state, sink, &SelectEventSink::OnConfirm);
+    ListEvent confirm = {ListEventKind::Confirm, 1, false};
+    SelectState::OnListChange(s, &cx, &confirm);
+    SelectEventSink* heard = sink.Get(&app);
+    utassert(heard->count == 1);
+    utassert(heard->last.hasValue);
+    utassert(StrSame(heard->last.value, StrL("cpp")));
+
+    s->Clean(&cx);
+    utassert(!s->SelectedIndex(nullptr));
+    utassert(heard->count == 2);
+    utassert(!heard->last.hasValue);
+
+    delete win;
+    EntityDropAll(&app);
+}
+
+static void SourceSelectBuilderWritesItsOwnState() {
+    using namespace gpui::component;
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    Entity<SelectState> state = SelectState::New(&app);
+    SearchableItem items[] = {{StrL("One"), StrL("one")}};
+    component::Select::New(&cx, StrL("source-select"), state)
+        ->Items(items, 1)
+        ->Icon(IconName::Search)
+        ->TitlePrefix(StrL("Value: "))
+        ->FocusRing(false)
+        ->IntoEl();
+    SelectState* s = state.Get(&app);
+    utassert(s->state.items == items);
+    utassert(s->state.nItems == 1);
+    utassert(s->icon == IconName::Search);
+    utassert(StrSame(s->titlePrefix, StrL("Value: ")));
+    utassert(!s->focusRingEnabled);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestSelect() {
     TestSuite("select");
     ArrowsOpenAClosedSelect();
@@ -115,4 +232,7 @@ void TestSelect() {
     ADisabledSelectAnswersToNothing();
     OtherKeysAreNotTheSelects();
     TheListInsideASelectIsTheContentHandle();
+    CaretKeepsTheSourceSizeScale();
+    SelectStateOwnsCommittedSelectionAndEvents();
+    SourceSelectBuilderWritesItsOwnState();
 }

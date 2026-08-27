@@ -10,11 +10,74 @@ namespace gpui {
 
 namespace component {
 
+// The source Select owns a small render-once caret instead of drawing the
+// chevron inline. Keeping it as a value also preserves the source size rule:
+// xsmall and small stay themselves, every larger trigger uses medium.
+struct Caret {
+    UiSize size = UiSize::Medium;
+    Rgba color = {};
+    bool hasColor = false;
+
+    static Caret New(UiSize size);
+    Caret TextColor(Rgba color) const;
+    float IconSize() const;
+    El* IntoEl(Arena* a) const;
+};
+
+// SelectEvent::Confirm(Option<Value>). C++ represents the sole enum variant
+// as a tagged payload: hasValue=false is Confirm(None).
+struct SelectEvent {
+    bool hasValue = false;
+    IndexPath index = {};
+    Str value = {};
+};
+
+// Rust keeps SelectState outside SearchableListState: the latter is the list
+// delegate and cursor, while this entity is the committed select and the
+// event emitter. `state` deliberately comes first so the same generational
+// entity can be rebound to the inner state for the list listeners; the
+// entity remains owned and destroyed as SelectState.
+struct SelectState {
+    SearchableListState state;
+    InputState queryInput;
+    InputState* activeQuery = nullptr;
+    bool searchable = false;
+    IconName icon = IconName::None;
+    Str titlePrefix = {};
+    bool focusRingEnabled = true;
+    EntityId self = {};
+
+    static Entity<SelectState> New(App* app);
+    SearchableListState* List() { return &state; }
+    const SearchableListState* List() const { return &state; }
+    void Searchable(bool value);
+    void SetItems(const SearchableItem* items, int nItems);
+    void SetSelectedIndex(const IndexPath* selected, Ctx* cx);
+    void SetSelectedIndex(int flatIndex, Ctx* cx);
+    void SetSelectedValue(Str value, Ctx* cx);
+    bool SelectedIndex(IndexPath* out) const;
+    Str SelectedValue() const;
+    void Focus(Window* win) const;
+    void SetOpen(bool open, Ctx* cx);
+    void ToggleMenu(Ctx* cx);
+    void Clean(Ctx* cx);
+
+    static void OnListChange(SelectState* self, Ctx* cx,
+                             const ListEvent* event);
+    static void OnMouseDownOut(SelectState* self, Ctx* cx,
+                               const MouseDownEvent* event);
+};
+
+// Typed rebind of the first-member list state. This is the C++ counterpart
+// of `SelectState.state.list`: one entity lifetime, two typed views.
+Entity<SearchableListState> SelectListEntity(Entity<SelectState> state);
+
 struct Select {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
     Entity<SearchableListState> state = {};
+    Entity<SelectState> selectState = {};
     // The items, which are the caller's: they have to outlive the frame, so a
     // static array rather than one built on the frame arena.
     const SearchableItem* items = nullptr;
@@ -50,6 +113,7 @@ struct Select {
     Listener onClear;
 
     static Select* New(Ctx* cx, Str id, Entity<SearchableListState> state);
+    static Select* New(Ctx* cx, Str id, Entity<SelectState> state);
     Select* Items(const SearchableItem* items, int n);
     Select* Sections(const Str* titles, int n);
     Select* Placeholder(Str s);
@@ -84,12 +148,14 @@ Str SelectTriggerTitle(const SearchableListState* s, Str placeholder,
 
 // SelectState::toggle / clear, as handlers a trigger can bind straight to.
 void SelectToggleOpen(SearchableListState* s, Ctx* cx);
+void SelectToggleOpen(SelectState* s, Ctx* cx);
 
 // Declare the "Select" key context on `root` and hang the five handlers off
 // it. The themed Select does this for itself; a caller that builds its own
 // select out of the same parts can too.
 void SelectBindKeys(Ctx* cx, El* root, Entity<SearchableListState> state);
 void SelectClear(SearchableListState* s, Ctx* cx);
+void SelectClear(SelectState* s, Ctx* cx);
 
 } // namespace component
 } // namespace gpui

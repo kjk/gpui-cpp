@@ -34,7 +34,7 @@ struct ThemeColorsStory;
 static void FillThemeItems(ThemeColorsStory* self, App* app);
 
 struct ThemeColorsStory {
-    Entity<component::SearchableListState> themes = {};
+    Entity<component::SelectState> themes = {};
     Vec<component::SearchableItem> themeItems;
     int openGroup = 0;
     bool showInherited = false;
@@ -100,11 +100,11 @@ static void ToggleThemeSelect(ThemeColorsStory* self, Ctx* cx,
 // the one for its mode, and the window switches to that mode so the change is
 // on screen rather than one menu away.
 static void SetTheme(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
-    component::SearchableListState* st = self->themes.Get(cx);
-    if (!st || st->selected.len == 0) {
+    component::SelectState* st = self->themes.Get(cx);
+    if (!st || st->state.selected.len == 0) {
         return;
     }
-    int ix = st->selected[0];
+    int ix = st->state.selected[0];
     if (ix < 0 || ix >= self->themeItems.len) {
         return;
     }
@@ -218,8 +218,8 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         self->seeded = true;
         FillThemeItems(self, cx->app);
         InputSetPlaceholder(&self->filter, StrL("Search..."));
-        self->themes = EntityNewState<component::SearchableListState>(cx->app);
-        component::SearchableListState* t = self->themes.Get(cx);
+        self->themes = component::SelectState::New(cx->app);
+        component::SelectState* t = self->themes.Get(cx);
         if (t) {
             // The picker opens on the theme that is showing, which is the
             // one the registry has installed for the mode in force.
@@ -232,7 +232,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                     break;
                 }
             }
-            component::SearchableListSelectOnly(t, at);
+            component::SearchableListSelectOnly(t->List(), at);
         }
     }
     if (self->filter.focused) {

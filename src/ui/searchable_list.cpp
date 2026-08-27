@@ -166,6 +166,13 @@ void SearchableListState::OnRowClick(SearchableListState* self, Ctx* cx,
     // was picked, once it has been.
     if (SearchableListClick(self, index)) {
         self->open = false;
+        if (self->previousFocus.IsValid() &&
+            FocusHandleContainsFocused(cx->win, self->contentFocus)) {
+            if (!FocusHandleRestore(cx->win, self->previousFocus)) {
+                FocusHandleRestore(cx->win, self->triggerFocus);
+            }
+        }
+        self->previousFocus = {};
     }
     ListEvent ev = {ListEventKind::Confirm, index, false};
     if (self->onChange.IsValid()) {
@@ -405,9 +412,7 @@ void SearchableListState::OnAction(SearchableListState* self, Ctx* cx,
             SelectToggleOpen(self, cx);
             return;
         case SelectAction::Dismiss:
-            self->open = false;
-            self->list.selected = -1;
-            Notify(cx);
+            SelectToggleOpen(self, cx);
             return;
         case SelectAction::Confirm:
             if (self->list.selected >= 0 && self->list.selected < self->matches

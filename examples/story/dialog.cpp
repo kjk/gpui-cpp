@@ -29,7 +29,7 @@ struct DialogStory {
     bool keyboard = true;
     InputState focusInput;
     InputState basicInput;
-    Entity<component::SearchableListState> basicSelect = {};
+    Entity<component::SelectState> basicSelect = {};
     Entity<TableState> table = {};
     LocalDate basicDate = {};
     bool basicDateOpen = false;
@@ -76,8 +76,8 @@ static void ResetDialogState(DialogStory* self, Ctx* cx) {
     self->otherOpen = false;
     self->basicInput.focused = false;
     self->basicDateOpen = false;
-    if (component::SearchableListState* state = self->basicSelect.Get(cx)) {
-        state->open = false;
+    if (component::SelectState* state = self->basicSelect.Get(cx)) {
+        state->state.open = false;
     }
 }
 
@@ -685,7 +685,7 @@ static void EnsureDialogState(DialogStory* self, Ctx* cx) {
     InputSetPlaceholder(&self->basicInput, StrL("Your Name"));
     InputSetPlaceholder(&self->focusInput,
                         StrL("Type before opening a dialog"));
-    self->basicSelect = EntityNewState<component::SearchableListState>(cx->app);
+    self->basicSelect = component::SelectState::New(cx->app);
     self->table = EntityNewState<TableState>(cx->app);
     self->basicDate = DateToday();
     self->basicDate.day = 0;

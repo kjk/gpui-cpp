@@ -6,6 +6,201 @@ namespace gpui {
 
 namespace component {
 
+Caret Caret::New(UiSize size) {
+    Caret out;
+    out.size = size;
+    return out;
+}
+
+Caret Caret::TextColor(Rgba value) const {
+    Caret out = *this;
+    out.color = value;
+    out.hasColor = true;
+    return out;
+}
+
+float Caret::IconSize() const {
+    if (size == UiSize::XSmall) {
+        return 12;
+    }
+    if (size == UiSize::Small) {
+        return 14;
+    }
+    return 16;
+}
+
+El* Caret::IntoEl(Arena* a) const {
+    El* out = IconEl(a, IconName::ChevronDown, IconSize());
+    if (hasColor) {
+        out->Fg(color);
+    }
+    return out;
+}
+
+static int SelectFlatIndex(const SearchableListState* s, IndexPath path) {
+    if (!s || !s->items || path.row < 0 || path.section < 0) {
+        return -1;
+    }
+    int row = 0;
+    for (int i = 0; i < s->nItems; i++) {
+        if (s->items[i].section != path.section) {
+            continue;
+        }
+        if (row == path.row) {
+            return i;
+        }
+        row++;
+    }
+    return -1;
+}
+
+static IndexPath SelectPath(const SearchableListState* s, int flat) {
+    if (!s || !s->items || flat < 0 || flat >= s->nItems) {
+        return IndexPathNew(-1);
+    }
+    int section = s->items[flat].section;
+    int row = 0;
+    for (int i = 0; i < flat; i++) {
+        if (s->items[i].section == section) {
+            row++;
+        }
+    }
+    return IndexPathNew(row).Section(section);
+}
+
+Entity<SearchableListState> SelectListEntity(Entity<SelectState> state) {
+    Entity<SearchableListState> out;
+    out.id = state.id;
+    return out;
+}
+
+Entity<SelectState> SelectState::New(App* app) {
+    Entity<SelectState> out = EntityNewState<SelectState>(app);
+    SelectState* self = out.Get(app);
+    if (self) {
+        self->self = out.id;
+        self->activeQuery = &self->queryInput;
+        self->state.onChange = ListenTo(out, &SelectState::OnListChange);
+    }
+    return out;
+}
+
+void SelectState::Searchable(bool value) {
+    searchable = value;
+}
+
+void SelectState::SetItems(const SearchableItem* items, int nItems) {
+    SearchableListSearch(&state, items, nItems, Str{});
+}
+
+void SelectState::SetSelectedIndex(const IndexPath* selected, Ctx* cx) {
+    SetSelectedIndex(selected ? SelectFlatIndex(&state, *selected) : -1, cx);
+}
+
+void SelectState::SetSelectedIndex(int flatIndex, Ctx* cx) {
+    if (flatIndex < 0 || flatIndex >= state.nItems) {
+        flatIndex = -1;
+    }
+    SearchableListSelectOnly(&state, flatIndex);
+    state.list.selected = -1;
+    for (int i = 0; i < state.matches.len; i++) {
+        if (state.matches[i] == flatIndex) {
+            state.list.selected = i;
+            break;
+        }
+    }
+    if (cx) {
+        Notify(cx);
+    }
+}
+
+void SelectState::SetSelectedValue(Str value, Ctx* cx) {
+    // Rust clears the active search before asking the delegate for a value's
+    // full-list position. The query text lives in InputState here, while the
+    // state owns the same full match snapshot.
+    if (activeQuery) {
+        InputSetValue(activeQuery, Str{});
+    }
+    SearchableListSearch(&state, state.items, state.nItems, Str{});
+    int found = -1;
+    for (int i = 0; i < state.nItems; i++) {
+        if (StrSame(state.items[i].value, value)) {
+            found = i;
+            break;
+        }
+    }
+    SetSelectedIndex(found, cx);
+}
+
+bool SelectState::SelectedIndex(IndexPath* out) const {
+    if (state.selected.len <= 0) {
+        return false;
+    }
+    IndexPath path = SelectPath(&state, state.selected[0]);
+    if (path.row < 0) {
+        return false;
+    }
+    if (out) {
+        *out = path;
+    }
+    return true;
+}
+
+Str SelectState::SelectedValue() const {
+    if (state.selected.len <= 0 || !state.items) {
+        return {};
+    }
+    int ix = state.selected[0];
+    return ix >= 0 && ix < state.nItems ? state.items[ix].value : Str{};
+}
+
+void SelectState::Focus(Window* win) const {
+    if (win && state.triggerFocus.IsValid()) {
+        FocusHandleFocus(win, state.triggerFocus);
+    }
+}
+
+void SelectState::SetOpen(bool open, Ctx* cx) {
+    if (state.open == open) {
+        return;
+    }
+    SelectToggleOpen(&state, cx);
+}
+
+void SelectState::ToggleMenu(Ctx* cx) {
+    SelectToggleOpen(&state, cx);
+}
+
+void SelectState::Clean(Ctx* cx) {
+    SetSelectedIndex(-1, cx);
+    SelectEvent ev;
+    EntityEmit(cx->app, cx->win, self, &ev);
+}
+
+void SelectState::OnListChange(SelectState* self, Ctx* cx,
+                               const ListEvent* event) {
+    if (!self || !event || event->kind != ListEventKind::Confirm) {
+        return;
+    }
+    SelectEvent ev;
+    int ix = event->index;
+    if (ix >= 0 && ix < self->state.nItems) {
+        ev.hasValue = true;
+        ev.index = SelectPath(&self->state, ix);
+        ev.value = self->state.items[ix].value;
+    }
+    self->Focus(cx->win);
+    EntityEmit(cx->app, cx->win, self->self, &ev);
+}
+
+void SelectState::OnMouseDownOut(SelectState* self, Ctx* cx,
+                                 const MouseDownEvent*) {
+    if (self && self->state.open) {
+        self->SetOpen(false, cx);
+        self->Focus(cx->win);
+    }
+}
+
 Select* Select::New(Ctx* cx, Str id, Entity<SearchableListState> state) {
     Arena* a = cx->a;
     Select* s = ArenaNew<Select>(a);
@@ -14,6 +209,17 @@ Select* Select::New(Ctx* cx, Str id, Entity<SearchableListState> state) {
     s->id = id;
     s->state = state;
     return s;
+}
+
+Select* Select::New(Ctx* cx, Str id, Entity<SelectState> state) {
+    Select* out = Select::New(cx, id, SelectListEntity(state));
+    out->selectState = state;
+    SelectState* self = state.Get(cx);
+    if (self) {
+        self->self = state.id;
+        self->state.onChange = ListenTo(state, &SelectState::OnListChange);
+    }
+    return out;
 }
 Select* Select::Items(const SearchableItem* it, int n) {
     items = it;
@@ -157,12 +363,24 @@ void SelectToggleOpen(SearchableListState* s, Ctx* cx) {
     Notify(cx);
 }
 
+void SelectToggleOpen(SelectState* s, Ctx* cx) {
+    if (s) {
+        s->ToggleMenu(cx);
+    }
+}
+
 void SelectClear(SearchableListState* s, Ctx* cx) {
     if (!s) {
         return;
     }
     s->selected.Clear();
     Notify(cx);
+}
+
+void SelectClear(SelectState* s, Ctx* cx) {
+    if (s) {
+        s->Clean(cx);
+    }
 }
 
 Select* Select::Trigger(El* e) {
@@ -181,8 +399,22 @@ El* Select::IntoEl() {
     IdScope scope(cx, id);
     const Theme& th = ThemeNow(cx->app);
     SearchableListState* s = state.Get(cx);
+    if (SelectState* owner = selectState.Get(cx)) {
+        if (query) {
+            owner->activeQuery = query;
+            owner->searchable = true;
+        } else if (owner->searchable) {
+            query = &owner->queryInput;
+            owner->activeQuery = query;
+        }
+        owner->icon = icon;
+        owner->titlePrefix = titlePrefix;
+        owner->focusRingEnabled = focusRing;
+        owner->state.items = items;
+        owner->state.nItems = nItems;
+    }
     // input_size / input_text_size, by size.
-    float h = 32, padX = 10, font = 14, caret = 16;
+    float h = 32, padX = 10, font = 14;
     if (size == UiSize::Large) {
         h = 44;
         padX = 12;
@@ -190,12 +422,10 @@ El* Select::IntoEl() {
     } else if (size == UiSize::Small) {
         h = 24;
         padX = 8;
-        caret = 14;
     } else if (size == UiSize::XSmall) {
         h = 20;
         padX = 4;
         font = 12;
-        caret = 12;
     }
     bool open = s && s->open && !disabled;
     bool hasValue = s && s->selected.len > 0;
@@ -246,10 +476,10 @@ El* Select::IntoEl() {
             // A custom icon replaces the caret, at xsmall.
             box->Child(IconEl(a, icon, 12)->Fg(th.mutedFg));
         } else {
-            box->Child(IconEl(a, IconName::ChevronDown, caret)->Fg(th.mutedFg));
+            box->Child(Caret::New(size).TextColor(th.mutedFg).IntoEl(a));
         }
     }
-    if (!disabled) {
+    if (!disabled && !open) {
         BindClick(box, id, onToggle);
         box->FocusRing(focusRing);
     }
@@ -278,7 +508,8 @@ El* Select::IntoEl() {
             SearchableList::New(cx, StrL("list"), state, query)
                 ->InSelect(true)
                 ->Items(items, nItems)
-                ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width : 240))
+                ->W(menuWidth > 0 ? menuWidth
+                                  : (width > 0 ? width + 2 : 242))
                 ->CheckIcon(checkIcon);
         if (sections) {
             list->Sections(sections, nSections);
@@ -302,6 +533,10 @@ El* Select::IntoEl() {
         // the trigger's edge.
         menu = PopoverSurface(cx, list->IntoEl());
         menu = DropdownOpen(cx, menu, MotionName(cx, StrL("open")));
+        if (selectState.IsValid()) {
+            menu->OnMouseDownOut(
+                ListenTo(selectState, &SelectState::OnMouseDownOut));
+        }
     } else if (s) {
         // A closed list still has to know its items and what the query left,
         // so the trigger can name the selection and the keys can move it.
