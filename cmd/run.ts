@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "d8376ad5635b963b2e751fbd4e328f9195d565a5",
+  sha: "91217366a5765600a127bf108ce00b7143a93381",
   date: "2026-08-27",
-  subject: "scrollbar: fix repaint after clicking the track to jump (#2843)",
+  subject: "editor: Fix input line selection on soft_wrapped multiple lines (#2656)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

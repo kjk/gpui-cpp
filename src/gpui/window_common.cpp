@@ -442,10 +442,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
             s->scrollY = most;
         }
         if (s->scrollY != was && s->autoScroll.hasLastDrag) {
-            InputSelectTo(
-                s, win->app, win,
-                InputIndexForPosition(s, &win->paint, s->autoScroll.lastDrag.x,
-                                      s->autoScroll.lastDrag.y));
+            bool affinity = false;
+            int offset = InputIndexForPosition(
+                s, &win->paint, s->autoScroll.lastDrag.x,
+                s->autoScroll.lastDrag.y, &affinity);
+            InputSelectToWithAffinity(s, win->app, win, offset, affinity);
         }
         WindowRequestAnimationFrame(win);
     }
@@ -1117,7 +1118,9 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
     if (!s->focused) {
         InputFocus(s, win->app, win);
     }
-    int offset = InputIndexForPosition(s, &win->paint, in.x, in.y);
+    bool lineEndAffinity = false;
+    int offset = InputIndexForPosition(s, &win->paint, in.x, in.y,
+                                       &lineEndAffinity);
     // `M::on_click(..)`, which is go-to-definition and returns true when it
     // took the press — so the same click does not also move the caret.
     if (InputClickDefinition(s, win->app, win, offset,
@@ -1129,9 +1132,11 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
     } else if (in.clickCount == 2) {
         InputSelectWord(s, win->app, win, offset);
     } else if (in.modifiers.shift) {
-        InputSelectTo(s, win->app, win, offset);
+        InputSelectToWithAffinity(s, win->app, win, offset,
+                                  lineEndAffinity);
     } else {
-        InputMoveTo(s, win->app, win, offset);
+        InputMoveToWithAffinity(s, win->app, win, offset,
+                                lineEndAffinity);
     }
     s->selecting = true;
 }
@@ -1516,8 +1521,10 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         InputState* s = win->input;
         s->autoScroll.lastDrag = Point{x, y};
         s->autoScroll.hasLastDrag = true;
-        InputSelectTo(s, win->app, win,
-                      InputIndexForPosition(s, &win->paint, x, y));
+        bool affinity = false;
+        int offset =
+            InputIndexForPosition(s, &win->paint, x, y, &affinity);
+        InputSelectToWithAffinity(s, win->app, win, offset, affinity);
         // A drag that has reached the edge of a field with somewhere to go
         // keeps scrolling it until the pointer comes back in. A single-line
         // field has nowhere to go, which is why Rust asks the same question.

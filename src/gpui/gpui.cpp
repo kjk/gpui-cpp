@@ -1695,10 +1695,11 @@ El* El::MarkRange(int lo, int hi) {
     markHi = hi;
     return this;
 }
-El* El::Caret(int off, Rgba color, float width) {
+El* El::Caret(int off, Rgba color, float width, bool lineEndAffinity) {
     caretOff = off;
     caretColor = color;
     caretW = width;
+    caretLineEndAffinity = lineEndAffinity;
     return this;
 }
 
@@ -2473,7 +2474,7 @@ Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 
 bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                  int off, float* outX, float* outY, float* outH, bool mono,
-                 float lineHeight) {
+                 float lineHeight, bool lineEndAffinity) {
     if (!ctx) {
         return false;
     }
@@ -2504,7 +2505,7 @@ bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
         *outY = 0;
         *outH = fontSize;
         ok = true;
-    } else if (off > 0) {
+    } else if (off > 0 && (lineEndAffinity || off == s.len)) {
         // The trailing edge of everything before it, the way the caret is
         // placed.
         int n = TextLayoutRangeRects(tl, s, 0, off, r, 32);
@@ -2515,7 +2516,10 @@ bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
             ok = true;
         }
     } else {
-        int n = TextLayoutRangeRects(tl, s, 0, s.len, r, 32);
+        // The leading edge of what follows. At a soft-wrap boundary this is
+        // the start of the next visual row; the prefix branch above is the
+        // trailing edge of the previous one.
+        int n = TextLayoutRangeRects(tl, s, off, s.len, r, 32);
         if (n > 0) {
             *outX = r[0].x;
             *outY = r[0].y;
@@ -5115,7 +5119,8 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
                 off = e->text.len;
             }
             int n = 0;
-            if (off > 0) {
+            if (off > 0 &&
+                (e->caretLineEndAffinity || off == e->text.len)) {
                 // The trailing edge of everything before it.
                 n = TextLayoutRangeRects(tl, e->text, 0, off, r, 32);
                 if (n > 0) {
@@ -5124,9 +5129,9 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
                     h = r[n - 1].h;
                 }
             } else {
-                // Nothing before it, so the leading edge of the first
-                // character instead.
-                n = TextLayoutRangeRects(tl, e->text, 0, e->text.len, r, 32);
+                // The leading edge of what follows. At a wrap boundary this
+                // puts a no-affinity caret on the next row.
+                n = TextLayoutRangeRects(tl, e->text, off, e->text.len, r, 32);
                 if (n > 0) {
                     x = e->x + r[0].x;
                     y = e->y + r[0].y;

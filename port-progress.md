@@ -9368,3 +9368,13 @@ The C++ runtime already did this at the shared dispatch point after
 equivalence is now called out beside the invalidation. The existing dispatch
 regression exercises an isolated custom scroll listener and verifies that a
 track press updates it immediately without entering drag state.
+
+`91217366` distinguishes the two visual caret positions that share one byte
+offset at a soft-wrap boundary. Mouse selection, dragging, vertical movement
+and End/Shift-End now carry the same line-end affinity as Rust; caret paint and
+coordinate lookup use the trailing edge of the previous row or the leading
+edge of the next row accordingly. Wrapped hit-testing also shapes the left
+edge instead of collapsing it to the logical line start. The regression finds
+a real shaped wrap boundary and verifies that clicks on its two rows return
+the same offset with opposite affinities. MSVC release tests pass 20,956
+checks.

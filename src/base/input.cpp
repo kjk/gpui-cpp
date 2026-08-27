@@ -853,7 +853,8 @@ El* Textarea::New(Ctx* cx, InputState* state,
                 el->Caret(0, style.caret);
             }
         } else if (caret && cursor >= start && cursor <= start + line.len) {
-            el->Caret(cursor - start, style.caret);
+            el->Caret(cursor - start, style.caret, 2,
+                      state->cursorLineEndAffinity);
             // Where it lands is the anchor a completion menu hangs off.
             el->CaretOut(&state->caretWinX, &state->caretWinY);
         }
@@ -1488,7 +1489,7 @@ static bool WrappedRowOfCaret(const InputState* s, Window* win, Str line,
     float lineMult = lineH / font;
     float cx = 0, cy = 0, ch = lineH;
     if (!TextPointAt(ctx, line, font, maxW, true, rel, &cx, &cy, &ch,
-                     s->lastMono, lineMult)) {
+                     s->lastMono, lineMult, s->cursorLineEndAffinity)) {
         return false;
     }
     // The middle of the row rather than its top edge, for the same reason the
@@ -1742,7 +1743,8 @@ void InputScrollToOffset(InputState* s, int offset, InputMoveDir dir) {
     InputScrollToCaret(s, -1, y, dir);
 }
 
-void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
+void InputMoveToWithAffinity(InputState* s, App* app, Window* win, int offset,
+                             bool lineEndAffinity) {
     UndoBreakCoalescing(&s->undo);
     Str t = InputValue(s);
     if (offset < 0) {
@@ -1751,6 +1753,7 @@ void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
     if (offset > t.len) {
         offset = t.len;
     }
+    s->cursorLineEndAffinity = lineEndAffinity;
     s->selectedRange = SelectionAt(offset);
     s->hasSelectedWordRange = false;
     PauseBlink(s, app, win);
@@ -1760,7 +1763,12 @@ void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
     Notify(app, win);
 }
 
-void InputSelectTo(InputState* s, App* app, Window* win, int offset) {
+void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
+    InputMoveToWithAffinity(s, app, win, offset, false);
+}
+
+void InputSelectToWithAffinity(InputState* s, App* app, Window* win,
+                               int offset, bool lineEndAffinity) {
     Str t = InputValue(s);
     if (offset < 0) {
         offset = 0;
@@ -1768,6 +1776,7 @@ void InputSelectTo(InputState* s, App* app, Window* win, int offset) {
     if (offset > t.len) {
         offset = t.len;
     }
+    s->cursorLineEndAffinity = lineEndAffinity;
     if (s->selectionReversed) {
         s->selectedRange.start = offset;
     } else {
@@ -1794,8 +1803,13 @@ void InputSelectTo(InputState* s, App* app, Window* win, int offset) {
     Notify(app, win);
 }
 
+void InputSelectTo(InputState* s, App* app, Window* win, int offset) {
+    InputSelectToWithAffinity(s, app, win, offset, false);
+}
+
 void InputSelectAll(InputState* s, App* app, Window* win) {
     UndoBreakCoalescing(&s->undo);
+    s->cursorLineEndAffinity = false;
     s->selectedRange = Selection{0, InputValue(s).len};
     s->selectionReversed = false;
     s->hasSelectedWordRange = false;
@@ -1805,6 +1819,7 @@ void InputSelectAll(InputState* s, App* app, Window* win) {
 void InputUnselect(InputState* s, App* app, Window* win) {
     UndoBreakCoalescing(&s->undo);
     int offset = InputCursor(s);
+    s->cursorLineEndAffinity = false;
     s->selectedRange = SelectionAt(offset);
     s->hasSelectedWordRange = false;
     Notify(app, win);
@@ -1812,6 +1827,7 @@ void InputUnselect(InputState* s, App* app, Window* win) {
 
 void InputSetSelectedRange(InputState* s, App* app, Window* win, int a, int b) {
     Str t = InputValue(s);
+    s->cursorLineEndAffinity = false;
     // A non-empty range grows out to character boundaries; an empty one stays
     // empty and clips to the boundary before it.
     Bias endBias = a == b ? Bias::Left : Bias::Right;
@@ -1831,6 +1847,7 @@ void InputSelectWord(InputState* s, App* app, Window* win, int offset) {
         return;
     }
     UndoBreakCoalescing(&s->undo);
+    s->cursorLineEndAffinity = false;
     s->selectedRange = Selection{a, b};
     s->selectionReversed = false;
     s->selectedWordRange = s->selectedRange;
@@ -1843,6 +1860,7 @@ void InputSelectLine(InputState* s, App* app, Window* win, int offset) {
     int b = 0;
     TextLineRangeAt(InputValue(s), offset, &a, &b);
     UndoBreakCoalescing(&s->undo);
+    s->cursorLineEndAffinity = false;
     s->selectedRange = Selection{a, b};
     s->selectionReversed = false;
     s->hasSelectedWordRange = false;
@@ -2029,6 +2047,7 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
                     nullptr);
     }
 
+    s->cursorLineEndAffinity = false;
     s->selectedRange = SelectionAt(newOffset);
     s->selectionReversed = false;
     s->hasSelectedWordRange = false;
@@ -2136,6 +2155,7 @@ void InputReplaceAndMarkText(InputState* s, App* app, Window* win,
             return;
         }
     }
+    s->cursorLineEndAffinity = false;
     if (text.len == 0) {
         // An empty insert is the composition being abandoned: the caret goes
         // back where it started and nothing is marked.
@@ -2202,6 +2222,7 @@ static void ReplaceText(InputState* s, App* app, Window* win, Str value) {
 // reset_selection: a single-line field puts the caret at the end, matching an
 // HTML <input>; a multi-line one goes back to 0..0.
 static void ResetSelection(InputState* s) {
+    s->cursorLineEndAffinity = false;
     if (InputIsSingleLine(s)) {
         s->selectedRange = SelectionAt(InputValue(s).len);
     } else {
@@ -3386,7 +3407,38 @@ struct VerticalTarget {
     int offset = 0;
     float preferredX = -1;
     int preferredColumn = -1;
+    bool lineEndAffinity = false;
 };
+
+// Whether `offset` is the end of the visual row containing `relY`. The two
+// shaped points differ only at a soft-wrap boundary; everywhere else there
+// is no affinity to retain.
+static bool InputLineEndAffinityAt(PaintCtx* ctx, Str line, float font,
+                                   float maxW, int offset, float relY,
+                                   bool mono, float lineMult) {
+    if (!ctx || offset <= 0 || offset >= line.len) {
+        return false;
+    }
+    float endX = 0, endY = 0, endH = 0;
+    float startX = 0, startY = 0, startH = 0;
+    if (!TextPointAt(ctx, line, font, maxW, true, offset, &endX, &endY,
+                     &endH, mono, lineMult, true) ||
+        !TextPointAt(ctx, line, font, maxW, true, offset, &startX, &startY,
+                     &startH, mono, lineMult, false)) {
+        return false;
+    }
+    float dy = endY - startY;
+    if (dy > -0.5f && dy < 0.5f) {
+        return false;
+    }
+    float endMid = endY + endH * 0.5f;
+    float startMid = startY + startH * 0.5f;
+    float toEnd = relY - endMid;
+    float toStart = relY - startMid;
+    if (toEnd < 0) toEnd = -toEnd;
+    if (toStart < 0) toStart = -toStart;
+    return toEnd <= toStart;
+}
 
 // display_map.rs: a vertical move walks *display* rows, so a wrapped line
 // takes as many presses to cross as it has visual rows. The caret's point
@@ -3411,7 +3463,7 @@ static bool VerticalTargetDisplay(const InputState* s, Window* win, int lines,
     float cx = 0, cy = 0, ch = lineH;
     float lineMult = lineH / font;
     if (!TextPointAt(ctx, line, font, maxW, true, from - start, &cx, &cy, &ch,
-                     s->lastMono, lineMult)) {
+                     s->lastMono, lineMult, s->cursorLineEndAffinity)) {
         return false;
     }
     // The x the whole walk aims at, so crossing a short row and coming back
@@ -3446,8 +3498,11 @@ static bool VerticalTargetDisplay(const InputState* s, Window* win, int lines,
     int targetStart = RopeLineStartOffset(t, row);
     out->offset = targetStart;
     if (target.len > 0) {
-        out->offset += TextIndexAt(ctx, target, font, maxW, true, wantX, y,
-                                   s->lastMono, lineMult);
+        int local = TextIndexAt(ctx, target, font, maxW, true, wantX, y,
+                                s->lastMono, lineMult);
+        out->offset += local;
+        out->lineEndAffinity = InputLineEndAffinityAt(
+            ctx, target, font, maxW, local, y, s->lastMono, lineMult);
     }
     out->preferredX = wantX;
     return true;
@@ -3486,7 +3541,7 @@ static void MoveVertical(InputState* s, App* app, Window* win, int lines) {
     Str t = InputValue(s);
     VerticalTarget to = VerticalTargetFor(s, win, lines, t, InputCursor(s));
     PauseBlink(s, app, win);
-    InputMoveTo(s, app, win, to.offset);
+    InputMoveToWithAffinity(s, app, win, to.offset, to.lineEndAffinity);
     s->preferredX = to.preferredX;
     s->preferredColumn = to.preferredColumn;
 }
@@ -3504,7 +3559,8 @@ static void SelectVertical(InputState* s, App* app, Window* win, int lines) {
     Str t = InputValue(s);
     VerticalTarget to = VerticalTargetFor(s, win, lines, t, InputCursor(s));
     PauseBlink(s, app, win);
-    InputSelectTo(s, app, win, to.offset);
+    InputSelectToWithAffinity(s, app, win, to.offset,
+                              to.lineEndAffinity);
     s->preferredX = to.preferredX;
     s->preferredColumn = to.preferredColumn;
     // scroll_to: the moving end of the selection takes the view with it, the
@@ -3543,6 +3599,7 @@ static void DoUndo(InputState* s, App* app, Window* win) {
             Selection r = t->changes[i].newRange;
             InputReplaceTextInRange(s, app, win, &r, t->changes[i].oldText);
         }
+        s->cursorLineEndAffinity = false;
         s->selectedRange = sel;
         s->selectionReversed = false;
     }
@@ -3558,6 +3615,7 @@ static void DoRedo(InputState* s, App* app, Window* win) {
             Selection r = t->changes[i].oldRange;
             InputReplaceTextInRange(s, app, win, &r, t->changes[i].newText);
         }
+        s->cursorLineEndAffinity = false;
         s->selectedRange = sel;
         s->selectionReversed = false;
     }
@@ -3811,7 +3869,8 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return true;
         case InputAction::MoveEnd:
             PauseBlink(s, app, win);
-            InputMoveTo(s, app, win, InputEndOfLine(s, win));
+            InputMoveToWithAffinity(s, app, win, InputEndOfLine(s, win),
+                                    true);
             return true;
         case InputAction::MoveToStart:
             InputMoveTo(s, app, win, 0);
@@ -3858,7 +3917,8 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return true;
         case InputAction::SelectToEndOfLine:
             UndoBreakCoalescing(&s->undo);
-            InputSelectTo(s, app, win, InputEndOfLine(s, win));
+            InputSelectToWithAffinity(s, app, win, InputEndOfLine(s, win),
+                                      true);
             return true;
         case InputAction::SelectToPreviousWordStart:
             UndoBreakCoalescing(&s->undo);
@@ -4314,7 +4374,10 @@ void InputBlur(InputState* s, App* app, Window* win) {
 // line for the x; the rows here are the logical lines, evenly spaced from the
 // first one, so the row is arithmetic and only the x needs shaping.
 int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
-                          float y) {
+                          float y, bool* lineEndAffinity) {
+    if (lineEndAffinity) {
+        *lineEndAffinity = false;
+    }
     Str t = InputValue(s);
     if (t.len == 0 || !ctx) {
         return 0;
@@ -4369,12 +4432,21 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
     }
     Str line = RopeSliceLine(t, row);
     int start = RopeLineStartOffset(t, row);
-    if (line.len == 0 || x <= b.x) {
+    // A wrapped line still needs shaping at its left edge: the same x starts
+    // every visual row, and relY is what distinguishes those offsets.  The
+    // logical-line shortcut is valid only when the line does not wrap.
+    if (line.len == 0 || (x <= b.x && !s->softWrap)) {
         return start;
     }
-    return start + TextIndexAt(ctx, line, font, s->softWrap ? b.w : 0,
-                               s->softWrap, x - b.x, relY, s->lastMono,
-                               s->lastLineH > 0 ? s->lastLineH / font : 0);
+    float maxW = s->softWrap ? b.w : 0;
+    float lineMult = s->lastLineH > 0 ? s->lastLineH / font : 0;
+    int local = TextIndexAt(ctx, line, font, maxW, s->softWrap, x - b.x,
+                            relY, s->lastMono, lineMult);
+    if (lineEndAffinity && s->softWrap) {
+        *lineEndAffinity = InputLineEndAffinityAt(
+            ctx, line, font, maxW, local, relY, s->lastMono, lineMult);
+    }
+    return start + local;
 }
 
 /* Port of crates/base/src/input/editor/search.rs — the matcher behind the

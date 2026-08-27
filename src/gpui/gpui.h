@@ -1901,6 +1901,9 @@ struct El {
     int caretOff = -1;
     Rgba caretColor = {};
     float caretW = 2;
+    // A soft-wrap boundary is both the end of one visual row and the start
+    // of the next. True chooses the former; false chooses the latter.
+    bool caretLineEndAffinity = false;
     // The taffy node this element was laid out as, this frame. A
     // `taffy::NodeId` is a u64 and is kept as one here so gpui.h does not
     // have to name the layout port's types.
@@ -2118,7 +2121,8 @@ struct El {
     El* Spans(const TextSpan* runs, int n);
     // The marked range, which is drawn underlined in the text's own colour.
     El* MarkRange(int lo, int hi);
-    El* Caret(int off, Rgba color, float width = 2);
+    El* Caret(int off, Rgba color, float width = 2,
+              bool lineEndAffinity = false);
     El* Child(El* c);
     El* Bold();
     El* Semibold();
@@ -3711,6 +3715,10 @@ struct InputState {
     // rows aims at — a column means nothing halfway through a wrapped line.
     // -1 for none; cleared by every move that is not part of the walk.
     float preferredX = -1;
+    // Which side of a soft-wrap boundary the live caret belongs to. The byte
+    // offset alone cannot distinguish the previous row's end from the next
+    // row's start.
+    bool cursorLineEndAffinity = false;
 
     ~InputState();
 };
@@ -3788,8 +3796,12 @@ int InputNextEndOfWord(const InputState* s);
 
 // move_to(): drops the selection and puts the caret at `offset`.
 void InputMoveTo(InputState* s, App* app, Window* win, int offset);
+void InputMoveToWithAffinity(InputState* s, App* app, Window* win, int offset,
+                             bool lineEndAffinity);
 // select_to(): drags the live end of the selection to `offset`.
 void InputSelectTo(InputState* s, App* app, Window* win, int offset);
+void InputSelectToWithAffinity(InputState* s, App* app, Window* win,
+                               int offset, bool lineEndAffinity);
 void InputSelectAll(InputState* s, App* app, Window* win);
 void InputUnselect(InputState* s, App* app, Window* win);
 void InputSetSelectedRange(InputState* s, App* app, Window* win, int a, int b);
@@ -4068,7 +4080,8 @@ void InputBlur(InputState* s, App* app, Window* win);
 
 // index_for_mouse_position: the offset a press at (x, y) lands on, against the
 // run the element last painted.
-int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y);
+int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
+                          bool* lineEndAffinity = nullptr);
 // The fold chevron a press at (x, y) landed on, or -1. The boxes are the ones
 // the last frame's gutter left behind.
 int InputFoldIconAt(const InputState* s, float x, float y);
@@ -4243,7 +4256,8 @@ void TextMeasClear(PaintCtx* ctx);
 // drawn.
 bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                  int off, float* outX, float* outY, float* outH,
-                 bool mono = false, float lineHeight = 0);
+                 bool mono = false, float lineHeight = 0,
+                 bool lineEndAffinity = true);
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                 float relX, float relY, bool mono = false,
                 float lineHeight = 0);

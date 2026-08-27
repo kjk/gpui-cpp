@@ -2504,6 +2504,63 @@ static void LspFacadesInstallCapabilitiesAndExposeOverlayState() {
     utassert(!HoverPopoverState::Of(&state).open);
 }
 
+static void SoftWrapBoundariesKeepTheVisualRowAffinity() {
+    InputState state;
+    InputSetValue(&state, StrL("alpha beta gamma delta epsilon"));
+    state.kind = InputKind::Editor;
+    state.softWrap = true;
+    InputMoveToWithAffinity(&state, nullptr, nullptr, 5, true);
+    utassert(state.cursorLineEndAffinity);
+    InputSelectTo(&state, nullptr, nullptr, 6);
+    utassert(!state.cursorLineEndAffinity);
+
+    PaintApp* paint = PaintAppNew();
+    utassert(paint);
+    if (!paint) {
+        return;
+    }
+    PaintCtx ctx;
+    ctx.pa = paint;
+    Str line = InputValue(&state);
+    const float font = 16.f;
+    const float width = 72.f;
+    const float lineMult = 1.5f;
+    int boundary = -1;
+    float endY = 0, endH = 0, nextY = 0, nextH = 0;
+    for (int i = 1; i < line.len; i++) {
+        float endX = 0, nextX = 0;
+        if (TextPointAt(&ctx, line, font, width, true, i, &endX, &endY,
+                        &endH, false, lineMult, true) &&
+            TextPointAt(&ctx, line, font, width, true, i, &nextX, &nextY,
+                        &nextH, false, lineMult, false) &&
+            endY + 0.5f < nextY) {
+            boundary = i;
+            break;
+        }
+    }
+    utassert(boundary > 0);
+    if (boundary > 0) {
+        // The same byte offset closes one row and opens the next. The
+        // affinity decides which caret position is intended.
+        utassert(endY < nextY);
+        state.lastBounds = {0, 0, width, nextY + nextH + 20};
+        state.inputBounds = state.lastBounds;
+        state.lastFont = font;
+        state.lastLineH = font * lineMult;
+        state.rowBoxes.Append(state.lastBounds);
+
+        bool affinity = false;
+        int at = InputIndexForPosition(
+            &state, &ctx, width + 100, endY + endH * 0.5f, &affinity);
+        utassert(at == boundary && affinity);
+        at = InputIndexForPosition(&state, &ctx, 0, nextY + nextH * 0.5f,
+                                   &affinity);
+        utassert(at == boundary && !affinity);
+    }
+    TextMeasClear(&ctx);
+    PaintAppFree(paint);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2587,4 +2644,5 @@ void TestInputState() {
     DiagnosticSetOwnsMetadataAndAnswersRanges();
     HighlighterContractsAreDependencyFreeAndFunctional();
     LspFacadesInstallCapabilitiesAndExposeOverlayState();
+    SoftWrapBoundariesKeepTheVisualRowAffinity();
 }
