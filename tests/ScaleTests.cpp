@@ -328,6 +328,198 @@ static void PlotTooltipClamps() {
     Point at = PlotTooltipPlace({190, 90}, within, {400, 400}, 8);
     utassert(TestNear(at.x, 0.f) && TestNear(at.y, 0.f));
 }
+
+namespace plot = gpui::component::plot;
+
+static bool PlotFloat(const void* item, int, void*, float* out) {
+    *out = *(const float*)item;
+    return true;
+}
+
+static bool PlotDouble(const void* item, int, void*, float* out) {
+    *out = *(const float*)item * 2.f;
+    return true;
+}
+
+static bool RadialAngle(const void*, int index, void* user, float* out) {
+    int count = (int)(intptr_t)user;
+    *out = (float)index * 2.f * kPi / (float)count;
+    return true;
+}
+
+static void PlotShapeGeometry() {
+    utassertnear(kPlotTextSize, 10.f);
+    utassertnear(kPlotTextGap, 2.f);
+    utassertnear(kPlotTextHeight, 12.f);
+    Point origin = plot::OriginPoint(3, 4, {10, 20});
+    utassertnear(origin.x, 13.f);
+    utassertnear(origin.y, 24.f);
+
+    // shape/arc.rs::test_arc_builder and test_arc_centroid.
+    plot::Arc arc = plot::Arc::New();
+    arc.InnerRadius(10)->OuterRadius(20);
+    plot::ArcData arcData = {};
+    arcData.value = 1;
+    arcData.endAngle = kPi;
+    Point centroid = arc.Centroid(arcData);
+    utassertnear(centroid.x, 15.f);
+    utassertnear(centroid.y, 0.f);
+
+    // shape/line.rs::test_line_path: accessors resolve every valid datum.
+    float lineValues[] = {1, 2, 3};
+    plot::Line line = plot::Line::New();
+    line.Data(lineValues, 3, sizeof(float))->X(PlotFloat)->Y(PlotDouble);
+    Point points[3] = {};
+    utassert(line.Points({0, 0, 100, 100}, points, 3) == 3);
+    utassertnear(points[0].x, 1.f);
+    utassertnear(points[2].y, 6.f);
+
+    // radial_line.rs: noon, three, six and nine o'clock around (50, 50).
+    float radialValues[] = {1, 1, 1, 1};
+    plot::RadialLine radial = plot::RadialLine::New();
+    radial.Data(radialValues, 4, sizeof(float))
+        ->Angle(RadialAngle, (void*)(intptr_t)4)
+        ->Radius(PlotFloat);
+    Point radialPoints[4] = {};
+    utassert(radial.Points({0, 0, 100, 100}, radialPoints, 4) == 4);
+    const Point expected[] = {{50, 49}, {51, 50}, {50, 51}, {49, 50}};
+    for (int i = 0; i < 4; i++) {
+        utassertnear(radialPoints[i].x, expected[i].x);
+        utassertnear(radialPoints[i].y, expected[i].y);
+    }
+}
+
+static void PlotPieArcs() {
+    float values[] = {0, 1, 0, 2};
+    plot::Pie pie = plot::Pie::New();
+    pie.Value(PlotFloat);
+    Arena* arena = ArenaNew();
+    ArenaVec<plot::ArcData> arcs;
+    pie.Arcs(arena, {values, 4, sizeof(float)}, &arcs);
+    utassert(arcs.len == 2);
+    plot::ArcData resolved[2] = {};
+    int resolvedCount = 0;
+    for (const plot::ArcData& item : arcs) {
+        if (resolvedCount < 2) resolved[resolvedCount++] = item;
+    }
+    if (resolvedCount >= 2) {
+        utassert(resolved[0].index == 1 && resolved[1].index == 3);
+        utassertnear(resolved[0].value, 1.f);
+        utassertnear(resolved[1].value, 2.f);
+        utassertnear(resolved[0].startAngle, 0.f);
+        utassertnear(resolved[0].endAngle, resolved[1].startAngle);
+        utassertnear(resolved[1].endAngle, 2.f * kPi);
+    }
+    ArenaDelete(arena);
+}
+
+struct PlotSales {
+    float apples;
+    float bananas;
+    float cherries;
+};
+
+static bool PlotSalesValue(const void* item, int, Str key, void*, float* out) {
+    const PlotSales* sales = (const PlotSales*)item;
+    if (StrEqI(key, StrL("apples"))) {
+        *out = sales->apples;
+    } else if (StrEqI(key, StrL("bananas"))) {
+        *out = sales->bananas;
+    } else if (StrEqI(key, StrL("cherries"))) {
+        *out = sales->cherries;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+static void PlotStackSeries() {
+    PlotSales values[] = {{10, 20, 30}, {15, 25, 35}};
+    Str keys[] = {StrL("apples"), StrL("bananas"), StrL("cherries")};
+    plot::Stack stack = plot::Stack::New();
+    stack.Data(values, 2, sizeof(PlotSales))
+        ->Keys(keys, 3)
+        ->Value(PlotSalesValue);
+    Arena* arena = ArenaNew();
+    ArenaVec<plot::StackSeries> series;
+    stack.Series(arena, &series);
+    utassert(series.len == 3);
+    Str resolvedKeys[3] = {};
+    plot::StackPoint resolvedPoints[3] = {};
+    int resolvedCount = 0;
+    for (const plot::StackSeries& item : series) {
+        if (resolvedCount >= 3) break;
+        resolvedKeys[resolvedCount] = item.key;
+        for (const plot::StackPoint& point : item.points) {
+            resolvedPoints[resolvedCount] = point;
+            break;
+        }
+        resolvedCount++;
+    }
+    if (resolvedCount >= 3) {
+        utassert(StrEqI(resolvedKeys[0], keys[0]));
+        utassertnear(resolvedPoints[0].y0, 0.f);
+        utassertnear(resolvedPoints[0].y1, 10.f);
+        utassertnear(resolvedPoints[1].y0, 10.f);
+        utassertnear(resolvedPoints[1].y1, 30.f);
+        utassertnear(resolvedPoints[2].y0, 30.f);
+        utassertnear(resolvedPoints[2].y1, 60.f);
+    }
+    ArenaDelete(arena);
+}
+
+static void PlotBarAndAxisContracts() {
+    utassert(!plot::BarAlignmentIsHorizontal(plot::BarAlignment::Bottom));
+    utassert(plot::BarAlignmentIsHorizontal(plot::BarAlignment::Left));
+    utassertnear(plot::BarAlignmentGradientAngle(plot::BarAlignment::Bottom),
+                 0.f);
+    utassertnear(plot::BarAlignmentGradientAngle(plot::BarAlignment::Top),
+                 180.f);
+    utassertnear(plot::BarAlignmentGradientAngle(plot::BarAlignment::Left),
+                 90.f);
+    utassertnear(plot::BarAlignmentGradientAngle(plot::BarAlignment::Right),
+                 270.f);
+    Point label =
+        plot::BarLabelOrigin(plot::BarAlignment::Bottom, 10, 100, 40, 20);
+    utassertnear(label.x, 20.f);
+    utassertnear(label.y, 28.f);
+    label = plot::BarLabelOrigin(plot::BarAlignment::Left, 10, 0, 40, 20);
+    utassertnear(label.x, 42.f);
+    utassertnear(label.y, 15.f);
+
+    Arena* arena = ArenaNew();
+    plot::PlotAxis axis = plot::PlotAxis::New(arena);
+    utassert(axis.xAxis && !axis.yAxis);
+    plot::AxisText tick = plot::AxisText::New(StrL("x"), 20, Rgb(1, 2, 3));
+    // Rust resolves labels at builder-call time: a label before x is absent.
+    axis.XLabel(&tick, 1);
+    utassert(axis.xLabel.items.len == 0);
+    axis.X(30)->XLabel(&tick, 1);
+    utassert(axis.xLabel.items.len == 1);
+    for (const plot::Text& text : axis.xLabel.items) {
+        utassertnear(text.origin.x, 20.f);
+        utassertnear(text.origin.y, 36.f);
+        break;
+    }
+    axis.YLabelSide(plot::AxisLabelSide::Start)->Y(12)->YLabel(&tick, 1);
+    utassert(axis.yLabel.items.len == 1);
+    for (const plot::Text& text : axis.yLabel.items) {
+        utassertnear(text.origin.x, 10.f);
+        utassertnear(text.origin.y, 15.f);
+        break;
+    }
+    ArenaDelete(arena);
+
+    plot::CrossLine cross = plot::CrossLine::New({10, 20});
+    utassert(cross.ShowVertical() && !cross.ShowHorizontal());
+    cross.Both()->Span(3, 40)->HSpan(4, 50);
+    utassert(cross.ShowVertical() && cross.ShowHorizontal());
+    utassert(cross.hasVerticalLength && cross.verticalStart == 3 &&
+             cross.verticalLength == 40);
+    utassert(cross.hasHorizontalLength && cross.horizontalStart == 4 &&
+             cross.horizontalLength == 50);
+}
+
 void TestScale() {
     TestSuite("scale/linear");
     ScaleLinearBasics();
@@ -359,4 +551,10 @@ void TestScale() {
     TestSuite("plot/tooltip");
     PlotTooltipQuadrants();
     PlotTooltipClamps();
+
+    TestSuite("plot/shapes");
+    PlotShapeGeometry();
+    PlotPieArcs();
+    PlotStackSeries();
+    PlotBarAndAxisContracts();
 }

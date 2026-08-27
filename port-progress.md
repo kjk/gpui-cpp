@@ -8593,3 +8593,56 @@ the release story gallery compiles; strict Linux g++ passes its 20,490
 applicable checks. The Linux validation also exposed and fixed name-hiding,
 single-translation-unit and class-memaccess warnings left by earlier work;
 that portable cleanup is the preceding `ca86f43` commit.
+
+## UI plot restores the source-shaped primitive layer
+
+The chart façade and Sankey layout already rendered every gallery chart, but
+`crates/ui/src/plot` itself was represented only by four scales and tooltip
+placement. Thirty-five public declarations were absent: there was no callable
+axis/grid/label layer, no low-level line/area/bar/arc/pie/radial/stack shape
+vocabulary, no Sankey ribbon helper and no plot-local crosshair, dot, tooltip
+state or structured tooltip. The shared label gap had also drifted from the
+pinned source's 2 pixels to 4, making every Sankey label block two pixels too
+tall per line.
+
+`component::plot` now mirrors the Rust module without colliding with the
+top-level themed `Tooltip`. `Text`, `PlotLabel`, `AxisText`, `PlotAxis` and
+`Grid` preserve the 10/2/12 text metrics, 18-pixel axis gutter, builder-call
+label resolution, alignment, arbitrary dash sequences, current-font shaping
+and UTF-8-boundary ellipsis search. `Line` and `Area` share the exact natural
+Catmull-Rom, linear and step-after paths; bars retain all four alignments,
+per-record baselines/fills/labels, non-uniform corner radii and the source's
+label origins. `Arc` implements the D3 angle, padding and donut path math,
+`Pie` filters non-positive values while preserving original indices,
+`RadialLine` uses noon-zero clockwise coordinates and independent fill,
+stroke, closure and dots, and `Stack` emits natural-key-order cumulative
+series. `SankeyLinkPath` builds the source's per-end-width cubic ribbon over
+the already complete layout engine.
+
+Cross lines now support vertical/horizontal/both spans and dashed-hairline or
+solid-band appearance, dots preserve the source's one-pixel border offset,
+and the plot tooltip builds the same normal-layer crosshair/dots plus deferred
+popover box. Structured title/rows take precedence over free children, the
+box keeps its 150-pixel default minimum and flips from left/top to right/bottom
+at the plot midpoints. An explicitly empty title remains present, matching
+Rust's `Some("")` rather than collapsing to absence.
+
+The generic seam follows repository rules: Rust's owned `Vec<T>` plus boxed
+closures becomes borrowed strided POD records plus plain accessor/payload
+pairs, and stack output borrows its original record pointers in frame-arena
+storage instead of cloning arbitrary `T`. The private `Sealed` scale trait is
+compile-time-only in Rust; concrete C++ scales expose its convention directly.
+The `Plot` trait maps to the existing `ChartSeries` common path and
+`El::customPaint` for immediate implementations, with prepainted content as
+ordinary children. Two-stop fills remain gradients; the portable painter has
+no gradient-stroke primitive, so a gradient stroke uses its representative
+first stop, the same deliberate flattening used anywhere a backend accepts a
+stroke colour rather than a fill.
+
+Translated tests cover the upstream arc centroid, pie filtering/angles,
+line/radial point resolution, stack accumulation, bar orientation/labels,
+axis builder timing and cross-line spans, beside the complete scale and Sankey
+suites. UI plot is full: the audit moves to 115 full, 6 partial, 8 adapters
+and 2 exclusions with 132 unresolved partial-module spellings and no
+full-module errors. MSVC release passes 20,560 checks, strict Linux g++ passes
+its 20,546 applicable checks, and the release story gallery compiles.

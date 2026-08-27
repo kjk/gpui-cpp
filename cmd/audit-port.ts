@@ -45,18 +45,9 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
   .trim()
   .split(/\s+/);
 
-const partialBase = new Set([
-  "dock",
-  "input",
-]);
+const partialBase = new Set(["dock", "input"]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
-const partialUi = new Set([
-  "dock",
-  "global_state",
-  "input",
-  "plot",
-  "text",
-]);
+const partialUi = new Set(["dock", "global_state", "input", "text"]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
 const partialReasons: Record<string, string> = {
@@ -147,7 +138,8 @@ function entriesFor(crate: CrateName, modules: string[]): Entry[] {
       reason:
         module === "async_util"
           ? "async is a standing repository non-goal"
-          : (partialReasons[key] ?? adapterReasons[key] ??
+          : (partialReasons[key] ??
+            adapterReasons[key] ??
             (status === "partial" ? declarationReviewReason : undefined)),
     };
   });
@@ -206,11 +198,7 @@ const testTargets: Record<string, string[]> = {
   "base/sheet": ["tests/SheetTests.cpp"],
   "base/slider": ["tests/SliderTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/state_style": ["tests/StateStyleTests.cpp"],
-  "base/switch": [
-    "tests/ClickTests.cpp",
-    "tests/AccessibilityTests.cpp",
-    "tests/StateStyleTests.cpp",
-  ],
+  "base/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp", "tests/StateStyleTests.cpp"],
   "base/table": ["tests/DataTableTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/tabs": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/text_selection": ["tests/TextSelectionTests.cpp"],
@@ -223,7 +211,12 @@ const testTargets: Record<string, string[]> = {
   "ui/accordion": ["tests/AccessibilityTests.cpp"],
   "ui/avatar": ["tests/AvatarTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/button": ["tests/ButtonGroupTests.cpp", "tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
-  "ui/chart": ["tests/ChartTests.cpp", "tests/BuilderCapacityTests.cpp", "tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
+  "ui/chart": [
+    "tests/ChartTests.cpp",
+    "tests/BuilderCapacityTests.cpp",
+    "tests/ScaleTests.cpp",
+    "tests/SankeyTests.cpp",
+  ],
   "ui/checkbox": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/collapsible": ["tests/AccessibilityTests.cpp"],
   "ui/combobox": ["tests/SelectTests.cpp", "tests/SearchableListTests.cpp"],
@@ -315,8 +308,7 @@ const declarationMappings: Record<string, DeclarationMapping> = {
       "C++ El::TrapId plus FocusTrapContainer::New is the extension surface; the POD tree has no inheritance trait wrapper",
   },
   "base/history.rs::trait HistoryItem": {
-    collapse:
-      "C++ History<I> requires Version, SetVersion and operator== directly on its POD-friendly item type",
+    collapse: "C++ History<I> requires Version, SetVersion and operator== directly on its POD-friendly item type",
   },
   "base/popup.rs::const POPUP_PRIORITY": {
     spellings: ["kPopupPriority"],
@@ -342,6 +334,30 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   "ui/group_box.rs::trait GroupBoxVariants": {
     spellings: ["WithVariant", "Normal", "Fill", "Outline"],
   },
+  "ui/plot/axis.rs::const AXIS_GAP": {
+    spellings: ["kPlotAxisGap"],
+  },
+  "ui/plot/label.rs::const TEXT_GAP": {
+    spellings: ["kPlotTextGap"],
+  },
+  "ui/plot/label.rs::const TEXT_HEIGHT": {
+    spellings: ["kPlotTextHeight"],
+  },
+  "ui/plot/label.rs::const TEXT_SIZE": {
+    spellings: ["kPlotTextSize"],
+  },
+  "ui/plot/mod.rs::trait Plot": {
+    collapse:
+      "C++ uses ChartSeries for the common plot contract and El::customPaint for source-shaped immediate Plot implementations; prepaint children are ordinary El children",
+  },
+  "ui/plot/scale.rs::trait Scale": {
+    collapse:
+      "C++ ScaleLinear, ScalePoint, ScaleBand and ScaleOrdinal expose Tick and LeastIndex directly; templates need no runtime scale trait",
+  },
+  "ui/plot/scale/sealed.rs::trait Sealed": {
+    collapse:
+      "Rust's private sealed-trait gate has no C++ runtime representation; only the four concrete scale types expose the convention",
+  },
   "ui/theme/color.rs::fn black": { spellings: ["ThemeBlack"] },
   "ui/theme/color.rs::fn hsl": { spellings: ["ThemeHsl"] },
   "ui/theme/color.rs::fn try_parse_background": {
@@ -362,18 +378,10 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     spellings: ["UiSize"],
   },
   "ui/sizing.rs::trait Sizable": {
-    collapse:
-      "C++ components expose WithSize(UiSize) directly; fluent trait extension needs no inheritance wrapper",
+    collapse: "C++ components expose WithSize(UiSize) directly; fluent trait extension needs no inheritance wrapper",
   },
   "ui/sizing.rs::trait StyleSized": {
-    spellings: [
-      "UiInputTextSize",
-      "UiInputSize",
-      "UiListSize",
-      "UiSizeWith",
-      "UiTableCellSize",
-      "UiButtonTextSize",
-    ],
+    spellings: ["UiInputTextSize", "UiInputSize", "UiListSize", "UiSizeWith", "UiTableCellSize", "UiButtonTextSize"],
   },
   "ui/window_ext.rs::trait WindowExt": {
     collapse:
@@ -588,12 +596,11 @@ if (existsSync(rustRoot)) {
             const cpp = declarationSourceText(searchTargets);
             const pascal = name!
               .split("_")
-              .map((part) => part.length ? part[0]!.toUpperCase() + part.slice(1) : "")
+              .map((part) => (part.length ? part[0]!.toUpperCase() + part.slice(1) : ""))
               .join("");
             const spellings = mapping?.spellings ?? (kind === "fn" ? [name!, pascal] : [name!]);
             if (!spellings.some((spelling) => new RegExp(`\\b${spelling}\\b`).test(cpp))) {
-              const message =
-                `${crate} ${status} missing ${item.path} :: ${item.name} -> ${searchTargets.join(", ")}`;
+              const message = `${crate} ${status} missing ${item.path} :: ${item.name} -> ${searchTargets.join(", ")}`;
               if (status === "full" || status === "facade") errors.push(message);
               else if (missingDeclarations) console.log(message);
             }
@@ -634,9 +641,7 @@ if (existsSync(rustRoot)) {
     const hasSpellings = !!mapping.spellings?.length;
     const hasCollapse = !!mapping.collapse?.trim();
     if (hasSpellings === hasCollapse) {
-      errors.push(
-        `public declaration mapping needs exactly one spelling list or collapse reason: ${key}`,
-      );
+      errors.push(`public declaration mapping needs exactly one spelling list or collapse reason: ${key}`);
     }
   }
 }

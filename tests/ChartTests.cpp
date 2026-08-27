@@ -79,10 +79,11 @@ static void SankeyLabelsCarryIndependentStylesAndDoNotCap() {
     utassert(StrSame(plain.text, StrL("a")));
     utassert(!plain.hasColor);
     utassert(plain.fontSize == 0);
-    utassertnear(plain.LineHeight(), 14);
+    // plot/label.rs: TEXT_SIZE 10 + TEXT_GAP 2.
+    utassertnear(plain.LineHeight(), 12);
     utassert(styled.hasColor);
     utassert(ChartColorEq(styled.color, red));
-    utassertnear(styled.LineHeight(), 18);
+    utassertnear(styled.LineHeight(), 16);
 
     App app = {};
     component::Init(&app);
