@@ -103,17 +103,17 @@ $commands += @{
 }
 
 # For every src/** file, create an entry that points clangd at the amalgam.
-# When clangd sees a src/** file, it will use the amalgam's compile command,
-# which gives it the full context (#defines, includes, amalgam header).
-# The #line directives in the amalgam then map diagnostics back to src/**.
+# When clangd sees a src/** file, it will use the amalgam's compile command (flags only),
+# which gives it the full context (#defines, includes from -I.work, etc.).
+# Do NOT include a main file (/TP <file>) here — that would cause clangd to
+# compile both the original main AND the looked-up src file in one TU, leading
+# to duplicate includes (e.g., base.h via gpui.cpp and via entity.cpp).
 Get-ChildItem -Path (Join-Path $root "src") -Recurse -File -Include "*.cpp","*.h","*.hpp" | ForEach-Object {
     $srcFile = $_.FullName
     $commands += @{
         directory = $root
         file = $srcFile
-        # Point at the amalgam, not the src file. clangd will see the #line markers
-        # and display diagnostics in the correct src location.
-        arguments = @($clangClPath) + $baseFlags + @("/TP", $gpuiCpp)
+        arguments = @($clangClPath) + $baseFlags
     }
 }
 
