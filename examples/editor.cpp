@@ -573,7 +573,7 @@ static int DefinitionsAt(void*, Arena* a, Str text, int offset,
     Str word(text.s + wa, wb - wa);
     // The one symbol this document defines: the first `Duration` in it, which
     // is where the word is declared.
-    if (StrEqI(word, StrL("Duration"))) {
+    if (StrEqI(word, "Duration")) {
         int at = -1;
         for (int i = 0; i + word.len <= text.len; i++) {
             if (StrEq(Str(text.s + i, word.len), word) && i != wa) {
@@ -591,7 +591,7 @@ static int DefinitionsAt(void*, Arena* a, Str text, int offset,
         }
     }
     for (const DocLink& d : kRustDocs) {
-        if (!StrEqI(word, Str(d.name))) {
+        if (!base::StrEqI(word, d.name)) {
             continue;
         }
         if (cap > 0 && out) {

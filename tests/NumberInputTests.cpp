@@ -18,27 +18,24 @@ static Str Stepped(const char* value, StepAction action, double step) {
     return Str(out);
 }
 
-static bool Same(Str got, const char* want) {
-    return got.s && StrEqI(got, Str(want));
-}
-
 static void AStepKeepsTheTextsPrecision() {
     // The integer stays an integer, and the two decimals stay two.
-    utassert(Same(Stepped("1", StepAction::Increment, 1), "2"));
-    utassert(Same(Stepped("1.50", StepAction::Increment, 1), "2.50"));
-    utassert(Same(Stepped("1.5", StepAction::Decrement, 1), "0.5"));
+    utassert(base::StrEqI(Stepped("1", StepAction::Increment, 1), "2"));
+    utassert(base::StrEqI(Stepped("1.50", StepAction::Increment, 1), "2.50"));
+    utassert(base::StrEqI(Stepped("1.5", StepAction::Decrement, 1), "0.5"));
     // A fractional step widens an integer to the step's own precision.
-    utassert(Same(Stepped("1", StepAction::Increment, 0.01), "1.01"));
-    utassert(Same(Stepped("1234.56", StepAction::Decrement, 0.01), "1234.55"));
+    utassert(base::StrEqI(Stepped("1", StepAction::Increment, 0.01), "1.01"));
+    utassert(base::StrEqI(Stepped("1234.56", StepAction::Decrement, 0.01),
+                          "1234.55"));
 }
 
 static void TextThatIsNotANumberStepsFromZero() {
     // Rust's `current.unwrap_or(0.)`, and with no current there is nothing to
     // compare against, so the step always reports.
-    utassert(Same(Stepped("", StepAction::Increment, 1), "1"));
-    utassert(Same(Stepped("abc", StepAction::Decrement, 1), "-1"));
+    utassert(base::StrEqI(Stepped("", StepAction::Increment, 1), "1"));
+    utassert(base::StrEqI(Stepped("abc", StepAction::Decrement, 1), "-1"));
     // Trailing junk is not a number: parse::<f64>() refuses it.
-    utassert(Same(Stepped("12px", StepAction::Increment, 1), "1"));
+    utassert(base::StrEqI(Stepped("12px", StepAction::Increment, 1), "1"));
 }
 
 static void TheRangeClampsAndWidens() {
@@ -46,28 +43,28 @@ static void TheRangeClampsAndWidens() {
     utassert(NumberStepValue(StrL("9"), StepAction::Increment, 5, false, 0,
                              true, 10.5, out, (int)sizeof(out)));
     // Clamped to the max, whose own precision widens the result.
-    utassert(StrEqI(Str(out), StrL("10.5")));
+    utassert(StrEqI(Str(out), "10.5"));
 
     utassert(NumberStepValue(StrL("1"), StepAction::Decrement, 5, true, 0.25,
                              false, 0, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), StrL("0.25")));
+    utassert(StrEqI(Str(out), "0.25"));
 
     // With no current value the range is entered immediately, in either
     // direction. A value already outside the range may only move in the
     // pressed direction — clamping it across itself is not a decrement.
     utassert(NumberStepValue(Str{}, StepAction::Increment, 1, true, 10,
                              false, 0, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), StrL("10")));
+    utassert(StrEqI(Str(out), "10"));
     utassert(NumberStepValue(Str{}, StepAction::Decrement, 1, true, 10,
                              false, 0, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), StrL("10")));
+    utassert(StrEqI(Str(out), "10"));
     utassert(!NumberStepValue(StrL("5"), StepAction::Decrement, 1, true, 10,
                               false, 0, out, (int)sizeof(out)));
     utassert(!NumberStepValue(StrL("1000"), StepAction::Increment, 1, false,
                               0, true, 100, out, (int)sizeof(out)));
     utassert(NumberStepValue(StrL("1000"), StepAction::Decrement, 1, false,
                              0, true, 100, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), StrL("100")));
+    utassert(StrEqI(Str(out), "100"));
 }
 
 static void AStepThatDoesNotMoveIsNoStep() {
@@ -117,7 +114,7 @@ struct NumberEventSink {
 };
 
 static bool RejectFour(Str value, intptr_t) {
-    return !StrEqI(value, StrL("4"));
+    return !StrEqI(value, "4");
 }
 
 static void ApplyStepValidatesAndFallsBackToTheStepEvent() {
@@ -132,7 +129,7 @@ static void ApplyStepValidatesAndFallsBackToTheStepEvent() {
     utassert(NumberInputApplyStep(&state, &app, nullptr,
                                   StepAction::Increment, &one, false, 0,
                                   false, 0, false, onStep));
-    utassert(StrEqI(InputValue(&state), StrL("3")));
+    utassert(StrEqI(InputValue(&state), "3"));
     utassert(sink.Get(&app)->count == 1);
     utassert(sink.Get(&app)->last == StepAction::Increment);
 
@@ -140,7 +137,7 @@ static void ApplyStepValidatesAndFallsBackToTheStepEvent() {
     utassert(NumberInputApplyStep(&state, &app, nullptr,
                                   StepAction::Decrement, &one, true, 0,
                                   false, 0, false, onStep));
-    utassert(StrEqI(InputValue(&state), StrL("2")));
+    utassert(StrEqI(InputValue(&state), "2"));
     utassert(sink.Get(&app)->count == 1);
     utassert(state.maskPattern.kind == MaskKind::Number);
     utassert(!state.maskPatternSet);
@@ -149,7 +146,7 @@ static void ApplyStepValidatesAndFallsBackToTheStepEvent() {
     utassert(!NumberInputApplyStep(&state, &app, nullptr,
                                    StepAction::Increment, &one, false, 0,
                                    false, 0, false, onStep));
-    utassert(StrEqI(InputValue(&state), StrL("2")));
+    utassert(StrEqI(InputValue(&state), "2"));
     EntityDropAll(&app);
 }
 
@@ -157,7 +154,7 @@ static El* FindNamed(El* root, const char* name) {
     if (!root) {
         return nullptr;
     }
-    if (root->id.s && StrEqI(root->id, Str(name))) {
+    if (root->id.s && base::StrEqI(root->id, name)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {
@@ -195,14 +192,14 @@ static void ThemedDefaultUsesOneSharedSemanticStep() {
     utassert(semantic->accessibilityDecrementDirect.IsValid());
 
     inc->onClick.Call();
-    utassert(StrEqI(InputValue(&state), StrL("4.0")));
+    utassert(StrEqI(InputValue(&state), "4.0"));
     utassert(state.focused && win->input == &state);
     // At the bound the operation is still the spinbutton's, but its text is
     // not rewritten to a differently formatted copy of the same value.
     semantic->accessibilityIncrementDirect.Call();
-    utassert(StrEqI(InputValue(&state), StrL("4.0")));
+    utassert(StrEqI(InputValue(&state), "4.0"));
     dec->onClick.Call();
-    utassert(StrEqI(InputValue(&state), StrL("3.5")));
+    utassert(StrEqI(InputValue(&state), "3.5"));
 
     IdsCollect(root);
     FocusCollect(win, root);
@@ -216,7 +213,7 @@ static void ThemedDefaultUsesOneSharedSemanticStep() {
     utassert(editorFocus != 0);
     WindowSetFocusId(win, editorFocus);
     WindowKeyDown(win, KeyUp, false, false, false, false);
-    utassert(StrEqI(InputValue(&state), StrL("4.0")));
+    utassert(StrEqI(InputValue(&state), "4.0"));
 
     NumberInputText* text = NumberInputText::New(&cx);
     El* child = Div(a);

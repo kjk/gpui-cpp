@@ -21,7 +21,7 @@ static void ARowCarriesWhatItWasBuiltWith() {
     utassert(!m.IsEmpty());
     utassert(m.items.len == 1);
     utassert(m.items[0].kind == component::NativeMenuItemKind::Item);
-    utassert(StrEqI(m.items[0].label, StrL("Github")));
+    utassert(StrEqI(m.items[0].label, "Github"));
     utassert(!m.items[0].disabled);
     utassert(!m.items[0].checked);
     utassert(m.items[0].icon == IconName::Github);

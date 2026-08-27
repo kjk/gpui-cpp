@@ -70,7 +70,7 @@ static const uint32_t* PaletteRow(int row) {
     }
     const char* want = kPaletteHues[row - 1];
     for (int i = 0; i < kNumShadcnScales; i++) {
-        if (StrCmpI(kShadcnScales[i].name, want) == 0) {
+        if (base::StrEqI(Str(kShadcnScales[i].name), want)) {
             return kShadcnScales[i].hex;
         }
     }

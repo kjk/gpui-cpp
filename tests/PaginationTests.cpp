@@ -68,7 +68,7 @@ static El* FindNamedPg(El* root, const char* name) {
     if (!root) {
         return nullptr;
     }
-    if (root->id.s && StrEqI(root->id, Str(name))) {
+    if (root->id.s && base::StrEqI(root->id, name)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {
@@ -87,7 +87,7 @@ static El* FindPrefixed(El* root, const char* prefix) {
     }
     int n = (int)Str(prefix).len;
     if (root->id.s && root->id.len >= n &&
-        StrEqI(Str(root->id.s, n), Str(prefix))) {
+        base::StrEqI(Str(root->id.s, n), prefix)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {

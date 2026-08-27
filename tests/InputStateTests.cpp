@@ -2034,7 +2034,7 @@ static El* FindNamedEl(El* root, const char* name) {
     if (!root) {
         return nullptr;
     }
-    if (root->id.s && StrEqI(root->id, Str(name))) {
+    if (root->id.s && base::StrEqI(root->id, name)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {
@@ -2104,7 +2104,7 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     component::AnyInputState any = component::AnyInputState::From(&state);
     utassert(any.kind == component::AnyInputKind::Input);
     utassert(any.AsInput() == &state && !any.AsTextarea() && !any.AsEditor());
-    utassert(StrEqI(any.Value(a, &app), StrL("alpha")));
+    utassert(StrEqI(any.Value(a, &app), "alpha"));
 
     state.masked = true;
     Str masked = any.Value(a, &app);
@@ -2127,7 +2127,7 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     otpState->len = 2;
     component::AnyInputState anyOtp = component::AnyInputState::FromOtp(otp);
     utassert(anyOtp.AsOtp().id == otp.id && !anyOtp.AsEditor());
-    utassert(StrEqI(anyOtp.Value(a, &app), StrL("42")));
+    utassert(StrEqI(anyOtp.Value(a, &app), "42"));
     otpState->masked = true;
     utassert(anyOtp.Value(a, &app).len == 6);
     utassert(anyOtp == component::AnyInputState::FromOtp(otp));
@@ -2168,7 +2168,7 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
             ->UpdateQuery(0, StrL("a"))
             ->Show(1, completions, 2);
     utassert(state.completion.open && state.completion.items.len == 2);
-    utassert(StrEqI(state.completion.query, StrL("a")));
+    utassert(StrEqI(state.completion.query, "a"));
     El* completionEl = completion->IntoEl();
     utassert(completionEl && completionEl->onMouseDownOut.IsValid());
     utassert(completion->HandleAction(InputAction::MoveDown));

@@ -104,7 +104,7 @@ static void TheFixtureLayoutReadsBack() {
     utassert(!s.hasVersion);
 
     const PanelStateNode& center = s.nodes[s.center];
-    utassert(StrEqI(center.panelName, StrL("StackPanel")));
+    utassert(StrEqI(center.panelName, "StackPanel"));
     utassert(center.children.len == 2);
     utassert(center.kind == PanelInfoKind::Stack);
     utassert(center.sizes.len == 2);
@@ -114,24 +114,24 @@ static void TheFixtureLayoutReadsBack() {
     utassert(!AxisIsHorizontal(center.axis));
 
     const PanelStateNode& first = s.nodes[center.children[0]];
-    utassert(StrEqI(first.panelName, StrL("TabPanel")));
+    utassert(StrEqI(first.panelName, "TabPanel"));
     utassert(first.kind == PanelInfoKind::Tabs);
     utassert(first.activeIndex == 0);
     const PanelStateNode& second = s.nodes[center.children[1]];
-    utassert(StrEqI(second.panelName, StrL("TabPanel")));
+    utassert(StrEqI(second.panelName, "TabPanel"));
     utassert(second.children.len == 1);
     utassert(
-        StrEqI(s.nodes[second.children[0]].panelName, StrL("StoryContainer")));
+        StrEqI(s.nodes[second.children[0]].panelName, "StoryContainer"));
 
     utassert(s.left.present);
     utassert(s.left.open);
     utassertnear(s.left.size, 350.f);
     utassert(s.left.placement == DockPlacement::Left);
     const PanelStateNode& left = s.nodes[s.left.node];
-    utassert(StrEqI(left.panelName, StrL("TabPanel")));
+    utassert(StrEqI(left.panelName, "TabPanel"));
     utassert(left.children.len == 1);
     utassert(
-        StrEqI(s.nodes[left.children[0]].panelName, StrL("StoryContainer")));
+        StrEqI(s.nodes[left.children[0]].panelName, "StoryContainer"));
 
     utassert(s.bottom.present);
     utassert(s.bottom.open);
@@ -176,7 +176,7 @@ static void ALayoutSurvivesTheRoundTrip() {
     utassert(DockAreaStateParse(a, text, &back));
     utassert(back.hasVersion && back.version == 2);
     const PanelStateNode& node = back.nodes[back.center];
-    utassert(StrEqI(node.panelName, StrL("Tiles")));
+    utassert(StrEqI(node.panelName, "Tiles"));
     utassert(node.kind == PanelInfoKind::Tiles);
     utassert(node.children.len == 2);
     utassert(node.metas.len == 2);

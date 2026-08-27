@@ -44,11 +44,11 @@ const char* CompSlug(int i) {
 }
 
 int CompFromSlug(const char* slug) {
-    if (!slug || !slug[0] || StrEqI(Str(slug), StrL("overview"))) {
+    if (!slug || !slug[0] || StrEqI(Str(slug), "overview")) {
         return CompOverview;
     }
     for (int i = 0; i < CompCount; i++) {
-        if (StrEqI(Str(slug), Str(kSlugs[i]))) {
+        if (base::StrEqI(Str(slug), kSlugs[i])) {
             return i;
         }
     }

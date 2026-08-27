@@ -421,11 +421,11 @@ struct PlotSales {
 
 static bool PlotSalesValue(const void* item, int, Str key, void*, float* out) {
     const PlotSales* sales = (const PlotSales*)item;
-    if (StrEqI(key, StrL("apples"))) {
+    if (StrEqI(key, "apples")) {
         *out = sales->apples;
-    } else if (StrEqI(key, StrL("bananas"))) {
+    } else if (StrEqI(key, "bananas")) {
         *out = sales->bananas;
-    } else if (StrEqI(key, StrL("cherries"))) {
+    } else if (StrEqI(key, "cherries")) {
         *out = sales->cherries;
     } else {
         return false;

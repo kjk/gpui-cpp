@@ -27,7 +27,7 @@ static bool HasPrefixI(Str s, const char* prefix) {
     if (s.len < n) {
         return false;
     }
-    return StrCmpNI(s.s, prefix, n) == 0;
+    return base::StrEqI(Str(s.s, n), prefix);
 }
 
 bool HttpUrlIsRemote(Str url) {

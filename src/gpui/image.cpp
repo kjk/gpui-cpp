@@ -80,16 +80,7 @@ static bool StartsWithNoCase(Str s, const char* prefix) {
     if (s.len < n) {
         return false;
     }
-    for (int i = 0; i < n; i++) {
-        char c = s.s[i];
-        if (c >= 'A' && c <= 'Z') {
-            c = (char)(c - 'A' + 'a');
-        }
-        if (c != prefix[i]) {
-            return false;
-        }
-    }
-    return true;
+    return base::StrEqI(Str(s.s, n), prefix);
 }
 
 // "data:image/png;base64,iVBOR..." — the payload after the comma, decoded by
@@ -417,7 +408,7 @@ const uint8_t* ImageVectorForSrc(Str src, int* lenOut) {
     // table. Only a src that is not an asset needs the slot above.
     Str asset = ImageAssetFor(GetTempArena(), src);
     if (asset.s && asset.len > 4 &&
-        StrEqI(Str(asset.s + asset.len - 4, 4), StrL(".svg"))) {
+        StrEqI(Str(asset.s + asset.len - 4, 4), ".svg")) {
         return SvgDrawOpsFor(asset, lenOut);
     }
     ImageCacheSlot* s = ImageSlotFor(nullptr, src);

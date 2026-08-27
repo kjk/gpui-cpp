@@ -182,35 +182,6 @@ static bool RowIsExplicit(const ThemeConfig* cfg, const char* key) {
     return key[0] != 0 && ThemeConfigNames(cfg, key);
 }
 
-// The query filter: the category, the name, or the start of the hex — Rust
-// takes a leading `#` off the query first, and matches the rest against the
-// hex it prints.
-static bool StrHasI(Str hay, Str needle) {
-    if (needle.len <= 0) {
-        return true;
-    }
-    for (int i = 0; i + needle.len <= hay.len; i++) {
-        int j = 0;
-        while (j < needle.len) {
-            char a = hay.s[i + j], b = needle.s[j];
-            if (a >= 'A' && a <= 'Z') {
-                a = (char)(a - 'A' + 'a');
-            }
-            if (b >= 'A' && b <= 'Z') {
-                b = (char)(b - 'A' + 'a');
-            }
-            if (a != b) {
-                break;
-            }
-            j++;
-        }
-        if (j == needle.len) {
-            return true;
-        }
-    }
-    return false;
-}
-
 El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
@@ -431,10 +402,10 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         }
         if (query.len > 0) {
             Str hex = HexOf(cx, rows[i].color.color);
-            bool hit = StrHasI(Str(rows[i].group), query) ||
-                       StrHasI(Str(rows[i].name), query) ||
+            bool hit = base::StrContainsI(Str(rows[i].group), query) ||
+                       base::StrContainsI(Str(rows[i].name), query) ||
                        (hex.len > query.len + 1 &&
-                        StrHasI(Str(hex.s + 1, query.len), query));
+                        base::StrContainsI(Str(hex.s + 1, query.len), query));
             if (!hit) {
                 continue;
             }

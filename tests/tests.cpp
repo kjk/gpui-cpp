@@ -119,6 +119,7 @@ int GpuiMain(int argc, char** argv) {
     TestDrawOps();
     TestHttp();
     TestArenaStr();
+    TestStr();
     TestFmt();
     TestGeometry();
     TestExecutor();

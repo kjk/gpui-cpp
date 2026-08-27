@@ -71,7 +71,7 @@ static void SyncPendingSeedsTheFieldAndSliders() {
     s.value = 0xff0000;
     s.hasValue = true;
     ColorPickerSyncPending(&s);
-    utassert(StrEqI(InputValue(&s.hexInput), StrL("#FF0000")));
+    utassert(StrEqI(InputValue(&s.hexInput), "#FF0000"));
     // hsla(0, 1, 0.5): the lightness slider lands at a half.
     utassertnear(s.sliders.lightness.value.End(), 0.5f);
     // And it is a no-op the second time.
@@ -81,8 +81,8 @@ static void SyncPendingSeedsTheFieldAndSliders() {
 // formats_alpha_only_when_translucent.
 static void HexStringWidth() {
     Arena* a = ArenaNew();
-    utassert(StrEqI(ColorPickerHexString(a, 0xff0000), StrL("#FF0000")));
-    utassert(StrEqI(ColorPickerHexString(a, 0x7fff0000), StrL("#FF00007F")));
+    utassert(StrEqI(ColorPickerHexString(a, 0xff0000), "#FF0000"));
+    utassert(StrEqI(ColorPickerHexString(a, 0x7fff0000), "#FF00007F"));
     ArenaDelete(a);
 }
 

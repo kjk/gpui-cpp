@@ -168,7 +168,7 @@ static void ASemanticConfigOnlyChangesWhatItNames() {
     utassert(tk.typography.sm.size == 15.f && tk.typography.sm
                                                       .lineHeight == 20.f);
     utassert(tk.typography.sm.weight == FontWeight::Bold);
-    utassert(StrEqI(tk.typography.mono, StrL("Cascadia")));
+    utassert(StrEqI(tk.typography.mono, "Cascadia"));
     utassert(tk.shadow.md[0].y == 6.f && tk.shadow.md[0].blur == 8.f);
     // A document with no `tokens` object is not one of these at all.
     JsonValue* other = JsonParse(a, StrL("{\"themes\":[]}"));
@@ -220,14 +220,14 @@ static void TypedSemanticSchemaParsesAndAppliesArrays() {
     SemanticThemeConfigFile file;
     utassert(SemanticThemeConfigFileParse(json, &file));
     utassert(file.tokens.colors.surface.has &&
-             StrEqI(file.tokens.colors.surface.value, StrL("#111827")));
+             StrEqI(file.tokens.colors.surface.value, "#111827"));
     utassert(file.tokens.radius.lg.has &&
              file.tokens.radius.lg.value == 10.f);
     SemanticThemeTokens tokens = ThemeSemanticTokens(ThemeLight());
     utassert(file.tokens.ApplyTo(&tokens));
     utassert(Is(tokens.colors.surface, 0x111827));
     utassert(tokens.radius.lg == 10.f);
-    utassert(StrEqI(tokens.typography.sans, StrL("Inter")) &&
+    utassert(StrEqI(tokens.typography.sans, "Inter") &&
              tokens.typography.md.lineHeight == 22.f);
     utassert(tokens.shadow.sm.len == 1 && tokens.shadow.sm[0].x == 1.f &&
              tokens.shadow.sm[0].y == 2.f &&

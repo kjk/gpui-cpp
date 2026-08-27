@@ -79,9 +79,9 @@ static void BaseGlobalRetainsTheApplicationMenus() {
     int count = 0;
     const MenuDef* retained = BaseAppMenus(&app, &count);
     utassert(count == 1 && retained);
-    utassert(StrEqI(retained[0].name, StrL("File")));
+    utassert(StrEqI(retained[0].name, "File"));
     utassert(retained[0].n == 1);
-    utassert(StrEqI(retained[0].items[0].label, StrL("Open")));
+    utassert(StrEqI(retained[0].items[0].label, "Open"));
     uint32_t action = 0;
     utassert(AppMenuRowForId(&app, 1, &action, nullptr));
     utassert(action == row.action);

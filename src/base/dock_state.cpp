@@ -120,13 +120,13 @@ static int ParseNode(Arena* a, const JsonValue* v, DockAreaState* out) {
 }
 
 static DockPlacement PlacementOf(Str s) {
-    if (StrEqI(s, StrL("left"))) {
+    if (StrEqI(s, "left")) {
         return DockPlacement::Left;
     }
-    if (StrEqI(s, StrL("right"))) {
+    if (StrEqI(s, "right")) {
         return DockPlacement::Right;
     }
-    if (StrEqI(s, StrL("bottom"))) {
+    if (StrEqI(s, "bottom")) {
         return DockPlacement::Bottom;
     }
     return DockPlacement::Center;

@@ -24,26 +24,6 @@ Str StrOwn(Arena* a, Str s) {
     return StrOwn(a, s.s, s.len);
 }
 
-bool StrEqAsciiI(Str a, Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    for (int32_t i = 0; i < a.len; i++) {
-        char x = a.s[i];
-        char y = b.s[i];
-        if (x >= 'A' && x <= 'Z') {
-            x = (char)(x + 32);
-        }
-        if (y >= 'A' && y <= 'Z') {
-            y = (char)(y + 32);
-        }
-        if (x != y) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // ─── util/char.rs ────────────────────────────────────────────────────────
 
 int32_t Utf8Encode(char* out, uint32_t cp) {

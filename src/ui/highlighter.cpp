@@ -510,7 +510,7 @@ static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
     Str head = name;
     for (int pass = 0; pass < 2; pass++) {
         for (const auto& row : kMap) {
-            if (StrEqI(head, Str(row.name))) {
+            if (base::StrEqI(head, row.name)) {
                 *out = SyntaxTokColor(row.tok, mode, th.foreground);
                 return true;
             }

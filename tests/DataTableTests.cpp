@@ -96,9 +96,9 @@ static void SourceColumnBuildersKeepEveryField() {
             .Selectable(false)
             .MinWidth(150)
             .MaxWidth(145);
-    utassert(StrEqI(col.key, StrL("cpu")));
-    utassert(StrEqI(col.name, StrL("CPU")));
-    utassert(StrEqI(col.title, StrL("CPU")));
+    utassert(StrEqI(col.key, "cpu"));
+    utassert(StrEqI(col.name, "CPU"));
+    utassert(StrEqI(col.title, "CPU"));
     utassert(col.center && !col.right);
     utassert(col.hasSort && col.sortable);
     utassert(col.sort == ColumnSort::Ascending);
@@ -113,7 +113,7 @@ static void SourceColumnBuildersKeepEveryField() {
 
     component::ColumnGroup group =
         component::ColumnGroup::New(StrL("Machine"), 3);
-    utassert(StrEqI(group.label, StrL("Machine")) && group.span == 3);
+    utassert(StrEqI(group.label, "Machine") && group.span == 3);
 }
 
 static void EachColumnHasItsOwnResizeBounds() {
@@ -566,7 +566,7 @@ static El* FindNamed(El* root, const char* name) {
     if (!root) {
         return nullptr;
     }
-    if (root->id.s && StrEqI(root->id, Str(name))) {
+    if (root->id.s && base::StrEqI(root->id, name)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {

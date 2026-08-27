@@ -105,13 +105,13 @@ inline Str UiSizeAsStr(UiSize s) {
 }
 
 inline UiSize UiSizeFromStr(Str text) {
-    if (StrEqI(text, StrL("xs")) || StrEqI(text, StrL("xsmall"))) {
+    if (StrEqI(text, "xs") || StrEqI(text, "xsmall")) {
         return UiSize::XSmall;
     }
-    if (StrEqI(text, StrL("sm")) || StrEqI(text, StrL("small"))) {
+    if (StrEqI(text, "sm") || StrEqI(text, "small")) {
         return UiSize::Small;
     }
-    if (StrEqI(text, StrL("lg")) || StrEqI(text, StrL("large"))) {
+    if (StrEqI(text, "lg") || StrEqI(text, "large")) {
         return UiSize::Large;
     }
     return UiSize::Medium;

@@ -59,7 +59,8 @@ bool PaintGpuOn() {
     if (on < 0) {
         char buf[16] = {};
         DWORD n = GetEnvironmentVariableA("GPUI_PAINT", buf, sizeof(buf));
-        on = (n > 0 && n < sizeof(buf) && StrCmpI(buf, "gpu") == 0) ? 1 : 0;
+        on = (n > 0 && n < sizeof(buf) && base::StrEqI(Str(buf), "gpu")) ? 1
+                                                                         : 0;
         if (on) {
             logf("paint: GPU backend (GPUI_PAINT=gpu)");
         }

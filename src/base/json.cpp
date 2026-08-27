@@ -295,7 +295,7 @@ const JsonValue* JsonGet(const JsonValue* v, const char* key) {
         return nullptr;
     }
     for (const JsonValue* c = v->first; c; c = c->next) {
-        if (c->key.s && StrEqI(c->key, Str(key))) {
+        if (c->key.s && base::StrEqI(c->key, key)) {
             return c;
         }
     }

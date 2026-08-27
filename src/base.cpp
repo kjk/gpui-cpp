@@ -3,7 +3,6 @@
 
 #include "base.h"
 
-#include <cctype>
 #include <climits>
 #include <cstdarg>
 #include <stdio.h>
@@ -17,7 +16,6 @@ template <typename T, size_t N>
 char (&DimofSizeHelper(T (&array)[N]))[N];
 #define dimof(array) (sizeof(DimofSizeHelper(array)))
 
-static bool StrEqNI(Str s1, Str s2, int n);
 static int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
 
 void* AllocZero(int count, int size) {
@@ -882,14 +880,8 @@ bool StrEq(Str s1, const char* s2) {
     return StrEq(s1, Str(s2));
 }
 
-bool StrEqI(Str s1, Str s2) {
-    if (s1.s == s2.s) {
-        return true;
-    }
-    if (s1.len != s2.len) {
-        return false;
-    }
-    if (s1.len == 0) {
+GPUI_NOINLINE bool StrEqIRest(Str s1, Str s2) {
+    if (s1.s == s2.s || s1.len == 0) {
         return true;
     }
     if (StrIsNull(s1) || StrIsNull(s2)) {
@@ -898,12 +890,16 @@ bool StrEqI(Str s1, Str s2) {
     return 0 == StrCmpNI(s1.s, s2.s, s1.len);
 }
 
+bool StrEqI(Str s1, const char* s2) {
+    return StrEqI(s1, Str(s2));
+}
+
 bool StrContainsI(Str s, Str sub) {
     if (!s || !sub || sub.len <= 0) {
         return false;
     }
     for (int off = 0; off + sub.len <= s.len; off++) {
-        if (StrEqNI(Str(s.s + off, s.len - off), sub, sub.len)) {
+        if (StrEqI(Str(s.s + off, sub.len), sub)) {
             return true;
         }
     }
@@ -995,24 +991,6 @@ int SeqStrCount(SeqStrings strs) {
         n++;
     }
     return n;
-}
-
-static bool StrEqNI(Str s1, Str s2, int n) {
-    if (s1.s == s2.s) {
-        return true;
-    }
-    if (!s1 || !s2 || n == 0) {
-        return n == 0;
-    }
-    if (s1.len < n || s2.len < n) {
-        return false;
-    }
-    for (int i = 0; i < n; i++) {
-        if (tolower(s1.s[i]) != tolower(s2.s[i])) {
-            return false;
-        }
-    }
-    return true;
 }
 
 static bool IsDigit(char c) {

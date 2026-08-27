@@ -303,7 +303,7 @@ static void TheDelegateTableOwnsTheWholeContract() {
     utassert(probe.sectionsCalls == 1 && probe.itemCountCalls == 2);
     // One representative item plus every visible item.
     utassert(probe.renderCalls >= 4);
-    utassert(StrEqI(query.placeholder, StrL("Find")));
+    utassert(StrEqI(query.placeholder, "Find"));
     utassert(query.onChange.IsValid());
     utassert(list->loadMoreThreshold == 20);
     utassert(!list->loading && !list->hasMore);
@@ -312,7 +312,7 @@ static void TheDelegateTableOwnsTheWholeContract() {
     InputEvent changed = {InputEventKind::Change};
     ListState::OnQueryInput(list, &cx, &changed);
     ListDelegateSink* got = sink.Get(&app);
-    utassert(got->searches == 1 && StrEqI(got->query, StrL("alpha")));
+    utassert(got->searches == 1 && StrEqI(got->query, "alpha"));
     utassert(list->selected == 0 && got->hasSelection);
     IndexPath first = {0, 0, 0};
     utassert(got->selected == first);

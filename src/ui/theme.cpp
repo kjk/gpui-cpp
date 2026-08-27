@@ -988,14 +988,6 @@ static bool ScaleOf(const ShadcnScale* hue, int scale, Rgba* out) {
     return true;
 }
 
-static bool NameEq(const char* name, Str s) {
-    int n = (int)strlen(name);
-    if (n != s.len) {
-        return false;
-    }
-    return StrCmpNI(name, s.s, n) == 0;
-}
-
 // The integer at [s, s+len), or -1 for anything that is not one. Rust uses
 // `parse::<usize>()`, which is equally all-or-nothing.
 static int ParseUint(const char* s, int len) {
@@ -1060,14 +1052,14 @@ bool ThemeParseColor(Str s, Rgba* out) {
         }
     }
     Rgba c;
-    if (NameEq("white", name)) {
+    if (base::StrEqI(name, "white")) {
         c = RgbaHex(kShadcnWhite);
-    } else if (NameEq("black", name)) {
+    } else if (base::StrEqI(name, "black")) {
         c = RgbaHex(kShadcnBlack);
     } else {
         const ShadcnScale* hue = nullptr;
         for (int i = 0; i < kNumShadcnScales; i++) {
-            if (NameEq(kShadcnScales[i].name, name)) {
+            if (base::StrEqI(name, kShadcnScales[i].name)) {
                 hue = &kShadcnScales[i];
                 break;
             }
@@ -1138,18 +1130,18 @@ const ColorName* ColorNameAll(int* count) {
 
 bool ColorNameParse(Str value, ColorName* out) {
     if (!out) return false;
-    if (NameEq("white", value)) {
+    if (base::StrEqI(value, "white")) {
         *out = ColorName::White;
         return true;
     }
-    if (NameEq("black", value)) {
+    if (base::StrEqI(value, "black")) {
         *out = ColorName::Black;
         return true;
     }
     for (int i = 0; i < (int)(sizeof(kPublicColorNames) /
                               sizeof(kPublicColorNames[0])); i++) {
         ColorName candidate = kPublicColorNames[i];
-        if (NameEq(ColorNameText(candidate), value)) {
+        if (base::StrEqI(value, ColorNameText(candidate))) {
             *out = candidate;
             return true;
         }
@@ -1162,7 +1154,7 @@ Rgba ColorNameScale(ColorName name, int scale) {
     if (name == ColorName::Black) return ThemeBlack();
     const char* value = ColorNameText(name);
     for (int i = 0; i < kNumShadcnScales; i++) {
-        if (StrCmpI(kShadcnScales[i].name, value) != 0) continue;
+        if (!base::StrEqI(Str(kShadcnScales[i].name), value)) continue;
         Rgba out;
         if (ScaleOf(&kShadcnScales[i], scale, &out)) return out;
         break;
@@ -1200,26 +1192,6 @@ static Str TrimStr(Str s) {
     return s;
 }
 
-static bool EqIgnoreCase(Str s, const char* lit) {
-    int n = 0;
-    while (lit[n]) {
-        n++;
-    }
-    if (s.len != n) {
-        return false;
-    }
-    for (int i = 0; i < n; i++) {
-        char c = s.s[i];
-        if (c >= 'A' && c <= 'Z') {
-            c = (char)(c - 'A' + 'a');
-        }
-        if (c != lit[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
 static bool StartsWithIgnoreCase(Str s, const char* lit) {
     int n = 0;
     while (lit[n]) {
@@ -1228,7 +1200,7 @@ static bool StartsWithIgnoreCase(Str s, const char* lit) {
     if (s.len < n) {
         return false;
     }
-    return EqIgnoreCase(Str(s.s, n), lit);
+    return base::StrEqI(Str(s.s, n), lit);
 }
 
 // split_top_level_commas: a comma inside parentheses belongs to whatever is
@@ -1276,13 +1248,13 @@ static bool ParseGradientDirection(Str dir, float* out) {
             break;
         }
         Str word = Str(dir.s + start, i - start);
-        if (EqIgnoreCase(word, "top")) {
+        if (base::StrEqI(word, "top")) {
             top = true;
-        } else if (EqIgnoreCase(word, "right")) {
+        } else if (base::StrEqI(word, "right")) {
             right = true;
-        } else if (EqIgnoreCase(word, "bottom")) {
+        } else if (base::StrEqI(word, "bottom")) {
             bottom = true;
-        } else if (EqIgnoreCase(word, "left")) {
+        } else if (base::StrEqI(word, "left")) {
             left = true;
         } else {
             return false;
@@ -1313,7 +1285,8 @@ static bool ParseGradientDirection(Str dir, float* out) {
 // parse_linear_gradient_angle: `135deg`, or `to bottom right`.
 static bool ParseGradientAngle(Str angle, float* out) {
     angle = TrimStr(angle);
-    if (angle.len > 3 && EqIgnoreCase(Str(angle.s + angle.len - 3, 3), "deg")) {
+    if (angle.len > 3 &&
+        base::StrEqI(Str(angle.s + angle.len - 3, 3), "deg")) {
         Str num = TrimStr(Str(angle.s, angle.len - 3));
         float deg = ParseFloatOr(num.s, num.len, 1e30f);
         if (deg >= 1e29f) {
@@ -1932,7 +1905,7 @@ const ThemeRegistry* ThemeRegistry::Global(const App* app) {
 }
 
 static ThemeMode ParseMode(Str s) {
-    return StrEqI(s, StrL("dark")) ? ThemeMode::Dark : ThemeMode::Light;
+    return StrEqI(s, "dark") ? ThemeMode::Dark : ThemeMode::Light;
 }
 
 // sorted_themes: is_default first, then light before dark, then by name
@@ -2457,7 +2430,7 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
         }
         const char* name = entries[i].name;
         int len = (int)strlen(name);
-        if (len < 6 || StrCmpI(name + len - 5, ".json") != 0) {
+        if (len < 6 || !base::StrEqI(Str(name + len - 5), ".json")) {
             continue;
         }
         char file[kMaxPath];

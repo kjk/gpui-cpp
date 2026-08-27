@@ -25,7 +25,7 @@ static void AddRootRaw(const char* dir) {
         return;
     }
     for (int i = 0; i < gRootN; i++) {
-        if (StrCmpI(gRoots[i], dir) == 0) {
+        if (base::StrEqI(Str(gRoots[i]), dir)) {
             return;
         }
     }
@@ -147,7 +147,7 @@ void AssetsAddDefaultRoots(Str exampleName) {
             char prev[kMaxPath];
             StrCopyZ(prev, kMaxPath, walk);
             ParentDir(walk);
-            if (!walk[0] || StrCmpI(prev, walk) == 0) {
+            if (!walk[0] || base::StrEqI(Str(prev), walk)) {
                 break;
             }
         }

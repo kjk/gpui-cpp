@@ -163,7 +163,7 @@ static void RefreshBattery(SysState* s) {
         if (ReadSmallFile(path, buf, (int)sizeof(buf)) <= 0) {
             continue;
         }
-        if (StrCmpNI(buf, "Battery", 7) != 0) {
+        if (!base::StrEqI(Str(buf, 7), "Battery")) {
             continue;
         }
         snprintf(path, sizeof(path), "/sys/class/power_supply/%s/capacity",
@@ -176,7 +176,7 @@ static void RefreshBattery(SysState* s) {
         snprintf(path, sizeof(path), "/sys/class/power_supply/%s/status",
                  ent->d_name);
         if (ReadSmallFile(path, buf, (int)sizeof(buf)) > 0) {
-            s->battery.charging = StrCmpNI(buf, "Charging", 8) == 0;
+            s->battery.charging = base::StrEqI(Str(buf, 8), "Charging");
         }
         break;
     }

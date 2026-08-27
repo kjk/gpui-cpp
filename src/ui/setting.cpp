@@ -56,46 +56,16 @@ RenderOptions RenderOptions::WithDisabled(bool value) const {
     return out;
 }
 
-// to_lowercase().contains(q): the query against one string, ignoring case.
-static bool ContainsCI(Str hay, Str needle) {
-    if (needle.len <= 0) {
-        return true;
-    }
-    if (!hay.s || hay.len < needle.len) {
-        return false;
-    }
-    for (int i = 0; i + needle.len <= hay.len; i++) {
-        int j = 0;
-        while (j < needle.len) {
-            char a = hay.s[i + j];
-            char b = needle.s[j];
-            if (a >= 'A' && a <= 'Z') {
-                a = (char)(a + 32);
-            }
-            if (b >= 'A' && b <= 'Z') {
-                b = (char)(b + 32);
-            }
-            if (a != b) {
-                break;
-            }
-            j++;
-        }
-        if (j == needle.len) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool SettingItemMatches(const SettingItem* it, Str query) {
     if (query.len <= 0) {
         return true;
     }
-    if (ContainsCI(it->title, query) || ContainsCI(it->description, query)) {
+    if (base::StrContainsI(it->title, query) ||
+        base::StrContainsI(it->description, query)) {
         return true;
     }
     for (int i = 0; i < it->keywords.len; i++) {
-        if (ContainsCI(it->keywords[i], query)) {
+        if (base::StrContainsI(it->keywords[i], query)) {
             return true;
         }
     }

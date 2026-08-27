@@ -204,8 +204,8 @@ int StoryFromSlug(const char* slug) {
         return StoryWelcome;
     }
     for (int i = 0; i < StoryCount; i++) {
-        if (StrEqI(Str(slug), Str(kMeta[i].slug)) ||
-            StrEqI(Str(slug), Str(kMeta[i].title))) {
+        if (base::StrEqI(Str(slug), kMeta[i].slug) ||
+            base::StrEqI(Str(slug), kMeta[i].title)) {
             return i;
         }
     }

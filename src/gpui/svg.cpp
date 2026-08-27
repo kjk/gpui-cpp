@@ -538,16 +538,7 @@ static bool StartsWithI(const char* p, const char* end, const char* lit) {
     if (p + n > end) {
         return false;
     }
-    for (int i = 0; i < n; i++) {
-        char a = p[i], b = lit[i];
-        if (a >= 'A' && a <= 'Z') {
-            a = (char)(a + 32);
-        }
-        if (a != b) {
-            return false;
-        }
-    }
-    return true;
+    return base::StrEqI(Str(p, n), lit);
 }
 
 static bool IsIdentChar(char c) {
@@ -566,7 +557,7 @@ static bool GetAttrStr(Str tag, const char* name, Str* out) {
     const char* end = tag.s + tag.len;
     while (p + nlen + 2 < end) {
         bool bound = (p == tag.s) || !IsIdentChar(p[-1]);
-        if (bound && StrCmpNI(p, name, nlen) == 0 && p[nlen] == '=') {
+        if (bound && base::StrEqI(Str(p, nlen), name) && p[nlen] == '=') {
             p += nlen + 1;
             char q = 0;
             if (*p == '"' || *p == '\'') {
@@ -648,7 +639,7 @@ static bool ParseSvgPaint(const SvgIcon* ic, Str v, Rgba* out) {
     if (ParseSvgColor(v, out)) {
         return true;
     }
-    if (!ic || v.len < 6 || StrCmpNI(v.s, "url(", 4) != 0) {
+    if (!ic || v.len < 6 || !base::StrEqI(Str(v.s, 4), "url(")) {
         return false;
     }
     const char* p = v.s + 4;
@@ -748,13 +739,13 @@ static SvgMatrix ParseTransform(Str s) {
         }
         SvgMatrix m;
         Str fn(name, nameLen);
-        if (StrEqI(fn, StrL("translate")) && n >= 1) {
+        if (StrEqI(fn, "translate") && n >= 1) {
             m.e = v[0];
             m.f = n >= 2 ? v[1] : 0;
-        } else if (StrEqI(fn, StrL("scale")) && n >= 1) {
+        } else if (StrEqI(fn, "scale") && n >= 1) {
             m.a = v[0];
             m.d = n >= 2 ? v[1] : v[0];
-        } else if (StrEqI(fn, StrL("rotate")) && n >= 1) {
+        } else if (StrEqI(fn, "rotate") && n >= 1) {
             float rad = v[0] * 3.14159265358979f / 180.f;
             float cs = cosf(rad);
             float sn = sinf(rad);
@@ -773,7 +764,7 @@ static SvgMatrix ParseTransform(Str s) {
                 back.f = -v[2];
                 m = MatMul(to, MatMul(m, back));
             }
-        } else if (StrEqI(fn, StrL("matrix")) && n >= 6) {
+        } else if (StrEqI(fn, "matrix") && n >= 6) {
             m.a = v[0];
             m.b = v[1];
             m.c = v[2];
@@ -854,7 +845,7 @@ static bool IsHiddenContainer(const char* name, const char* end) {
         if (end - name < len) {
             continue;
         }
-        if (StrCmpNI(name, n, len) != 0) {
+        if (!base::StrEqI(Str(name, len), n)) {
             continue;
         }
         // "clipPath" must not match "clipPathUnits": the name ends where
@@ -871,7 +862,7 @@ static bool IsHiddenContainer(const char* name, const char* end) {
 // The name of a tag, matched whole: "text" must not also match "textPath".
 static bool IsTagNamed(const char* name, const char* end, const char* lit) {
     int len = (int)strlen(lit);
-    if (end - name < len || StrCmpNI(name, lit, len) != 0) {
+    if (end - name < len || !base::StrEqI(Str(name, len), lit)) {
         return false;
     }
     char after = name + len < end ? name[len] : ' ';
@@ -917,12 +908,12 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
         }
     }
     if (GetAttr(tag, "font-weight", buf, 64)) {
-        cur.bold = StrEqI(Str(buf), StrL("bold")) || atoi(buf) >= 600;
+        cur.bold = StrEqI(Str(buf), "bold") || atoi(buf) >= 600;
     }
     if (GetAttr(tag, "text-anchor", buf, 64)) {
         Str v(buf);
-        cur.anchor = StrEqI(v, StrL("middle")) ? kTextAnchorMiddle
-                     : StrEqI(v, StrL("end"))  ? kTextAnchorEnd
+        cur.anchor = StrEqI(v, "middle") ? kTextAnchorMiddle
+                     : StrEqI(v, "end")  ? kTextAnchorEnd
                                                : kTextAnchorStart;
     }
     if (GetAttr(tag, "fill", buf, 64)) {
@@ -1213,11 +1204,11 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             }
             char fill[64];
             if (GetAttr(tag, "fill", fill, 64)) {
-                ic->filled = !StrEqI(Str(fill), StrL("none"));
+                ic->filled = !StrEqI(Str(fill), "none");
             }
             char stroke[64];
             if (GetAttr(tag, "stroke", stroke, 64)) {
-                ic->stroked = !StrEqI(Str(stroke), StrL("none"));
+                ic->stroked = !StrEqI(Str(stroke), "none");
             }
             continue;
         }
@@ -1410,11 +1401,11 @@ const uint8_t* AssetIconForPath(Str assetPath, int* lenOut) {
     if (assetPath.len <= kDirLen + kExtLen) {
         return nullptr;
     }
-    if (StrCmpNI(assetPath.s, kDir, kDirLen) != 0) {
+    if (!base::StrEqI(Str(assetPath.s, kDirLen), kDir)) {
         return nullptr;
     }
     Str base(assetPath.s + kDirLen, assetPath.len - kDirLen - kExtLen);
-    if (StrCmpNI(base.s + base.len, ".svg", kExtLen) != 0) {
+    if (!base::StrEqI(Str(base.s + base.len, kExtLen), ".svg")) {
         return nullptr;
     }
     return AssetIconFind(base, lenOut);
@@ -1465,9 +1456,7 @@ const uint8_t* SvgDrawOpsFor(Str assetPath, int* lenOut) {
         return nullptr;
     }
     for (int i = 0; i < gCacheN; i++) {
-        if (gCache[i].data &&
-            StrCmpNI(gCache[i].path, assetPath.s, assetPath.len) == 0 &&
-            gCache[i].path[assetPath.len] == 0) {
+        if (gCache[i].data && base::StrEqI(assetPath, gCache[i].path)) {
             *lenOut = gCache[i].len;
             return gCache[i].data;
         }

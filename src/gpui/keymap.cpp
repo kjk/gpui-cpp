@@ -74,33 +74,13 @@ static const NamedKey kNamedKeys[] = {
     {"`", 192},
 };
 
-static bool NameEq(Str s, const char* lit) {
-    int n = 0;
-    while (lit[n]) {
-        n++;
-    }
-    if (s.len != n) {
-        return false;
-    }
-    for (int i = 0; i < n; i++) {
-        char c = s.s[i];
-        if (c >= 'A' && c <= 'Z') {
-            c = (char)(c - 'A' + 'a');
-        }
-        if (c != lit[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
 static int VkForName(Str name) {
     if (name.len == 0) {
         return 0;
     }
     for (int i = 0; i < (int)(sizeof(kNamedKeys) / sizeof(kNamedKeys[0]));
          i++) {
-        if (NameEq(name, kNamedKeys[i].name)) {
+        if (base::StrEqI(name, kNamedKeys[i].name)) {
             return kNamedKeys[i].vk;
         }
     }
@@ -156,12 +136,13 @@ bool KeyChordParse(Str spec, KeyChord* out) {
             break;
         }
         Str part = Str(spec.s + i, dash - i);
-        if (NameEq(part, "ctrl")) {
+        if (base::StrEqI(part, "ctrl")) {
             c.ctrl = true;
-        } else if (NameEq(part, "cmd") || NameEq(part, "super") ||
-                   NameEq(part, "win")) {
+        } else if (base::StrEqI(part, "cmd") ||
+                   base::StrEqI(part, "super") ||
+                   base::StrEqI(part, "win")) {
             c.platform = true;
-        } else if (NameEq(part, "secondary")) {
+        } else if (base::StrEqI(part, "secondary")) {
             // The shortcut modifier: Command on macOS, Control elsewhere.
             // One `secondary-c` binding is Cmd-C on a Mac and Ctrl-C on the
             // other two, which is what Rust's `secondary-` means.
@@ -170,9 +151,10 @@ bool KeyChordParse(Str spec, KeyChord* out) {
 #else
             c.ctrl = true;
 #endif
-        } else if (NameEq(part, "alt") || NameEq(part, "option")) {
+        } else if (base::StrEqI(part, "alt") ||
+                   base::StrEqI(part, "option")) {
             c.alt = true;
-        } else if (NameEq(part, "shift")) {
+        } else if (base::StrEqI(part, "shift")) {
             c.shift = true;
         } else {
             return false;

@@ -155,10 +155,6 @@ static const SyntaxLangDef kLangs[] = {
 
 constexpr int kNLangs = (int)(sizeof(kLangs) / sizeof(kLangs[0]));
 
-static char SyntaxLower(char c) {
-    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
-}
-
 // Whether `list` — space-separated — holds `word`.
 static bool SyntaxInList(const char* list, Str word, bool ci) {
     if (!list || word.len <= 0) {
@@ -171,12 +167,9 @@ static bool SyntaxInList(const char* list, Str word, bool ci) {
         }
         int len = (int)(p - start);
         if (len == word.len) {
-            bool same = true;
-            for (int i = 0; same && i < len; i++) {
-                char a = word.s[i];
-                char b = start[i];
-                same = ci ? SyntaxLower(a) == SyntaxLower(b) : a == b;
-            }
+            Str candidate(start, len);
+            bool same = ci ? base::StrEqI(word, candidate)
+                           : base::StrEq(word, candidate);
             if (same) {
                 return true;
             }
@@ -206,16 +199,12 @@ SyntaxLang SyntaxLangFor(Str info) {
            info.s[len] != ',' && info.s[len] != '{') {
         len++;
     }
-    char buf[32];
-    if (len <= 0 || len >= (int)sizeof(buf)) {
+    if (len <= 0) {
         return SyntaxLangNone;
     }
-    for (int i = 0; i < len; i++) {
-        buf[i] = SyntaxLower(info.s[i]);
-    }
-    Str name(buf, len);
+    Str name(info.s, len);
     for (int i = 0; i < kNLangs; i++) {
-        if (SyntaxInList(kLangs[i].names, name, false)) {
+        if (SyntaxInList(kLangs[i].names, name, true)) {
             return (SyntaxLang)i;
         }
     }

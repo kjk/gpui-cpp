@@ -132,7 +132,7 @@ static void RetainedStateOwnsAndForwardsCalendar() {
     utassert(state && state->date.kind == DateKind::Range);
     utassert(state && state->calendar.IsValid());
     utassert(state && state->dateFormat.s &&
-             StrEqI(state->dateFormat, StrL("%Y/%m/%d")));
+             StrEqI(state->dateFormat, "%Y/%m/%d"));
 
     Entity<DatePickerSink> sink = EntityNewState<DatePickerSink>(&app);
     SubscribeTo(&app, picker, sink, &DatePickerSink::OnChange);
@@ -157,11 +157,11 @@ static void RetainedStateOwnsAndForwardsCalendar() {
                                             &cx);
     Str formatted = component::DatePickerFormatValue(
         a, state->dateFormat, Date::Single(D(2025, 2, 10)));
-    utassert(StrEqI(formatted, StrL("Monday, February 10, 2025")));
+    utassert(StrEqI(formatted, "Monday, February 10, 2025"));
     formatted = component::DatePickerFormatDate(
         a, StrL("%G-W%V %U %W %-j %_m %q %v"), D(2021, 1, 1));
     utassert(StrEqI(formatted,
-                    StrL("2020-W53 00 00 1  1 1  1-Jan-2021")));
+                    "2020-W53 00 00 1  1 1  1-Jan-2021"));
     component::DatePickerStateSetFirstDayOfWeek(state, 1, &cx);
     component::DatePickerStateSetDisabledMatcher(
         state, DateMatcherWeekdays(1u << 0), &cx);
@@ -228,7 +228,7 @@ static El* FindNamedDp(El* root, const char* name) {
     if (!root) {
         return nullptr;
     }
-    if (root->id.s && StrEqI(root->id, Str(name))) {
+    if (root->id.s && base::StrEqI(root->id, name)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {

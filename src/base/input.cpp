@@ -2997,17 +2997,7 @@ static bool StartsWithI(Str s, const char* prefix) {
     if (s.len < n) {
         return false;
     }
-    for (int i = 0; i < n; i++) {
-        char a = s.s[i];
-        char b = prefix[i];
-        if (a >= 'A' && a <= 'Z') {
-            a = (char)(a - 'A' + 'a');
-        }
-        if (a != b) {
-            return false;
-        }
-    }
-    return true;
+    return base::StrEqI(Str(s.s, n), prefix);
 }
 
 static bool DefinitionIsExternal(Str uri) {

@@ -265,7 +265,7 @@ static void ALayoutSurvivesDumpAndLoad() {
     DockDump(&s, &state);
     // The tree is PanelStates: a split is a StackPanel, a group a TabPanel,
     // and a panel a leaf under its registered name.
-    utassert(StrEqI(state.nodes[state.center].panelName, StrL("StackPanel")));
+    utassert(StrEqI(state.nodes[state.center].panelName, "StackPanel"));
     utassert(state.nodes[state.center].kind == PanelInfoKind::Stack);
     utassertnear(state.nodes[state.center].sizes[0], 240.f);
     utassert(!AxisIsHorizontal(state.nodes[state.center].axis));
@@ -274,7 +274,7 @@ static void ALayoutSurvivesDumpAndLoad() {
     utassert(first.kind == PanelInfoKind::Tabs);
     utassert(first.activeIndex == 1);
     utassert(
-        StrEqI(state.nodes[first.children[0]].panelName, StrL("AlphaPanel")));
+        StrEqI(state.nodes[first.children[0]].panelName, "AlphaPanel"));
     utassert(state.left.present && !state.left.open);
     utassertnear(state.left.size, 210.f);
 
@@ -323,7 +323,7 @@ static void APanelNothingAnswersToBecomesInvalid() {
     utassert(DockLoad(&s, &state, arena));
     // The missing one was registered on the spot, under the name asked for.
     utassert(s.panels.len == 2);
-    utassert(StrEqI(s.panels[1].name, StrL("GitGraphPanel")));
+    utassert(StrEqI(s.panels[1].name, "GitGraphPanel"));
     utassert(s.nodes[s.center].panel.len == 2);
     utassert(s.nodes[s.center].activeIx == 1);
 
@@ -333,7 +333,7 @@ static void APanelNothingAnswersToBecomesInvalid() {
     DockDump(&s, &again);
     const PanelStateNode& group = again.nodes[again.center];
     utassert(StrEqI(again.nodes[group.children[1]].panelName,
-                    StrL("GitGraphPanel")));
+                    "GitGraphPanel"));
     ArenaDelete(arena);
 }
 
@@ -753,7 +753,7 @@ static void ThePanelRegistryRebuildsPersistedPanels() {
                       state));
     utassert(calls == 1);
     utassert(state.Get(&app)->panels.len == 1);
-    utassert(StrEqI(state.Get(&app)->panels[0].title, StrL("restored")));
+    utassert(StrEqI(state.Get(&app)->panels[0].title, "restored"));
 
     EntityDropAll(&app);
     ArenaDelete(arena);
@@ -785,7 +785,7 @@ static El* FindNamedDk(El* root, const char* name) {
     if (!root) {
         return nullptr;
     }
-    if (root->id.s && StrEqI(root->id, Str(name))) {
+    if (root->id.s && base::StrEqI(root->id, name)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {

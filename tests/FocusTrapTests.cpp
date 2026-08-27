@@ -135,7 +135,7 @@ static void ThePublicContainerRefinesItsElement() {
     El* child = Div(a)->Child(Div(a)->FocusId(78));
     El* trap = FocusTrapContainer::New(&cx, StrL("modal"), focus, child);
     utassert(trap == child);
-    utassert(StrEqI(trap->id, StrL("modal")));
+    utassert(StrEqI(trap->id, "modal"));
     utassert(trap->style.focusId == 77);
     utassert(trap->style.trapId == 77);
 

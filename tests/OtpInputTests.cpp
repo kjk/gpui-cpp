@@ -6,20 +6,16 @@
 
 #include "Test.h"
 
-static bool Is(const OtpState& s, const char* want) {
-    return StrEqI(Str(s.value), Str(want));
-}
-
 static void OnlyDigitsAreTaken() {
     OtpState s;
     utassert(OtpEditValue(&s, 0, '1'));
     utassert(OtpEditValue(&s, 0, '2'));
-    utassert(Is(s, "12"));
+    utassert(base::StrEqI(Str(s.value), "12"));
     // A letter, a space and a symbol all leave the value where it was.
     utassert(!OtpEditValue(&s, 0, 'a'));
     utassert(!OtpEditValue(&s, 0, ' '));
     utassert(!OtpEditValue(&s, 0, '-'));
-    utassert(Is(s, "12"));
+    utassert(base::StrEqI(Str(s.value), "12"));
 }
 
 static void FullWidthDigitsFoldOntoPlainOnes() {
@@ -27,7 +23,7 @@ static void FullWidthDigitsFoldOntoPlainOnes() {
     // U+FF13 and U+FF17, which an IME produces.
     utassert(OtpEditValue(&s, 0, 0xFF13));
     utassert(OtpEditValue(&s, 0, 0xFF17));
-    utassert(Is(s, "37"));
+    utassert(base::StrEqI(Str(s.value), "37"));
     utassert(OtpDigitChar(0xFF10) == '0');
     utassert(OtpDigitChar(0xFF19) == '9');
     utassert(OtpDigitChar(0xFF1A) == 0);
@@ -38,9 +34,9 @@ static void BackspacePopsTheLastDigit() {
     OtpEditValue(&s, 0, '4');
     OtpEditValue(&s, 0, '5');
     utassert(OtpEditValue(&s, KeyBack, 0));
-    utassert(Is(s, "4"));
+    utassert(base::StrEqI(Str(s.value), "4"));
     utassert(OtpEditValue(&s, KeyBack, 0));
-    utassert(Is(s, ""));
+    utassert(base::StrEqI(Str(s.value), ""));
     // Nothing left to pop.
     utassert(!OtpEditValue(&s, KeyBack, 0));
 }
@@ -52,10 +48,10 @@ static void AFullCodeRefusesMore() {
     utassert(OtpEditValue(&s, 0, '2'));
     utassert(OtpEditValue(&s, 0, '3'));
     utassert(OtpEditValue(&s, 0, '4'));
-    utassert(Is(s, "1234"));
+    utassert(base::StrEqI(Str(s.value), "1234"));
     // The run is not shifted along; the digit is simply dropped.
     utassert(!OtpEditValue(&s, 0, '5'));
-    utassert(Is(s, "1234"));
+    utassert(base::StrEqI(Str(s.value), "1234"));
     utassert(s.len == 4);
 }
 

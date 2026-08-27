@@ -32,16 +32,17 @@ int SceneLevelOn() {
     if (!buf[0]) {
         return lvl;
     }
-    if (StrCmpI(buf, "0") == 0 || StrCmpI(buf, "off") == 0) {
+    Str value(buf);
+    if (base::StrEqI(value, "0") || base::StrEqI(value, "off")) {
         lvl = kSceneOff;
-    } else if (StrCmpI(buf, "1") == 0 || StrCmpI(buf, "replay") == 0 ||
-               StrCmpI(buf, "on") == 0) {
+    } else if (base::StrEqI(value, "1") || base::StrEqI(value, "replay") ||
+               base::StrEqI(value, "on")) {
         lvl = kSceneReplay;
-    } else if (StrCmpI(buf, "cache") == 0) {
+    } else if (base::StrEqI(value, "cache")) {
         lvl = kSceneCache;
-    } else if (StrCmpI(buf, "skip") == 0) {
+    } else if (base::StrEqI(value, "skip")) {
         lvl = kSceneSkip;
-    } else if (StrCmpI(buf, "damage") == 0) {
+    } else if (base::StrEqI(value, "damage")) {
         lvl = kSceneDamage;
     } else {
         logf("paint: GPUI_SCENE=%s is not a level; leaving it at skip",

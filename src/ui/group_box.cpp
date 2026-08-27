@@ -5,10 +5,10 @@ namespace gpui {
 namespace component {
 
 GroupBoxVariant GroupBoxVariantFromStr(Str text) {
-    if (StrEqI(text, StrL("fill"))) {
+    if (StrEqI(text, "fill")) {
         return GroupBoxVariant::Fill;
     }
-    if (StrEqI(text, StrL("outline"))) {
+    if (StrEqI(text, "outline")) {
         return GroupBoxVariant::Outline;
     }
     return GroupBoxVariant::Normal;

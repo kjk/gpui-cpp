@@ -1396,7 +1396,14 @@ inline bool StrEq(Str s1, Str s2) {
     return StrEqRest(s1, s2);
 }
 bool StrEq(Str s1, const char* s2);
-bool StrEqI(Str s1, Str s2);
+GPUI_NOINLINE bool StrEqIRest(Str s1, Str s2);
+inline bool StrEqI(Str s1, Str s2) {
+    if (s1.len != s2.len) {
+        return false;
+    }
+    return StrEqIRest(s1, s2);
+}
+bool StrEqI(Str s1, const char* s2);
 bool StrContainsI(Str s, Str sub);
 
 // ─── sequential strings ───────────────────────────────────────────────────

@@ -3235,7 +3235,8 @@ static bool LayoutReuseOn() {
         StrCopyZ(buf, (int)sizeof(buf), env);
     }
     on = 1;
-    if (buf[0] && (StrCmpI(buf, "0") == 0 || StrCmpI(buf, "off") == 0)) {
+    if (buf[0] &&
+        (base::StrEqI(Str(buf), "0") || base::StrEqI(Str(buf), "off"))) {
         on = 0;
         logf("layout: reuse off (GPUI_LAYOUT_REUSE), rebuilding every frame");
     }

@@ -31,22 +31,6 @@ static bool HtmlIsNameChar(char c) {
            c == ':';
 }
 
-static char HtmlLower(char c) {
-    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
-}
-
-static bool HtmlNamesEqual(Str a, Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    for (int i = 0; i < a.len; i++) {
-        if (HtmlLower(a.s[i]) != HtmlLower(b.s[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
 Minifier& Minifier::OmitDoctype(bool value) {
     omitDoctype = value;
     return *this;
@@ -86,10 +70,7 @@ Str Minifier::WriteCollapseWhitespace(Arena* a, Str source) {
 static bool HtmlStartsI(Str source, int at, const char* value) {
     int len = (int)strlen(value);
     if (at < 0 || at + len > source.len) return false;
-    for (int i = 0; i < len; i++) {
-        if (HtmlLower(source.s[at + i]) != HtmlLower(value[i])) return false;
-    }
-    return true;
+    return base::StrEqI(Str(source.s + at, len), value);
 }
 
 Str Minifier::Minify(Arena* a, Str source) {
@@ -145,12 +126,12 @@ Str Minifier::Minify(Arena* a, Str source) {
                 nameEnd++;
             }
             Str name(source.s + nameAt, nameEnd - nameAt);
-            if (!close && (HtmlNamesEqual(name, StrL("pre")) ||
-                           HtmlNamesEqual(name, StrL("textarea")) ||
-                           HtmlNamesEqual(name, StrL("script")) ||
-                           HtmlNamesEqual(name, StrL("style")))) {
+            if (!close && (base::StrEqI(name, "pre") ||
+                           base::StrEqI(name, "textarea") ||
+                           base::StrEqI(name, "script") ||
+                           base::StrEqI(name, "style"))) {
                 raw = name;
-            } else if (close && raw.s && HtmlNamesEqual(name, raw)) {
+            } else if (close && raw.s && base::StrEqI(name, raw)) {
                 raw = {};
             }
             memcpy(out + n, source.s + at, (size_t)(end - at));
@@ -310,7 +291,7 @@ static void HtmlLexSkipRaw(HtmlLex* l, Str name) {
             int save = l->at;
             l->at += 2;
             HtmlLexName(l);
-            if (HtmlNamesEqual(l->name, name)) {
+            if (base::StrEqI(l->name, name)) {
                 while (l->at < l->src.len && l->src.s[l->at] != '>') {
                     l->at++;
                 }
@@ -327,10 +308,6 @@ static void HtmlLexSkipRaw(HtmlLex* l, Str name) {
 }
 
 // ─── attributes and text ──────────────────────────────────────────────────
-
-static bool HtmlNameIs(Str n, const char* s) {
-    return HtmlNamesEqual(n, Str(s));
-}
 
 // The raw slice of one attribute's value, or an empty Str. A valueless
 // attribute (`<td nowrap>`) reads as empty, which is what a caller asking
@@ -352,10 +329,8 @@ static Str HtmlAttrRaw(Str attrs, const char* name) {
             at++; // nothing consumed: step over the odd byte
             continue;
         }
-        bool match = nl == nameLen;
-        for (int i = 0; match && i < nl; i++) {
-            match = HtmlLower(attrs.s[ns + i]) == name[i];
-        }
+        bool match = nl == nameLen &&
+                     base::StrEqI(Str(attrs.s + ns, nl), name);
         while (at < attrs.len && HtmlIsSpace(attrs.s[at])) {
             at++;
         }
@@ -456,40 +431,40 @@ Str HtmlAttrValue(Arena* a, Str attrs, const char* name) {
 // children and no box of its own.
 static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
     *level = 0;
-    if (HtmlNameIs(n, "p")) {
+    if (base::StrEqI(n, "p")) {
         *kind = MdKind::Paragraph;
-    } else if (n.len == 2 && HtmlLower(n.s[0]) == 'h' && n.s[1] >= '1' &&
-               n.s[1] <= '6') {
+    } else if (n.len == 2 && base::StrEqI(Str(n.s, 1), "h") &&
+               n.s[1] >= '1' && n.s[1] <= '6') {
         *kind = MdKind::Heading;
         *level = (uint8_t)(n.s[1] - '0');
-    } else if (HtmlNameIs(n, "blockquote")) {
+    } else if (base::StrEqI(n, "blockquote")) {
         *kind = MdKind::Quote;
-    } else if (HtmlNameIs(n, "ul") || HtmlNameIs(n, "ol")) {
+    } else if (base::StrEqI(n, "ul") || base::StrEqI(n, "ol")) {
         *kind = MdKind::List;
-    } else if (HtmlNameIs(n, "li")) {
+    } else if (base::StrEqI(n, "li")) {
         *kind = MdKind::Item;
-    } else if (HtmlNameIs(n, "pre")) {
+    } else if (base::StrEqI(n, "pre")) {
         *kind = MdKind::Code;
-    } else if (HtmlNameIs(n, "table")) {
+    } else if (base::StrEqI(n, "table")) {
         *kind = MdKind::Table;
-    } else if (HtmlNameIs(n, "tr")) {
+    } else if (base::StrEqI(n, "tr")) {
         *kind = MdKind::Row;
-    } else if (HtmlNameIs(n, "td") || HtmlNameIs(n, "th")) {
+    } else if (base::StrEqI(n, "td") || base::StrEqI(n, "th")) {
         *kind = MdKind::Cell;
-    } else if (HtmlNameIs(n, "dt") || HtmlNameIs(n, "dd") ||
-               HtmlNameIs(n, "summary") || HtmlNameIs(n, "figcaption")) {
+    } else if (base::StrEqI(n, "dt") || base::StrEqI(n, "dd") ||
+               base::StrEqI(n, "summary") || base::StrEqI(n, "figcaption")) {
         // A term, a definition and a caption are each a line of prose, so
         // they read as paragraphs rather than as anonymous containers.
         *kind = MdKind::Paragraph;
-    } else if (HtmlNameIs(n, "div") || HtmlNameIs(n, "section") ||
-               HtmlNameIs(n, "article") || HtmlNameIs(n, "main") ||
-               HtmlNameIs(n, "header") || HtmlNameIs(n, "footer") ||
-               HtmlNameIs(n, "aside") || HtmlNameIs(n, "nav") ||
-               HtmlNameIs(n, "figure") || HtmlNameIs(n, "details") ||
-               HtmlNameIs(n, "form") || HtmlNameIs(n, "fieldset") ||
-               HtmlNameIs(n, "address") || HtmlNameIs(n, "dl") ||
-               HtmlNameIs(n, "body") || HtmlNameIs(n, "html") ||
-               HtmlNameIs(n, "center")) {
+    } else if (base::StrEqI(n, "div") || base::StrEqI(n, "section") ||
+               base::StrEqI(n, "article") || base::StrEqI(n, "main") ||
+               base::StrEqI(n, "header") || base::StrEqI(n, "footer") ||
+               base::StrEqI(n, "aside") || base::StrEqI(n, "nav") ||
+               base::StrEqI(n, "figure") || base::StrEqI(n, "details") ||
+               base::StrEqI(n, "form") || base::StrEqI(n, "fieldset") ||
+               base::StrEqI(n, "address") || base::StrEqI(n, "dl") ||
+               base::StrEqI(n, "body") || base::StrEqI(n, "html") ||
+               base::StrEqI(n, "center")) {
         *kind = MdKind::Group;
     } else {
         return false;
@@ -499,24 +474,25 @@ static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
 
 // The inline marks, which are html.rs's parse_paragraph arms.
 static uint8_t HtmlInlineMark(Str n) {
-    if (HtmlNameIs(n, "b") || HtmlNameIs(n, "strong")) {
+    if (base::StrEqI(n, "b") || base::StrEqI(n, "strong")) {
         return MdBold;
     }
-    if (HtmlNameIs(n, "i") || HtmlNameIs(n, "em") || HtmlNameIs(n, "cite") ||
-        HtmlNameIs(n, "var")) {
+    if (base::StrEqI(n, "i") || base::StrEqI(n, "em") ||
+        base::StrEqI(n, "cite") || base::StrEqI(n, "var")) {
         return MdItalic;
     }
-    if (HtmlNameIs(n, "code") || HtmlNameIs(n, "kbd") ||
-        HtmlNameIs(n, "samp") || HtmlNameIs(n, "tt")) {
+    if (base::StrEqI(n, "code") || base::StrEqI(n, "kbd") ||
+        base::StrEqI(n, "samp") || base::StrEqI(n, "tt")) {
         return MdCode;
     }
-    if (HtmlNameIs(n, "u") || HtmlNameIs(n, "ins")) {
+    if (base::StrEqI(n, "u") || base::StrEqI(n, "ins")) {
         return MdUnderline;
     }
-    if (HtmlNameIs(n, "s") || HtmlNameIs(n, "del") || HtmlNameIs(n, "strike")) {
+    if (base::StrEqI(n, "s") || base::StrEqI(n, "del") ||
+        base::StrEqI(n, "strike")) {
         return MdDel;
     }
-    if (HtmlNameIs(n, "mark")) {
+    if (base::StrEqI(n, "mark")) {
         return MdHighlight;
     }
     return 0;
@@ -613,12 +589,12 @@ HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag) {
         return t;
     }
     t.close = l.tok == HtmlTok::Close;
-    if (HtmlNameIs(l.name, "br")) {
+    if (base::StrEqI(l.name, "br")) {
         t.known = !t.close;
         t.isBreak = t.known;
         return t;
     }
-    if (HtmlNameIs(l.name, "img")) {
+    if (base::StrEqI(l.name, "img")) {
         t.known = !t.close;
         t.isImage = t.known;
         if (t.known) {
@@ -629,7 +605,7 @@ HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag) {
         }
         return t;
     }
-    if (HtmlNameIs(l.name, "a")) {
+    if (base::StrEqI(l.name, "a")) {
         t.known = true;
         t.mark = MdLink;
         if (!t.close) {
@@ -803,7 +779,7 @@ static void HtmlText(HtmlBuild* b, Str raw) {
 static void HtmlClose(HtmlBuild* b, Str name) {
     int found = -1;
     for (int i = b->stack.len - 1; i >= 0; i--) {
-        if (HtmlNamesEqual(b->stack[i].name, name)) {
+        if (base::StrEqI(b->stack[i].name, name)) {
             found = i;
             break;
         }
@@ -854,27 +830,27 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
     MdKind kind = MdKind::Group;
     uint8_t level = 0;
 
-    if (HtmlNameIs(l->name, "br")) {
+    if (base::StrEqI(l->name, "br")) {
         HtmlAddRun(b, StrL("\n"));
         return;
     }
-    if (HtmlNameIs(l->name, "hr")) {
+    if (base::StrEqI(l->name, "hr")) {
         b->para = nullptr;
         HtmlNewNode(b, MdKind::Rule);
         return;
     }
-    if (HtmlNameIs(l->name, "img")) {
+    if (base::StrEqI(l->name, "img")) {
         HtmlAddImage(b, HtmlAttrValue(b->a, l->attrs, "src"),
                      HtmlAttrValue(b->a, l->attrs, "alt"),
                      HtmlLength(b->a, l->attrs, "width"),
                      HtmlLength(b->a, l->attrs, "height"));
         return;
     }
-    if (HtmlNameIs(l->name, "thead") || HtmlNameIs(l->name, "tbody") ||
-        HtmlNameIs(l->name, "tfoot")) {
+    if (base::StrEqI(l->name, "thead") || base::StrEqI(l->name, "tbody") ||
+        base::StrEqI(l->name, "tfoot")) {
         // Not a node of its own: it only says which rows are header rows,
         // exactly as MD_BLOCK_THEAD does on the markdown side.
-        bool head = HtmlNameIs(l->name, "thead");
+        bool head = base::StrEqI(l->name, "thead");
         HtmlPush(b, nullptr, name);
         if (b->stack.len > 0) {
             HtmlOpen& o = b->stack[b->stack.len - 1];
@@ -899,13 +875,13 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
         MdNode* n = HtmlNewNode(b, kind);
         n->level = level;
         if (kind == MdKind::List) {
-            n->ordered = HtmlNameIs(l->name, "ol");
+            n->ordered = base::StrEqI(l->name, "ol");
             n->start = HtmlListStart(HtmlAttrValue(b->a, l->attrs, "start"));
         } else if (kind == MdKind::Row) {
             n->head = b->inHead;
         } else if (kind == MdKind::Cell) {
             n->align = HtmlAlign(b->a, l->attrs);
-            if (HtmlNameIs(l->name, "th") && n->parent) {
+            if (base::StrEqI(l->name, "th") && n->parent) {
                 n->parent->head = true;
             }
         }
@@ -925,7 +901,7 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
     // <code class="language-cpp"> inside a <pre> names the fence's language
     // rather than marking a span, which is the shape every markdown-rendered
     // code block on the web has.
-    if (b->cur->kind == MdKind::Code && HtmlNameIs(l->name, "code")) {
+    if (b->cur->kind == MdKind::Code && base::StrEqI(l->name, "code")) {
         Str cls = HtmlAttrValue(b->a, l->attrs, "class");
         if (cls.len > 9 && StrEq(Str(cls.s, 9), StrL("language-"))) {
             b->cur->lang = Str(cls.s + 9, cls.len - 9);
@@ -935,7 +911,7 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
     }
 
     uint8_t mark = HtmlInlineMark(l->name);
-    bool link = HtmlNameIs(l->name, "a");
+    bool link = base::StrEqI(l->name, "a");
     HtmlPush(b, nullptr, name);
     if (b->stack.len <= 0) {
         return;
@@ -981,8 +957,8 @@ void HtmlParseInto(Arena* a, MdNode* parent, Str source) {
         }
         // <head> and <title> are metadata; <style> and <script> are the two
         // html.rs drops by name. All four take their content with them.
-        if (HtmlNameIs(l.name, "head") || HtmlNameIs(l.name, "title") ||
-            HtmlNameIs(l.name, "script") || HtmlNameIs(l.name, "style")) {
+        if (base::StrEqI(l.name, "head") || base::StrEqI(l.name, "title") ||
+            base::StrEqI(l.name, "script") || base::StrEqI(l.name, "style")) {
             Str name = StrDup(a, l.name);
             if (!l.selfClose) {
                 HtmlLexSkipRaw(&l, name);

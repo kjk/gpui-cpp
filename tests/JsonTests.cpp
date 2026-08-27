@@ -10,7 +10,7 @@ static void AnObjectReadsBackByName() {
         a, StrL("{\"name\": \"tabs\", \"open\": true, \"size\": 350.5,"
                 " \"none\": null, \"sizes\": [1, 2.5, -3]}"));
     utassert(v && v->kind == JsonKind::Object);
-    utassert(StrEqI(JsonString(JsonGet(v, "name")), StrL("tabs")));
+    utassert(StrEqI(JsonString(JsonGet(v, "name")), "tabs"));
     utassert(JsonBool(JsonGet(v, "open")));
     utassertnear((float)JsonNumber(JsonGet(v, "size")), 350.5f);
     const JsonValue* none = JsonGet(v, "none");
@@ -79,7 +79,7 @@ static void WhatIsWrittenParsesBack() {
     JsonValue* v = JsonParse(a, text);
     utassert(v && v->kind == JsonKind::Object);
     utassertnear((float)JsonNumber(JsonGet(v, "version")), 2.f);
-    utassert(StrEqI(JsonString(JsonGet(v, "name")), StrL("a \"quoted\" name")));
+    utassert(StrEqI(JsonString(JsonGet(v, "name")), "a \"quoted\" name"));
     utassert(!JsonBool(JsonGet(v, "open"), true));
     utassert(JsonLen(JsonGet(v, "sizes")) == 2);
     utassertnear((float)JsonNumber(JsonAt(JsonGet(v, "sizes"), 1)), 263.5f);

@@ -361,21 +361,21 @@ static void SourceRegistryAndConfigSettingsAreRetained() {
              registry->Count() == ThemeRegistryCount(&app));
     const ThemeConfig* config = ThemeRegistryFind(&app, StrL("Metrics"));
     utassert(config && config->colors && config->fontSize == 18.f &&
-             StrEqI(config->fontFamily, StrL("Inter")) &&
-             StrEqI(config->monoFontFamily, StrL("Cascadia Mono")) &&
+             StrEqI(config->fontFamily, "Inter") &&
+             StrEqI(config->monoFontFamily, "Cascadia Mono") &&
              config->monoFontSize == 14.f && config->hasShadow &&
              !config->shadow);
     utassert(ThemeRegistryApply(&app, config));
     const Theme& theme = ThemeLight(&app);
     utassert(theme.mode == ThemeMode::Light && theme.fontSize == 18.f &&
-             StrEqI(theme.fontFamily, StrL("Inter")) &&
-             StrEqI(theme.monoFontFamily, StrL("Cascadia Mono")) &&
+             StrEqI(theme.fontFamily, "Inter") &&
+             StrEqI(theme.monoFontFamily, "Cascadia Mono") &&
              theme.monoFontSize == 14.f && theme.radius == 9.f &&
              theme.radiusLg == 11.f && !theme.shadow);
     SemanticThemeTokens tokens = ThemeSemanticTokens(theme);
     utassert(tokens.shadow.sm.len == 0 && tokens.shadow.md.len == 0 &&
              tokens.shadow.lg.len == 0);
-    utassert(StrEqI(tokens.typography.sans, StrL("Inter")) &&
+    utassert(StrEqI(tokens.typography.sans, "Inter") &&
              tokens.typography.md.size == 18.f &&
              tokens.typography.monoMd.size == 14.f);
     ArenaDelete(arena);

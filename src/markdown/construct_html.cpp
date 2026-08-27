@@ -37,13 +37,12 @@ static Str TrimAscii(Str s) {
 
 // `HTML_RAW_NAMES.contains(&name)` / `HTML_BLOCK_NAMES.contains(&name)`,
 // against a name that is not lowercased first.
-// The name lists are SeqStrings runs. The compare stays this module's own —
-// `StrEqAsciiI`, which lowercases nothing but A-Z, because that is what a tag
-// name is by CommonMark and not what a locale might decide.
+// The name lists are SeqStrings runs. Tag names are ASCII by CommonMark;
+// base's case-insensitive slice comparison avoids a folded copy.
 static bool NamesContainI(SeqStrings names, Str name) {
     int off = 0;
     while (names[off]) {
-        if (StrEqAsciiI(SeqStrAt(names, off), name)) {
+        if (base::StrEqI(SeqStrAt(names, off), name)) {
             return true;
         }
         if (!SeqStrAdvance(names, off)) {
