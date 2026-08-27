@@ -776,10 +776,8 @@ SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
     out.radius.xl = t.radius * 2.f;
     out.radius.full = 9999.f;
 
-    // `typography_tokens` overwrites two sizes and the two families and
-    // leaves the rest of the scale at its defaults. The families are empty
-    // here: this tree names no font on the theme — the paint layer asks the
-    // platform for the UI face and for its monospace one.
+    // `typography_tokens` overwrites the application base sizes and leaves
+    // the source platform-default families and the rest of the scale intact.
     out.typography.md.size = fontSize > 0 ? fontSize : 16.f;
     out.typography.monoMd.size = kMonoFontSize;
 
@@ -1952,16 +1950,26 @@ static void ApplyTextStyle(const JsonValue* obj, const char* key,
     }
     ApplyFloatField(v, "size", &out->size);
     ApplyFloatField(v, "line_height", &out->lineHeight);
-    ApplyFloatField(v, "weight", &out->weight);
+    const JsonValue* weight = JsonGet(v, "weight");
+    if (weight && weight->kind == JsonKind::Number) {
+        out->weight = (FontWeight)(uint16_t)weight->num;
+    }
 }
 
 static void ApplyShadowLevel(const JsonValue* obj, const char* key,
-                             SemanticShadow* out, bool* any) {
+                             Vec<BoxShadow>* level, bool* any) {
     const JsonValue* v = JsonGet(obj, key);
     if (!v || v->kind != JsonKind::Object) {
         return;
     }
     *any = true;
+    if (level->len == 0) {
+        level->Append(BoxShadow{});
+    }
+    BoxShadow* out = ShadowFirst(*level);
+    if (!out) {
+        return;
+    }
     ApplyFloatField(v, "x", &out->x);
     ApplyFloatField(v, "y", &out->y);
     ApplyFloatField(v, "blur", &out->blur);
@@ -2032,9 +2040,7 @@ bool ThemeSemanticConfigApply(const JsonValue* doc, SemanticThemeTokens* io) {
         ApplyShadowLevel(sh, "sm", &io->shadow.sm, &any);
         ApplyShadowLevel(sh, "md", &io->shadow.md, &any);
         ApplyShadowLevel(sh, "lg", &io->shadow.lg, &any);
-        if (any) {
-            io->shadow.has = true;
-        }
+        (void)any;
     }
     return true;
 }

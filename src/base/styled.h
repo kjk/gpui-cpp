@@ -15,10 +15,6 @@ inline El* VFlex(Arena* a) {
     return Div(a)->FlexCol();
 }
 
-// The source calls this GPUI value BoxShadow. Theme tokens used the more
-// descriptive name first; they are the same POD value.
-using BoxShadow = SemanticShadow;
-
 inline BoxShadow box_shadow(float x, float y, float blur, float spread,
                             Hsla color) {
     BoxShadow out;

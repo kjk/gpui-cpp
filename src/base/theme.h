@@ -76,7 +76,7 @@ struct ResizableTheme {
 };
 
 struct Theme {
-    SemanticThemeTokens tokens = {};
+    SemanticThemeTokens tokens;
     ScrollbarTheme scrollbar = {};
     ResizableTheme resizable = {};
 

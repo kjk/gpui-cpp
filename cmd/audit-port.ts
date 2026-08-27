@@ -51,7 +51,6 @@ const partialBase = new Set([
   "resizable",
   "scrollbar",
   "text_selection",
-  "theme_tokens",
 ]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
 const partialUi = new Set([

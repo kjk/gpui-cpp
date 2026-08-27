@@ -8225,3 +8225,33 @@ alert/status root. Base toast is full: the audit moves to 105 full, 16 partial,
 no full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
 20,265 checks; wasm passes its 19,560 applicable checks. The release story
 gallery compiles unchanged.
+
+## Base theme tokens restore the source scales and owned shadow levels
+
+The initial semantic-token layer used port-specific `Semantic*` type names,
+stored font weight as an untyped float, left both source font families empty,
+and flattened each shadow elevation to one value plus a shared `has` bit. That
+lost the Rust module's public structure and made multiple shadows impossible.
+
+Base now exposes the source-shaped `ColorTokens`, `RadiusTokens`,
+`SpacingTokens`, `TextStyleToken`, `TypographyTokens` and `ShadowTokens`
+types, with compatibility aliases for existing callers. Typography uses the
+runtime `FontWeight` type and the exact source defaults: `.SystemUIFont` plus
+Menlo, Consolas or DejaVu Sans Mono according to the target. Shadow levels are
+owning `Vec<BoxShadow>` values, default empty, and `elevations` creates the
+source 1/2, 4/8/-2 and 12/24/-4 levels without flattening later shadows.
+
+Two representation seams remain explicit. Source `Hsla` is stored as the
+renderer-native `Rgba`, and source `SharedString` is represented by `Str`:
+default families are borrowed literals while configured families are copied
+to the theme registry arena. JSON overlay preserves each shadow vector and
+updates its first source-compatible entry; font weight is parsed into
+`FontWeight` rather than a float.
+
+Tests cover the exact radius, spacing, typography and platform-family
+defaults, typed normal/bold weights, empty shadows, all three elevations,
+multiple shadow retention and semantic JSON overlays. Base theme tokens are
+full: the audit moves to 106 full, 15 partial, 8 adapters and 2 exclusions
+with 237 unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 20,276 checks; wasm passes
+its 19,571 applicable checks. The release story gallery compiles unchanged.

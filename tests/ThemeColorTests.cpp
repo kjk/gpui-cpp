@@ -82,10 +82,40 @@ static void TheSemanticTokensAreTheRolesOfThePalette() {
                                                       .lineHeight == 20.f);
     utassert(tk.typography.monoMd.size == kMonoFontSize);
     // ShadowTokens::elevations, at 18% black.
-    utassert(tk.shadow.has);
-    utassert(tk.shadow.md.y == 4.f && tk.shadow.md.blur == 8.f &&
-             tk.shadow.md.spread == -2.f);
-    utassert(tk.shadow.lg.blur == 24.f);
+    utassert(tk.shadow.sm.len == 1 && tk.shadow.md.len == 1 &&
+             tk.shadow.lg.len == 1);
+    utassert(tk.shadow.md[0].y == 4.f && tk.shadow.md[0].blur == 8.f &&
+             tk.shadow.md[0].spread == -2.f);
+    utassert(tk.shadow.lg[0].blur == 24.f);
+}
+
+static void SourceTokenDefaultsKeepTypographyAndShadowStructure() {
+    SemanticThemeTokens tk;
+    utassert(tk.radius.none == 0.f && tk.radius.sm == 3.f &&
+             tk.radius.md == 6.f && tk.radius.full == 9999.f);
+    utassert(tk.spacing.xxs == 2.f && tk.spacing.md == 12.f &&
+             tk.spacing.xxl == 32.f);
+    utassert(StrSame(tk.typography.sans, StrL(".SystemUIFont")));
+#if GPUI_OS_WINDOWS
+    utassert(StrSame(tk.typography.mono, StrL("Consolas")));
+#elif GPUI_OS_MAC
+    utassert(StrSame(tk.typography.mono, StrL("Menlo")));
+#else
+    utassert(StrSame(tk.typography.mono, StrL("DejaVu Sans Mono")));
+#endif
+    utassert(tk.typography.xs.size == 12.f &&
+             tk.typography.xs.lineHeight == 16.f);
+    utassert(tk.typography.monoMd.size == 13.f &&
+             tk.typography.monoMd.weight == FontWeight::Normal);
+    utassert(tk.shadow.sm.len == 0 && tk.shadow.md.len == 0 &&
+             tk.shadow.lg.len == 0);
+
+    ShadowTokens elevated = ShadowTokens::Elevations(Rgba8(1, 2, 3, 4));
+    utassert(elevated.sm.len == 1 && elevated.md.len == 1 &&
+             elevated.lg.len == 1);
+    elevated.md.Append(BoxShadow{1, 2, 3, 4, Rgb(5, 6, 7), true});
+    utassert(elevated.md.len == 2);
+    utassert(elevated.md[1].inset && elevated.md[1].spread == 4.f);
 }
 
 // apply_semantic_tokens: the subset the legacy palette can hold comes back,
@@ -120,7 +150,7 @@ static void ASemanticConfigOnlyChangesWhatItNames() {
         "\"ring\":\"blue-500\"},\"radius\":{\"md\":10},"
         "\"spacing\":{\"md\":20},"
         "\"typography\":{\"mono\":\"Cascadia\","
-        "\"sm\":{\"size\":15}},"
+        "\"sm\":{\"size\":15,\"weight\":700}},"
         "\"shadow\":{\"md\":{\"y\":6,\"color\":\"#00000033\"}}}}");
     JsonValue* json = JsonParse(a, doc);
     utassert(json != nullptr);
@@ -133,8 +163,9 @@ static void ASemanticConfigOnlyChangesWhatItNames() {
     utassert(tk.spacing.md == 20.f && tk.spacing.lg == 16.f);
     utassert(tk.typography.sm.size == 15.f && tk.typography.sm
                                                       .lineHeight == 20.f);
+    utassert(tk.typography.sm.weight == FontWeight::Bold);
     utassert(StrEqI(tk.typography.mono, StrL("Cascadia")));
-    utassert(tk.shadow.md.y == 6.f && tk.shadow.md.blur == 8.f);
+    utassert(tk.shadow.md[0].y == 6.f && tk.shadow.md[0].blur == 8.f);
     // A document with no `tokens` object is not one of these at all.
     JsonValue* other = JsonParse(a, StrL("{\"themes\":[]}"));
     utassert(!ThemeSemanticConfigApply(other, &tk));
@@ -146,6 +177,7 @@ void TestThemeColor() {
     TheLightPaletteIsDefaultLight();
     TheDarkPaletteIsDefaultDark();
     TheSemanticTokensAreTheRolesOfThePalette();
+    SourceTokenDefaultsKeepTypographyAndShadowStructure();
     ASemanticSetAppliesBackToAPalette();
     ASemanticConfigOnlyChangesWhatItNames();
 }

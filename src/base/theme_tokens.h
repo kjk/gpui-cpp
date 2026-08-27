@@ -1,17 +1,15 @@
 /* Semantic design tokens — crates/base/src/theme_tokens.rs
  *
- * The parallel token layer upstream is migrating to: visual *roles* and
- * scales, named without a component in sight — no `button`, no `table`,
- * no `sidebar`. Rust keeps them on `gpui_base::Theme` and the `crates/ui`
- * theme projects them out of its own palette every time it is applied;
- * the conversion functions live in `ui/theme.h`, keeping this layer unaware
- * of the component palette and its gradient-bearing ThemeTokens. */
+ * Visual roles and scales, named without component vocabulary. The themed
+ * crate projects its palette into these values; Base does not depend on that
+ * palette or its gradient-bearing ThemeTokens.
+ */
 
 #include "gpui/gpui.h"
 
 namespace gpui {
 
-struct SemanticColorTokens {
+struct ColorTokens {
     Rgba background = {};
     Rgba foreground = {};
     Rgba surface = {};
@@ -31,7 +29,7 @@ struct SemanticColorTokens {
     Rgba ring = {};
 };
 
-struct SemanticRadiusTokens {
+struct RadiusTokens {
     float none = 0;
     float sm = 3;
     float md = 6;
@@ -40,7 +38,7 @@ struct SemanticRadiusTokens {
     float full = 9999;
 };
 
-struct SemanticSpacingTokens {
+struct SpacingTokens {
     float xxs = 2;
     float xs = 4;
     float sm = 8;
@@ -50,27 +48,29 @@ struct SemanticSpacingTokens {
     float xxl = 32;
 };
 
-// One text role: a size, the line box it sits in, and a weight. Rust's
-// FontWeight is a float where 400 is normal.
-struct SemanticTextStyle {
+struct TextStyleToken {
     float size = 16;
     float lineHeight = 24;
-    float weight = 400;
+    FontWeight weight = FontWeight::Normal;
 };
 
-struct SemanticTypographyTokens {
-    Str sans = {};
-    Str mono = {};
-    SemanticTextStyle xs = {12, 16, 400};
-    SemanticTextStyle sm = {14, 20, 400};
-    SemanticTextStyle md = {16, 24, 400};
-    SemanticTextStyle lg = {18, 28, 400};
-    SemanticTextStyle xl = {20, 28, 400};
-    SemanticTextStyle monoMd = {13, 20, 400};
+struct TypographyTokens {
+    Str sans = Str(".SystemUIFont");
+#if GPUI_OS_MAC
+    Str mono = Str("Menlo");
+#elif GPUI_OS_WINDOWS
+    Str mono = Str("Consolas");
+#else
+    Str mono = Str("DejaVu Sans Mono");
+#endif
+    TextStyleToken xs = {12, 16, FontWeight::Normal};
+    TextStyleToken sm = {14, 20, FontWeight::Normal};
+    TextStyleToken md = {16, 24, FontWeight::Normal};
+    TextStyleToken lg = {18, 28, FontWeight::Normal};
+    TextStyleToken xl = {20, 28, FontWeight::Normal};
+    TextStyleToken monoMd = {13, 20, FontWeight::Normal};
 };
 
-// One elevation: an offset, a blur, a spread and a colour. Rust's BoxShadow
-// carries an `inset` flag too; nothing in the token set sets it.
 struct SemanticShadow {
     float x = 0;
     float y = 0;
@@ -80,27 +80,40 @@ struct SemanticShadow {
     bool inset = false;
 };
 
-struct SemanticShadowTokens {
-    // Whether each elevation is defined at all — Rust holds a Vec per level
-    // and an empty one means no shadow, which is what `Theme::shadow` reads.
-    bool has = false;
-    SemanticShadow sm = {};
-    SemanticShadow md = {};
-    SemanticShadow lg = {};
+using BoxShadow = SemanticShadow;
+
+struct ShadowTokens {
+    Vec<BoxShadow> sm;
+    Vec<BoxShadow> md;
+    Vec<BoxShadow> lg;
+
+    ShadowTokens() = default;
+    static ShadowTokens Elevations(Rgba color);
 };
 
-// theme.mono_font_size: 13, which is what a code editor's rows are drawn at.
 const float kMonoFontSize = 13.f;
 
-// ShadowTokens::elevations: the three levels, from one colour.
-SemanticShadowTokens SemanticShadowElevations(Rgba color);
-
 struct SemanticThemeTokens {
-    SemanticColorTokens colors = {};
-    SemanticRadiusTokens radius = {};
-    SemanticSpacingTokens spacing = {};
-    SemanticTypographyTokens typography = {};
-    SemanticShadowTokens shadow = {};
+    ColorTokens colors = {};
+    RadiusTokens radius = {};
+    SpacingTokens spacing = {};
+    TypographyTokens typography = {};
+    ShadowTokens shadow;
+
+    SemanticThemeTokens() = default;
 };
+
+// Compatibility spellings retained for the component-theme conversion and
+// callers written before the exact source names became canonical.
+using SemanticColorTokens = ColorTokens;
+using SemanticRadiusTokens = RadiusTokens;
+using SemanticSpacingTokens = SpacingTokens;
+using SemanticTextStyle = TextStyleToken;
+using SemanticTypographyTokens = TypographyTokens;
+using SemanticShadowTokens = ShadowTokens;
+
+SemanticShadowTokens SemanticShadowElevations(Rgba color);
+const BoxShadow* ShadowFirst(const Vec<BoxShadow>& level);
+BoxShadow* ShadowFirst(Vec<BoxShadow>& level);
 
 } // namespace gpui
