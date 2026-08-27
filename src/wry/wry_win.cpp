@@ -3119,6 +3119,23 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     if (!parentWindow || !attrs) {
         return nullptr;
     }
+    if (attrs->headerCount < 0 || (attrs->headerCount > 0 && !attrs->headers) ||
+        attrs->initializationScriptCount < 0 ||
+        (attrs->initializationScriptCount > 0 && !attrs->initializationScripts) ||
+        attrs->customProtocolCount < 0 ||
+        (attrs->customProtocolCount > 0 && !attrs->customProtocols)) {
+        logf("wry: invalid Windows webview attribute array\n");
+        return nullptr;
+    }
+    for (int i = 0; i < attrs->customProtocolCount; i++) {
+        for (int j = 0; j < i; j++) {
+            if (base::StrEq(attrs->customProtocols[i].name, attrs->customProtocols[j].name)) {
+                logf("wry: duplicate custom protocol '%s'\n",
+                     attrs->customProtocols[i].name);
+                return nullptr;
+            }
+        }
+    }
     HWND parent = (HWND)parentWindow;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 

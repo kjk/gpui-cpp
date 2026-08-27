@@ -9102,3 +9102,9 @@ last converted value.
 version directly, while a fixed runtime now reads the same four-part product
 version from `EmbeddedBrowserWebView.dll` through dynamically resolved
 version.dll entry points; availability behavior is unchanged.
+
+Windows construction now rejects duplicate custom-protocol names at the
+builder boundary, matching Wry's `DuplicateCustomProtocol` error instead of
+registering two filters and dispatching only to the first. The same validation
+also rejects negative counts and non-empty null header, script or protocol
+arrays before any HWND or COM object is created.
