@@ -6,9 +6,7 @@ struct TestGlobalValue {
     static int destroyed;
     int value = 0;
 
-    ~TestGlobalValue() {
-        destroyed++;
-    }
+    ~TestGlobalValue() { destroyed++; }
 };
 
 int TestGlobalValue::destroyed = 0;
@@ -47,8 +45,8 @@ static void BaseInitializationIsIdempotentAndIsolated() {
     utassert(BaseThemeGlobal(&first) != nullptr);
     utassert(BaseThemeGlobal(&second) != nullptr);
     utassert(BaseThemeGlobal(&first) != BaseThemeGlobal(&second));
-    utassert(BaseThemeGlobal(&first)->scrollbar.mode ==
-             ScrollbarMode::Scrolling);
+    utassert(BaseThemeGlobal(&first)
+                 ->scrollbar.mode == ScrollbarMode::Scrolling);
     utassert(BaseThemeGlobal(&first)->scrollbar.motion.enter == 0);
 
     BaseSuppressTextSelection(&first);
@@ -100,14 +98,30 @@ static void UiInitializationIsIdempotentAndIsolated() {
     component::UiGlobalStateInit(&first);
     component::UiGlobalStateInit(&first);
     component::UiGlobalStateInit(&second);
+    // ui/global_state.rs preserves this early legacy initialization point;
+    // BaseInit repeats it later after Root initialization.
+    utassert(AppGlobalGet<BaseGlobalState>(&first) != nullptr);
+    utassert(BaseGlobalStateOf(&second) != nullptr);
     utassert(component::UiSelectionNextDocumentOrder(&first) == 1);
     utassert(component::UiSelectionNextDocumentOrder(&first) == 2);
     utassert(component::UiSelectionNextDocumentOrder(&second) == 1);
+    component::UiSelectionFrameBegin(&first);
+    utassert(component::UiSelectionNextDocumentOrder(&first) == 1);
+
+    component::UiGlobalStateOf(&first)->selectionDocumentOrder = UINT64_MAX;
+    utassert(component::UiSelectionNextDocumentOrder(&first) == UINT64_MAX);
+    utassert(component::UiSelectionNextDocumentOrder(&first) == 0);
 
     EntityId view = {7, 3};
+    EntityId nested = {8, 4};
     component::UiTextViewStatePush(&first, view);
     utassert(component::UiTextViewStateCurrent(&first) == view);
+    component::UiTextViewStatePush(&first, nested);
+    utassert(component::UiTextViewStateCurrent(&first) == nested);
     utassert(!component::UiTextViewStateCurrent(&second).IsValid());
+    component::UiTextViewStatePop(&first);
+    utassert(component::UiTextViewStateCurrent(&first) == view);
+    component::UiTextViewStatePop(&first);
     component::UiTextViewStatePop(&first);
     utassert(!component::UiTextViewStateCurrent(&first).IsValid());
 

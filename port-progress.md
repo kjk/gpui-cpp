@@ -8646,3 +8646,26 @@ suites. UI plot is full: the audit moves to 115 full, 6 partial, 8 adapters
 and 2 exclusions with 132 unresolved partial-module spellings and no
 full-module errors. MSVC release passes 20,560 checks, strict Linux g++ passes
 its 20,546 applicable checks, and the release story gallery compiles.
+
+## UI global state restores the source initialization boundary
+
+The UI-global value already carried the pinned source's two fields and exact
+operations: a per-app LIFO stack of current text-view entities and a document
+order counter that starts at one, resets at the beginning of a selection frame
+and wraps as an unsigned 64-bit integer. Its initialization boundary was the
+remaining structural difference. Rust's `ui::global_state::init` first
+initializes the legacy Base global, then installs `UiGlobalState`; the later
+top-level Base initialization deliberately repeats that idempotent operation.
+The C++ port had deferred Base state until that later call.
+
+`UiGlobalStateInit` now preserves the source order by initializing Base state
+itself before ensuring the UI value. Tests observe that side effect without
+creating the global through an accessor, verify state isolation between apps,
+the frame reset and wrapping order, nested LIFO behavior and harmless popping
+of an empty stack. The remaining lack of a retained `TextViewState` entity
+that consumes the stack belongs to the still-partial UI text module rather
+than to global state itself.
+
+UI global state is full: the audit moves to 116 full, 5 partial, 8 adapters
+and 2 exclusions with 132 unresolved partial-module spellings and no
+full-module errors. MSVC release passes 20,567 checks.
