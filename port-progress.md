@@ -4173,7 +4173,8 @@ right:
   ERROR_FILE_NOT_FOUND. The default is the exe's own path with `.WebView2`
   after it, which is what the loader passes.
 - **`TargetCompatibleBrowserVersion`**, which is a *browser* version
-  (`149.0.4022.49`, the SDK's `CORE_WEBVIEW_TARGET_PRODUCT_VERSION`) and not
+  (`137.0.3296.44`, pinned `webview2-com-sys 0.38.0`'s
+  `CORE_WEBVIEW_TARGET_PRODUCT_VERSION`) and not
   the SDK package's own version, which is the thing it looks like.
 
 ### What is ported, and what is not
@@ -9156,3 +9157,9 @@ Windows backend always registers `DownloadStarting` by default, obtains the
 same versioned interface and marks the default download handled just as the
 pinned closure does; assigning null explicitly still models a public Rust
 attribute record whose handler is `None`.
+
+The handwritten environment-options object now advertises the exact target
+browser version from Wry's locked `webview2-com-sys 0.38.0` bindings:
+`137.0.3296.44`. It had drifted to `149.0.4022.49`, which can make WebView2
+reject an installed runtime that satisfies the pinned crate but not the newer
+SDK accidentally represented by the port.

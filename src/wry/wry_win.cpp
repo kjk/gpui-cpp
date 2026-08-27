@@ -1734,9 +1734,9 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
     HRESULT STDMETHODCALLTYPE get_TargetCompatibleBrowserVersion(LPWSTR* value) override {
         // What the SDK's own options object answers: the browser version its
         // headers were generated against, which the runtime reads as "at
-        // least this" (CORE_WEBVIEW_TARGET_PRODUCT_VERSION for the 1.0.4022.49
-        // package). It is a browser version, not the package's.
-        *value = CoTaskMemDupW(L"149.0.4022.49");
+        // least this" (`CORE_WEBVIEW_TARGET_PRODUCT_VERSION` in pinned
+        // webview2-com-sys 0.38.0). It is a browser version, not the crate's.
+        *value = CoTaskMemDupW(L"137.0.3296.44");
         return *value ? S_OK : E_OUTOFMEMORY;
     }
     HRESULT STDMETHODCALLTYPE put_TargetCompatibleBrowserVersion(LPCWSTR) override { return S_OK; }

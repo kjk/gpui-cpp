@@ -63,8 +63,8 @@ halves are written out instead, and both are in `wry_win.cpp`:
   Two values the SDK's helper supplies and the runtime insists on: a user data
   folder (the exe's path with `.WebView2` after it, when the caller names
   none) and `TargetCompatibleBrowserVersion`, which is a *browser* version
-  (`149.0.4022.49`, `CORE_WEBVIEW_TARGET_PRODUCT_VERSION` for the 1.0.4022.49
-  package) and not the package's own.
+  (`137.0.3296.44`, `CORE_WEBVIEW_TARGET_PRODUCT_VERSION` in Wry's pinned
+  `webview2-com-sys 0.38.0`) and not the crate's own.
 
 ## The macOS backend
 
