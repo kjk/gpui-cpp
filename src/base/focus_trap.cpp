@@ -74,6 +74,11 @@ void FocusTrapApplyPending(Window* win) {
     if (!trap) {
         return;
     }
+    // The open transition owns focus; later renders do not. This matches the
+    // reverted dialog focus-reclaim change at upstream d5821f27.
+    if (trap == win->previousTrap) {
+        return;
+    }
     // Focus that is already inside stays where it is — the trap keeps focus
     // in, it does not send it back to the top on every frame.
     if (FocusTrapActive(win) == trap) {

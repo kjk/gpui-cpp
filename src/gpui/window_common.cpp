@@ -399,8 +399,10 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         win->paint.mouseY = win->inspector.pendingY;
     }
     TextMeasBeginFrame(&win->paint);
-    // Whatever a trap asked for last frame has been settled; this frame's
-    // containers ask again as they build.
+    // Remember whether this frame's trap was already open, then let the
+    // current element tree declare its trap. A newly appearing trap takes
+    // focus; an existing one only constrains Tab while focus remains in it.
+    win->previousTrap = win->pendingTrap;
     win->pendingTrap = 0;
 
     // Whatever the view pointed win->input at is the focused field. Start its

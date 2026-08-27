@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "f6a93f9da331048b689e35b33a52bab8c7c4034e",
+  sha: "d5821f270317754f2a311a0bb148ec32cbb0ced4",
   date: "2026-08-25",
-  subject: "dialog: Reclaim focus when it escapes the topmost modal (#2828)",
+  subject: "Revert \"dialog: Reclaim focus when it escapes the topmost modal (#2828)\"",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

@@ -51,10 +51,10 @@ int FocusTrapTab(Window* win, bool backward);
 // focus where it was.
 bool FocusTrapEnter(Window* win, int trapId, bool backward = false);
 
-// A container says it is open this frame. Rust does this by tracking focus on
-// the trap container as it renders; here the element tree is built before the
-// focusables are known, so the request is armed during the build and settled
-// after the frame's FocusCollect.
+// A container says it is open this frame. Rust focuses a dialog when it opens;
+// here the element tree is built before the focusables are known, so the
+// request is armed during the build and settled after the frame's
+// FocusCollect. A trap that was present in the preceding frame is left alone.
 //
 // `hostFocusId` is the container's own focus id, used only when the trap
 // holds nothing that takes tab: Rust's container tracks focus itself, so a
@@ -63,8 +63,9 @@ bool FocusTrapEnter(Window* win, int trapId, bool backward = false);
 // non-stops wants.
 void FocusTrapArm(Window* win, int trapId, int hostFocusId = 0);
 
-// Settle what FocusTrapArm asked for: if the armed trap does not already hold
-// focus, focus its first element. Called once a frame, after FocusCollect.
+// Settle what FocusTrapArm asked for: if the armed trap is newly visible and
+// does not already hold focus, focus its first element. Called once a frame,
+// after FocusCollect.
 void FocusTrapApplyPending(Window* win);
 
 } // namespace gpui

@@ -87,6 +87,21 @@ static void AnOpenContainerTakesFocusIntoItself() {
     delete win;
 }
 
+// Re-rendering an already-open modal does not reclaim focus that escaped it.
+// Rust reverted the render-time focus call in d5821f27, leaving focus only on
+// the open transition.
+static void AnOpenContainerDoesNotReclaimEscapedFocus() {
+    int ids[] = {1, 11, 12};
+    int traps[] = {0, 7, 7};
+    Window* win = WindowWithFocusables(ids, traps, 3);
+    win->previousTrap = 7;
+    win->focusId = 1;
+    FocusTrapArm(win, 7);
+    FocusTrapApplyPending(win);
+    utassert(win->focusId == 1);
+    delete win;
+}
+
 static void ATrapWithNothingFocusableLeavesFocusAlone() {
     int ids[] = {1, 2};
     int traps[] = {0, 0};
@@ -281,6 +296,7 @@ void TestFocusTrap() {
     TabOutsideEveryTrapNeverWandersIn();
     TwoTrapsDoNotReachEachOther();
     AnOpenContainerTakesFocusIntoItself();
+    AnOpenContainerDoesNotReclaimEscapedFocus();
     ATrapWithNothingFocusableLeavesFocusAlone();
     NothingArmedTouchesNothing();
     ATrapIsNamedNotNumbered();

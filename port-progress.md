@@ -9302,3 +9302,10 @@ escapes the modal. The C++ dialog already had that behavior structurally:
 every visible popup arms its trap during the frame build and
 `FocusTrapApplyPending` returns focus to it after focus collection. No C++
 logic changed for this checkin.
+
+`d5821f27` reverts that render-time focus reclaim. The C++ trap lifecycle now
+distinguishes a newly rendered trap from one that was present in the previous
+frame: the open transition takes focus, while later renders leave escaped
+focus alone. This also makes the existing focus-trap implementation closer to
+Rust's `Root::open_dialog` boundary instead of treating every render as an
+open.

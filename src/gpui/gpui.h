@@ -4614,6 +4614,10 @@ struct Window {
     // The focus trap a container asked to hold focus this frame, settled
     // after the focusables are collected. 0 when nothing asked.
     int pendingTrap = 0;
+    // Which trap was present in the preceding rendered frame. A trap takes
+    // focus when it first appears, but an already-open one does not reclaim
+    // focus that code deliberately moved elsewhere.
+    int previousTrap = 0;
     // The trap container's own focus id, for a trap that holds no tab stop.
     int pendingTrapHost = 0;
     Vec<KeyedSlot> keyed;
