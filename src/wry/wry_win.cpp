@@ -3690,6 +3690,28 @@ static void FreeCookieFields(Cookie* cookie) {
     *cookie = Cookie{};
 }
 
+// `cookie` 0.18.1 exposes `time` 0.3.37 without its `large-dates` feature.
+// Keep WebView2's floating-point expiry inside the same OffsetDateTime range
+// Rust accepts, and model Rust's saturating float-to-integer cast explicitly.
+static constexpr int64_t kTimeMinUnixSeconds = -377705116800LL; // -9999-01-01 00:00:00 UTC
+static constexpr int64_t kTimeMaxUnixSeconds = 253402300799LL;  //  9999-12-31 23:59:59 UTC
+
+static bool CookieExpiryFromDouble(double value, int64_t* result) {
+    if (value != value) { // Rust casts NaN to zero.
+        *result = 0;
+        return true;
+    }
+    // Rust truncates finite floats toward zero before `from_unix_timestamp`
+    // validates them, so the fractional interval next to either endpoint is
+    // still representable.
+    if (value <= (double)kTimeMinUnixSeconds - 1.0 ||
+        value >= (double)kTimeMaxUnixSeconds + 1.0) {
+        return false;
+    }
+    *result = (int64_t)value;
+    return true;
+}
+
 static bool CookieFromWebView2(ICoreWebView2Cookie* source, Cookie* out) {
     if (!source || !out) {
         return false;
@@ -3753,8 +3775,7 @@ static bool CookieFromWebView2(ICoreWebView2Cookie* source, Cookie* out) {
     }
     result.session = isSession != FALSE || expires == -1;
     if (!result.session) {
-        result.hasExpires = true;
-        result.expiresUnixSeconds = (int64_t)expires;
+        result.hasExpires = CookieExpiryFromDouble(expires, &result.expiresUnixSeconds);
     }
     *out = result;
     return true;
@@ -3861,6 +3882,16 @@ static int64_t UnixTimeNow() {
     return (int64_t)(ticks.QuadPart / 10000000ULL) - 11644473600LL;
 }
 
+static int64_t SaturatingCookieExpiry(int64_t now, int64_t duration) {
+    if (duration > 0 && now > kTimeMaxUnixSeconds - duration) {
+        return kTimeMaxUnixSeconds;
+    }
+    if (duration < 0 && now < kTimeMinUnixSeconds - duration) {
+        return kTimeMinUnixSeconds;
+    }
+    return now + duration;
+}
+
 static ICoreWebView2Cookie* CookieToWebView2(ICoreWebView2CookieManager* manager,
                                              const Cookie* source) {
     if (!manager || !source) {
@@ -3874,7 +3905,8 @@ static ICoreWebView2Cookie* CookieToWebView2(ICoreWebView2CookieManager* manager
         return nullptr;
     }
     if (source->hasMaxAge) {
-        hr = cookie->put_Expires((double)(UnixTimeNow() + source->maxAgeSeconds));
+        hr = cookie->put_Expires(
+            (double)SaturatingCookieExpiry(UnixTimeNow(), source->maxAgeSeconds));
     } else if (source->hasExpires) {
         hr = cookie->put_Expires((double)source->expiresUnixSeconds);
     }

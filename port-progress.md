@@ -9163,3 +9163,9 @@ browser version from Wry's locked `webview2-com-sys 0.38.0` bindings:
 `137.0.3296.44`. It had drifted to `149.0.4022.49`, which can make WebView2
 reject an installed runtime that satisfies the pinned crate but not the newer
 SDK accidentally represented by the port.
+
+Windows cookie expiry conversion now preserves the range and overflow behavior
+of Wry's locked `time` 0.3.37 dependency. Native floating-point expiries outside
+the crate's default years -9999 through 9999 are omitted without an undefined
+C++ cast, NaN follows Rust's zero conversion, and adding max-age saturates at
+the same endpoints instead of overflowing `int64_t`.
