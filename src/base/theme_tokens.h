@@ -77,6 +77,7 @@ struct SemanticShadow {
     float blur = 0;
     float spread = 0;
     Rgba color = {};
+    bool inset = false;
 };
 
 struct SemanticShadowTokens {

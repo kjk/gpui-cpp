@@ -12,18 +12,24 @@ namespace gpui {
 // flags, so the shaped-text cache keys mono and proportional runs apart on
 // its own. Both backends decode the same byte.
 enum {
-    kFontWeightMask = 3,
+    kFontWeightMask = 15,
     kFontWeightNormal = 0,
-    kFontWeightSemibold = 1,
-    kFontWeightBold = 2,
-    kFontWeightMedium = 3,
-    kFontMono = 4,
-    kFontUnderline = 8,
-    kFontItalic = 16,
+    kFontWeightThin = 1,
+    kFontWeightExtraLight = 2,
+    kFontWeightLight = 3,
+    kFontWeightExplicitNormal = 4,
+    kFontWeightMedium = 5,
+    kFontWeightSemibold = 6,
+    kFontWeightBold = 7,
+    kFontWeightExtraBold = 8,
+    kFontWeightBlack = 9,
+    kFontMono = 16,
+    kFontUnderline = 32,
+    kFontItalic = 64,
     // text_decoration_line_through(): what a markdown `~~del~~` run and an
     // HTML <s> / <del> paint with. DirectWrite and Pango draw it themselves;
     // Core Text has no strikethrough attribute, so paint_mac draws the rule.
-    kFontStrike = 32
+    kFontStrike = 128
 };
 
 // GPUI lays every line of text into a box phi times the font size — the

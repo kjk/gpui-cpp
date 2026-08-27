@@ -621,6 +621,34 @@ El* El::PadB(float v) {
     style.pad.bottom = v;
     return this;
 }
+El* El::Margin(float v) {
+    style.margin = {v, v, v, v};
+    return this;
+}
+El* El::MarginX(float v) {
+    style.margin.left = style.margin.right = v;
+    return this;
+}
+El* El::MarginY(float v) {
+    style.margin.top = style.margin.bottom = v;
+    return this;
+}
+El* El::MarginL(float v) {
+    style.margin.left = v;
+    return this;
+}
+El* El::MarginR(float v) {
+    style.margin.right = v;
+    return this;
+}
+El* El::MarginT(float v) {
+    style.margin.top = v;
+    return this;
+}
+El* El::MarginB(float v) {
+    style.margin.bottom = v;
+    return this;
+}
 El* El::ItemsCenter() {
     style.display = Display::Flex;
     style.align = FlexAlign::Center;
@@ -1114,6 +1142,9 @@ void StyleApplyFields(Style* into, const Style& over, uint32_t fields) {
     }
     if (fields & StyleFieldPad) {
         into->pad = over.pad;
+    }
+    if (fields & StyleFieldMargin) {
+        into->margin = over.margin;
     }
     if (fields & StyleFieldGap) {
         into->gapX = over.gapX;
@@ -1628,14 +1659,24 @@ int HashClickId(Str s) {
 }
 El* El::Bold() {
     style.fontBold = true;
+    style.fontWeight = (uint16_t)FontWeight::Bold;
     return this;
 }
 El* El::Semibold() {
     style.fontSemibold = true;
+    style.fontWeight = (uint16_t)FontWeight::Semibold;
     return this;
 }
 El* El::Medium() {
     style.fontMedium = true;
+    style.fontWeight = (uint16_t)FontWeight::Medium;
+    return this;
+}
+El* El::Weight(FontWeight value) {
+    style.fontWeight = (uint16_t)value;
+    style.fontBold = value == FontWeight::Bold;
+    style.fontSemibold = value == FontWeight::Semibold;
+    style.fontMedium = value == FontWeight::Medium;
     return this;
 }
 El* El::Mono() {
@@ -1964,11 +2005,23 @@ static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
 
 static uint8_t ElTextWeight(const El* e) {
     uint8_t w = kFontWeightNormal;
-    if (e->style.fontBold) {
+    switch ((FontWeight)e->style.fontWeight) {
+        case FontWeight::Thin: w = kFontWeightThin; break;
+        case FontWeight::ExtraLight: w = kFontWeightExtraLight; break;
+        case FontWeight::Light: w = kFontWeightLight; break;
+        case FontWeight::Normal: w = kFontWeightExplicitNormal; break;
+        case FontWeight::Medium: w = kFontWeightMedium; break;
+        case FontWeight::Semibold: w = kFontWeightSemibold; break;
+        case FontWeight::Bold: w = kFontWeightBold; break;
+        case FontWeight::ExtraBold: w = kFontWeightExtraBold; break;
+        case FontWeight::Black: w = kFontWeightBlack; break;
+        default: break;
+    }
+    if (e->style.fontWeight == 0 && e->style.fontBold) {
         w = kFontWeightBold;
-    } else if (e->style.fontSemibold) {
+    } else if (e->style.fontWeight == 0 && e->style.fontSemibold) {
         w = kFontWeightSemibold;
-    } else if (e->style.fontMedium) {
+    } else if (e->style.fontWeight == 0 && e->style.fontMedium) {
         w = kFontWeightMedium;
     }
     if (e->style.fontMono) {
@@ -2781,6 +2834,10 @@ static taffy::Style ToTaffyStyle(const El* e) {
                  taffy::LengthPercentage::Length(s.pad.right),
                  taffy::LengthPercentage::Length(s.pad.top),
                  taffy::LengthPercentage::Length(s.pad.bottom)};
+    t.margin = {taffy::LengthPercentageAuto::Length(s.margin.left),
+                taffy::LengthPercentageAuto::Length(s.margin.right),
+                taffy::LengthPercentageAuto::Length(s.margin.top),
+                taffy::LengthPercentageAuto::Length(s.margin.bottom)};
     t.gap = {taffy::LengthPercentage::Length(s.gapX),
              taffy::LengthPercentage::Length(s.gapY)};
     // GPUI hands `Style::border_widths` straight to taffy, so a border takes
@@ -3026,12 +3083,14 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     // what makes the string inside it medium, and an accordion's title is one
     // of those. A child that names a weight of its own keeps it; a child that
     // names none takes the one above.
-    if (e->style.fontBold || e->style.fontSemibold || e->style.fontMedium) {
+    if (e->style.fontWeight || e->style.fontBold || e->style.fontSemibold ||
+        e->style.fontMedium) {
         for (El* c = e->first; c; c = c->next) {
-            if (c->style.fontBold || c->style.fontSemibold ||
+            if (c->style.fontWeight || c->style.fontBold || c->style.fontSemibold ||
                 c->style.fontMedium) {
                 continue;
             }
+            c->style.fontWeight = e->style.fontWeight;
             c->style.fontBold = e->style.fontBold;
             c->style.fontSemibold = e->style.fontSemibold;
             c->style.fontMedium = e->style.fontMedium;

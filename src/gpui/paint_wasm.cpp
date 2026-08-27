@@ -553,18 +553,14 @@ EM_JS(int, GpJsTextNew,
     if (text.length === 0) {
         return 0;
     }
-    const mono = (weightBits & 4) !== 0;
-    const italic = (weightBits & 16) !== 0;
-    const underline = (weightBits & 8) !== 0;
-    const strike = (weightBits & 32) !== 0;
+    const mono = (weightBits & 16) !== 0;
+    const italic = (weightBits & 64) !== 0;
+    const underline = (weightBits & 32) !== 0;
+    const strike = (weightBits & 128) !== 0;
     let w = 400;
-    const wb = weightBits & 3;
-    if (wb === 1) {
-        w = 600;
-    } else if (wb === 2) {
-        w = 700;
-    } else if (wb === 3) {
-        w = 500;
+    const wb = weightBits & 15;
+    if (wb > 0) {
+        w = wb * 100;
     } else if (fontSize >= 18) {
         // The 20 px and 24 px DirectWrite formats are created semibold and a
         // run that asks for no weight inherits that. The other backends match

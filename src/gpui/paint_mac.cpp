@@ -634,12 +634,24 @@ struct TextLayout {
 
 static NSFontWeight WeightFor(uint8_t weight, float fontSize) {
     switch (weight & kFontWeightMask) {
-        case kFontWeightBold:
-            return NSFontWeightBold;
-        case kFontWeightSemibold:
-            return NSFontWeightSemibold;
+        case kFontWeightThin:
+            return NSFontWeightThin;
+        case kFontWeightExtraLight:
+            return NSFontWeightUltraLight;
+        case kFontWeightLight:
+            return NSFontWeightLight;
+        case kFontWeightExplicitNormal:
+            return NSFontWeightRegular;
         case kFontWeightMedium:
             return NSFontWeightMedium;
+        case kFontWeightSemibold:
+            return NSFontWeightSemibold;
+        case kFontWeightBold:
+            return NSFontWeightBold;
+        case kFontWeightExtraBold:
+            return NSFontWeightHeavy;
+        case kFontWeightBlack:
+            return NSFontWeightBlack;
         default:
             break;
     }

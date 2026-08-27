@@ -636,12 +636,24 @@ static const char* kMono = "Monospace";
 
 static PangoWeight PangoWeightFor(uint8_t weight, float fontSize) {
     switch (weight & kFontWeightMask) {
-        case kFontWeightBold:
-            return PANGO_WEIGHT_BOLD;
-        case kFontWeightSemibold:
-            return PANGO_WEIGHT_SEMIBOLD;
+        case kFontWeightThin:
+            return PANGO_WEIGHT_THIN;
+        case kFontWeightExtraLight:
+            return PANGO_WEIGHT_ULTRALIGHT;
+        case kFontWeightLight:
+            return PANGO_WEIGHT_LIGHT;
+        case kFontWeightExplicitNormal:
+            return PANGO_WEIGHT_NORMAL;
         case kFontWeightMedium:
             return PANGO_WEIGHT_MEDIUM;
+        case kFontWeightSemibold:
+            return PANGO_WEIGHT_SEMIBOLD;
+        case kFontWeightBold:
+            return PANGO_WEIGHT_BOLD;
+        case kFontWeightExtraBold:
+            return PANGO_WEIGHT_ULTRABOLD;
+        case kFontWeightBlack:
+            return PANGO_WEIGHT_HEAVY;
         default:
             break;
     }

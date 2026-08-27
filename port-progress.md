@@ -8119,3 +8119,36 @@ the audit moves to 102 full, 19 partial, 8 adapters and 2 exclusions with 256
 unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 20,182 checks; wasm passes
 its 19,477 applicable checks. The release story gallery compiles unchanged.
+
+## Base styled restores its source extension surface
+
+The first styled port exposed only `HFlex` and `VFlex`, leaving the source
+`RoleOverride`, `box_shadow` constructor and the entire `StyledExt` contract
+implicit in scattered `El` methods. It also meant three source operations had
+no faithful runtime representation: arbitrary margins, the thin/light/extra
+bold/black font weights, and an explicit normal weight that overrides an
+inherited bold parent.
+
+`styled.h` now owns the source-shaped tagged `RoleOverride`, including
+implicit, presentational and explicit-role resolution; the source
+`box_shadow` value constructor; and a stateless `StyledExt` surface for style
+refinement, flex direction, padding, margins, debug colors/focus, all nine
+font weights and corner radii. The inspector seam publishes the same 21
+method names for reflection without importing Rust's dynamic type system.
+`BoxShadow` remains the shared POD `SemanticShadow` value and now retains the
+source inset bit.
+
+This contract is backed by real runtime behavior rather than aliases. `Style`
+now carries four-sided margins through field refinement and Taffy conversion,
+and carries a numeric `FontWeight` through inheritance and text runs. The
+DirectWrite, Pango, Core Text and Canvas backends map all nine weights while
+preserving the mono, underline, italic and strike flags. Legacy `Bold`,
+`Semibold` and `Medium` builders continue through the same representation.
+
+Tests cover all role override cases, complete shadow construction, the source
+method inventory, style refinement, padding/margins/corners, every weight,
+margin layout and explicit-normal inheritance. Base styled is full: the audit
+moves to 103 full, 18 partial, 8 adapters and 2 exclusions with 252 unresolved
+partial-module spellings and no full-module errors. MSVC debug/release,
+clang-cl release and MSVC ASan pass 20,208 checks; wasm passes its 19,503
+applicable checks. The release story gallery compiles unchanged.

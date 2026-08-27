@@ -1079,12 +1079,24 @@ static IDWriteTextFormat* FontFor(PaintApp* pa, float fontSize,
 
 static DWRITE_FONT_WEIGHT DwriteWeight(uint8_t weight) {
     switch (weight & kFontWeightMask) {
-        case kFontWeightBold:
-            return DWRITE_FONT_WEIGHT_BOLD;
-        case kFontWeightSemibold:
-            return DWRITE_FONT_WEIGHT_SEMI_BOLD;
+        case kFontWeightThin:
+            return DWRITE_FONT_WEIGHT_THIN;
+        case kFontWeightExtraLight:
+            return DWRITE_FONT_WEIGHT_EXTRA_LIGHT;
+        case kFontWeightLight:
+            return DWRITE_FONT_WEIGHT_LIGHT;
+        case kFontWeightExplicitNormal:
+            return DWRITE_FONT_WEIGHT_NORMAL;
         case kFontWeightMedium:
             return DWRITE_FONT_WEIGHT_MEDIUM;
+        case kFontWeightSemibold:
+            return DWRITE_FONT_WEIGHT_SEMI_BOLD;
+        case kFontWeightBold:
+            return DWRITE_FONT_WEIGHT_BOLD;
+        case kFontWeightExtraBold:
+            return DWRITE_FONT_WEIGHT_EXTRA_BOLD;
+        case kFontWeightBlack:
+            return DWRITE_FONT_WEIGHT_BLACK;
         default:
             return DWRITE_FONT_WEIGHT_NORMAL;
     }

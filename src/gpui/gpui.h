@@ -1144,6 +1144,20 @@ struct Corners {
     bool IsUniform() const { return tl == tr && tr == br && br == bl; }
 };
 
+// GPUI's FontWeight values. Zero remains "inherit/unset" on Style; an
+// explicit Normal is distinct so a child can override a bold parent.
+enum class FontWeight : uint16_t {
+    Thin = 100,
+    ExtraLight = 200,
+    Light = 300,
+    Normal = 400,
+    Medium = 500,
+    Semibold = 600,
+    Bold = 700,
+    ExtraBold = 800,
+    Black = 900
+};
+
 // gpui::Anchor. Base's Popup and Positioner import this runtime vocabulary in
 // Rust; keeping it here avoids each component inventing a near-copy.
 enum class Anchor : uint8_t {
@@ -1210,6 +1224,7 @@ struct Style {
     // Zero is unset, and a basis in DIPs is the field above.
     float flexBasisFrac = 0;
     Edges pad = {};
+    Edges margin = {};
     // gap, per axis. `Gap()` sets both, which is what `gap_N` does; a style
     // that names only one — `gap_x_2` — leaves the other where it was.
     float gapX = 0;
@@ -1246,6 +1261,7 @@ struct Style {
     bool fontBold = false;
     bool fontSemibold = false;
     bool fontMedium = false; // font_medium(): DWrite weight 500
+    uint16_t fontWeight = 0;
     bool fontMono = false;   // font_family("Consolas")
     bool underline = false;  // text_decoration_1()
     // text_decoration_line_through(): a ~~del~~ run, an HTML <s> or <del>.
@@ -1881,6 +1897,13 @@ struct El {
     El* PadR(float v);
     El* PadT(float v);
     El* PadB(float v);
+    El* Margin(float v);
+    El* MarginX(float v);
+    El* MarginY(float v);
+    El* MarginL(float v);
+    El* MarginR(float v);
+    El* MarginT(float v);
+    El* MarginB(float v);
     El* ItemsCenter();
     El* ItemsStart();
     El* ItemsEnd();
@@ -2009,6 +2032,7 @@ struct El {
     El* Bold();
     El* Semibold();
     El* Medium();
+    El* Weight(FontWeight value);
     El* Mono();
     El* Underline();
     El* Strikethrough();
@@ -2309,7 +2333,8 @@ enum StyleField : uint32_t {
     StyleFieldBorderT = 1u << 14,
     StyleFieldBorderB = 1u << 15,
     StyleFieldBorderL = 1u << 16,
-    StyleFieldBorderR = 1u << 17
+    StyleFieldBorderR = 1u << 17,
+    StyleFieldMargin = 1u << 18
 };
 
 // StyleRefinement::refine, over the fields `fields` names and no others. The

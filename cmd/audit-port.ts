@@ -50,7 +50,6 @@ const partialBase = new Set([
   "input",
   "resizable",
   "scrollbar",
-  "styled",
   "text_selection",
   "theme_tokens",
   "toast",
@@ -76,7 +75,6 @@ const partialReasons: Record<string, string> = {
   "base/input":
     "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
-  "base/styled": "StyleRefinement is represented by the runtime El builder surface",
   "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",

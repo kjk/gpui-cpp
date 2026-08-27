@@ -202,10 +202,86 @@ static void TwoNonesAreEqual() {
     utassert(a == b);
 }
 
+static void RoleOverridesResolveLikeTheSourceEnum() {
+    AccessibilityRole role = AccessibilityRole::None;
+    utassert(RoleOverride::Implicit().Resolve(AccessibilityRole::Button,
+                                               &role));
+    utassert(role == AccessibilityRole::Button);
+    utassert(!RoleOverride::Presentational().Resolve(
+        AccessibilityRole::Button, &role));
+    utassert(RoleOverride::Explicit(AccessibilityRole::Link)
+                 .Resolve(AccessibilityRole::Button, &role));
+    utassert(role == AccessibilityRole::Link);
+}
+
+static void BoxShadowKeepsEverySourceField() {
+    Hsla color = HslaNew(0.5f, 0.4f, 0.3f, 0.8f);
+    BoxShadow shadow = box_shadow(1, 2, 3, 4, color);
+    utassert(shadow.x == 1 && shadow.y == 2);
+    utassert(shadow.blur == 3 && shadow.spread == 4);
+    utassert(!shadow.inset);
+    utassert(shadow.color.a == HslaToRgba(color).a);
+}
+
+static void StyledExtensionsProjectOntoElements() {
+    Arena* a = ArenaNew();
+    El* row = StyledExt::HFlex(Div(a));
+    utassert(row->style.display == Display::Flex);
+    utassert(row->style.dir == FlexDir::Row);
+    utassert(row->style.align == FlexAlign::Center);
+
+    StyledExt::Paddings(row, Edges::New(1, 2, 3, 4));
+    StyledExt::Margins(row, Edges::New(5, 6, 7, 8));
+    StyledExt::CornerRadii(row, Corners{9, 10, 11, 12});
+    utassert(row->style.pad == Edges::New(1, 2, 3, 4));
+    utassert(row->style.margin == Edges::New(5, 6, 7, 8));
+    utassert(row->style.corners.tl == 9 && row->style.corners.br == 11);
+
+    StyledExt::FontThin(row);
+    utassert(row->style.fontWeight == (uint16_t)FontWeight::Thin);
+    StyledExt::FontExtraLight(row);
+    utassert(row->style.fontWeight == (uint16_t)FontWeight::ExtraLight);
+    StyledExt::FontLight(row);
+    utassert(row->style.fontWeight == (uint16_t)FontWeight::Light);
+    StyledExt::FontNormal(row);
+    utassert(row->style.fontWeight == (uint16_t)FontWeight::Normal);
+    StyledExt::FontMedium(row);
+    StyledExt::FontSemibold(row);
+    StyledExt::FontBold(row);
+    StyledExt::FontExtraBold(row);
+    StyledExt::FontBlack(row);
+    utassert(row->style.fontWeight == (uint16_t)FontWeight::Black);
+
+    int count = 0;
+    const char* const* methods = StyledExtReflectionMethods(&count);
+    utassert(methods && count == 21);
+    utassert(StrSame(Str(methods[0]), StrL("refine_style")));
+    utassert(StrSame(Str(methods[count - 1]), StrL("corner_radii")));
+    ArenaDelete(a);
+}
+
+static void MarginsReachTaffyAndNormalOverridesItsParent() {
+    Arena* a = ArenaNew();
+    El* root = Div(a)->FlexRow()->W(100)->H(50)->Bold();
+    El* child = Div(a)->W(20)->H(10);
+    StyledExt::Margins(child, Edges::New(7, 0, 3, 0));
+    StyledExt::FontNormal(child);
+    root->Child(child);
+    LayoutEl(nullptr, root, 0, 0, 100, 50, 14, Rgba{});
+    utassertnear(child->x, 7.f);
+    utassertnear(child->y, 3.f);
+    utassert(child->style.fontWeight == (uint16_t)FontWeight::Normal);
+    ArenaDelete(a);
+}
+
 void TestStyleEq() {
     TestSuite("style_eq");
     TwoDefaultStylesAreEqual();
     EveryFieldIsCompared();
     ATemplateIsComparedByItsContents();
     TwoNonesAreEqual();
+    RoleOverridesResolveLikeTheSourceEnum();
+    BoxShadowKeepsEverySourceField();
+    StyledExtensionsProjectOntoElements();
+    MarginsReachTaffyAndNormalOverridesItsParent();
 }
