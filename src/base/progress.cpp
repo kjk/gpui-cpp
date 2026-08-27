@@ -9,7 +9,8 @@ float ProgressClampValue(float value) {
     return value > 100 ? 100 : value;
 }
 
-El* Progress::New(Ctx* cx, Str id, float value, bool indeterminate) {
+El* Progress::New(Ctx* cx, Str id, float value, bool indeterminate,
+                  Str accessibilityLabel) {
     Arena* a = cx->a;
     El* e = Div(a)
                 ->Id(id)
@@ -18,6 +19,9 @@ El* Progress::New(Ctx* cx, Str id, float value, bool indeterminate) {
                 ->AriaMaxNumericValue(100);
     if (!indeterminate) {
         e->AriaNumericValue(ProgressClampValue(value));
+    }
+    if (accessibilityLabel.s) {
+        e->AriaLabel(accessibilityLabel);
     }
     return e;
 }

@@ -8,8 +8,26 @@
 #include "base/input.h"
 #include "base/element_ext.h"
 #include "base/text_boundary.h"
+#include "base/theme.h"
 
 namespace gpui {
+
+InputEditorStyle InputEditorStyleResolve(
+    const InputEditorStyle& projected, const SemanticThemeTokens& tokens) {
+    InputEditorStyle out = projected;
+    const ColorTokens& colors = tokens.colors;
+    if (out.foreground.a == 0) out.foreground = colors.foreground;
+    if (out.mutedForeground.a == 0) {
+        out.mutedForeground = colors.mutedForeground;
+    }
+    if (out.background.a == 0) out.background = colors.surface;
+    if (out.border.a == 0) out.border = colors.border;
+    if (out.selection.a == 0) {
+        out.selection = RgbaOpacity(colors.accent, 0.4f);
+    }
+    if (out.caret.a == 0) out.caret = out.foreground;
+    return out;
+}
 
 El* InputBase::New(Ctx* cx, Str id, bool interactive,
                    AccessibilityRole role) {
@@ -166,11 +184,15 @@ El* Input::New(Ctx* cx, InputState* state) {
     return New(cx, state, InputEditorStyle{});
 }
 
-El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
+El* Input::New(Ctx* cx, InputState* state,
+               const InputEditorStyle& projected) {
     Arena* a = cx->a;
     if (!state) {
         return TextEl(a, Str{});
     }
+    BaseTheme theme = base_theme::Theme::Global(cx->app);
+    InputEditorStyle resolved = InputEditorStyleResolve(projected, theme.tokens);
+    const InputEditorStyle& style = resolved;
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
     float lineMult = kInputLineH / font;
     state->lastLineH = kInputLineH;
@@ -335,12 +357,15 @@ El* Textarea::New(Ctx* cx, InputState* state) {
 // The multi-line editor. Rust lays every visible row out through the display
 // map; without one, each logical line is its own run and the selection is
 // clipped to it — which is the same picture as long as nothing soft-wraps.
-El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
-                  bool lineNumbers) {
+El* Textarea::New(Ctx* cx, InputState* state,
+                  const InputEditorStyle& projected, bool lineNumbers) {
     Arena* a = cx->a;
     if (!state) {
         return TextEl(a, Str{});
     }
+    BaseTheme theme = base_theme::Theme::Global(cx->app);
+    InputEditorStyle resolved = InputEditorStyleResolve(projected, theme.tokens);
+    const InputEditorStyle& style = resolved;
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
     // EDITOR_LINE_HEIGHT: a code editor takes its rows from its own font, so
     // a smaller or larger one keeps its leading in proportion. Every other

@@ -32,6 +32,10 @@ HoverCard* HoverCard::CloseDelay(int ms) {
     closeDelayMs = ms;
     return this;
 }
+HoverCard* HoverCard::OnOpenChange(Listener fn) {
+    onOpenChange = fn;
+    return this;
+}
 
 bool HoverCardOpen(Ctx* cx, Str id) {
     return HoverCardIsOpen(cx, id);
@@ -66,6 +70,7 @@ El* HoverCard::IntoEl() {
         PopupPlaceContent(card, anchor, offset);
     }
     return gpui::HoverCard::New(cx, cardId, st)
+        ->OnOpenChange(onOpenChange)
         ->Trigger(trigger)
         ->Content(card)
         ->IntoEl();

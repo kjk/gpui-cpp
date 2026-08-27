@@ -6,11 +6,23 @@
 
 namespace gpui {
 
+enum class OtpEventKind : uint8_t {
+    Change,
+    Complete,
+    Focus,
+    Blur,
+};
+
+struct OtpEvent {
+    OtpEventKind kind = OtpEventKind::Change;
+};
+
 // Rust's OtpState. A one-time-code field is not a text editor: there is no
 // caret to move and no selection, only a run of digits that grows from the end
 // and shrinks with backspace. The value is UTF-8 but every character in it is
 // an ASCII digit, so `len` counts characters and bytes alike.
 struct OtpState {
+    EntityId self = {};
     char value[16] = {};
     int len = 0;
     int length = 6;

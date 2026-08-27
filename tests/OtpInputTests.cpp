@@ -6,6 +6,18 @@
 
 #include "Test.h"
 
+struct OtpRecorder {
+    OtpEventKind events[8] = {};
+    int count = 0;
+
+    static void OnEvent(OtpRecorder* self, Ctx*, const OtpEvent* ev) {
+        if (self->count <
+            (int)(sizeof(self->events) / sizeof(self->events[0]))) {
+            self->events[self->count++] = ev->kind;
+        }
+    }
+};
+
 static void OnlyDigitsAreTaken() {
     OtpState s;
     utassert(OtpEditValue(&s, 0, '1'));
@@ -55,10 +67,40 @@ static void AFullCodeRefusesMore() {
     utassert(s.len == 4);
 }
 
+static void EditingEmitsChangeAndThenComplete() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<OtpState> otp = EntityNewState<OtpState>(&app);
+    Entity<OtpRecorder> recorder = EntityNewState<OtpRecorder>(&app);
+    SubscribeTo(&app, otp, recorder, &OtpRecorder::OnEvent);
+    OtpState* state = otp.Get(&app);
+    state->self = otp.id;
+    state->length = 2;
+    state->focused = true;
+    Ctx cx = {&app, win, nullptr, otp.id};
+    KeyEvent one = {};
+    one.vk = '1';
+    OtpKeyDown(state, &cx, &one);
+    KeyEvent two = {};
+    two.vk = '2';
+    OtpKeyDown(state, &cx, &two);
+
+    OtpRecorder* seen = recorder.Get(&app);
+    utassert(seen->count == 3);
+    utassert(seen->events[0] == OtpEventKind::Change);
+    utassert(seen->events[1] == OtpEventKind::Change);
+    utassert(seen->events[2] == OtpEventKind::Complete);
+
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestOtpInput() {
     TestSuite("otp_input");
     OnlyDigitsAreTaken();
     FullWidthDigitsFoldOntoPlainOnes();
     BackspacePopsTheLastDigit();
     AFullCodeRefusesMore();
+    EditingEmitsChangeAndThenComplete();
 }

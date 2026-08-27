@@ -17,6 +17,10 @@ static void HoverCardSetOpen(HoverCardState* self, Ctx* cx, bool open) {
     }
     self->open = open;
     Notify(cx);
+    if (self->onOpenChange.IsValid()) {
+        HoverCardOpenChangeEvent ev = {open};
+        ListenerCall(cx->app, cx->win, self->onOpenChange, &ev);
+    }
 }
 
 void HoverCardState::OnOpen(HoverCardState* self, Ctx* cx, const TickEvent*) {
@@ -69,13 +73,14 @@ void HoverCardContentHover(HoverCardState* self, Ctx* cx,
 }
 
 void HoverCardSetDelays(Ctx* cx, Entity<HoverCardState> state, int openMs,
-                        int closeMs) {
+                        int closeMs, Listener onOpenChange) {
     HoverCardState* s = state.Get(cx);
     if (!s) {
         return;
     }
     s->openDelayMs = openMs;
     s->closeDelayMs = closeMs;
+    s->onOpenChange = onOpenChange;
 }
 
 bool HoverCardIsOpen(Ctx* cx, Entity<HoverCardState> state) {
@@ -101,6 +106,11 @@ HoverCard* HoverCard::New(Ctx* cx, Str id, Entity<HoverCardState> state) {
     h->cx = cx;
     h->id = id;
     h->state = state.IsValid() ? state : HoverCardStateFor(cx, id);
+    if (HoverCardState* s = h->state.Get(cx)) {
+        // Builder callbacks are frame-supplied. Omission on a later frame
+        // clears one that is no longer rendered, just like Rust's sync(None).
+        s->onOpenChange = {};
+    }
     h->root = Div(a)->Id(id);
     return h;
 }
@@ -147,6 +157,13 @@ HoverCard* HoverCard::Content(El* content) {
         content->OnHover(ListenTo(state, &HoverCardContentHover));
     }
     root->Child(content);
+    return this;
+}
+
+HoverCard* HoverCard::OnOpenChange(Listener fn) {
+    if (HoverCardState* s = state.Get(cx)) {
+        s->onOpenChange = fn;
+    }
     return this;
 }
 

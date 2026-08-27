@@ -342,6 +342,10 @@ Button* Button::Tooltip(Str s) {
     tooltip = s;
     return this;
 }
+Button* Button::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 Button* Button::AccessibilityId(Str s) {
     accessibilityId = s;
     return this;
@@ -684,7 +688,9 @@ El* Button::IntoEl() {
         e->AriaToggled(accessibilityToggled ? AccessibilityToggled::True
                                            : AccessibilityToggled::False);
     }
-    if (label.s) {
+    if (accessibilityLabel.s) {
+        e->AriaLabel(accessibilityLabel);
+    } else if (label.s) {
         e->AriaLabel(label);
     } else if (tooltip.s) {
         // Icon-only buttons use their tooltip as the accessible name, the

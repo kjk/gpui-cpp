@@ -856,6 +856,9 @@ void ThemeSyncBase(App* app) {
     }
     const Theme& ui = ThemeNow(app);
     BaseTheme base;
+    base.appearance = ui.mode == ThemeMode::Dark
+                          ? BaseThemeAppearance::Dark
+                          : BaseThemeAppearance::Light;
     base.tokens = ThemeSemanticTokens(ui, ThemeFontSize(app));
     base.scrollbar.mode = ScrollbarModeNow(app);
     base.scrollbar.motion = ScrollbarMotionFor(base.scrollbar.mode);
@@ -882,6 +885,8 @@ void ThemeSyncBase(App* app) {
 
     base.resizable.handle = ui.border;
     base.resizable.activeHandle = ui.dragBorder;
+    base.resizable.hasHandle = true;
+    base.resizable.hasActiveHandle = true;
     BaseThemeSet(app, base);
 }
 

@@ -252,7 +252,7 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
     // adds opposite it.
     El* headRow =
         Div(a)->FlexRow()->W(kFill)->Gap(16)->ItemsStart()->JustifyBetween();
-    El* head = Div(a)->FlexCol()->Gap(4);
+    El* head = Div(a)->FlexCol()->MinW(0)->Flex1()->Gap(4);
     head->Child(StoryTxt(cx, StoryDup(cx, title), 16, th.mutedFg)
                     ->Medium()
                     ->LineHeight(1.f));

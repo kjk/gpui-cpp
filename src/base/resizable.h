@@ -36,6 +36,11 @@ void ResizableAdjustToContainer(float* sizes, int n, float containerSize);
 const float kResizeHandleSize = 1.f;
 const float kResizeHandlePadding = 4.f;
 
+namespace base_theme {
+struct Theme;
+}
+Rgba ResizableHandleColor(const base_theme::Theme& theme, bool active);
+
 // ResizeHandleState. Rust's resize handle is an Element of its own and keeps
 // this in `window.with_element_state`: one flag, set from the press inside
 // its bounds and cleared by any release. It is the handle's own and not the
@@ -171,8 +176,8 @@ float ResizablePanelSize(const ResizableState* s, int ix, float declared);
 // `resizable_panel()` children. The group owns the panels' sizes, the handle
 // between each pair and the drag that moves it. Rust keeps the whole of this
 // in `crates/base` and has no themed counterpart at all, because the only
-// thing a theme has to say about it is what colour the hairline is — which is
-// `HandleColors` here, since nothing in this layer may read a theme.
+// thing a theme has to say about it is what colour the hairline is. Explicit
+// `HandleColors` win; otherwise Base resolves border/ring semantic tokens.
 struct ResizablePanelGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;

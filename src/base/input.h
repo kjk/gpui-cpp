@@ -12,6 +12,8 @@
 
 namespace gpui {
 
+struct SemanticThemeTokens;
+
 // `InputBase::new(id)`: the frame is a stateful element, so its click and
 // focus ids are the fold of the name down from the root rather than a hash of
 // the one name. `interactive` is Rust's `.when(!disabled, ..)` around the
@@ -27,10 +29,10 @@ struct InputBase {
 // and the caret; what they look like is pushed in by the themed layer above
 // it, the way Rust calls state.set_editor_style(...) before rendering.
 struct InputEditorStyle {
-    Rgba foreground = Rgb(0x17, 0x17, 0x17);
-    Rgba mutedForeground = Rgb(0x73, 0x73, 0x73);
-    Rgba caret = Rgb(0x17, 0x17, 0x17);
-    Rgba selection = Rgba8(0x6b, 0xb3, 0xf0, 90);
+    Rgba foreground = {0, 0, 0, 0};
+    Rgba mutedForeground = {0, 0, 0, 0};
+    Rgba caret = {0, 0, 0, 0};
+    Rgba selection = {0, 0, 0, 0};
     float fontSize = 12;
     // Editor::font_family(cx.theme().mono_font_family): a code editor draws
     // its rows, and its gutter, in the theme's monospace family.
@@ -66,6 +68,7 @@ struct InputEditorStyle {
     // down. Transparent means the rows show through, which is what a field
     // that never suggests anything gets.
     Rgba background = {0, 0, 0, 0};
+    Rgba border = {0, 0, 0, 0};
     // The colour a symbol takes while the shortcut modifier is held over it
     // and the definition provider has somewhere to go. Rust reads `link_text`
     // out of the *highlight* theme; this tree's scanner palette has no such
@@ -83,6 +86,11 @@ struct InputEditorStyle {
     // tab size.
     int indentWidth = 4;
 };
+
+// Fill only colours the caller left unset. Keeping the projected style as
+// the input to every call lets a palette change take effect immediately.
+InputEditorStyle InputEditorStyleResolve(const InputEditorStyle& projected,
+                                         const SemanticThemeTokens& tokens);
 
 struct Input {
     static El* New(Ctx* cx, InputState* state);

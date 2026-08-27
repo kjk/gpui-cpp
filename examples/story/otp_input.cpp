@@ -10,10 +10,30 @@ struct OtpInputStory {
     Entity<OtpState> oneGroup = {};
     Entity<OtpState> threeGroups = {};
     Entity<OtpState> custom = {};
+    Subscription otpSubscription = {};
+    char otpValue[17] = {};
     bool seeded = false;
 
     static El* Render(OtpInputStory* self, Ctx* cx);
+    static void OnOtp(OtpInputStory* self, Ctx* cx, const OtpEvent* ev);
 };
+
+void OtpInputStory::OnOtp(OtpInputStory* self, Ctx* cx,
+                          const OtpEvent* ev) {
+    if (!self || ev->kind != OtpEventKind::Complete) {
+        return;
+    }
+    OtpState* state = self->otp.Get(cx);
+    if (!state) {
+        return;
+    }
+    int n = state->len < (int)sizeof(self->otpValue) - 1
+                ? state->len
+                : (int)sizeof(self->otpValue) - 1;
+    memcpy(self->otpValue, state->value, n);
+    self->otpValue[n] = 0;
+    Notify(cx);
+}
 
 static Entity<OtpState> SeedOtp(Ctx* cx, const char* value, int slots) {
     Entity<OtpState> e = EntityNewState<OtpState>(cx->app);
@@ -49,6 +69,7 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
         self->oneGroup = SeedOtp(cx, "123456", 6);
         self->threeGroups = SeedOtp(cx, "012345", 6);
         self->custom = SeedOtp(cx, "654321", 4);
+        self->otpSubscription = Subscribe(cx, self->otp, &OtpInputStory::OnOtp);
     }
     // The Options dropdown flips masking on every field at once, which is one
     // write per state now rather than a flag the elements read.
@@ -69,6 +90,10 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
     StorySectionAdd(def, component::OtpInput::New(cx, StrL("otp"), self->otp)
                              ->WithSize(self->toolbar.size)
                              ->IntoEl());
+    if (self->otpValue[0]) {
+        StorySectionAdd(def,
+                        TextEl(a, StoryFmt(cx, "Value: %s", self->otpValue)));
+    }
     page->Child(def);
 
     El* group = StorySection(cx, "Grouping",

@@ -22,12 +22,19 @@ struct HoverCardState {
     bool hoveringContent = false;
     int openDelayMs = 600;
     int closeDelayMs = 300;
+    // The element that supplied this callback is discarded before either
+    // delayed transition lands, so the retained state owns the listener.
+    Listener onOpenChange = {};
     // The armed timer. Cancelling it is what Rust's epoch counter does: a
     // countdown that has been superseded must not fire.
     int timer = 0;
 
     static void OnOpen(HoverCardState* self, Ctx* cx, const TickEvent* ev);
     static void OnClose(HoverCardState* self, Ctx* cx, const TickEvent* ev);
+};
+
+struct HoverCardOpenChangeEvent {
+    bool open = false;
 };
 
 // The trigger and the content each report their own hovering, and the state
@@ -37,7 +44,7 @@ void HoverCardContentHover(HoverCardState* self, Ctx* cx, const HoverEvent* ev);
 
 // `sync`: the delays are the caller's every frame, not just the first one.
 void HoverCardSetDelays(Ctx* cx, Entity<HoverCardState> state, int openMs,
-                        int closeMs);
+                        int closeMs, Listener onOpenChange = {});
 bool HoverCardIsOpen(Ctx* cx, Entity<HoverCardState> state);
 // The state behind one card id — `window.use_keyed_state(id, ..)`. One place
 // keys it, so a skin that wants the delays and the card itself agree on which
@@ -72,6 +79,7 @@ struct HoverCard {
     bool IsOpen() const;
     HoverCard* Trigger(El* trigger);
     HoverCard* Content(El* content);
+    HoverCard* OnOpenChange(Listener fn);
     El* IntoEl();
 };
 } // namespace gpui

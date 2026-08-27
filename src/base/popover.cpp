@@ -1,7 +1,24 @@
 #include "base/popover.h"
+#include "base/actions.h"
 #include "base/global_state.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
+
+void PopoverInitKeys() {
+    CancelInitKeys("Popover");
+    static uint32_t generation = UINT32_MAX;
+    uint32_t current = KeymapGeneration();
+    if (generation == current) {
+        return;
+    }
+    generation = current;
+    KeyBinding bindings[] = {
+        {"enter", action::Confirm(), "Popover"},
+        {"space", action::Confirm(), "Popover"},
+    };
+    KeymapBind(bindings, dimof(bindings));
+}
 
 static void PopoverReportOpenChange(PopoverState* s, Ctx* cx) {
     if (!s || !s->onOpenChange.IsValid()) {
@@ -74,6 +91,15 @@ void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
 void PopoverToggle(PopoverState* self, Ctx* cx, const MouseDownEvent* ev,
                    intptr_t button) {
     if (ev->button != (MouseButton)button) {
+        return;
+    }
+    PopoverSetOpenFocused(self, cx, !self->open);
+    Notify(cx);
+}
+
+void PopoverConfirm(PopoverState* self, Ctx* cx, const ActionEvent* ev) {
+    if (!self || ev->action != action::Confirm()) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
         return;
     }
     PopoverSetOpenFocused(self, cx, !self->open);
@@ -207,6 +233,12 @@ El* Popover::IntoEl() {
     }
     // popover.rs builds Popup::new(id, trigger).anchor(anchor), rather than
     // duplicating its capture and positioning lifecycle.
-    return Popup::New(cx, id, trigger, anchor)->Content(content)->IntoEl();
+    El* root = Popup::New(cx, id, trigger, anchor)->Content(content)->IntoEl();
+    if (state.IsValid()) {
+        PopoverInitKeys();
+        root->KeyContext(StrL("Popover"))
+            ->OnAction(action::Confirm(), ListenTo(state, &PopoverConfirm));
+    }
+    return root;
 }
 } // namespace gpui

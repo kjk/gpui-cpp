@@ -13,6 +13,11 @@ namespace gpui {
 
 namespace base_theme {
 
+enum class ThemeAppearance : uint8_t {
+    Light,
+    Dark,
+};
+
 struct ScrollbarTheme {
     ScrollbarMode mode = ScrollbarMode::Scrolling;
     ScrollbarMotion motion = {};
@@ -40,11 +45,14 @@ struct ScrollbarTheme {
 };
 
 struct ResizableTheme {
-    Rgba handle = {};
-    Rgba activeHandle = {};
+    Rgba handle = {0, 0, 0, 0};
+    Rgba activeHandle = {0, 0, 0, 0};
+    bool hasHandle = false;
+    bool hasActiveHandle = false;
 };
 
 struct Theme {
+    ThemeAppearance appearance = ThemeAppearance::Light;
     SemanticThemeTokens tokens;
     ScrollbarTheme scrollbar = {};
     ResizableTheme resizable = {};
@@ -62,6 +70,7 @@ struct Theme {
 // globals share one type and one state.
 using BaseScrollbarTheme = base_theme::ScrollbarTheme;
 using BaseResizableTheme = base_theme::ResizableTheme;
+using BaseThemeAppearance = base_theme::ThemeAppearance;
 using BaseTheme = base_theme::Theme;
 
 BaseTheme* BaseThemeGlobal(App* app);

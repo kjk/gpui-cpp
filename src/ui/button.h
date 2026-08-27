@@ -146,6 +146,7 @@ struct Button {
     bool hasCustom = false;
     Rgba custom = {};
     Str tooltip = {};
+    Str accessibilityLabel = {};
     Str accessibilityId = {};
     AccessibilityRole accessibilityRole = AccessibilityRole::None;
     bool hasAccessibilityRole = false;
@@ -218,6 +219,7 @@ struct Button {
     Button* TabStop(bool v);
     Button* FocusRing(bool v);
     Button* Tooltip(Str s);
+    Button* AccessibilityLabel(Str s);
     Button* AccessibilityId(Str s);
     Button* Role(AccessibilityRole role);
     // Accessibility state only; Selected controls the visual state.

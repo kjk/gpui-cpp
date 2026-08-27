@@ -2,6 +2,14 @@
 
 namespace gpui {
 
+static void OtpEmit(OtpState* s, App* app, Window* win, OtpEventKind kind) {
+    if (!s || !s->self.IsValid()) {
+        return;
+    }
+    OtpEvent ev = {kind};
+    EntityEmit(app, win, s->self, &ev);
+}
+
 char OtpDigitChar(uint32_t c) {
     if (c >= '0' && c <= '9') {
         return (char)c;
@@ -52,6 +60,7 @@ void OtpFocus(OtpState* s, App* app, Window* win) {
     }
     s->focused = true;
     BlinkStart(app, win, &s->blink);
+    OtpEmit(s, app, win, OtpEventKind::Focus);
 }
 
 void OtpBlur(OtpState* s, App* app, Window* win) {
@@ -60,6 +69,7 @@ void OtpBlur(OtpState* s, App* app, Window* win) {
     }
     s->focused = false;
     BlinkStop(app, win, &s->blink);
+    OtpEmit(s, app, win, OtpEventKind::Blur);
 }
 
 bool OtpCursorVisible(OtpState* s, App* app) {
@@ -87,6 +97,10 @@ void OtpKeyDown(OtpState* self, Ctx* cx, const KeyEvent* ev) {
     // starts over from full, the way typing into a text field does.
     const_cast<KeyEvent*>(ev)->propagate = false;
     BlinkPause(cx->app, cx->win, &self->blink);
+    OtpEmit(self, cx->app, cx->win, OtpEventKind::Change);
+    if (self->len == self->length) {
+        OtpEmit(self, cx->app, cx->win, OtpEventKind::Complete);
+    }
     Notify(cx);
 }
 
@@ -101,6 +115,9 @@ void OtpClick(OtpState* self, Ctx* cx, const ClickEvent*) {
 El* OtpInput::New(Ctx* cx, Str id, Entity<OtpState> state) {
     El* e = New(cx, id);
     OtpState* s = state.Get(cx);
+    if (s) {
+        s->self = state.id;
+    }
     if (!s || !id.s) {
         return e;
     }

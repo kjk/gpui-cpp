@@ -9,7 +9,8 @@ namespace gpui {
 // focus; and it is what a cell inside a clickable row can afford to be now
 // that a click bubbles out of the rect it landed on.
 
-El* Table::New(Ctx* cx, Str id, int rowCount, int columnCount) {
+El* Table::New(Ctx* cx, Str id, int rowCount, int columnCount,
+               Str accessibilityLabel) {
     Arena* a = cx->a;
     El* e = Div(a)->PathClick(id)->Role(AccessibilityRole::Table);
     if (rowCount >= 0) {
@@ -17,6 +18,9 @@ El* Table::New(Ctx* cx, Str id, int rowCount, int columnCount) {
     }
     if (columnCount >= 0) {
         e->AriaColumnCount(columnCount);
+    }
+    if (accessibilityLabel.s) {
+        e->AriaLabel(accessibilityLabel);
     }
     return e;
 }

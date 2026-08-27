@@ -9342,3 +9342,17 @@ a 48 by 12 child.
 Toggle roots: centered on both axes with relative 1.0 line height. Their
 ported geometry regressions use the same 120 by 40 root and 48 by 12 ordinary
 child as upstream and verify both centers after real Taffy layout.
+
+`476d9770` introduces `gpui-shell` and also tightens the existing Base/UI
+surface. The existing-module changes are ported: delayed HoverCard transitions
+announce from retained state; OTP has Change/Complete/Focus/Blur events and
+the story reports a completed code; Popover binds Enter/Space to Confirm and
+announces only real transitions; Progress, Table and themed Button accept
+explicit accessible names; input/editor, scrollbar and resizable defaults
+resolve from current semantic theme tokens; Base records light/dark
+appearance; sized resizable groups bind their cross axis; and StorySection's
+heading column can shrink. The new `crates/shell`, Shell story and JavaScript
+examples are not ported: QuickJS is a third-party runtime, and the shell's
+async filesystem/process/network stack crosses this tree's explicit runtime
+and network exclusions. MSVC release tests pass 20,949 checks, and the release
+story and showcase targets build with `/W4 /WX`.

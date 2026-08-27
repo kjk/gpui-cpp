@@ -83,7 +83,8 @@ static ResolvedScrollbarThumb ResolveThumb(
 }
 
 static void ResolveScrollbarStyles(El* box, const ScrollbarStyles& local,
-                                   const ScrollbarStyles& global) {
+                                   const ScrollbarStyles& global,
+                                   Rgba foreground) {
     box->scrollThemeSet = true;
     box->scrollTrack = ResolveTrackBackground(
         local.track, local.track, global.track, global.track);
@@ -102,8 +103,8 @@ static void ResolveScrollbarStyles(El* box, const ScrollbarStyles& local,
                                 : (global.track.hasWidth ? global.track.width
                                                          : 16.f);
 
-    Background normalDefault(Rgba8(0, 0, 0, 89));
-    Background activeDefault(Rgba8(0, 0, 0, 140));
+    Background normalDefault(RgbaOpacity(foreground, 0.35f));
+    Background activeDefault(RgbaOpacity(foreground, 0.55f));
     ResolvedScrollbarThumb normal =
         ResolveThumb(local.thumb, local.thumb, global.thumb, global.thumb,
                      normalDefault, 6, 4, 0);
@@ -131,12 +132,10 @@ static void ResolveScrollbarStyles(El* box, const ScrollbarStyles& local,
 }
 
 static El* ApplyScrollbarTheme(Ctx* cx, El* box) {
-    const BaseTheme* theme = BaseThemeGlobal(cx->app);
-    if (!theme) {
-        return box;
-    }
-    box->scrollMotion = theme->scrollbar.motion;
-    ResolveScrollbarStyles(box, ScrollbarStyles{}, theme->scrollbar.styles);
+    BaseTheme theme = base_theme::Theme::Global(cx->app);
+    box->scrollMotion = theme.scrollbar.motion;
+    ResolveScrollbarStyles(box, ScrollbarStyles{}, theme.scrollbar.styles,
+                           theme.tokens.colors.foreground);
     return box;
 }
 
@@ -346,13 +345,10 @@ El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY,
 El* Scrollbar::ApplyStyles(Ctx* cx, El* element,
                            const ScrollbarStyles& styles) {
     El* box = element ? element : Div(cx->a);
-    const BaseTheme* theme = BaseThemeGlobal(cx->app);
-    ScrollbarStyles global = theme ? theme->scrollbar.styles
-                                   : ScrollbarStyles{};
-    ResolveScrollbarStyles(box, styles, global);
-    if (theme) {
-        box->scrollMotion = theme->scrollbar.motion;
-    }
+    BaseTheme theme = base_theme::Theme::Global(cx->app);
+    ResolveScrollbarStyles(box, styles, theme.scrollbar.styles,
+                           theme.tokens.colors.foreground);
+    box->scrollMotion = theme.scrollbar.motion;
     return box;
 }
 

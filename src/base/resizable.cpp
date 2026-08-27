@@ -3,6 +3,16 @@
 
 namespace gpui {
 
+Rgba ResizableHandleColor(const base_theme::Theme& theme, bool active) {
+    if (active) {
+        return theme.resizable.hasActiveHandle
+                   ? theme.resizable.activeHandle
+                   : theme.tokens.colors.ring;
+    }
+    return theme.resizable.hasHandle ? theme.resizable.handle
+                                     : theme.tokens.colors.border;
+}
+
 template <typename T>
 static void ResizableVecRemove(Vec<T>* values, int ix) {
     if (!values || ix < 0 || ix >= values->len) return;
@@ -278,10 +288,9 @@ ResizablePanelGroup* ResizablePanelGroup::New(
     r->cx = cx;
     r->id = id;
     r->groupAxis = axis;
-    if (const BaseTheme* theme = BaseThemeGlobal(cx->app)) {
-        r->handleColor = theme->resizable.handle;
-        r->handleDragColor = theme->resizable.activeHandle;
-    }
+    BaseTheme theme = base_theme::Theme::Global(cx->app);
+    r->handleColor = ResizableHandleColor(theme, false);
+    r->handleDragColor = ResizableHandleColor(theme, true);
     // `self.state.unwrap_or(window.use_keyed_state(self.id, .., ResizableState
     // ::default()))`: a group only needs the caller to hold its state when the
     // caller means to drive it -- the programmatic story resizes panels from
@@ -335,10 +344,9 @@ ResizeHandle* ResizeHandle::New(Ctx* cx, Str id, Axis axis) {
     out->cx = cx;
     out->id = id;
     out->axis = axis;
-    if (const BaseTheme* theme = BaseThemeGlobal(cx->app)) {
-        out->color = theme->resizable.handle;
-        out->activeColor = theme->resizable.activeHandle;
-    }
+    BaseTheme theme = base_theme::Theme::Global(cx->app);
+    out->color = ResizableHandleColor(theme, false);
+    out->activeColor = ResizableHandleColor(theme, true);
     return out;
 }
 

@@ -92,6 +92,21 @@ static void TheTreeSkipsVisualBoxesButKeepsSemanticParents() {
     FreeAccessibilityFrame(&f);
 }
 
+static void StyledButtonsCanReplaceTheirVisibleAccessibleName() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    component::Init(&f.app);
+    El* button = component::Button::New(&f.cx, StrL("row-action"))
+                     ->Label(StrL("Save"))
+                     ->AccessibilityLabel(StrL("Save the current document"))
+                     ->IntoEl();
+    AccessibilityCollect(button, &f.win->accessibility);
+    const AccessibilityNode* node =
+        RoleNode(f.win->accessibility, AccessibilityRole::Button);
+    utassert(node &&
+             base::StrEq(node->info.label, "Save the current document"));
+    FreeAccessibilityFrame(&f);
+}
+
 static void ExplicitAriaFieldsSurviveCollection() {
     AccessibilityFrame f = NewAccessibilityFrame();
     El* node = Div(f.arena)
@@ -282,7 +297,8 @@ static void BaseControlsProjectTheirControlledState() {
                                       StrL("Airplane mode"), 3, false,
                                       FocusHandle{-88}))
                    ->Child(Toggle::New(&f.cx, StrL("toggle"), true))
-                   ->Child(Progress::New(&f.cx, StrL("done"), 120))
+                   ->Child(Progress::New(&f.cx, StrL("done"), 120, false,
+                                        StrL("Downloading release")))
                    ->Child(Progress::New(&f.cx, StrL("busy"), 40, true))
                    ->Child(Tab::New(&f.cx, StrL("account"), false, {}, true,
                                     StrL("Account"), 2, 5));
@@ -311,6 +327,7 @@ static void BaseControlsProjectTheirControlledState() {
     utassert(toggle && toggle->info.toggled == AccessibilityToggled::True);
     utassert(done && done->info.hasNumericValue &&
              TestNear(done->info.numericValue, 100));
+    utassert(done && base::StrEq(done->info.label, "Downloading release"));
     utassert(busy && !busy->info.hasNumericValue);
     utassert(tab && tab->info.hasSelected && tab->info.selected);
     if (tab) {
@@ -322,7 +339,8 @@ static void BaseControlsProjectTheirControlledState() {
 
 static void TablesKeepCountsAndOneBasedIndices() {
     AccessibilityFrame f = NewAccessibilityFrame();
-    El* table = Table::New(&f.cx, StrL("table"), 12, 4);
+    El* table = Table::New(&f.cx, StrL("table"), 12, 4,
+                           StrL("Open positions"));
     El* body = TableBody::New(&f.cx, StrL("body"));
     El* row = TableRow::New(&f.cx, StrL("row"), 3);
     row->Child(TableCell::New(&f.cx, StrL("cell"), 2)
@@ -344,6 +362,7 @@ static void TablesKeepCountsAndOneBasedIndices() {
         RoleNode(f.win->accessibility, AccessibilityRole::Cell);
     utassert(tableNode && tableNode->info.rowCount == 12 &&
              tableNode->info.columnCount == 4);
+    utassert(tableNode && base::StrEq(tableNode->info.label, "Open positions"));
     utassert(bodyNode && bodyNode->parent == 0);
     utassert(rowNode && rowNode->parent == 1 && rowNode->info.rowIndex == 3);
     utassert(cellNode && cellNode->parent == 2 &&
@@ -421,6 +440,7 @@ static void EditableTextOffersSetValueAndReadOnlyTextDoesNot() {
 void TestAccessibility() {
     TestSuite("accessibility");
     TheTreeSkipsVisualBoxesButKeepsSemanticParents();
+    StyledButtonsCanReplaceTheirVisibleAccessibleName();
     ExplicitAriaFieldsSurviveCollection();
     BaseControlsProjectTheirControlledState();
     TablesKeepCountsAndOneBasedIndices();

@@ -49,6 +49,8 @@ struct PopoverState {
     Listener onDismiss = {};
 };
 
+void PopoverInitKeys();
+
 // Open or close, doing what Rust's `toggle_open` does around it: the focus
 // goes into the popover (or into whatever it tracks) and comes back out to
 // where it was. A widget that is a popover in all but name — a select, a
@@ -61,6 +63,7 @@ void PopoverSetOpen(Ctx* cx, Entity<PopoverState> state, bool open);
 // press it is under, so the filter Rust does at registration is done here.
 void PopoverToggle(PopoverState* self, Ctx* cx, const MouseDownEvent* ev,
                    intptr_t button);
+void PopoverConfirm(PopoverState* self, Ctx* cx, const ActionEvent* ev);
 void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent* ev);
 void PopoverDismissOnMouseDown(PopoverState* self, Ctx* cx,
                                const MouseDownEvent* ev);

@@ -19,7 +19,7 @@ void BaseInit(App* app) {
 
     // The modules whose escape binding is otherwise installed lazily by the
     // first rendered instance. Rust installs these during crate init.
-    CancelInitKeys("Popover");
+    PopoverInitKeys();
     SheetInitKeys();
     CancelInitKeys("ColorPicker");
 }

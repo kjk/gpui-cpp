@@ -9,6 +9,17 @@
 
 #include "Test.h"
 
+struct HoverCardRecorder {
+    int changes = 0;
+    bool lastOpen = false;
+
+    static void OnOpenChange(HoverCardRecorder* self, Ctx*,
+                             const HoverCardOpenChangeEvent* ev) {
+        self->changes++;
+        self->lastOpen = ev->open;
+    }
+};
+
 // window.use_keyed_state(self.id, ..): the card makes its own state, so a
 // page declares no field for one. Two cards are two states, and the same card
 // asked twice is one — which is the whole point, since the tree that armed a
@@ -68,8 +79,33 @@ static void ACloseThatLandsOnAHoveredCardDoesNothing() {
     EntityDropAll(&app);
 }
 
+static void DelayedTransitionsAnnounceWhenTheyLand() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {&app, win, nullptr, {}};
+    Entity<HoverCardState> card = EntityNewState<HoverCardState>(&app);
+    Entity<HoverCardRecorder> recorder =
+        EntityNewState<HoverCardRecorder>(&app);
+    cx.self = recorder.id;
+    HoverCardSetDelays(&cx, card, 10, 10,
+                       Listen(&cx, &HoverCardRecorder::OnOpenChange));
+
+    HoverCardState* state = card.Get(&cx);
+    HoverCardState::OnOpen(state, &cx, nullptr);
+    HoverCardState::OnOpen(state, &cx, nullptr);
+    HoverCardState::OnClose(state, &cx, nullptr);
+    HoverCardRecorder* seen = recorder.Get(&app);
+    utassert(seen->changes == 2);
+    utassert(!seen->lastOpen);
+
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestHoverCard() {
     TestSuite("hover_card");
     EveryCardIdIsItsOwnStateAndKeepsIt();
     ACloseThatLandsOnAHoveredCardDoesNothing();
+    DelayedTransitionsAnnounceWhenTheyLand();
 }

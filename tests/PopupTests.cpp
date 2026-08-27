@@ -324,6 +324,26 @@ static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
         ->Content(fixed);
     utassert(!fixed->onMouseDownOut.IsValid());
 
+    // Enter and Space are Confirm in the Popover context. The action lives on
+    // Popup's wrapper, so a focused trigger finds it along its focus path.
+    El* keyboardRoot =
+        gpui::Popover::New(&cx, StrL("keyboard"), state)
+            ->OnOpenChange(Listen(&cx, &PopoverRecorder::OnOpenChange))
+            ->Trigger(Div(a)->W(50)->H(20))
+            ->Content(Div(a)->W(100)->H(100))
+            ->IntoEl();
+    utassert(keyboardRoot->style.keyContext ==
+             KeyContextOf(StrL("Popover")));
+    ActionSlot* confirm = keyboardRoot->actions;
+    while (confirm && confirm->action != action::Confirm()) {
+        confirm = confirm->next;
+    }
+    utassert(confirm && confirm->fn.IsValid());
+    ActionEvent ev = {action::Confirm()};
+    ListenerCall(&app, win, confirm->fn, &ev);
+    utassert(PopoverIsOpen(&cx, state));
+    utassert(seen->changes == 5 && seen->lastOpen);
+
     win->paint.hits.Reset();
     AppGlobalClear(&app);
     WindowKeyedFree(win);

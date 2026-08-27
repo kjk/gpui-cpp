@@ -103,6 +103,9 @@ static void StyledThemeChangesProjectIntoBase() {
     utassert(a->scrollbar.styles.thumb.hasBackground);
     utassert(a->scrollbar.styles.thumb.hasRadius);
     utassertnear(a->scrollbar.styles.thumb.radius, 0.f);
+    utassert(a->appearance == BaseThemeAppearance::Dark);
+    utassert(b->appearance == BaseThemeAppearance::Light);
+    utassert(a->resizable.hasHandle && a->resizable.hasActiveHandle);
     utassert(SameColor(a->resizable.handle, ThemeNow(&first).border));
     utassert(SameColor(a->resizable.activeHandle,
                        ThemeNow(&first).dragBorder));
@@ -125,6 +128,55 @@ static void StyledThemeChangesProjectIntoBase() {
 
     AppGlobalClear(&first);
     AppGlobalClear(&second);
+}
+
+static void UnprojectedBaseVisualsResolveFromSemanticTokens() {
+    SemanticThemeTokens tokens;
+    tokens.colors.foreground = Rgb(0xfa, 0xfa, 0xfa);
+    tokens.colors.mutedForeground = Rgb(0xa3, 0xa3, 0xa3);
+    tokens.colors.surface = Rgb(0x0a, 0x0a, 0x0a);
+    tokens.colors.border = Rgb(0x26, 0x26, 0x26);
+    tokens.colors.ring = Rgb(0x60, 0xa5, 0xfa);
+    tokens.colors.accent = Rgb(0x4a, 0xde, 0x80);
+
+    InputEditorStyle projected;
+    InputEditorStyle resolved = InputEditorStyleResolve(projected, tokens);
+    utassert(SameColor(resolved.foreground, tokens.colors.foreground));
+    utassert(SameColor(resolved.caret, tokens.colors.foreground));
+    utassert(SameColor(resolved.mutedForeground,
+                       tokens.colors.mutedForeground));
+    utassert(SameColor(resolved.background, tokens.colors.surface));
+    utassert(SameColor(resolved.border, tokens.colors.border));
+    utassert(resolved.selection.a == 102);
+
+    Rgba chosen = Rgb(1, 2, 3);
+    projected.foreground = chosen;
+    resolved = InputEditorStyleResolve(projected, tokens);
+    utassert(SameColor(resolved.foreground, chosen));
+    utassert(SameColor(resolved.caret, chosen));
+
+    BaseTheme base;
+    base.tokens = tokens;
+    utassert(SameColor(ResizableHandleColor(base, false),
+                       tokens.colors.border));
+    utassert(SameColor(ResizableHandleColor(base, true), tokens.colors.ring));
+    base.resizable.handle = chosen;
+    base.resizable.hasHandle = true;
+    utassert(SameColor(ResizableHandleColor(base, false), chosen));
+
+    App app;
+    BaseThemeSet(&app, base);
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, nullptr, arena, {}};
+    El* scrollbar = Scrollbar::ApplyStyles(&cx, Div(arena), {});
+    utassert(SameColor(scrollbar->scrollThumb.color,
+                       RgbaOpacity(tokens.colors.foreground, 0.35f)));
+    ScrollbarStyles explicitStyle;
+    explicitStyle.thumb = explicitStyle.thumb.Bg(chosen);
+    scrollbar = Scrollbar::ApplyStyles(&cx, Div(arena), explicitStyle);
+    utassert(SameColor(scrollbar->scrollThumb.color, chosen));
+    ArenaDelete(arena);
+    AppGlobalClear(&app);
 }
 
 static void BaseThemeSourceContractBuildsAndOwnsGlobals() {
@@ -209,6 +261,7 @@ void TestThemeSettings() {
     TheScrollbarModeIsTheThemesUntilAnElementSaysOtherwise();
     ThemeSettingsAreIsolatedPerApplication();
     StyledThemeChangesProjectIntoBase();
+    UnprojectedBaseVisualsResolveFromSemanticTokens();
     BaseThemeSourceContractBuildsAndOwnsGlobals();
     StyledThemeChangesProjectIntoTheRuntimeSeam();
 }

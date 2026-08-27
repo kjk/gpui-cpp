@@ -31,6 +31,7 @@ struct HoverCard {
     bool open = false;
     int openDelayMs = 600;
     int closeDelayMs = 300;
+    Listener onOpenChange = {};
     // hover_card.rs: `anchor: Anchor::TopCenter`.
     HoverCardAnchor anchor = HoverCardAnchor::TopCenter;
 
@@ -41,6 +42,7 @@ struct HoverCard {
     HoverCard* Open(bool v);
     HoverCard* OpenDelay(int ms);
     HoverCard* CloseDelay(int ms);
+    HoverCard* OnOpenChange(Listener fn);
     HoverCard* Anchor(HoverCardAnchor a);
     El* IntoEl();
 };
