@@ -48,7 +48,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 const partialBase = new Set([
   "dock",
   "input",
-  "resizable",
   "text_selection",
 ]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);

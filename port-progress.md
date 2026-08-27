@@ -8355,3 +8355,40 @@ adapters and 2 exclusions with 217 unresolved partial-module spellings and no
 full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
 20,365 checks; wasm passes its 19,660 applicable checks. The release story
 gallery compiles unchanged.
+
+## Base resizable restores group, panel and handle contracts
+
+The resizable port already performed the source drag arithmetic, measured
+panels through the retained state and rendered the real gallery layout, but it
+collapsed `ResizablePanelGroup` into a port-only `Resizable` builder. The
+source free constructors, concrete panel descriptor, standalone resize handle,
+custom appearance context and dynamic state lifecycle were absent.
+
+`ResizablePanelGroup`, `ResizablePanel`, `ResizeHandleContext`,
+`ResizeHandleRenderer`, `ResizeHandle` and `ResizablePanelEvent` now have
+source-shaped no-STL counterparts. `h_resizable`, `v_resizable`,
+`resizable_panel` and `resize_handle` restore the source construction seams;
+the old `Resizable` spelling remains an alias for existing callers. Groups can
+bind state and axis independently, replace their panel list, retain a resize
+listener and hand every divider's painted child to a caller-owned renderer.
+Custom appearance dimensions are preserved, and the left-dock placement uses
+the source's one-sided four-pixel hit band instead of the ordinary symmetric
+divider band.
+
+`ResizableState` now exposes sizes and container extent and supports
+programmatic resize, insertion, removal, reset and clear. Programmatic resize
+uses the same neighboring-panel constraints as a drag and emits the settled
+event for every valid request, including a request whose result is unchanged,
+matching `done_resizing`. Insertion copies the source's container-relative
+redistribution. The port continues to flatten Rust's private
+`ResizablePanelState` records into parallel POD vectors, and replaces retained
+`Rc` closures with caller-owned payload/function-pointer pairs; neither seam
+removes a public operation.
+
+Tests cover programmatic last-panel resize, insertion/removal/reset/clear,
+source constructors, explicit state and axis binding, panel growth, custom
+handle context and dimensions, and the special left placement. Base resizable
+is full: the audit moves to 110 full, 11 partial, 8 adapters and 2 exclusions
+with 208 unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 20,396 checks; wasm passes
+its 19,691 applicable checks. The release story gallery compiles unchanged.

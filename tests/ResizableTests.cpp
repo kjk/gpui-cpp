@@ -66,6 +66,139 @@ static void EveryPanelKeepsItsShareWhenTheContainerChanges() {
     utassertnear(sizes[1], 400.f);
 }
 
+static void ProgrammaticResizeAndDynamicPanelsUseTheSameState() {
+    App app = {};
+    Arena* arena = ArenaNew();
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = arena;
+    cx.win = win;
+    ResizableState state;
+    state.bounds = {0, 0, 400, 100};
+    state.sizes.Append(200);
+    state.sizes.Append(200);
+    state.mins.Append(100);
+    state.mins.Append(100);
+    state.maxs.Append(1e9f);
+    state.maxs.Append(1e9f);
+    state.grows.Append(false);
+    state.grows.Append(false);
+    state.shown.Append(true);
+    state.shown.Append(true);
+    state.laid.Append({});
+    state.laid.Append({});
+
+    // The last panel is driven through the preceding handle, as upstream.
+    utassert(state.ResizePanel(&cx, 1, 180));
+    utassertnear(state.Sizes()[0], 220.f);
+    utassertnear(state.Sizes()[1], 180.f);
+    utassertnear(state.ContainerSize(), 400.f);
+
+    utassert(state.InsertPanel(&cx, 100, 1));
+    utassert(state.Sizes().len == 3);
+    utassertnear(state.Sizes()[0], 165.f);
+    utassertnear(state.Sizes()[1], 100.f);
+    utassertnear(state.Sizes()[2], 135.f);
+    utassert(state.RemovePanel(&cx, 1));
+    utassert(state.Sizes().len == 2);
+    utassertnear(state.Sizes()[0] + state.Sizes()[1], 400.f);
+    state.mins[0] = 175;
+    utassert(state.ResetPanel(&cx, 0));
+    utassertnear(state.mins[0], PANEL_MIN_SIZE);
+    state.Clear();
+    utassert(state.Sizes().len == 0 && state.dragging == -1);
+    delete win;
+    ArenaDelete(arena);
+}
+
+struct ResizeAppearanceProbe {
+    int calls = 0;
+    Axis axis = Axis::Vertical;
+    bool active = true;
+    El* rendered = nullptr;
+};
+
+static El* RenderResizeAppearance(void* user,
+                                  const ResizeHandleContext* context,
+                                  Ctx* cx) {
+    ResizeAppearanceProbe* probe = (ResizeAppearanceProbe*)user;
+    probe->calls++;
+    probe->axis = context->AxisValue();
+    probe->active = context->IsActive();
+    probe->rendered = Div(cx->a)->W(3)->H(3);
+    return probe->rendered;
+}
+
+static void SourceConstructorsAndHandleAppearanceRemainConcrete() {
+    App app = {};
+    Arena* arena = ArenaNew();
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = arena;
+    cx.win = win;
+
+    ResizablePanel* first =
+        resizable_panel(&cx)->Size(150)->SizeRange(120, 300)->FlexNone()
+            ->Child(Div(arena));
+    ResizablePanel* second = resizable_panel(&cx)->Child(Div(arena));
+    ResizablePanelGroup* horizontal =
+        h_resizable(&cx, StrL("source-horizontal"))->Child(first)->Child(second);
+    utassert(horizontal->state.Get(&cx)->axis == Axis::Horizontal);
+    utassert(horizontal->panels.len == 2 && horizontal->grows[0] == false &&
+             horizontal->grows[1] == true);
+    El* root = horizontal->IntoEl();
+    utassert(root && root->style.dir == FlexDir::Row);
+
+    ResizablePanelGroup* vertical =
+        v_resizable(&cx, StrL("source-vertical"))->Size(240);
+    utassert(vertical->state.Get(&cx)->axis == Axis::Vertical);
+    utassertnear(vertical->width, 240.f);
+
+    ResizeAppearanceProbe probe;
+    ResizeHandle* handle =
+        resize_handle(&cx, StrL("standalone-handle"), Axis::Horizontal)
+            ->Placement(Side::Left)
+            ->WithAppearance(&probe, RenderResizeAppearance);
+    El* handleEl = handle->IntoEl();
+    utassert(handleEl && probe.calls == 1);
+    utassert(probe.axis == Axis::Horizontal && !probe.active);
+    utassert(handleEl->cursor == CursorKind::ColResize);
+    utassertnear(handleEl->style.absRight, 1.f);
+    utassertnear(handleEl->style.width,
+                 kResizeHandleSize + kResizeHandlePadding);
+
+    ResizeAppearanceProbe groupProbe;
+    ResizablePanelGroup* appeared =
+        h_resizable(&cx, StrL("appeared"))
+            ->WithHandleAppearance(&groupProbe, RenderResizeAppearance)
+            ->Child(resizable_panel(&cx)->Size(150)->Child(Div(arena)))
+            ->Child(resizable_panel(&cx)->Size(150)->Child(Div(arena)));
+    appeared->IntoEl();
+    utassert(groupProbe.calls == 1 && groupProbe.rendered);
+    utassertnear(groupProbe.rendered->style.width, 3.f);
+    utassertnear(groupProbe.rendered->style.height, 3.f);
+
+    Entity<ResizableState> explicitState = EntityNewState<ResizableState>(&app);
+    ResizablePanelGroup* configured =
+        ResizablePanelGroup::New(&cx, StrL("configured"))
+            ->Axis(Axis::Vertical)
+            ->WithState(explicitState);
+    configured->IntoEl();
+    utassert(explicitState.Get(&cx)->axis == Axis::Vertical);
+
+    ResizablePanelEvent event = ResizablePanelEvent::Resized;
+    utassert(event == ResizablePanelEvent::Resized);
+    utassertnear(PANEL_MIN_SIZE, 100.f);
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+    delete win;
+    ArenaDelete(arena);
+}
+
 void TestResizable() {
     TestSuite("resizable");
     ResizingOnePanelTakesFromTheNext();
@@ -74,4 +207,6 @@ void TestResizable() {
     APanelWillNotShrinkBelowItsMinimum();
     ARangeOfItsOwnBeatsTheDefault();
     EveryPanelKeepsItsShareWhenTheContainerChanges();
+    ProgrammaticResizeAndDynamicPanelsUseTheSameState();
+    SourceConstructorsAndHandleAppearanceRemainConcrete();
 }
