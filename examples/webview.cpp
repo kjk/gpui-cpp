@@ -5,10 +5,10 @@ using namespace gpui;
 // examples/webview — the gpui-component example of the same name: an address
 // bar over a webview, Enter loads what is in it.
 //
-// The webview is an OS control sitting over the window (WebView2 on Windows),
-// so it covers whatever is behind its box and does not take part in the
-// element tree's painting. That is why it gets a bordered box of its own
-// here, exactly as the Rust example gives it one.
+// The webview is an OS control sitting over the window (WebView2 on Windows,
+// WKWebView on macOS), so it covers whatever is behind its box and does not
+// take part in the element tree's painting. That is why it gets a bordered
+// box of its own here, exactly as the Rust example gives it one.
 struct Example {
     InputState address;
     Entity<WebView> web;
@@ -78,7 +78,7 @@ int GpuiMain(int argc, char** argv) {
         // Rust has no equivalent — `build_as_child` panics. Saying it out
         // loud is worth more than a window with a hole in it.
         logf(
-            "webview: no WebView2 runtime on this machine; the page will stay "
+            "webview: no native webview runtime on this machine; the page will stay "
             "empty\n");
     }
     return AppRunView(StrL("WebView"), 1024, 768, view.id, app, WinOpts{});
