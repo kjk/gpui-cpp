@@ -88,6 +88,211 @@ static void ASelectionIsComparedByValue() {
     utassert(!SearchableListIsChecked(&s, kItems, kN, 0));
 }
 
+static void SourceDelegateQueriesFlatAndGroupedItems() {
+    SearchableListDelegate flat = SearchableListDelegate::Items(kItems, kN);
+    utassert(flat.SectionsCount() == 1);
+    utassert(flat.ItemsCount(0) == kN);
+    utassert(flat.Item(IndexPathNew(1)) == &kItems[1]);
+    IndexPath path;
+    utassert(flat.Position(StrL("banana"), &path));
+    utassert(path == IndexPathNew(1));
+
+    SearchableGroup* fruit =
+        SearchableGroup::New(StrL("Fruit"))->Items(kItems, 2);
+    SearchableGroup* more =
+        SearchableGroup::New(StrL("More"))->Item(kItems[3]);
+    SearchableGroup* groups[] = {fruit, more};
+    SearchableListDelegate grouped =
+        SearchableListDelegate::Groups(groups, 2);
+    utassert(grouped.SectionsCount() == 2);
+    utassert(grouped.ItemsCount(1) == 1);
+    utassert(grouped.Item(IndexPathNew(0).Section(1)) == &more->items[0]);
+    utassert(grouped.Position(StrL("apple"), &path));
+    utassert(path == IndexPathNew(0).Section(0));
+    utassert(fruit->Matches(StrL("FRU")));
+    utassert(fruit->Matches(StrL("nan")));
+    utassert(!fruit->Matches(StrL("stone")));
+    delete fruit;
+    delete more;
+}
+
+static void SearchableVecRebuildsItsMatchedView() {
+    SearchableVec* values = SearchableVec::New(kItems, 3);
+    utassert(values->ItemsCount() == 3);
+    values->PerformSearch(StrL("app"));
+    utassert(values->ItemsCount() == 1);
+    utassert(StrSame(values->Item(IndexPathNew(0))->value, StrL("apple")));
+    IndexPath path;
+    utassert(!values->Position(StrL("banana"), &path));
+
+    // Pinned SearchableVec::push appends to both master and current views;
+    // it does not re-run the last query.
+    SearchableListItem blueberry = {StrL("Blueberry"), StrL("blue")};
+    values->Push(blueberry);
+    utassert(values->ItemsCount() == 2);
+    utassert(values->Position(StrL("blue"), &path));
+    utassert(path == IndexPathNew(1));
+    values->PerformSearch(Str{});
+    utassert(values->ItemsCount() == 4);
+    delete values;
+}
+
+static void ItemElementReservesItsCheckAndUsesListSizing() {
+    App app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    El* row = SearchableListItemElement::New(&cx, 7)
+                  ->WithSize(UiSize::Small)
+                  ->Child(TextEl(a, StrL("Seven")))
+                  ->IntoEl();
+    utassertnear(row->style.pad.left, 8.f);
+    utassertnear(row->style.pad.top, 2.f);
+    utassertnear(row->style.fontSize, 14.f);
+    El* inner = row->first;
+    utassert(inner != nullptr && inner->next == nullptr);
+    El* invisibleCheck = inner->first->next;
+    utassert(invisibleCheck != nullptr && invisibleCheck->next == nullptr);
+    utassertnear(invisibleCheck->style.width, 12.f);
+    utassertnear(invisibleCheck->style.opacity, 0.f);
+
+    El* checked = SearchableListItemElement::New(&cx, 8)
+                      ->WithSize(UiSize::Large)
+                      ->Checked(true)
+                      ->Selected(true)
+                      ->CheckIcon(IconName::CircleCheck)
+                      ->IntoEl();
+    utassertnear(checked->style.pad.left, 12.f);
+    utassertnear(checked->style.pad.top, 8.f);
+    utassertnear(checked->style.fontSize, 16.f);
+    El* visibleCheck = checked->first->first->next;
+    utassertnear(visibleCheck->style.opacity, 1.f);
+    utassert(StrSame(visibleCheck->iconPath,
+                     IconNamePath(IconName::CircleCheck)));
+
+    ArenaDelete(a);
+}
+
+static void StateAccessorsUseGroupedIndexPaths() {
+    SearchableListState s;
+    SearchableListSearch(&s, kItems, kN, Str{});
+    utassert(s.AddSelectedIndex(IndexPathNew(0).Section(1)));
+    utassert(!s.AddSelectedIndex(IndexPathNew(0).Section(1)));
+    Vec<Str> values;
+    s.SelectedValues(&values);
+    utassert(values.len == 1 && StrSame(values[0], StrL("apple")));
+    utassert(s.RemoveSelectedIndex(IndexPathNew(0).Section(1)));
+    utassert(!s.RemoveSelectedIndex(IndexPathNew(0).Section(1)));
+
+    IndexPath selection[] = {IndexPathNew(1), IndexPathNew(0).Section(1)};
+    s.SetSelectedIndices(selection, 2);
+    utassert(s.Selection().len == 2);
+    s.SelectedValues(&values);
+    utassert(values.len == 2);
+    utassert(StrSame(values[0], StrL("banana")));
+    utassert(StrSame(values[1], StrL("apple")));
+    utassert(!s.IsOpen());
+    utassert(s.Focus() == &s.triggerFocus);
+    values.Reset();
+}
+
+struct DelegateHooks {
+    int renderedItems = 0;
+    int renderedHeaders = 0;
+    int willChange = 0;
+    int confirmed = 0;
+};
+
+static bool HookMatches(void*, const SearchableListItem* item, Str) {
+    return StrSame(item->value, StrL("banana"));
+}
+
+static Str HookSectionTitle(void*, int) {
+    return StrL("Fruit");
+}
+
+static El* HookRenderItem(void* user, Ctx* cx, IndexPath,
+                          const SearchableListItem* item, bool checked) {
+    DelegateHooks* hooks = (DelegateHooks*)user;
+    hooks->renderedItems++;
+    return Div(cx->a)
+        ->Child(TextEl(cx->a, item->title))
+        ->AriaSelected(checked);
+}
+
+static El* HookRenderHeader(void* user, Ctx* cx, int) {
+    DelegateHooks* hooks = (DelegateHooks*)user;
+    hooks->renderedHeaders++;
+    return TextEl(cx->a, StrL("Custom header"));
+}
+
+static bool HookChecked(void*, IndexPath, const SearchableListItem*,
+                        const SearchableListState*, const App*) {
+    return true;
+}
+
+static void HookWillChange(void* user, SearchableListState*,
+                           const SearchableListChange*, int) {
+    // Leaving the selection untouched is the source delegate's veto seam.
+    ((DelegateHooks*)user)->willChange++;
+}
+
+static void HookConfirm(void* user, const SearchableListState*, IndexPath,
+                        bool) {
+    ((DelegateHooks*)user)->confirmed++;
+}
+
+static void DelegateHooksDriveSearchRenderingAndSelection() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    DelegateHooks hooks;
+    SearchableListDelegate delegate =
+        SearchableListDelegate::Items(kItems, 2);
+    delegate.user = &hooks;
+    delegate.sectionTitle = &HookSectionTitle;
+    delegate.matches = &HookMatches;
+    delegate.renderItem = &HookRenderItem;
+    delegate.renderSectionHeader = &HookRenderHeader;
+    delegate.isItemChecked = &HookChecked;
+    delegate.onWillChange = &HookWillChange;
+    delegate.onConfirm = &HookConfirm;
+
+    Entity<SearchableListState> entity =
+        EntityNewState<SearchableListState>(&app);
+    El* box = SearchableList::New(&cx, StrL("hook-list"), entity, nullptr)
+                  ->Delegate(delegate)
+                  ->IntoEl();
+    SearchableListState* state = entity.Get(&app);
+    utassert(state->hasDelegate);
+    utassert(state->matches.len == 1 && state->matches[0] == 1);
+    utassert(hooks.renderedHeaders == 1);
+    utassert(hooks.renderedItems == 1);
+    El* rows = box->first;
+    utassert(rows != nullptr && rows->first != nullptr);
+    utassert(StrSame(rows->first->text, StrL("Custom header")));
+    utassert(rows->first->next != nullptr);
+    utassert(rows->first->next->accessibility.selected);
+
+    utassert(SearchableListClick(state, 1));
+    utassert(hooks.willChange == 1);
+    utassert(state->selected.len == 0);
+    delegate.OnConfirm(state, IndexPathNew(1), false);
+    utassert(hooks.confirmed == 1);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestSearchableList() {
     TestSuite("searchable_list");
     TheQueryIsACaseInsensitiveSubstringOfTheTitle();
@@ -95,4 +300,9 @@ void TestSearchableList() {
     SingleReplacesTheSelection();
     MultiTogglesOnlyTheRowThatWasClicked();
     ASelectionIsComparedByValue();
+    SourceDelegateQueriesFlatAndGroupedItems();
+    SearchableVecRebuildsItsMatchedView();
+    ItemElementReservesItsCheckAndUsesListSizing();
+    StateAccessorsUseGroupedIndexPaths();
+    DelegateHooksDriveSearchRenderingAndSelection();
 }

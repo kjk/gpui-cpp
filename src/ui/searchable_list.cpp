@@ -9,6 +9,398 @@ namespace gpui {
 
 namespace component {
 
+static int SearchableFlatIndex(const SearchableListState* state,
+                               IndexPath path);
+
+SearchableListDelegate SearchableListDelegate::Items(
+    const SearchableListItem* values, int count) {
+    SearchableListDelegate out;
+    out.items = values;
+    out.nItems = count;
+    return out;
+}
+
+SearchableListDelegate SearchableListDelegate::Groups(
+    SearchableGroup* const* values, int count) {
+    SearchableListDelegate out;
+    out.groups = values;
+    out.nGroups = count;
+    return out;
+}
+
+int SearchableListDelegate::SectionsCount(const App* app) const {
+    if (sectionsCount) {
+        return sectionsCount(user, app);
+    }
+    return groups ? nGroups : 1;
+}
+
+Str SearchableListDelegate::SectionTitle(int section) const {
+    if (sectionTitle) {
+        return sectionTitle(user, section);
+    }
+    return groups && section >= 0 && section < nGroups && groups[section]
+               ? groups[section]->title
+               : Str{};
+}
+
+int SearchableListDelegate::ItemsCount(int section) const {
+    if (itemsCount) {
+        return itemsCount(user, section);
+    }
+    if (!groups) {
+        return section == 0 ? nItems : 0;
+    }
+    return section >= 0 && section < nGroups && groups[section]
+               ? groups[section]->items.len
+               : 0;
+}
+
+const SearchableListItem* SearchableListDelegate::Item(IndexPath path) const {
+    if (item) {
+        return item(user, path);
+    }
+    if (!groups) {
+        return path.section == 0 && path.row >= 0 && path.row < nItems
+                   ? &items[path.row]
+                   : nullptr;
+    }
+    if (path.section < 0 || path.section >= nGroups || !groups[path.section]) {
+        return nullptr;
+    }
+    const SearchableGroup* group = groups[path.section];
+    return path.row >= 0 && path.row < group->items.len
+               ? &group->items[path.row]
+               : nullptr;
+}
+
+bool SearchableListDelegate::Position(Str value, IndexPath* out) const {
+    if (position) {
+        return position(user, value, out);
+    }
+    for (int section = 0; section < SectionsCount(); section++) {
+        for (int row = 0; row < ItemsCount(section); row++) {
+            const SearchableListItem* foundItem =
+                Item(IndexPathNew(row).Section(section));
+            if (foundItem && StrSame(foundItem->value, value)) {
+                if (out) {
+                    *out = IndexPathNew(row).Section(section);
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool SearchableListDelegate::Matches(const SearchableListItem* value,
+                                     Str query) const {
+    return matches ? matches(user, value, query)
+                   : SearchableItemMatches(value, query);
+}
+
+El* SearchableListDelegate::RenderItem(Ctx* cx, IndexPath path,
+                                       const SearchableListItem* value,
+                                       bool checked) const {
+    return renderItem ? renderItem(user, cx, path, value, checked) : nullptr;
+}
+
+El* SearchableListDelegate::RenderSectionHeader(Ctx* cx, int section) const {
+    return renderSectionHeader ? renderSectionHeader(user, cx, section)
+                               : nullptr;
+}
+
+bool SearchableListDelegate::IsItemEnabled(
+    IndexPath path, const SearchableListItem* value, const App* app) const {
+    return isItemEnabled ? isItemEnabled(user, path, value, app)
+                         : value && !value->disabled && !value->pinned;
+}
+
+bool SearchableListDelegate::IsItemChecked(
+    IndexPath path, const SearchableListItem* value,
+    const SearchableListState* state, const App* app) const {
+    if (isItemChecked) {
+        return isItemChecked(user, path, value, state, app);
+    }
+    return value && state && SearchableListIsChecked(
+                                 state, state->items, state->nItems,
+                                 SearchableFlatIndex(state, path));
+}
+
+void SearchableListDelegate::OnWillChange(
+    SearchableListState* state, const SearchableListChange* changes,
+    int n) const {
+    if (onWillChange) {
+        onWillChange(user, state, changes, n);
+        return;
+    }
+    SearchableListApply(state, state->items, state->nItems, changes, n);
+}
+
+void SearchableListDelegate::OnConfirm(const SearchableListState* state,
+                                       IndexPath path,
+                                       bool secondary) const {
+    if (onConfirm) {
+        onConfirm(user, state, path, secondary);
+    }
+}
+
+SearchableGroup* SearchableGroup::New(Str value) {
+    SearchableGroup* out = new SearchableGroup();
+    out->title = value;
+    return out;
+}
+
+SearchableGroup* SearchableGroup::Item(const SearchableListItem& value) {
+    items.Append(value);
+    return this;
+}
+
+SearchableGroup* SearchableGroup::Items(const SearchableListItem* values,
+                                        int count) {
+    for (int i = 0; i < count; i++) {
+        items.Append(values[i]);
+    }
+    return this;
+}
+
+bool SearchableGroup::Matches(Str query) const {
+    if (StrContainsI(title, query)) {
+        return true;
+    }
+    for (int i = 0; i < items.len; i++) {
+        if (SearchableItemMatches(&items[i], query)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+SearchableVec* SearchableVec::New(const SearchableListItem* values,
+                                  int count) {
+    SearchableVec* out = new SearchableVec();
+    for (int i = 0; i < count; i++) {
+        out->items.Append(values[i]);
+        out->matchedItems.Append(values[i]);
+    }
+    return out;
+}
+
+SearchableVec* SearchableVec::Push(const SearchableListItem& value) {
+    items.Append(value);
+    matchedItems.Append(value);
+    return this;
+}
+
+void SearchableVec::PerformSearch(Str query) {
+    matchedItems.Clear();
+    for (int i = 0; i < items.len; i++) {
+        if (SearchableItemMatches(&items[i], query)) {
+            matchedItems.Append(items[i]);
+        }
+    }
+}
+
+int SearchableVec::ItemsCount(int section) const {
+    return section == 0 ? matchedItems.len : 0;
+}
+
+const SearchableListItem* SearchableVec::Item(IndexPath path) const {
+    return path.section == 0 && path.row >= 0 && path.row < matchedItems.len
+               ? &matchedItems[path.row]
+               : nullptr;
+}
+
+bool SearchableVec::Position(Str value, IndexPath* out) const {
+    for (int i = 0; i < matchedItems.len; i++) {
+        if (StrSame(matchedItems[i].value, value)) {
+            if (out) {
+                *out = IndexPathNew(i);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+SearchableListItemElement* SearchableListItemElement::New(Ctx* cx,
+                                                          size_t index) {
+    SearchableListItemElement* out =
+        ArenaNew<SearchableListItemElement>(cx->a);
+    out->cx = cx;
+    out->index = index;
+    return out;
+}
+
+SearchableListItemElement* SearchableListItemElement::Checked(bool value) {
+    checked = value;
+    return this;
+}
+
+SearchableListItemElement* SearchableListItemElement::CheckIcon(
+    IconName value) {
+    checkIcon = value;
+    return this;
+}
+
+SearchableListItemElement* SearchableListItemElement::Disabled(bool value) {
+    disabled = value;
+    return this;
+}
+
+SearchableListItemElement* SearchableListItemElement::Selected(bool value) {
+    selected = value;
+    return this;
+}
+
+bool SearchableListItemElement::IsSelected() const {
+    return selected;
+}
+
+SearchableListItemElement* SearchableListItemElement::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+
+SearchableListItemElement* SearchableListItemElement::Child(El* child) {
+    if (child) {
+        children.Append(cx->a, child);
+    }
+    return this;
+}
+
+SearchableListItemElement* SearchableListItemElement::Refine(
+    const Style& value, uint32_t fields) {
+    style = value;
+    styleSet = fields;
+    return this;
+}
+
+El* SearchableListItemElement::IntoEl() {
+    Arena* a = cx->a;
+    const Theme& th = ThemeNow(cx->app);
+    El* row = Div(a)
+                  ->PathId(StrDup(a, fmt("searchable-list-item-%d", (int)index)))
+                  ->FlexRow()
+                  ->Gap(4)
+                  ->PadY(4)
+                  ->PadX(8)
+                  ->Radius(th.radius)
+                  ->Fg(disabled ? th.mutedFg : th.foreground)
+                  ->ItemsCenter()
+                  ->JustifyBetween();
+    UiListSize(row, size);
+    if (!disabled && !selected) {
+        row->HoverBg(BackgroundOpacity(th.tokens.accent, 0.7f));
+    }
+    if (selected) {
+        row->Bg(th.tokens.accent);
+    }
+    if (styleSet) {
+        row->Refine(style, styleSet);
+    }
+    El* left = Div(a)->FlexRow()->W(kFill)->Gap(4)->ItemsCenter();
+    for (int i = 0; i < children.len; i++) {
+        left->Child(children[i]);
+    }
+    El* inner = Div(a)
+                    ->FlexRow()
+                    ->W(kFill)
+                    ->Gap(4)
+                    ->ItemsCenter()
+                    ->JustifyBetween()
+                    ->Child(left);
+    El* check = IconEl(a, checkIcon, UiIconPx(UiSize::XSmall))
+                    ->Fg(th.foreground);
+    if (!checked) {
+        check->Opacity(0);
+    }
+    inner->Child(check);
+    row->Child(inner);
+    return row;
+}
+
+static int SearchableFlatIndex(const SearchableListState* s,
+                               IndexPath path) {
+    if (!s || !s->items || path.section < 0 || path.row < 0) {
+        return -1;
+    }
+    int row = 0;
+    for (int i = 0; i < s->nItems; i++) {
+        if (s->items[i].section != path.section) {
+            continue;
+        }
+        if (row == path.row) {
+            return i;
+        }
+        row++;
+    }
+    return -1;
+}
+
+static IndexPath SearchablePath(const SearchableListState* s, int flat) {
+    if (!s || !s->items || flat < 0 || flat >= s->nItems) {
+        return IndexPathNew(-1);
+    }
+    int section = s->items[flat].section;
+    int row = 0;
+    for (int i = 0; i < flat; i++) {
+        if (s->items[i].section == section) {
+            row++;
+        }
+    }
+    return IndexPathNew(row).Section(section);
+}
+
+void SearchableListState::SelectedValues(Vec<Str>* out) const {
+    if (!out) {
+        return;
+    }
+    out->Clear();
+    for (int i = 0; i < selected.len; i++) {
+        int ix = selected[i];
+        if (items && ix >= 0 && ix < nItems) {
+            out->Append(items[ix].value);
+        }
+    }
+}
+
+bool SearchableListState::AddSelectedIndex(IndexPath index) {
+    int flat = SearchableFlatIndex(this, index);
+    if (flat < 0) {
+        return false;
+    }
+    for (int i = 0; i < selected.len; i++) {
+        if (selected[i] == flat) {
+            return false;
+        }
+    }
+    selected.Append(flat);
+    return true;
+}
+
+bool SearchableListState::RemoveSelectedIndex(IndexPath index) {
+    int flat = SearchableFlatIndex(this, index);
+    for (int i = 0; i < selected.len; i++) {
+        if (selected[i] != flat) {
+            continue;
+        }
+        for (int j = i; j < selected.len - 1; j++) {
+            selected[j] = selected[j + 1];
+        }
+        selected.len--;
+        return true;
+    }
+    return false;
+}
+
+void SearchableListState::SetSelectedIndices(const IndexPath* indices, int n) {
+    selected.Clear();
+    for (int i = 0; i < n; i++) {
+        AddSelectedIndex(indices[i]);
+    }
+}
+
 bool SearchableItemMatches(const SearchableItem* it, Str query) {
     if (query.len <= 0) {
         return true;
@@ -24,7 +416,8 @@ void SearchableListSearch(SearchableListState* s, const SearchableItem* items,
     s->nItems = nItems;
     s->matches.Clear();
     for (int i = 0; i < nItems; i++) {
-        if (SearchableItemMatches(&items[i], query)) {
+        if (s->hasDelegate ? s->delegate.Matches(&items[i], query)
+                           : SearchableItemMatches(&items[i], query)) {
             s->matches.Append(i);
         }
     }
@@ -62,6 +455,10 @@ bool SearchableListIsChecked(const SearchableListState* s,
     if (items[index].pinned) {
         return true;
     }
+    if (s->hasDelegate && s->delegate.isItemChecked) {
+        return s->delegate.IsItemChecked(SearchablePath(s, index),
+                                         &items[index], s, nullptr);
+    }
     return SelectionIndexOfValue(s, items, nItems, items[index].value) >= 0;
 }
 
@@ -69,6 +466,11 @@ bool SearchableListIsEnabled(const SearchableListState* s,
                              const SearchableItem* items, int nItems,
                              int index) {
     if (index < 0 || index >= nItems) {
+        return false;
+    }
+    if (s->hasDelegate && s->delegate.isItemEnabled &&
+        !s->delegate.IsItemEnabled(SearchablePath(s, index), &items[index],
+                                   nullptr)) {
         return false;
     }
     if (items[index].disabled || items[index].pinned) {
@@ -148,7 +550,11 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
 bool SearchableListClick(SearchableListState* s, int index) {
     Vec<SearchableListChange> changes;
     SearchableListChangesFor(s, s->items, s->nItems, index, &changes);
-    SearchableListApply(s, s->items, s->nItems, changes.els, changes.len);
+    if (s->hasDelegate) {
+        s->delegate.OnWillChange(s, changes.els, changes.len);
+    } else {
+        SearchableListApply(s, s->items, s->nItems, changes.els, changes.len);
+    }
     changes.Reset();
     return s->mode == SearchableListMode::Single && s->closeOnSelect;
 }
@@ -177,6 +583,9 @@ void SearchableListState::OnRowClick(SearchableListState* self, Ctx* cx,
     ListEvent ev = {ListEventKind::Confirm, index, false};
     if (self->onChange.IsValid()) {
         ListenerCall(cx->app, cx->win, self->onChange, &ev);
+    }
+    if (self->hasDelegate) {
+        self->delegate.OnConfirm(self, SearchablePath(self, index), false);
     }
     Notify(cx);
 }
@@ -231,6 +640,16 @@ SearchableList* SearchableList::CheckIcon(IconName n) {
     checkIcon = n;
     return this;
 }
+SearchableList* SearchableList::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+SearchableList* SearchableList::Delegate(
+    const SearchableListDelegate& value) {
+    delegate = value;
+    hasDelegate = true;
+    return this;
+}
 
 El* SearchableList::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
@@ -247,6 +666,43 @@ El* SearchableList::IntoEl() {
                   ->Bg(th.tokens.background);
     if (!s) {
         return box;
+    }
+    if (hasDelegate) {
+        int sectionCount = delegate.SectionsCount(cx->app);
+        int total = 0;
+        for (int section = 0; section < sectionCount; section++) {
+            total += delegate.ItemsCount(section);
+        }
+        SearchableListItem* flat = total > 0
+                                       ? (SearchableListItem*)Alloc(
+                                             a, total * (int)sizeof(*flat))
+                                       : nullptr;
+        Str* titles = sectionCount > 0
+                          ? (Str*)Alloc(a, sectionCount * (int)sizeof(*titles))
+                          : nullptr;
+        int at = 0;
+        for (int section = 0; section < sectionCount; section++) {
+            titles[section] = delegate.SectionTitle(section);
+            int count = delegate.ItemsCount(section);
+            for (int row = 0; row < count; row++) {
+                const SearchableListItem* source =
+                    delegate.Item(IndexPathNew(row).Section(section));
+                if (!source) {
+                    continue;
+                }
+                SearchableListItem copy = *source;
+                copy.section = section;
+                flat[at++] = copy;
+            }
+        }
+        items = flat;
+        nItems = at;
+        sections = titles;
+        nSections = sectionCount;
+        s->delegate = delegate;
+        s->hasDelegate = true;
+    } else {
+        s->hasDelegate = false;
     }
     // perform_search: the query decides which items there are to show at all.
     SearchableListSearch(s, items, nItems, query ? InputValue(query) : Str{});
@@ -289,33 +745,29 @@ El* SearchableList::IntoEl() {
             // render_section_header: py_0p5, px_2, text_sm and muted. The
             // list scrolls rather than squeezing, so neither a heading nor a
             // row is a flex item that can give height back.
-            rows->Child(Div(a)->W(kFill)->Shrink0()->PadX(8)->PadY(2)->Child(
-                TextEl(a, sections[it.section])->Font(14)->Fg(th.mutedFg)));
+            El* custom = hasDelegate
+                             ? delegate.RenderSectionHeader(cx, it.section)
+                             : nullptr;
+            if (custom) {
+                rows->Child(custom);
+            } else if (sections[it.section].s) {
+                rows->Child(
+                    Div(a)->W(kFill)->Shrink0()->PadX(8)->PadY(2)->Child(
+                        TextEl(a, sections[it.section])
+                            ->Font(14)
+                            ->Fg(th.mutedFg)));
+            }
             lastSection = it.section;
         }
         bool checked = SearchableListIsChecked(s, items, nItems, ix);
-        El* row = Div(a)
-                      ->Role(AccessibilityRole::ListBoxOption)
-                      ->AriaLabel(it.title)
-                      ->AriaSelected(checked)
-                      ->AriaPositionInSet(m + 1)
-                      ->AriaSizeOfSet(s->matches.len)
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->Shrink0()
-                      ->PadY(4)
-                      ->PadX(8)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Radius(th.radius);
         bool enabled = SearchableListIsEnabled(s, items, nItems, ix);
-        row->AriaDisabled(!enabled);
-        if (enabled) {
-            row->HoverBg(th.tokens.accent);
+        IndexPath path = SearchablePath(s, ix);
+        if (hasDelegate && delegate.isItemChecked) {
+            checked = delegate.IsItemChecked(path, &it, s, cx->app);
         }
-        if (m == s->list.selected) {
-            row->Bg(th.tokens.accent);
+        if (hasDelegate && delegate.isItemEnabled) {
+            enabled = enabled &&
+                      delegate.IsItemEnabled(path, &it, cx->app);
         }
         // SearchableListItem::render: an icon before the label when the item
         // gave one.
@@ -324,28 +776,43 @@ El* SearchableList::IntoEl() {
             label->Child(IconEl(a, it.icon, UiIconPx(UiSize::Small))
                              ->Fg(th.mutedFg));
         }
-        label->Child(TextEl(a, it.title)
-                         ->Font(14)
-                         ->Fg(enabled || checked ? th.foreground : th.mutedFg));
-        row->Child(label);
-        El* trail = Div(a)->FlexRow()->Gap(4)->ItemsCenter()->Shrink0();
-        // The trailing check the adapter adds for a selected row.
-        if (checked) {
-            trail->Child(IconEl(a, checkIcon, 16)->Fg(th.foreground));
-        }
-        // render_item's badge, after the check, as the story's delegate puts
-        // its "Featured" pill.
+        label->Child(TextEl(a, it.title)->Fg(
+            enabled || checked ? th.foreground : th.mutedFg));
+        El* content =
+            Div(a)->FlexRow()->W(kFill)->Gap(4)->ItemsCenter()->JustifyBetween();
+        content->Child(label);
+        // render_item's badge, as the story's delegate puts its "Featured"
+        // pill beside the custom row content.
         if (it.badge.s) {
-            trail->Child(Div(a)
-                             ->PadX(4)
-                             ->Radius(th.radius * 0.5f)
-                             ->Bg(th.tokens.primary)
-                             ->Child(TextEl(a, it.badge)
-                                         ->Font(12)
-                                         ->Fg(th.primaryFg)
-                                         ->LineHeight(1.4f)));
+            content->Child(Div(a)
+                               ->PadX(4)
+                               ->Radius(th.radius * 0.5f)
+                               ->Bg(th.tokens.primary)
+                               ->Child(TextEl(a, it.badge)
+                                           ->Font(12)
+                                           ->Fg(th.primaryFg)
+                                           ->LineHeight(1.4f)));
         }
-        row->Child(trail);
+        El* row = hasDelegate
+                      ? delegate.RenderItem(cx, path, &it, checked)
+                      : nullptr;
+        if (!row) {
+            row = SearchableListItemElement::New(cx, (size_t)m)
+                      ->Checked(checked)
+                      ->CheckIcon(checkIcon)
+                      ->Disabled(!enabled)
+                      ->Selected(m == s->list.selected)
+                      ->WithSize(size)
+                      ->Child(content)
+                      ->IntoEl();
+        }
+        row->Role(AccessibilityRole::ListBoxOption)
+                      ->AriaLabel(it.title)
+                      ->AriaSelected(checked)
+                      ->AriaPositionInSet(m + 1)
+                      ->AriaSizeOfSet(s->matches.len)
+                      ->AriaDisabled(!enabled)
+                      ->Shrink0();
         if (enabled) {
             BindPathClick(row, StrDup(a, fmt("row-%d", ix)),
                           ListenerArg(click, m));

@@ -510,7 +510,8 @@ El* Select::IntoEl() {
                 ->Items(items, nItems)
                 ->W(menuWidth > 0 ? menuWidth
                                   : (width > 0 ? width + 2 : 242))
-                ->CheckIcon(checkIcon);
+                ->CheckIcon(checkIcon)
+                ->WithSize(size);
         if (sections) {
             list->Sections(sections, nSections);
         }

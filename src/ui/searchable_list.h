@@ -14,7 +14,7 @@ namespace component {
 
 // One row. `value` is what identifies it — Rust's `SearchableListItem::value`,
 // which is what a selection is compared by, and `title` is what it shows.
-struct SearchableItem {
+struct SearchableListItem {
     Str title = {};
     Str value = {};
     // The section it belongs to. Items are given in section order.
@@ -35,6 +35,126 @@ struct SearchableItem {
     // is not the row's own title. The select page's countries list the name
     // in the menu and the name with its code in the trigger.
     Str display = {};
+};
+
+// Compatibility spelling used by the first port. It is the same item value,
+// not an adapter or a second representation.
+using SearchableItem = SearchableListItem;
+
+// The dependency-free counterpart of SearchableListDelegate for the common
+// in-memory case. Rust expresses these operations as a generic trait; the
+// port keeps the same queries over POD item/group arrays.
+struct SearchableGroup;
+struct SearchableListState;
+struct SearchableListChange;
+struct SearchableListDelegate {
+    void* user = nullptr;
+    const SearchableListItem* items = nullptr;
+    int nItems = 0;
+    SearchableGroup* const* groups = nullptr;
+    int nGroups = 0;
+    int (*sectionsCount)(void* user, const App* app) = nullptr;
+    Str (*sectionTitle)(void* user, int section) = nullptr;
+    int (*itemsCount)(void* user, int section) = nullptr;
+    const SearchableListItem* (*item)(void* user, IndexPath path) = nullptr;
+    bool (*position)(void* user, Str value, IndexPath* out) = nullptr;
+    bool (*matches)(void* user, const SearchableListItem* item,
+                    Str query) = nullptr;
+    El* (*renderItem)(void* user, Ctx* cx, IndexPath path,
+                      const SearchableListItem* item, bool checked) = nullptr;
+    El* (*renderSectionHeader)(void* user, Ctx* cx, int section) = nullptr;
+    bool (*isItemEnabled)(void* user, IndexPath path,
+                          const SearchableListItem* item,
+                          const App* app) = nullptr;
+    bool (*isItemChecked)(void* user, IndexPath path,
+                          const SearchableListItem* item,
+                          const SearchableListState* state,
+                          const App* app) = nullptr;
+    void (*onWillChange)(void* user, SearchableListState* state,
+                         const SearchableListChange* changes, int n) = nullptr;
+    void (*onConfirm)(void* user, const SearchableListState* state,
+                      IndexPath path, bool secondary) = nullptr;
+
+    static SearchableListDelegate Items(const SearchableListItem* items,
+                                        int nItems);
+    static SearchableListDelegate Groups(SearchableGroup* const* groups,
+                                         int nGroups);
+    int SectionsCount(const App* app = nullptr) const;
+    Str SectionTitle(int section) const;
+    int ItemsCount(int section) const;
+    const SearchableListItem* Item(IndexPath path) const;
+    bool Position(Str value, IndexPath* out) const;
+    bool Matches(const SearchableListItem* value, Str query) const;
+    El* RenderItem(Ctx* cx, IndexPath path,
+                   const SearchableListItem* value, bool checked) const;
+    El* RenderSectionHeader(Ctx* cx, int section) const;
+    bool IsItemEnabled(IndexPath path, const SearchableListItem* value,
+                       const App* app) const;
+    bool IsItemChecked(IndexPath path, const SearchableListItem* value,
+                       const SearchableListState* state,
+                       const App* app) const;
+    void OnWillChange(SearchableListState* state,
+                      const SearchableListChange* changes, int n) const;
+    void OnConfirm(const SearchableListState* state, IndexPath path,
+                   bool secondary) const;
+};
+
+// A named section. The builder owns copied POD items so Item() really appends
+// as Rust's fluent value builder does; callers delete it explicitly.
+struct SearchableGroup {
+    Str title = {};
+    Vec<SearchableListItem> items;
+
+    static SearchableGroup* New(Str title);
+    SearchableGroup* Item(const SearchableListItem& item);
+    SearchableGroup* Items(const SearchableListItem* items, int nItems);
+    bool Matches(Str query) const;
+    ~SearchableGroup() { items.Reset(); }
+};
+
+// SearchableVec's in-memory item specialization. Generic Rust item traits
+// become the concrete SearchableListItem value above; filtering rebuilds a
+// matched view while retaining the master item list.
+struct SearchableVec {
+    Vec<SearchableListItem> items;
+    Vec<SearchableListItem> matchedItems;
+
+    static SearchableVec* New(const SearchableListItem* items, int nItems);
+    SearchableVec* Push(const SearchableListItem& item);
+    void PerformSearch(Str query);
+    int ItemsCount(int section = 0) const;
+    const SearchableListItem* Item(IndexPath path) const;
+    bool Position(Str value, IndexPath* out) const;
+    ~SearchableVec() {
+        items.Reset();
+        matchedItems.Reset();
+    }
+};
+
+// A single standard row. It reserves the trailing check icon even when the
+// icon is invisible, so checked and unchecked titles line up exactly.
+struct SearchableListItemElement {
+    Ctx* cx = nullptr;
+    size_t index = 0;
+    UiSize size = UiSize::Medium;
+    bool selected = false;
+    bool checked = false;
+    bool disabled = false;
+    IconName checkIcon = IconName::Check;
+    ArenaVec<El*> children;
+    Style style = {};
+    uint32_t styleSet = 0;
+
+    static SearchableListItemElement* New(Ctx* cx, size_t index);
+    SearchableListItemElement* Checked(bool value);
+    SearchableListItemElement* CheckIcon(IconName value);
+    SearchableListItemElement* Disabled(bool value);
+    SearchableListItemElement* Selected(bool value);
+    bool IsSelected() const;
+    SearchableListItemElement* WithSize(UiSize value);
+    SearchableListItemElement* Child(El* child);
+    SearchableListItemElement* Refine(const Style& value, uint32_t fields);
+    El* IntoEl();
 };
 
 // Single replaces the selection, Multi toggles the row that was clicked.
@@ -94,6 +214,16 @@ struct SearchableListState {
     FocusHandle triggerFocus = {};
     FocusHandle contentFocus = {};
     FocusHandle previousFocus = {};
+    SearchableListDelegate delegate = {};
+    bool hasDelegate = false;
+
+    const Vec<int>& Selection() const { return selected; }
+    void SelectedValues(Vec<Str>* out) const;
+    bool IsOpen() const { return open; }
+    const FocusHandle* Focus() const { return &triggerFocus; }
+    bool AddSelectedIndex(IndexPath index);
+    bool RemoveSelectedIndex(IndexPath index);
+    void SetSelectedIndices(const IndexPath* indices, int n);
 
     static void OnRowClick(SearchableListState* self, Ctx* cx,
                            const ClickEvent* ev, intptr_t match);
@@ -171,6 +301,9 @@ struct SearchableList {
     float maxH = 320;
     // Combobox::check_icon: what marks a selected row.
     IconName checkIcon = IconName::Check;
+    UiSize size = UiSize::Medium;
+    SearchableListDelegate delegate = {};
+    bool hasDelegate = false;
     // Whether a Select encloses this list. One inside a select leaves the
     // keyboard to the select's own context — escape there closes the popup
     // rather than clearing the highlight — while one standing on its own
@@ -187,6 +320,8 @@ struct SearchableList {
     SearchableList* W(float v);
     SearchableList* MaxH(float v);
     SearchableList* CheckIcon(IconName n);
+    SearchableList* WithSize(UiSize value);
+    SearchableList* Delegate(const SearchableListDelegate& value);
     SearchableList* InSelect(bool v);
     El* IntoEl();
 };

@@ -7994,3 +7994,51 @@ unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 20,076 checks; wasm passes
 its 19,371 applicable checks. The release story build compiles the migrated
 SelectState users and the two explicit compatibility users.
+
+## UI searchable list restores its public delegate and row structure
+
+The list's search, single/multi strategies, value-based selection, disabled
+and pinned rows, sections and Select integration were already functional, but
+the source `SearchableListItem`, `SearchableListDelegate`,
+`SearchableListItemElement`, `SearchableGroup` and `SearchableVec` contracts
+had been flattened into one static `SearchableItem` array. Rows were also
+hand-built at a fixed medium size and omitted the check icon when unchecked,
+so labels moved horizontally as selection changed.
+
+`SearchableListItem` is now the source-named POD item (`SearchableItem` is an
+exact compatibility alias). `SearchableListDelegate` supplies the complete
+in-memory query vocabulary plus function-pointer hooks for section/item
+lookup, matching, custom item and header rendering, enabled/checked state,
+pre-change mutation or veto, and confirmation. `SearchableList::Delegate`
+flattens its current section view into frame-owned POD items, installs the
+delegate on retained state, and dispatches those hooks through search,
+rendering and selection. `SearchableGroup` owns an appendable item section,
+and `SearchableVec` retains a master item list while rebuilding its matched
+view. The pinned Select back-compat exports are direct aliases to these types.
+
+`SearchableListItemElement` now owns the standard row exactly where Rust does:
+source list-size padding/font, selection and disabled states, child content,
+style refinement, custom check icon, and a permanent 12 px trailing icon
+slot whose unchecked state is invisible rather than absent. Select forwards
+its size into the list. SearchableListState additionally exposes selection,
+selected values, open/focus accessors and grouped `IndexPath` add/remove/set
+operations.
+
+Two source abstractions translate deliberately. Rust's generic item/value
+traits are the concrete `SearchableListItem`/`Str` value used by every caller
+in this no-STL tree, while grouped data uses `SearchableGroup` pointers rather
+than a vector of non-POD nested vectors. Rust's possibly asynchronous
+`perform_search` remains synchronous item matching, consistent with the
+repository-wide async exclusion; custom delegates still control that match
+function and may update their persistent data before a frame.
+
+Tests cover default and custom matching, flat/group delegate lookup, fluent
+groups, SearchableVec filtering/push semantics, source row sizing and check
+reservation, grouped state accessors, custom render hooks, delegate veto and
+confirmation, in addition to the existing selection strategies. UI
+searchable list is full within those standing representation seams: the audit
+moves to 100 full, 21 partial, 8 adapters and 2 exclusions with 263 unresolved
+partial-module spellings and no full-module errors. MSVC debug/release,
+clang-cl release and MSVC ASan pass 20,132 checks; wasm passes its 19,427
+applicable checks. The release story build compiles its standalone lists,
+Selects and Comboboxes against the shared row implementation.

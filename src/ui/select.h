@@ -10,6 +10,13 @@ namespace gpui {
 
 namespace component {
 
+// Pinned backward-compatible re-exports. They are exact aliases to the
+// searchable-list source types, as in Rust's public `pub use` block.
+using SelectGroup = SearchableGroup;
+using SelectDelegate = SearchableListDelegate;
+using SelectItem = SearchableListItem;
+using SelectListItem = SearchableListItemElement;
+
 // The source Select owns a small render-once caret instead of drawing the
 // chevron inline. Keeping it as a value also preserves the source size rule:
 // xsmall and small stay themselves, every larger trigger uses medium.
