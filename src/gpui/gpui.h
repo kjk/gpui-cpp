@@ -1279,6 +1279,9 @@ struct Style {
     // deferred(): a popup anchored to its trigger still draws over the page
     // below it, and hit-tests before it.
     bool deferred = false;
+    // Rust sorts deferred elements by priority. Zero is the normal popup
+    // layer; TooltipOverlay asks for the dedicated layer above it.
+    uint8_t deferredLayer = 0;
     // Side placement rather than corner anchoring: the requested side when the
     // popup fits there, the opposite side when it does not, and the roomier of
     // the two when neither does — `Positioner::side`, which is what a dropdown
@@ -2047,6 +2050,7 @@ struct El {
     El* Absolute();
     El* Fixed();
     El* Deferred();
+    El* DeferredLayer(int layer);
     El* AnchorBelow(float gap = 0);
     // `Positioner::side`: flip to the other side rather than clamping when
     // the anchored side has no room. Dropdowns say this; a popup placed at a
@@ -4950,40 +4954,6 @@ struct BlinkCursor {
     static void OnFlip(BlinkCursor* self, Ctx* cx, const TickEvent* ev);
     static void OnResume(BlinkCursor* self, Ctx* cx, const TickEvent* ev);
 };
-
-// Port of TooltipOverlay in crates/base/src/tooltip.rs. One per window, the
-// way Rust keeps one overlay for every trigger in it, and an entity because it
-// owns timers — the same reason BlinkCursor below is one.
-//
-// A tooltip is not "the hovered element has text". It waits out SHOW_DELAY
-// before appearing, and on the way out it keeps a GRACE_PERIOD during which
-// `hadRecent` is set: a trigger entered inside that window shows at once
-// rather than making the reader wait again for a tip they were already
-// reading. Rust guards each countdown with an epoch; there is at most one in
-// flight here, so it is cancelled outright instead.
-struct TooltipOverlay {
-    // Heap-owned: the text came off a frame arena that is gone by the time the
-    // countdown lands.
-    Str text = {};
-    Bounds triggerBounds = {};
-    bool visible = false;
-    bool hadRecent = false;
-    int showTimer = 0;
-    int hideTimer = 0;
-
-    ~TooltipOverlay();
-
-    static void OnShow(TooltipOverlay* self, Ctx* cx, const TickEvent* ev);
-    static void OnHide(TooltipOverlay* self, Ctx* cx, const TickEvent* ev);
-};
-
-// request_show / request_hide, driven by the hover change in
-// window_common.cpp rather than by each trigger element.
-void TooltipRequestShow(Window* win, Str text, Bounds triggerBounds);
-void TooltipRequestHide(Window* win);
-// What the paint pass draws, or null when nothing is showing.
-const TooltipOverlay* TooltipShowing(Window* win);
-void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip);
 
 // Idempotent. Rust calls these from on_focus / on_blur.
 void BlinkStart(App* app, Window* win, EntityId* handle);

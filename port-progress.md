@@ -8152,3 +8152,39 @@ moves to 103 full, 18 partial, 8 adapters and 2 exclusions with 252 unresolved
 partial-module spellings and no full-module errors. MSVC debug/release,
 clang-cl release and MSVC ASan pass 20,208 checks; wasm passes its 19,503
 applicable checks. The release story gallery compiles unchanged.
+
+## Base tooltip restores its managed overlay entity
+
+Tooltip timing was already functional, but the implementation lived in
+`gpui.h` as a text-only runtime record and painted directly after the element
+tree. That erased `TooltipRequest`, `TooltipTransition` and
+`TooltipPositioner`, could not build application content or honor a preferred
+side, skipped normal layout/accessibility collection, and had no switch
+transition data for the themed renderer.
+
+The lifecycle now lives in `base/tooltip` as the source-shaped
+`TooltipOverlay` entity. It owns separate pending and visible requests, the
+500 ms show delay, 300 ms grace-period hide, previous/current trigger bounds,
+monotonic lifecycle and animation epochs, immediate switching, explicit hide
+and a custom renderer. `TooltipRequest` carries a content builder and optional
+placement, while the legacy string trigger deep-copies its text into the same
+request path. Callback data remains application-owned, following this tree's
+function-pointer callback convention instead of Rust's `Rc<dyn Fn>`.
+
+`TooltipTransition` is the C++ tagged-POD form of Rust's data-carrying enum,
+with Enter and Switch constructors. `TooltipPositioner` is a real wrapper over
+the shared side positioner with the source four-pixel viewport margin. The
+window renders its overlay entity into the frame tree, so custom content is
+laid out and projected to accessibility normally. A per-element deferred
+layer preserves Rust's priority 200 ordering above ordinary priority 100
+popups, and primary mouse-down now dismisses the overlay immediately even
+when hover remains on the trigger.
+
+Tests cover delayed request ownership and cancellation, immediate grace
+display, preferred placement, custom build/render callbacks, Enter and Switch
+epochs/bounds, deferred tooltip layering, grace hide and explicit dismissal.
+Base tooltip is full: the audit moves to 104 full, 17 partial, 8 adapters and
+2 exclusions with 248 unresolved partial-module spellings and no full-module
+errors. MSVC debug/release, clang-cl release and MSVC ASan pass 20,232 checks;
+wasm passes its 19,527 applicable checks. The release story gallery compiles
+unchanged.

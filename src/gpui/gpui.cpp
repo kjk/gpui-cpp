@@ -1725,6 +1725,11 @@ El* El::Deferred() {
     style.deferred = true;
     return this;
 }
+El* El::DeferredLayer(int layer) {
+    style.deferred = true;
+    style.deferredLayer = (uint8_t)(layer > 0 ? layer : 0);
+    return this;
+}
 El* El::AnchorBelow(float gap) {
     style.absolute = true;
     style.anchorBelow = true;
@@ -4811,7 +4816,12 @@ static void PaintOverlays(PaintCtx* ctx, El* e) {
         return;
     }
     if (IsOverlay(e)) {
+        int previousLayer = ctx->paintLayer;
+        if (e->style.deferredLayer) {
+            ctx->paintLayer = e->style.deferredLayer;
+        }
         PaintElNode(ctx, e, false);
+        ctx->paintLayer = previousLayer;
         return;
     }
     for (El* c = e->first; c; c = c->next) {
@@ -5525,38 +5535,6 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             e->style.radius + kFocusRingWidth, kFocusRingWidth,
             RgbaOpacity(RuntimeStyleNow(ctx->app).ring, kFocusRingOpacity));
     }
-}
-
-// TooltipOverlay::render. The overlay says what is showing and where its
-// trigger was, so the tip outlives the element that asked for it — which it
-// has to, since the countdown that revealed it lands frames later.
-void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
-    if (!tip || !tip->visible || !tip->text.s) {
-        return;
-    }
-    const RuntimeStyle& th = RuntimeStyleNow(ctx->app);
-    // tooltip.rs: the popover surface with the theme border round it, not a
-    // dark plate — `bg(tokens.popover).text_color(popover_foreground)
-    // .border_1().border_color(border).rounded(6).py_0p5().px_2().text_sm()`.
-    // The port painted it in `foreground` on `background`, which reads as an
-    // inverted chip in either theme.
-    const float kPadX = 8.f, kPadY = 2.f, kBorder = 1.f;
-    Size sz = MeasureText(ctx, tip->text, 14, 280);
-    // TooltipPositioner: the shared positioner's side placement, with no
-    // preferred side (which prefers above), centered on the trigger, the
-    // window margin, and `m_3` of clearance from the trigger itself.
-    Positioned at = PositionSide(
-        tip->triggerBounds,
-        {sz.w + kPadX * 2 + kBorder * 2, sz.h + kPadY * 2 + kBorder * 2},
-        {ctx->viewW, ctx->viewH}, kPopupMargin, nullptr, PopupAlign::Center,
-        10.f);
-    FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
-              th.popover);
-    DrawRoundStroke(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
-                    kBorder, th.border);
-    DrawTextAt(ctx, tip->text, at.bounds.x + kPadX + kBorder,
-               at.bounds.y + kPadY + kBorder, sz.w + 4, sz.h, 14,
-               th.popoverForeground, false);
 }
 
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {

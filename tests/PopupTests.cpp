@@ -115,6 +115,109 @@ static void PopoverOpenStateOwnsItsDeferredRegistration() {
 
 namespace {
 
+struct TooltipRecorder {
+    int builds = 0;
+    int renders = 0;
+    TooltipTransition transition = {};
+
+    static El* Build(Ctx* cx, void* data) {
+        TooltipRecorder* self = (TooltipRecorder*)data;
+        self->builds++;
+        return Div(cx->a)->W(40)->H(18)->AriaLabel(StrL("custom tip"));
+    }
+
+    static El* Render(Ctx* cx, El* view,
+                      const TooltipTransition& transition, void* data) {
+        TooltipRecorder* self = (TooltipRecorder*)data;
+        self->renders++;
+        self->transition = transition;
+        return Div(cx->a)->Child(view);
+    }
+};
+
+} // namespace
+
+static void TooltipOverlayOwnsRequestsTransitionsAndPositioning() {
+    App app;
+    Window* win = new Window();
+    Arena* a = ArenaNew();
+    win->app = &app;
+    Entity<TooltipOverlay> entity = EntityNew<TooltipOverlay>(&app);
+    TooltipOverlay* overlay = entity.Get(&app);
+    Ctx cx = {&app, win, a, entity.id};
+    TooltipRecorder recorder;
+
+    overlay->RenderWith(&TooltipRecorder::Render, &recorder);
+    overlay->hadRecentTooltip = true;
+    Bounds first = {10, 20, 30, 40};
+    TooltipRequest request =
+        TooltipRequest::New(first, &TooltipRecorder::Build, &recorder);
+    request.Placement(Placement::Right);
+    overlay->RequestShow(request, win, &cx);
+    utassert(overlay->hasContent);
+    utassert(!overlay->hasPending);
+    utassert(!overlay->isSwitching);
+    utassert(overlay->content.hasPreferredPlacement);
+    utassert(overlay->content.preferredPlacement == Placement::Right);
+
+    El* enter = TooltipOverlay::Render(overlay, &cx);
+    utassert(enter && enter->style.explicitPositioner);
+    utassert(enter->style.deferred);
+    utassert(enter->style.deferredLayer == kPaintLayerTooltip);
+    utassert(enter->style.positionerPlacement == (int8_t)Placement::Right);
+    utassert(recorder.builds == 1 && recorder.renders == 1);
+    utassert(recorder.transition.kind == TooltipTransitionKind::Enter);
+
+    Bounds second = {80, 20, 30, 40};
+    TooltipRequest next =
+        TooltipRequest::New(second, &TooltipRecorder::Build, &recorder);
+    overlay->RequestShow(next, win, &cx);
+    utassert(overlay->isSwitching && overlay->hasPreviousBounds);
+    El* switched = TooltipOverlay::Render(overlay, &cx);
+    utassert(switched != nullptr);
+    utassert(recorder.transition.kind == TooltipTransitionKind::Switch);
+    utassertnear(recorder.transition.previous.x, first.x);
+    utassertnear(recorder.transition.current.x, second.x);
+
+    overlay->RequestHide(win, &cx);
+    utassert(overlay->hadRecentTooltip && overlay->hideTask != 0);
+    overlay->Hide(&cx);
+    utassert(!overlay->hasContent && !overlay->hadRecentTooltip);
+    utassert(overlay->hideTask == 0);
+
+    EntityDrop(&app, entity.id);
+    WindowKeyedFree(win);
+    delete win;
+    ArenaDelete(a);
+}
+
+static void TooltipDelayOwnsAndCancelsPendingText() {
+    App app;
+    Window* win = new Window();
+    Arena* a = ArenaNew();
+    win->app = &app;
+    Entity<TooltipOverlay> entity = EntityNew<TooltipOverlay>(&app);
+    TooltipOverlay* overlay = entity.Get(&app);
+    Ctx cx = {&app, win, a, entity.id};
+
+    TooltipRequest request =
+        TooltipRequest::Text({2, 4, 20, 10}, StrL("delayed"));
+    overlay->RequestShow(request, win, &cx);
+    utassert(!overlay->hasContent && overlay->hasPending);
+    utassert(overlay->showTask != 0);
+    utassert(StrSame(overlay->pending.text, StrL("delayed")));
+    utassert(overlay->pending.text.s != request.text.s);
+    overlay->RequestHide(win, &cx);
+    utassert(!overlay->hasPending && overlay->showTask == 0);
+
+    EntityDrop(&app, entity.id);
+    WindowKeyedFree(win);
+    delete win;
+    ArenaDelete(a);
+}
+
+namespace {
+
 struct PopoverRecorder {
     int changes = 0;
     bool lastOpen = false;
@@ -250,4 +353,6 @@ void TestPopup() {
     TriggerCaptureEnablesContentOnTheNextFrame();
     PopoverOpenStateOwnsItsDeferredRegistration();
     PopoverOwnsOpenCallbacksAndOutsideDismissal();
+    TooltipOverlayOwnsRequestsTransitionsAndPositioning();
+    TooltipDelayOwnsAndCancelsPendingText();
 }
