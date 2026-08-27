@@ -9213,3 +9213,10 @@ returns, a client that exports `DllCanUnloadNow` has the loader's reference
 released. The WebView2 client pins itself for its asynchronous work and live COM
 objects; clients without that unload contract remain loaded. Repeated webview
 construction therefore no longer leaks one module reference per view.
+
+Windows construction now loads browser extensions at the same structural point
+as Wry: the final step of webview initialization, before the outer constructor
+installs drag/drop interception and applies bounds. An extension failure
+therefore has the same native side-effect boundary. The public attribute
+comments also state the actual Rust `Option<String>` mapping: null is `None`,
+while a non-null empty string is an explicit value.

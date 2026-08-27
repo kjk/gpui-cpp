@@ -366,7 +366,7 @@ struct WebViewAttributes {
     void* webviewConfiguration = nullptr;
 
     // ── WebViewBuilderExtWindows ──
-    /** Empty means wry's own default arguments — see readme.md. */
+    /** Null means wry's own default arguments; non-null empty is explicit. */
     Str additionalBrowserArgs;
     bool browserAcceleratorKeys = true;
     bool defaultContextMenus = true;
@@ -377,6 +377,7 @@ struct WebViewAttributes {
     bool useHttpsScheme = false;
     ScrollBarStyle scrollBarStyle = ScrollBarStyle::Default;
     bool browserExtensionsEnabled = false;
+    /** Null is Rust's `None`; non-null empty is an explicit empty path. */
     Str extensionPath;
     /** Optional borrowed `ICoreWebView2Environment*`, normally obtained from
         `WebViewEnvironmentRaw`. Windows AddRefs it during construction. */

@@ -3983,6 +3983,14 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         return nullptr;
     }
 
+    // Wry loads extensions as the last part of `init`, before the outer
+    // constructor installs drag/drop interception and applies final bounds.
+    if (attrs->browserExtensionsEnabled && attrs->extensionPath.s &&
+        !LoadExtensions(webview, attrs->extensionPath)) {
+        WebViewFree(wv);
+        return nullptr;
+    }
+
     if (attrs->dragDropHandler) {
         // wry's usual window runtimes initialize OLE before this point. GPUI
         // initializes COM directly, so this backend owns the extra OLE
@@ -4007,11 +4015,6 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
             WebViewFree(wv);
             return nullptr;
         }
-    }
-    if (attrs->browserExtensionsEnabled && attrs->extensionPath.s &&
-        !LoadExtensions(webview, attrs->extensionPath)) {
-        WebViewFree(wv);
-        return nullptr;
     }
     return wv;
 }
