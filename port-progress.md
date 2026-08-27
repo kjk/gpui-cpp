@@ -9144,3 +9144,8 @@ record; teardown marks it dead before closing the controller and queued
 handlers then return without touching the deleted owner. This gives the C
 callback form the lifetime Wry's owned closures already have, including
 partial-construction failure paths.
+
+The Windows cookie-manager helper now propagates `get_CookieManager` failure
+instead of inferring success solely from its output pointer. This matches the
+`?` boundary used by all four Wry cookie operations and releases any invalid
+partial COM result.

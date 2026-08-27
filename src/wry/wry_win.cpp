@@ -3673,8 +3673,12 @@ static ICoreWebView2CookieManager* CookieManager(WebView* wv) {
         return nullptr;
     }
     ICoreWebView2CookieManager* manager = nullptr;
-    webview2->get_CookieManager(&manager);
+    HRESULT hr = webview2->get_CookieManager(&manager);
     Rel(&webview2);
+    if (FAILED(hr)) {
+        Rel(&manager);
+        return nullptr;
+    }
     return manager;
 }
 
