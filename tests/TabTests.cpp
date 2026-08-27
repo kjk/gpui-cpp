@@ -289,6 +289,44 @@ static void TabBarRetainsStyleSpacingScrollAndUnboundedChildren() {
     EntityDropAll(&app);
 }
 
+static void SegmentedShadowFitsInsideExpandedClips() {
+    App app;
+    ThemeSet(&app, ThemeMode::Light);
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+
+    El* root = TabBar::New(&cx, StrL("segmented-shadow"))
+                   ->Segmented()
+                   ->Selected(0)
+                   ->Tab(StrL("One"))
+                   ->IntoEl();
+    El* viewport = FindNamedTab(root, "tabs");
+    El* strip = FindNamedTab(root, "tabs-inner");
+    utassert(viewport && strip);
+    utassertnear(viewport ? viewport->style.margin.left : 0, -4.f);
+    utassertnear(viewport ? viewport->style.pad.left : 0, 4.f);
+    utassertnear(strip ? strip->style.margin.left : 0, -4.f);
+    utassertnear(strip ? strip->style.pad.left : 0, 4.f);
+
+    El* tab = FindNamedTab(root, "0");
+    El* inner = tab ? tab->first : nullptr;
+    utassert(inner && inner->style.shadowCount == 2);
+    if (inner && inner->style.shadowCount == 2) {
+        utassertnear(inner->style.shadows[0].blur, 1.5f);
+        utassertnear(inner->style.shadows[1].blur, 1.f);
+        utassertnear(inner->style.shadows[1].spread, -1.f);
+    }
+
+    WindowMotionFree(win);
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
 void TestTab() {
     TestSuite("tab");
     UnderlineIsTallerThanEveryOtherVariant();
@@ -299,4 +337,5 @@ void TestTab() {
     TwoBarsHaveTwoOverflowMenus();
     SourceNamedTabAndTabBarKeepContentAndCallbackRules();
     TabBarRetainsStyleSpacingScrollAndUnboundedChildren();
+    SegmentedShadowFitsInsideExpandedClips();
 }

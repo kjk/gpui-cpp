@@ -1,5 +1,6 @@
 #include "ui/i18n.h"
 #include "ui/tab.h"
+#include "ui/styled.h"
 #include "base/motion.h"
 
 namespace gpui {
@@ -637,6 +638,12 @@ El* TabBar::IntoEl() {
                        ->Flex1()
                        ->H(kFill)
                        ->ClipX();
+    if (barPadX > 0) {
+        // Expand the clipping box into the bar's padding, then put its
+        // content origin back. This leaves every tab where it was while the
+        // segmented indicator's horizontal shadow gets room to fall off.
+        viewport->MarginX(-barPadX)->PadX(barPadX);
+    }
     float activeScrollX = scrollX;
     int activeScrollId = scrollId;
     Listener activeOnScroll = onScroll;
@@ -658,6 +665,9 @@ El* TabBar::IntoEl() {
                     ->ScrollX(activeScrollX)
                     ->ScrollId(activeScrollId)
                     ->OnScroll(activeOnScroll);
+    if (barPadX > 0) {
+        strip->MarginX(-barPadX)->PadX(barPadX);
+    }
     if (gap > 0) {
         strip->Gap(gap);
     }
@@ -761,6 +771,9 @@ El* TabBar::IntoEl() {
         if (st.innerBg.a) {
             inner->Bg(st.innerBg);
         }
+        if (st.shadow) {
+            RaisedShadow(inner);
+        }
         // inner_margins: the underline's inner box stands off the border
         // above and below it. There is no margin here, so the tab pads the
         // box away from its own edges, which comes to the same thing.
@@ -846,6 +859,12 @@ El* TabBar::IntoEl() {
                 ind->Top(0)->H(kFill)->Radius(99)->Bg(th.tokens.primary);
                 break;
             case TabVariant::Segmented:
+                ind->Top((h - innerH) * 0.5f)
+                    ->H(innerH)
+                    ->Radius(innerRadius)
+                    ->Bg(th.tokens.background);
+                RaisedShadow(ind);
+                break;
             case TabVariant::Tab:
                 ind->Top((h - innerH) * 0.5f)
                     ->H(innerH)

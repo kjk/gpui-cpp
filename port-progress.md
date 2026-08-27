@@ -9309,3 +9309,9 @@ frame: the open transition takes focus, while later renders leave escaped
 focus alone. This also makes the existing focus-trap implementation closer to
 Rust's `Root::open_dialog` boundary instead of treating every render as an
 open.
+
+`9e069926` expands the segmented tab strip's two clipping containers into the
+bar padding while restoring their content origins, preserving tab geometry
+and giving the active indicator's shadow horizontal room. The selected chip
+and its moving indicator now use the source's two-layer `raised_shadow`, with
+the CSS blur radii halved for GPUI's gaussian convention.
