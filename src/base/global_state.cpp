@@ -27,6 +27,52 @@ bool BaseIsTextSelectionSuppressed(const App* app) {
     return state && state->suppressTextSelection;
 }
 
+static MenuRow* CopyMenuRows(Arena* a, const MenuRow* rows, int count) {
+    if (!rows || count <= 0) {
+        return nullptr;
+    }
+    MenuRow* copy = (MenuRow*)a->Push((uint64_t)count * sizeof(MenuRow),
+                                      alignof(MenuRow), true);
+    for (int i = 0; i < count; i++) {
+        copy[i] = rows[i];
+        copy[i].label = StrDup(a, rows[i].label);
+        copy[i].submenu =
+            CopyMenuRows(a, rows[i].submenu, rows[i].submenuN);
+    }
+    return copy;
+}
+
+const MenuDef* BaseAppMenus(const App* app, int* count) {
+    BaseGlobalState* state = AppGlobalGet<BaseGlobalState>(app);
+    if (count) {
+        *count = state ? state->appMenus.len : 0;
+    }
+    return state && state->appMenus.len > 0 ? state->appMenus.els : nullptr;
+}
+
+void BaseSetAppMenus(App* app, const MenuDef* menus, int count) {
+    BaseGlobalState* state = BaseGlobalStateOf(app);
+    if (!state) {
+        return;
+    }
+    if (!state->appMenuArena) {
+        state->appMenuArena = ArenaNew();
+    }
+    state->appMenus.Clear();
+    state->appMenuArena->Reset();
+    if (menus && count > 0) {
+        VecReserve(state->appMenus, count);
+        for (int i = 0; i < count; i++) {
+            MenuDef copy = menus[i];
+            copy.name = StrDup(state->appMenuArena, menus[i].name);
+            copy.items = CopyMenuRows(state->appMenuArena, menus[i].items,
+                                      menus[i].n);
+            state->appMenus.Append(copy);
+        }
+    }
+    AppSetMenus(app, state->appMenus.els, state->appMenus.len);
+}
+
 void BaseDeferredPopoverSet(App* app, EntityId popover, bool open) {
     BaseGlobalState* state = BaseGlobalStateOf(app);
     if (!state || !popover.IsValid()) {
@@ -47,6 +93,11 @@ void BaseDeferredPopoverSet(App* app, EntityId popover, bool open) {
         }
         state->deferredPopovers.len--;
     }
+}
+
+DeferredPopover BaseRegisterDeferredPopover(App* app, EntityId popover) {
+    BaseDeferredPopoverSet(app, popover, true);
+    return popover;
 }
 
 bool BaseIsInDeferredContext(App* app) {

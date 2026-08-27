@@ -56,9 +56,42 @@ static void BaseInitializationIsIdempotentAndIsolated() {
     utassert(!BaseIsTextSelectionSuppressed(&second));
     BaseResetTextSelectionSuppression(&first);
     utassert(!BaseIsTextSelectionSuppressed(&first));
+    GlobalState* sourceName = BaseGlobalStateOf(&first);
+    utassert(sourceName != nullptr);
 
     AppGlobalClear(&first);
     AppGlobalClear(&second);
+}
+
+static void BaseGlobalRetainsTheApplicationMenus() {
+    App app;
+    char menuName[] = "File";
+    char rowName[] = "Open";
+    MenuRow row = {};
+    row.label = Str(rowName);
+    row.action = ActionOf(StrL("test::Open"));
+    MenuDef menu = {};
+    menu.name = Str(menuName);
+    menu.items = &row;
+    menu.n = 1;
+
+    BaseSetAppMenus(&app, &menu, 1);
+    menuName[0] = 'X';
+    rowName[0] = 'Y';
+    int count = 0;
+    const MenuDef* retained = BaseAppMenus(&app, &count);
+    utassert(count == 1 && retained);
+    utassert(StrEqI(retained[0].name, StrL("File")));
+    utassert(retained[0].n == 1);
+    utassert(StrEqI(retained[0].items[0].label, StrL("Open")));
+    uint32_t action = 0;
+    utassert(AppMenuRowForId(&app, 1, &action, nullptr));
+    utassert(action == row.action);
+
+    BaseSetAppMenus(&app, nullptr, 0);
+    utassert(BaseAppMenus(&app, &count) == nullptr && count == 0);
+    AppMenuClear(&app);
+    AppGlobalClear(&app);
 }
 
 static void UiInitializationIsIdempotentAndIsolated() {
@@ -104,5 +137,6 @@ void TestAppGlobals() {
     GlobalsBelongToOneApp();
     ReplacingAndRemovingReleaseOwnership();
     BaseInitializationIsIdempotentAndIsolated();
+    BaseGlobalRetainsTheApplicationMenus();
     UiInitializationIsIdempotentAndIsolated();
 }

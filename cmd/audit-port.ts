@@ -47,7 +47,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 
 const partialBase = new Set([
   "dock",
-  "global_state",
   "input",
   "macos_accessibility",
   "motion",

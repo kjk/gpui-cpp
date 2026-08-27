@@ -7688,3 +7688,31 @@ adapters and 2 exclusions with 293 unresolved partial-module spellings and no
 full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
 19,909 checks; wasm passes its 19,204 applicable checks. The release story
 build and pinned light-theme NumberInput comparison pass.
+
+## Base GlobalState retains the shared menu model
+
+Base already had the operational halves of `global_state.rs`: per-App
+ownership, idempotent initialization, mouse-down text-selection suppression,
+and deferred popover registrations represented by generational entity handles.
+The last is the non-refcounted projection of Rust's weak token: dropping the
+popover state makes its handle stale, and the next read sweeps it. What was
+missing structurally were the public `GlobalState` and `DeferredPopover` names,
+and what was missing behaviorally was `GlobalState::app_menus`: the runtime
+installed a deep platform copy, while the Base global retained no model for an
+in-window `AppMenuBar` to read.
+
+`GlobalState` and `DeferredPopover` are now exact public aliases for the Base
+implementation record and its generational token. The global owns an arena and
+a deep-copied `Vec<MenuDef>` including recursive submenu rows and all strings.
+`BaseSetAppMenus` replaces that model and installs the retained copy through
+the platform seam; `BaseAppMenus` returns the same application-owned model.
+The story now uses this source-shaped setter rather than bypassing Base.
+
+Tests mutate the source menu buffers after installation and verify that both
+the retained hierarchy and runtime action table remain intact, then verify
+replacement by an empty model and normal App-global cleanup. Base GlobalState
+is full: the audit moves to 90 full, 31 partial, 8 adapters and 2 exclusions
+with 291 unresolved partial-module spellings and no full-module errors. MSVC
+debug/release and MSVC ASan pass 19,917 checks; a warning-clean wasm
+`hello_world` build exercises the portable amalgamation. The release story
+build and pinned light-theme Introduction comparison pass.

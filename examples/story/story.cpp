@@ -1523,7 +1523,7 @@ static void StorySetSystemMenus(StoryApp* app, Ctx* cx, const MenuDef* menus,
         return;
     }
     app->menuHash = h;
-    AppSetMenus(cx->app, menus, n);
+    BaseSetAppMenus(cx->app, menus, n);
 }
 
 // The same rows as the menu the title bar draws. `id` keys the menu's state,
