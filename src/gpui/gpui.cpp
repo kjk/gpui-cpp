@@ -724,6 +724,23 @@ El* El::BorderR(float width, Rgba c) {
     style.borderColor = c;
     return this;
 }
+El* El::Shadows(const BoxShadow* values, int count) {
+    style.shadows = nullptr;
+    style.shadowCount = 0;
+    if (!values || count <= 0 || !arena ||
+        count > 0x7fffffff / (int)sizeof(BoxShadow)) {
+        return this;
+    }
+    BoxShadow* copy =
+        (BoxShadow*)Alloc(arena, count * (int)sizeof(BoxShadow));
+    if (!copy) {
+        return this;
+    }
+    memcpy(copy, values, (size_t)count * sizeof(BoxShadow));
+    style.shadows = copy;
+    style.shadowCount = count;
+    return this;
+}
 El* El::DashArray(float on, float off) {
     style.dashOn = on;
     style.dashOff = off;
@@ -4036,6 +4053,61 @@ static void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
     CanvasStrokeRound(ctx, x, y, w, h, ClampRadius(r, w, h), stroke, c);
 }
 
+// GPUI's renderer blurs an alpha mask for a box shadow. The portable paint
+// seam has no filter primitive, so approximate the same Gaussian falloff by
+// painting nested rounded masks from the blur's outside edge inward. Each
+// mask adds only the delta to the target opacity at that distance; unlike a
+// handful of arbitrary outlines this retains the declared blur radius,
+// spread, offset, colour and multiple-shadow ordering on every backend.
+static void PaintBoxShadow(PaintCtx* ctx, const El* e,
+                           const BoxShadow& shadow) {
+    if (shadow.inset || shadow.color.a == 0) {
+        // No component currently requests an inset shadow. Retain the field
+        // in the value contract, but do not turn it into an outward shadow.
+        return;
+    }
+    float x = e->x + shadow.x - shadow.spread;
+    float y = e->y + shadow.y - shadow.spread;
+    float w = e->w + shadow.spread * 2.f;
+    float h = e->h + shadow.spread * 2.f;
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    float radius = e->style.radius + shadow.spread;
+    if (radius < 0) {
+        radius = 0;
+    }
+    float blur = shadow.blur > 0 ? shadow.blur : 0;
+    if (blur <= 0.01f) {
+        FillRound(ctx, x, y, w, h, radius, shadow.color);
+        return;
+    }
+    int steps = (int)ceilf(blur);
+    if (steps < 2) {
+        steps = 2;
+    }
+    if (steps > 32) {
+        steps = 32;
+    }
+    float previous = 0;
+    for (int i = steps; i >= 0; i--) {
+        float distance = blur * (float)i / (float)steps;
+        float unit = distance / blur;
+        // Half of an opaque half-plane contributes at its edge. The
+        // exp(-2x^2) tail is visually close to the source Gaussian while
+        // remaining expressible through the existing rounded-fill seam.
+        float target = 0.5f * expf(-2.f * unit * unit);
+        float delta = target - previous;
+        previous = target;
+        if (delta <= 0.0001f) {
+            continue;
+        }
+        Rgba color = RgbaOpacity(shadow.color, delta);
+        FillRound(ctx, x - distance, y - distance, w + distance * 2.f,
+                  h + distance * 2.f, radius + distance, color);
+    }
+}
+
 // Layout lands on fractions of a pixel, which spreads a hairline over two
 // rows however it is inset. A border line is snapped to the nearest device
 // pixel center so it covers exactly one.
@@ -5143,6 +5215,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // nothing to say, which is the order the two refinements are applied in.
     bool groupFill =
         fill == BoxFill::Base && e->style.hasGroupHoverBg && ctx->groupHovered;
+    for (int i = 0; i < e->style.shadowCount; i++) {
+        PaintBoxShadow(ctx, e, e->style.shadows[i]);
+    }
     if (fill != BoxFill::Base || groupFill || e->style.hasBg) {
         const Background& b = fill == BoxFill::Active  ? e->style.activeBg
                               : fill == BoxFill::Hover ? e->style.hoverBg

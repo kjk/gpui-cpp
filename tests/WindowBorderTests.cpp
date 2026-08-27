@@ -156,6 +156,41 @@ static void BuilderPublishesPlatformResizeSettings() {
     delete window;
 }
 
+static void BuilderCarriesTheExactTwoSourceShadows() {
+    App app;
+    ThemeSet(&app, ThemeMode::Dark);
+    Window* window = new Window();
+    window->app = &app;
+    window->opts.clientTitleBar = true;
+    window->active = true;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, window, arena, {}};
+
+    El* backdrop = WindowBorder::New(&cx)->ShadowSize(20)->IntoEl();
+#if GPUI_OS_LINUX
+    // A pure Linux test has no native window, so WindowClientDecorated
+    // correctly selects server decorations and there is no client shadow.
+    utassert(backdrop->first == nullptr);
+#else
+    El* frame = backdrop->first;
+    utassert(frame != nullptr);
+    utassert(frame->style.shadowCount == 2);
+    const BoxShadow& ambient = frame->style.shadows[0];
+    const BoxShadow& contact = frame->style.shadows[1];
+    utassertnear(ambient.x, 0.f);
+    utassertnear(ambient.y, 2.f);
+    utassertnear(ambient.blur, 10.f);
+    utassertnear(ambient.spread, -1.f);
+    utassert(ambient.color.a == 46);
+    utassertnear(contact.y, 1.f);
+    utassertnear(contact.blur, 3.f);
+    utassertnear(contact.spread, 0.f);
+#endif
+
+    ArenaDelete(arena);
+    delete window;
+}
+
 void TestWindowBorder() {
     TestSuite("window_border");
     TilingTakesTheShadowOffThatSide();
@@ -164,4 +199,5 @@ void TestWindowBorder() {
     AWindowWithNoShadowIsGrabbedAtItsOwnEdges();
     WindowPaddingsFollowDecorationAndStableInset();
     BuilderPublishesPlatformResizeSettings();
+    BuilderCarriesTheExactTwoSourceShadows();
 }

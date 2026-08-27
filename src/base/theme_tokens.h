@@ -71,16 +71,9 @@ struct TypographyTokens {
     TextStyleToken monoMd = {13, 20, FontWeight::Normal};
 };
 
-struct SemanticShadow {
-    float x = 0;
-    float y = 0;
-    float blur = 0;
-    float spread = 0;
-    Rgba color = {};
-    bool inset = false;
-};
-
-using BoxShadow = SemanticShadow;
+// Base calls GPUI's box-shadow value a semantic shadow when it appears in a
+// theme token. It is the same source value, not a second representation.
+using SemanticShadow = BoxShadow;
 
 struct ShadowTokens {
     Vec<BoxShadow> sm;

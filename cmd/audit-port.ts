@@ -56,7 +56,6 @@ const partialUi = new Set([
   "input",
   "plot",
   "text",
-  "window_border",
 ]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
@@ -67,8 +66,6 @@ const partialReasons: Record<string, string> = {
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
-  "ui/window_border":
-    "fixed-overlay insets and platform resize delegation are complete; blurred Linux shadows and native per-side tiling detection remain smaller",
 };
 
 const adapterReasons: Record<string, string> = {

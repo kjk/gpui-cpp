@@ -124,6 +124,19 @@ struct Background {
     Background(Rgba c) : color(c) {}
 };
 
+// gpui::BoxShadow. The source style owns a Vec of these; a frame element
+// borrows an arena copy through Style::shadows below. Keeping the primitive
+// in gpui (rather than in Base's theme-token facade) lets ordinary elements
+// paint the same multi-layer shadows the Rust Styled API carries.
+struct BoxShadow {
+    float x = 0;
+    float y = 0;
+    float blur = 0;
+    float spread = 0;
+    Rgba color = {};
+    bool inset = false;
+};
+
 // gpui::linear_gradient(angle, from, to).
 Background BackgroundLinear(float angle, ColorStop from, ColorStop to);
 inline ColorStop ColorStopAt(Rgba c, float pct) {
@@ -1273,6 +1286,11 @@ struct Style {
     Background bg = {};
     Rgba borderColor = {};
     Rgba color = {};
+    // Arena-owned copy of Styled::shadow(Vec<BoxShadow>). Shadows do not
+    // participate in layout; they paint behind the element in declaration
+    // order, as GPUI's box-shadow list does.
+    const BoxShadow* shadows = nullptr;
+    int shadowCount = 0;
     // Transformation::rotate: turns clockwise about the element's own centre,
     // where 1 is a whole one. Only an icon reads it — a rotated box would want
     // the whole element tree in on it, and nothing in the port asks for one.
@@ -1968,6 +1986,7 @@ struct El {
     El* BorderB(float width, Rgba c);
     El* BorderL(float width, Rgba c);
     El* BorderR(float width, Rgba c);
+    El* Shadows(const BoxShadow* values, int count);
     El* Radius(float r);
     // rounded_tl / rounded_tr / rounded_br / rounded_bl, as one call. A corner
     // left at 0 is square, which is what `rounded_none` does to all four.

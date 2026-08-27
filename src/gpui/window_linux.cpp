@@ -68,6 +68,7 @@ static Atom aWmDeleteWindow, aWmProtocols, aNetWmName, aUtf8String;
 static Atom aNetWmState, aNetWmStateMaxVert, aNetWmStateMaxHorz;
 static Atom aNetFrameExtents;
 static Atom aNetWmMoveResize, aMotifWmHints, aGtkShowWindowMenu;
+static Atom aGtkEdgeConstraints;
 static Atom aClipboard, aTargets, aClipTarget;
 
 double TimeNow() {
@@ -176,6 +177,39 @@ static bool ReadMaximized(Window* win) {
         XFree(data);
     }
     return vert && horz;
+}
+
+// Zed's X11 platform reads Mutter's `_GTK_EDGE_CONSTRAINTS` property. Its
+// low eight bits alternate tiled/resizable for top, right, bottom and left;
+// these are exactly the four booleans GPUI exposes as Tiling. A manager that
+// does not publish the extension falls back to EWMH maximization below.
+static Tiling ReadTiling(Window* win, bool maximized) {
+    Tiling out = {};
+    PlatWindow* pw = win ? win->plat : nullptr;
+    if (pw) {
+        Atom type = 0;
+        int format = 0;
+        unsigned long n = 0, after = 0;
+        unsigned char* data = nullptr;
+        if (XGetWindowProperty(gDpy, pw->xwin, aGtkEdgeConstraints, 0, 1,
+                               False, XA_CARDINAL, &type, &format, &n, &after,
+                               &data) == Success) {
+            if (data && type == XA_CARDINAL && format == 32 && n >= 1) {
+                unsigned long bits = ((unsigned long*)data)[0];
+                out.top = (bits & (1ul << 0)) != 0;
+                out.right = (bits & (1ul << 2)) != 0;
+                out.bottom = (bits & (1ul << 4)) != 0;
+                out.left = (bits & (1ul << 6)) != 0;
+            }
+            if (data) {
+                XFree(data);
+            }
+        }
+    }
+    if (maximized) {
+        out.top = out.bottom = out.left = out.right = true;
+    }
+    return out;
 }
 
 static void SendWmState(Window* win, Atom a, Atom b, int action) {
@@ -1064,17 +1098,11 @@ static void HandleEvent(App* app, XEvent* ev) {
             }
             break;
         case PropertyNotify:
-            if (ev->xproperty.atom == aNetWmState) {
+            if (ev->xproperty.atom == aNetWmState ||
+                ev->xproperty.atom == aGtkEdgeConstraints) {
                 win->maximized = ReadMaximized(win);
-                // GPUI reports a maximized client window as tiled on every
-                // side, suppressing its shadow, borders and resize zones.
-                // Partial compositor tiling has no portable EWMH state; the
-                // component's explicit Tiling setter remains that seam.
-                win->tiling = {};
-                if (win->maximized) {
-                    win->tiling.top = win->tiling.bottom = true;
-                    win->tiling.left = win->tiling.right = true;
-                }
+                win->tiling = ReadTiling(win, win->maximized);
+                pw->dirty = true;
             }
             break;
         case KeyPress:
@@ -1410,6 +1438,8 @@ bool PlatInit(App* app) {
     aNetWmMoveResize = XInternAtom(gDpy, "_NET_WM_MOVERESIZE", False);
     aMotifWmHints = XInternAtom(gDpy, "_MOTIF_WM_HINTS", False);
     aGtkShowWindowMenu = XInternAtom(gDpy, "_GTK_SHOW_WINDOW_MENU", False);
+    aGtkEdgeConstraints =
+        XInternAtom(gDpy, "_GTK_EDGE_CONSTRAINTS", False);
     aClipboard = XInternAtom(gDpy, "CLIPBOARD", False);
     aTargets = XInternAtom(gDpy, "TARGETS", False);
     aClipTarget = XInternAtom(gDpy, "GPUI_CLIPBOARD", False);

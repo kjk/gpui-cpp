@@ -17,8 +17,6 @@ enum class ButtonRounded : uint8_t {
 struct ButtonCustomVariant {
     Rgba color = {};
     Rgba foreground = {};
-    // Retained exactly for the source contract. El has no general box-shadow
-    // primitive yet, so IntoEl cannot paint the requested shadow.
     bool shadow = false;
     Rgba hover = {};
     Rgba active = {};

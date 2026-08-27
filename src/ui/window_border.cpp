@@ -105,6 +105,10 @@ El* WindowBorder::IntoEl() {
     bool clientDecorated = !cx->win || WindowClientDecorated(cx->win);
     WindowTiling effectiveTiling =
         hasTiling || !cx->win ? tiling : cx->win->tiling;
+    if (!hasTiling && cx->win && cx->win->maximized) {
+        effectiveTiling.top = effectiveTiling.bottom = true;
+        effectiveTiling.left = effectiveTiling.right = true;
+    }
     // window.set_client_inset(platform_inset). Rust keeps the full platform
     // inset even when tiling suppresses the visual shadow on one or all
     // edges, so Positioner never places a popup under the resize frame.
@@ -133,7 +137,12 @@ El* WindowBorder::IntoEl() {
     float visualShadow = effectiveTiling.AllTiled() ? 0.f : shadowSize;
     Edges insets = WindowBorderInsets(visualShadow, effectiveTiling);
 
-    El* backdrop = Div(a)->FlexCol()->SizeFull()->ClipY();
+    El* backdrop = Div(a)
+                       ->FlexCol()
+                       ->SizeFull()
+                       ->ClipX()
+                       ->ClipY()
+                       ->Bg(Rgba8(0, 0, 0, 0));
     if (insets.top > 0) {
         backdrop->PadT(insets.top);
     }
@@ -149,10 +158,23 @@ El* WindowBorder::IntoEl() {
 
     // The frame itself: a one-pixel border on every side the window is not
     // tiled against, dimmed while the window is not the active one.
-    El* frame = Div(a)->FlexCol()->Flex1()->MinH(0)->W(kFill)->ClipY();
-    Rgba border = th.border;
+    El* frame = Div(a)
+                    ->FlexCol()
+                    ->Flex1()
+                    ->MinW(0)
+                    ->MinH(0)
+                    ->W(kFill)
+                    ->ClipX()
+                    ->ClipY()
+                    ->Bg(Rgba8(0, 0, 0, 0));
+    // The source deliberately uses neutral 20%/80%, independent of the
+    // theme's semantic border token.
+    Rgba border = th.mode == ThemeMode::Dark ? Rgb(51, 51, 51)
+                                              : Rgb(204, 204, 204);
+    float activeOpacity = 1.f;
     if (!WindowIsActive(cx)) {
         border = RgbaOpacity(border, 0.7f);
+        activeOpacity = 0.7f;
     }
     if (!effectiveTiling.top) {
         frame->BorderT(kWindowBorderSize, border);
@@ -165,6 +187,17 @@ El* WindowBorder::IntoEl() {
     }
     if (!effectiveTiling.right) {
         frame->BorderR(kWindowBorderSize, border);
+    }
+    if (!effectiveTiling.IsTiled() && shadowSize > 0) {
+        // The exact two layers from window_border.rs: ambient first, contact
+        // second. El copies them into the frame arena.
+        BoxShadow shadows[2] = {
+            {0, 2, 10, -1, Rgba8(0, 0, 0, (uint8_t)(46 * activeOpacity)),
+             false},
+            {0, 1, 3, 0, Rgba8(0, 0, 0, (uint8_t)(46 * activeOpacity)),
+             false},
+        };
+        frame->Shadows(shadows, 2);
     }
     if (child) {
         frame->Child(child);

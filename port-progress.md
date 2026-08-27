@@ -8547,3 +8547,49 @@ identity and legacy settings retention. UI theme is full: the audit moves to
 partial-module spellings and no full-module errors. MSVC debug/release,
 clang-cl release and MSVC ASan pass 20,490 checks; wasm passes its 19,785
 applicable checks. The release story gallery compiles unchanged.
+
+## UI window border restores native tiling and layered shadows
+
+The window-border public surface and resize geometry were already complete,
+but the client frame still differed in the two places visible on Linux. It
+drew no shadow, and its X11 adapter collapsed window-manager state to either
+fully maximized or untiled. A left/right/top/bottom tile therefore retained
+padding, borders and resize handles on sides that GPUI suppresses.
+
+The runtime now carries GPUI's `BoxShadow` as an element style value. `El`
+copies an arbitrary source-order list into the frame arena and paints each
+outset layer behind the element, preserving offset, blur radius, spread,
+colour and corner radius. The portable paint API has no filter operation, so
+the blur mask is expressed as nested rounded fills whose alpha deltas follow
+a Gaussian falloff; this keeps the same declared reach and avoids adding a
+backend-only shadow API. Inset shadow values remain represented but are not
+painted because no component in the pinned tree requests one.
+
+`WindowBorder` now installs the source's exact ambient layer (0, 2, blur 10,
+spread -1, black at 18%) and contact layer (0, 1, blur 3, spread 0), dims both
+with an inactive window, suppresses the whole shadow for any tiled edge, and
+uses the source's neutral 20%/80% border rather than the semantic border
+token. The backdrop and frame also match the source's transparent fill,
+two-axis clipping and zero automatic minimum width. The new general shadow
+seam closes the retained custom-button shadow at the same time, using pinned
+GPUI's `shadow_xs` values.
+
+On X11 the platform now reads `_GTK_EDGE_CONSTRAINTS`, the extension Zed's
+own GPUI adapter uses. Its alternating tiled/resizable bits become the four
+`Tiling` sides directly, while standard EWMH maximization remains the
+all-sides fallback. Property changes dirty the window immediately, so
+padding, border, cursor and resize behavior move together with the native
+tile state. Windows/macOS/wasm derive the same all-sides state from their
+existing maximized flag; their platform adapters continue to own resize
+cursors and initiation instead of duplicating Rust's cursor-only overlay
+elements.
+
+Tests cover the exact two-layer shadow data as well as the existing inset,
+tiling and resize-edge matrix, and the button suite now proves `shadow_xs`
+reaches the element. UI window border is full: the audit moves to 114 full,
+7 partial, 8 adapters and 2 exclusions with 167 unresolved partial-module
+spellings and no full-module errors. MSVC release passes 20,504 checks and
+the release story gallery compiles; strict Linux g++ passes its 20,490
+applicable checks. The Linux validation also exposed and fixed name-hiding,
+single-translation-unit and class-memaccess warnings left by earlier work;
+that portable cleanup is the preceding `ca86f43` commit.

@@ -727,6 +727,14 @@ El* Button::IntoEl() {
     if (bg.gradient || bg.color.a) {
         e->Bg(bg);
     }
+    if (!disabled && th.shadow && variant == ButtonVariant::Custom &&
+        customVariant.shadow) {
+        // Styled::shadow_xs at the pinned GPUI checkin: Tailwind's
+        // 0 1px 2px 0 black/5%. This was retained but could not be painted
+        // before El acquired the source BoxShadow value above.
+        BoxShadow shadow = {0, 1, 2, 0, Rgba8(0, 0, 0, 13), false};
+        e->Shadows(&shadow, 1);
+    }
     if (interactive && onClick.IsValid()) {
         e->OnClick(onClick);
     }

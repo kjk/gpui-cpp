@@ -123,6 +123,10 @@ static void SourceButtonVariantsRoundingAndIconsRemainConcrete() {
     utassert(SameButtonColor(
         rendered->style.bg.color,
         RgbaMixOklab(theme.magenta, Rgba8(0, 0, 0, 0), 0.2f)));
+    utassert(rendered->style.shadowCount == 1);
+    utassertnear(rendered->style.shadows[0].y, 1.f);
+    utassertnear(rendered->style.shadows[0].blur, 2.f);
+    utassert(rendered->style.shadows[0].color.a == 13);
     component::ButtonVariants::Primary(button);
     utassert(button->variant == component::ButtonVariant::Primary &&
              !button->hasCustom);
