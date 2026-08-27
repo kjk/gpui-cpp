@@ -7756,3 +7756,20 @@ adapters and 2 exclusions with 290 unresolved partial-module spellings and no
 full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
 19,957 checks; wasm passes its 19,252 applicable checks. The release story
 build and pinned light-theme List comparison pass.
+
+## Base macOS accessibility forwarding is structurally complete
+
+The sole public declaration in `macos_accessibility.rs`,
+`install_window_hit_test_forwarder`, was still marked partial even though the
+native adapter was already complete. `PlatInstallAccessibilityHitTest` obtains
+the AppKit window, gets its metaclass, adds `accessibilityHitTest:` with the
+same Objective-C type encoding, and forwards the point to the content view.
+It also safely returns for a missing window/class and remembers installation,
+because C++ Root is rebuilt per frame where Rust Root installs once.
+
+The audit now records that exact portable-name mapping instead of expecting a
+second macOS-only entry point. Base macOS accessibility is full: the audit
+moves to 92 full, 29 partial, 8 adapters and 2 exclusions with 289 unresolved
+partial-module spellings and no full-module errors. The implementation itself
+is unchanged; the already passing portable accessibility suite covers its
+semantic-tree side, while the Objective-C forwarding half remains macOS-only.

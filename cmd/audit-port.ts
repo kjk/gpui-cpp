@@ -48,7 +48,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 const partialBase = new Set([
   "dock",
   "input",
-  "macos_accessibility",
   "motion",
   "resizable",
   "scrollbar",
@@ -86,8 +85,6 @@ const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
   "base/input":
     "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
-  "base/macos_accessibility":
-    "the portable semantic tree exists; only the native macOS hit-test forwarding seam is connected",
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
   "base/styled": "StyleRefinement is represented by the runtime El builder surface",
   "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
@@ -320,6 +317,10 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   "base/dialog.rs::fn init": { spellings: ["DialogInitKeys"] },
   "base/number_input.rs::fn step_value": {
     spellings: ["NumberStepValue"],
+  },
+  "base/macos_accessibility.rs::fn install_window_hit_test_forwarder": {
+    spellings: ["PlatInstallAccessibilityHitTest"],
+    targets: ["src/gpui/platform.h", "src/gpui/window_mac.cpp"],
   },
   "base/geometry.rs::struct Edges": {
     spellings: ["Edges"],

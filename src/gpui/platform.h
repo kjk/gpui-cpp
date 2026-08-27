@@ -144,6 +144,9 @@ void* PlatWindowHandle(Window* win);
 // accessibilityHitTest: install the native adapter that publishes the
 // portable semantic tree. Windows answers WM_GETOBJECT; macOS currently only
 // forwards hit-testing to its content view; Linux and wasm are no-ops.
+// C++ portable spelling of Base's public
+// `install_window_hit_test_forwarder`; the macOS implementation is the source
+// operation and the other platform definitions are intentional no-ops.
 void PlatInstallAccessibilityHitTest(Window* win);
 // The portable tree is live data; native accessibility clients need change
 // notifications beside their queries. The focus id is GPUI's internal id,
