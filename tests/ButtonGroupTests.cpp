@@ -78,6 +78,49 @@ static void BaseButtonCentersOrdinaryChildGeometry() {
     EntityDropAll(&app);
 }
 
+static void BaseTabAndToggleCenterOrdinaryChildGeometry() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx{&app, win, arena, {}};
+    win->paint.app = &app;
+    win->paint.window = win;
+    const RuntimeStyle& th = RuntimeStyleNow(&app);
+
+    El* tabChild = Div(arena)->W(48)->H(12);
+    El* tab = Tab::New(&cx, StrL("alignment-tab"))
+                  ->W(120)
+                  ->H(40)
+                  ->Child(tabChild);
+    utassert(tab->style.display == Display::Flex);
+    utassert(tab->style.align == FlexAlign::Center);
+    utassert(tab->style.justify == Justify::Center);
+    utassertnear(tab->style.lineHeight, 1.f);
+    LayoutEl(&win->paint, tab, 0, 0, 120, 40, th.fontSize, th.foreground);
+    utassertnear(tabChild->Bounds().CenterX(), tab->Bounds().CenterX());
+    utassertnear(tabChild->Bounds().CenterY(), tab->Bounds().CenterY());
+
+    El* toggleChild = Div(arena)->W(48)->H(12);
+    El* toggle = Toggle::New(&cx, StrL("alignment-toggle"))
+                     ->W(120)
+                     ->H(40)
+                     ->Child(toggleChild);
+    utassert(toggle->style.display == Display::Flex);
+    utassert(toggle->style.align == FlexAlign::Center);
+    utassert(toggle->style.justify == Justify::Center);
+    utassertnear(toggle->style.lineHeight, 1.f);
+    LayoutEl(&win->paint, toggle, 0, 0, 120, 40, th.fontSize,
+             th.foreground);
+    utassertnear(toggleChild->Bounds().CenterX(), toggle->Bounds().CenterX());
+    utassertnear(toggleChild->Bounds().CenterY(), toggle->Bounds().CenterY());
+
+    WindowKeyedFree(win);
+    delete win;
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 static void SelectionEventsAreOrderedAndNotWordSized() {
     App app;
     component::Init(&app);
@@ -328,6 +371,7 @@ static void ButtonGroupsAssignSourceCornersWithoutAWrapperClip() {
 void TestButtonGroup() {
     TestSuite("button_group");
     BaseButtonCentersOrdinaryChildGeometry();
+    BaseTabAndToggleCenterOrdinaryChildGeometry();
     SelectionEventsAreOrderedAndNotWordSized();
     SourceButtonVariantsRoundingAndIconsRemainConcrete();
     SourceToggleAndSegmentedGroupKeepStateAndGeometry();

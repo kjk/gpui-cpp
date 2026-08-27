@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "0bfcb640235b7f76c4f764c2fa6454be4cf4711a",
+  sha: "ff3eb1128ac1058f1bb88e777744ce1237aa3b79",
   date: "2026-08-26",
-  subject: "base: Fix to default center button content (#2835)",
+  subject: "base: Center tab and toggle content (#2839)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

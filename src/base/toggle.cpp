@@ -17,6 +17,12 @@ El* Toggle::New(Ctx* cx, Str id, bool pressed, bool disabled,
                 const StateStyle* instance) {
     Arena* a = cx->a;
     El* e = Div(a)
+                // Match Button's neutral control geometry: a fixed-size
+                // toggle centers ordinary content without themed padding.
+                ->Flex()
+                ->ItemsCenter()
+                ->JustifyCenter()
+                ->LineHeight(1.f)
                 ->PathClick(id)
                 ->Role(AccessibilityRole::Button)
                 ->AriaToggled(pressed ? AccessibilityToggled::True

@@ -9337,3 +9337,8 @@ axes and keeps its inherited line box at relative 1.0. Fixed-height buttons
 now center arbitrary children by their geometry rather than relying on themed
 padding; the layout regression test ports the upstream 120 by 40 button with
 a 48 by 12 child.
+
+`ff3eb112` applies the same neutral flex geometry to unstyled Base Tab and
+Toggle roots: centered on both axes with relative 1.0 line height. Their
+ported geometry regressions use the same 120 by 40 root and 48 by 12 ordinary
+child as upstream and verify both centers after real Taffy layout.
