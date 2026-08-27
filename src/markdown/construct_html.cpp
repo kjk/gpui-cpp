@@ -22,19 +22,6 @@ static const uint8_t kHtmlCdata = 5;
 static const uint8_t kHtmlBasic = 6;
 static const uint8_t kHtmlComplete = 7;
 
-// `slice.as_str().trim()`, which is what the tag-name lookups compare.
-static Str TrimAscii(Str s) {
-    int32_t start = 0;
-    int32_t end = s.len;
-    while (start < end && IsAsciiWhitespace((uint8_t)s.s[start])) {
-        start++;
-    }
-    while (end > start && IsAsciiWhitespace((uint8_t)s.s[end - 1])) {
-        end--;
-    }
-    return Str(s.s + start, end - start);
-}
-
 // `HTML_RAW_NAMES.contains(&name)` / `HTML_BLOCK_NAMES.contains(&name)`,
 // against a name that is not lowercased first.
 // The name lists are SeqStrings runs. Tag names are ASCII by CommonMark;
@@ -167,7 +154,7 @@ State HtmlFlowTagName(Tokenizer* t) {
         bool slash = t->current == '/';
         Slice slice = SliceFromIndices(t->parseState->bytes,
                                        t->tokenizeState.start, t->point.index);
-        Str name = TrimAscii(slice.bytes);
+        Str name = base::StrTrimAscii(slice.bytes);
         t->tokenizeState.seen = false;
         t->tokenizeState.start = 0;
 

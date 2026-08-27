@@ -1176,22 +1176,6 @@ Rgba ThemeWhite() {
     return RgbaHex(kShadcnWhite);
 }
 
-static Str TrimStr(Str s) {
-    while (s.len > 0 && (s.s[0] == ' ' || s.s[0] == '\t' || s.s[0] == '\n' ||
-                         s.s[0] == '\r')) {
-        s.s++;
-        s.len--;
-    }
-    while (s.len > 0) {
-        char c = s.s[s.len - 1];
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-            break;
-        }
-        s.len--;
-    }
-    return s;
-}
-
 // split_top_level_commas: a comma inside parentheses belongs to whatever is
 // there — `rgb(1, 2, 3)` is one stop, not three.
 static int SplitTopLevelCommas(Str inner, Str* out, int cap) {
@@ -1208,14 +1192,14 @@ static int SplitTopLevelCommas(Str inner, Str* out, int cap) {
             }
         } else if (c == ',' && depth == 0) {
             if (n < cap) {
-                out[n] = TrimStr(Str(inner.s + start, i - start));
+                out[n] = base::StrTrimAscii(Str(inner.s + start, i - start));
             }
             n++;
             start = i + 1;
         }
     }
     if (n < cap) {
-        out[n] = TrimStr(Str(inner.s + start, inner.len - start));
+        out[n] = base::StrTrimAscii(Str(inner.s + start, inner.len - start));
     }
     n++;
     return n;
@@ -1273,10 +1257,10 @@ static bool ParseGradientDirection(Str dir, float* out) {
 
 // parse_linear_gradient_angle: `135deg`, or `to bottom right`.
 static bool ParseGradientAngle(Str angle, float* out) {
-    angle = TrimStr(angle);
+    angle = base::StrTrimAscii(angle);
     if (angle.len > 3 &&
         base::StrEqI(Str(angle.s + angle.len - 3, 3), "deg")) {
-        Str num = TrimStr(Str(angle.s, angle.len - 3));
+        Str num = base::StrTrimAscii(Str(angle.s, angle.len - 3));
         float deg = ParseFloatOr(num.s, num.len, 1e30f);
         if (deg >= 1e29f) {
             return false;
@@ -1290,7 +1274,7 @@ static bool ParseGradientAngle(Str angle, float* out) {
         return true;
     }
     if (base::StrStartsWithI(angle, "to ")) {
-        return ParseGradientDirection(TrimStr(Str(angle.s + 3, angle.len - 3)),
+        return ParseGradientDirection(base::StrTrimAscii(Str(angle.s + 3, angle.len - 3)),
                                       out);
     }
     return false;
@@ -1299,7 +1283,7 @@ static bool ParseGradientAngle(Str angle, float* out) {
 // parse_linear_color_stop: a colour, and optionally where along the line it
 // sits — `red-500 25%`. Without one it takes the end it was given.
 static bool ParseColorStop(Str stop, float defaultPct, ColorStop* out) {
-    stop = TrimStr(stop);
+    stop = base::StrTrimAscii(stop);
     if (stop.len <= 0) {
         return false;
     }
@@ -1315,7 +1299,7 @@ static bool ParseColorStop(Str stop, float defaultPct, ColorStop* out) {
             return false;
         }
         pct = Clamp01f(v / 100.f);
-        stop = TrimStr(Str(stop.s, i));
+        stop = base::StrTrimAscii(Str(stop.s, i));
         if (stop.len <= 0) {
             return false;
         }
@@ -1330,7 +1314,7 @@ static bool ParseColorStop(Str stop, float defaultPct, ColorStop* out) {
 }
 
 static bool ParseLinearGradient(Str s, Background* out) {
-    s = TrimStr(s);
+    s = base::StrTrimAscii(s);
     if (!base::StrStartsWithI(s, "linear-gradient(") ||
         s.s[s.len - 1] != ')') {
         return false;

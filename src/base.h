@@ -1406,6 +1406,8 @@ inline bool StrEqI(Str s1, Str s2) {
     return StrEqIRest(s1, s2);
 }
 bool StrEqI(Str s1, const char* s2);
+bool StrStartsWith(Str s, Str prefix);
+bool StrStartsWith(Str s, const char* prefix);
 inline bool StrStartsWithI(Str s, Str prefix) {
     if (prefix.len > s.len) {
         return false;
@@ -1413,7 +1415,19 @@ inline bool StrStartsWithI(Str s, Str prefix) {
     return StrEqI(Str(s.s, prefix.len), prefix);
 }
 bool StrStartsWithI(Str s, const char* prefix);
+bool StrEndsWith(Str s, Str suffix);
+bool StrEndsWith(Str s, const char* suffix);
+bool StrEndsWithI(Str s, Str suffix);
+bool StrEndsWithI(Str s, const char* suffix);
+int StrFind(Str s, Str sub);
+int StrFind(Str s, const char* sub);
+int StrFindI(Str s, Str sub);
+int StrFindI(Str s, const char* sub);
+bool StrContains(Str s, Str sub);
 bool StrContainsI(Str s, Str sub);
+// Trims ASCII space, tab, newline, carriage return and form feed without
+// allocating. The result is a slice into `s`.
+Str StrTrimAscii(Str s);
 // Replaces every non-overlapping occurrence of `from` with `to`. The result
 // is temporary-arena backed; when `from` is empty or absent, `value` is
 // returned unchanged.

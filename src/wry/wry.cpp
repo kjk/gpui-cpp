@@ -26,19 +26,12 @@ void CookieListFree(Vec<Cookie>* cookies) {
     cookies->Reset();
 }
 
-static bool StrStartsWith(Str s, Str prefix) {
-    if (prefix.len > s.len) {
-        return false;
-    }
-    return base::StrEq(Str(s.s, prefix.len), prefix);
-}
-
 Str WorkAroundUriPrefix(Str httpOrHttps, Str protocol) {
     return base::FormatTemp("%s://%s.", httpOrHttps, protocol);
 }
 
 bool IsWorkAroundUri(Str uri, Str httpOrHttps, Str protocol) {
-    return StrStartsWith(uri, WorkAroundUriPrefix(httpOrHttps, protocol));
+    return base::StrStartsWith(uri, WorkAroundUriPrefix(httpOrHttps, protocol));
 }
 
 Str ApplyUriWorkAround(Str uri, Str httpOrHttps, Str protocol) {

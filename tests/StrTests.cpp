@@ -50,6 +50,32 @@ static void ReplaceAllHandlesEmptyAndMissingMatches() {
                          "heo"));
 }
 
+static void PrefixSuffixAndFindHelpersHandleBoundaries() {
+    Str text = StrL("Alpha beta");
+    utassert(base::StrStartsWith(text, "Alpha"));
+    utassert(!base::StrStartsWith(text, "alpha"));
+    utassert(base::StrStartsWith(text, ""));
+    utassert(base::StrEndsWith(text, "beta"));
+    utassert(!base::StrEndsWith(text, "Beta"));
+    utassert(base::StrEndsWithI(text, "BETA"));
+    utassert(base::StrEndsWith(text, ""));
+    utassert(base::StrFind(text, StrL("beta")) == 6);
+    utassert(base::StrFindI(text, StrL("BETA")) == 6);
+    utassert(base::StrFind(text, StrL("gamma")) == -1);
+    utassert(base::StrFind(text, StrL("")) == -1);
+    utassert(base::StrContains(text, StrL("Alpha")));
+    utassert(base::StrContainsI(text, StrL("BETA")));
+    utassert(!base::StrContains(text, StrL("alpha")));
+}
+
+static void TrimAsciiReturnsASlice() {
+    char text[] = "\f \tHello world\r\n";
+    Str trimmed = base::StrTrimAscii(Str(text, (int)sizeof(text) - 1));
+    utassert(base::StrEq(trimmed, "Hello world"));
+    utassert(trimmed.s == text + 3);
+    utassert(base::StrEq(base::StrTrimAscii(StrL(" \t\r\n")), ""));
+}
+
 void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
@@ -57,4 +83,6 @@ void TestStr() {
     CaseInsensitivePrefixUsesBothOverloads();
     ReplaceAllReplacesNonOverlappingMatches();
     ReplaceAllHandlesEmptyAndMissingMatches();
+    PrefixSuffixAndFindHelpersHandleBoundaries();
+    TrimAsciiReturnsASlice();
 }

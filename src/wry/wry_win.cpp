@@ -1214,13 +1214,6 @@ static WCHAR* LoaderOverrideDup(const WCHAR* environment, const WCHAR* property)
     return result;
 }
 
-static bool StrStartsWith(Str s, Str prefix) {
-    if (prefix.len > s.len) {
-        return false;
-    }
-    return base::StrEq(Str(s.s, prefix.len), prefix);
-}
-
 // ─── util.rs ─────────────────────────────────────────────────────────────
 
 static const UINT kBaseDpi = 96;
@@ -4156,7 +4149,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
             // A url in one of our own protocols has to go over the
             // work-around scheme, the way every request in it does.
             Str prefix = base::FormatTemp("%s://", wv->protocols[i].name);
-            if (StrStartsWith(url, prefix)) {
+            if (base::StrStartsWith(url, prefix)) {
                 url = ApplyUriWorkAround(url, Str(wv->httpOrHttps), wv->protocols[i].name);
                 break;
             }

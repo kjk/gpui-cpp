@@ -894,20 +894,111 @@ bool StrEqI(Str s1, const char* s2) {
     return StrEqI(s1, Str(s2));
 }
 
+bool StrStartsWith(Str s, Str prefix) {
+    if (prefix.len > s.len) {
+        return false;
+    }
+    if (prefix.len == 0) {
+        return true;
+    }
+    return s.s && prefix.s && StrEq(Str(s.s, prefix.len), prefix);
+}
+
+bool StrStartsWith(Str s, const char* prefix) {
+    return StrStartsWith(s, Str(prefix));
+}
+
 bool StrStartsWithI(Str s, const char* prefix) {
     return StrStartsWithI(s, Str(prefix));
 }
 
-bool StrContainsI(Str s, Str sub) {
-    if (!s || !sub || sub.len <= 0) {
+bool StrEndsWith(Str s, Str suffix) {
+    if (suffix.len > s.len) {
         return false;
+    }
+    if (suffix.len == 0) {
+        return true;
+    }
+    return s.s && suffix.s &&
+           StrEq(Str(s.s + s.len - suffix.len, suffix.len), suffix);
+}
+
+bool StrEndsWith(Str s, const char* suffix) {
+    return StrEndsWith(s, Str(suffix));
+}
+
+bool StrEndsWithI(Str s, Str suffix) {
+    if (suffix.len > s.len) {
+        return false;
+    }
+    if (suffix.len == 0) {
+        return true;
+    }
+    return s.s && suffix.s &&
+           StrEqI(Str(s.s + s.len - suffix.len, suffix.len), suffix);
+}
+
+bool StrEndsWithI(Str s, const char* suffix) {
+    return StrEndsWithI(s, Str(suffix));
+}
+
+int StrFind(Str s, Str sub) {
+    if (!s.s || !sub.s || sub.len <= 0 || sub.len > s.len) {
+        return -1;
+    }
+    for (int off = 0; off + sub.len <= s.len; off++) {
+        if (StrEq(Str(s.s + off, sub.len), sub)) {
+            return off;
+        }
+    }
+    return -1;
+}
+
+int StrFind(Str s, const char* sub) {
+    return StrFind(s, Str(sub));
+}
+
+int StrFindI(Str s, Str sub) {
+    if (!s.s || !sub.s || sub.len <= 0 || sub.len > s.len) {
+        return -1;
     }
     for (int off = 0; off + sub.len <= s.len; off++) {
         if (StrEqI(Str(s.s + off, sub.len), sub)) {
-            return true;
+            return off;
         }
     }
-    return false;
+    return -1;
+}
+
+int StrFindI(Str s, const char* sub) {
+    return StrFindI(s, Str(sub));
+}
+
+bool StrContains(Str s, Str sub) {
+    return StrFind(s, sub) >= 0;
+}
+
+bool StrContainsI(Str s, Str sub) {
+    return StrFindI(s, sub) >= 0;
+}
+
+static bool IsStrTrimAscii(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+Str StrTrimAscii(Str s) {
+    if (!s.s || s.len <= 0) {
+        return s;
+    }
+    int start = 0;
+    int end = s.len;
+    while (start < end && IsStrTrimAscii(s.s[start])) {
+        start++;
+    }
+    while (end > start && IsStrTrimAscii(s.s[end - 1])) {
+        end--;
+    }
+    return Str(s.s + start, end - start);
 }
 
 Str StrReplaceAll(Str value, Str from, Str to) {
