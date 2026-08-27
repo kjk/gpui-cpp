@@ -158,6 +158,9 @@ bool PlatDirExists(const char* path);
 // lookup asks, and it asks it many times a frame.
 bool PlatFileExists(const char* path);
 void PlatGetCwd(char* out, int cap);
+// Resolves an existing file or directory to an absolute path, following
+// symlinks/reparse points. False includes a result that would not fit.
+bool PlatCanonicalPath(const char* path, char* out, int cap);
 // The directory the running binary sits in.
 void PlatGetExeDir(char* out, int cap);
 

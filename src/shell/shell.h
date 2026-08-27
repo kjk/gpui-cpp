@@ -5,6 +5,7 @@
 #include "shell/error.h"
 #include "shell/metrics.h"
 #include "shell/policy.h"
+#include "shell/runtime.h"
 #include "shell/scope.h"
 #include "shell/snapshot.h"
 #include "shell/spec.h"

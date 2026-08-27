@@ -122,6 +122,59 @@ void PlatGetCwd(char* out, int cap) {
     GetCurrentDirectoryA((DWORD)cap, out);
 }
 
+bool PlatCanonicalPath(const char* path, char* out, int cap) {
+    if (!path || !path[0] || !out || cap <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    HANDLE file = CreateFileW(
+        ToCWstrTemp(Str(path)), 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    WCHAR wide[kMaxPath] = {};
+    DWORD n = GetFinalPathNameByHandleW(file, wide, kMaxPath,
+                                       FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    CloseHandle(file);
+    if (n == 0 || n >= kMaxPath) {
+        return false;
+    }
+    const WCHAR* start = wide;
+    int prefixBytes = 0;
+    if (n >= 8 && wide[0] == L'\\' && wide[1] == L'\\' && wide[2] == L'?' &&
+        wide[3] == L'\\' && wide[4] == L'U' && wide[5] == L'N' &&
+        wide[6] == L'C' && wide[7] == L'\\') {
+        start += 8;
+        n -= 8;
+        prefixBytes = 2;
+    } else if (n >= 4 && wide[0] == L'\\' && wide[1] == L'\\' &&
+               wide[2] == L'?' && wide[3] == L'\\') {
+        start += 4;
+        n -= 4;
+    }
+    int bytes = WideCharToMultiByte(CP_UTF8, 0, start, (int)n, nullptr, 0,
+                                    nullptr, nullptr);
+    if (bytes <= 0 || bytes + prefixBytes >= cap) {
+        return false;
+    }
+    if (prefixBytes) {
+        out[0] = '/';
+        out[1] = '/';
+    }
+    WideCharToMultiByte(CP_UTF8, 0, start, (int)n, out + prefixBytes,
+                        cap - prefixBytes - 1, nullptr, nullptr);
+    bytes += prefixBytes;
+    out[bytes] = 0;
+    for (int i = 0; i < bytes; i++) {
+        if (out[i] == '\\') {
+            out[i] = '/';
+        }
+    }
+    return true;
+}
+
 void PlatGetExeDir(char* out, int cap) {
     if (!out || cap <= 0) {
         return;

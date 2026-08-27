@@ -7,6 +7,8 @@
 
 namespace gpui {
 
+class ShellRuntime;
+
 enum class ScopePhase : uint8_t {
     Render,
     Event,
@@ -18,8 +20,6 @@ const char* ScopePhaseName(ScopePhase phase);
 bool ScopePhaseAllowsNotify(ScopePhase phase);
 
 namespace shell {
-
-struct ShellRuntime;
 
 class CallScopeGuard {
   public:

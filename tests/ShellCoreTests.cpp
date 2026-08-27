@@ -3,6 +3,8 @@
 
 #include "Test.h"
 
+#include <stdio.h>
+
 using namespace gpui::shell;
 
 static void BridgedValuesMatchJavaScriptConversions() {
@@ -318,6 +320,192 @@ static void ThemeTokenNamesAndValuesComeFromTheTheme() {
     AppGlobalClear(&app);
 }
 
+static shell::CallbackId FirstCallback(const RenderSnapshot* snapshot) {
+    if (!snapshot || !snapshot->Specs()) return UINT64_MAX;
+    const SpecNode* root = snapshot->Specs()->Node(snapshot->Root());
+    if (!root) return UINT64_MAX;
+    for (SpecId childId : root->children) {
+        const SpecNode* child = snapshot->Specs()->Node(childId);
+        if (!child) continue;
+        for (const SpecOp& op : child->ops) {
+            if (op.kind == SpecOpKind::Callback) return op.callback;
+        }
+    }
+    return UINT64_MAX;
+}
+
+static void RuntimeLoadsRendersAndRetiresCallbacks() {
+    App app;
+    Window window;
+    window.app = &app;
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr && !error.IsSet());
+    if (!runtime) return;
+
+    Str source = StrL(
+        "import { View } from 'gpui';\n"
+        "import { v_flex, Button } from 'gpui-base';\n"
+        "export default class Main extends View {\n"
+        "  render(cx) {\n"
+        "    return v_flex().id('root').p(12).items_center()\n"
+        "      .child('hello')\n"
+        "      .child(Button.new('save')\n"
+        "        .on_click((event) => { globalThis.shellClicks = event.click_count; })\n"
+        "        .child('Save'));\n"
+        "  }\n"
+        "}\n");
+    ViewType* type = runtime->LoadSource(StrL("runtime-test.js"), source,
+                                         &error);
+    utassert(type != nullptr && !error.IsSet());
+    ViewObject* object = type
+                             ? runtime->Instantiate(type, &window, &app,
+                                                    nullptr, &error)
+                             : nullptr;
+    utassert(object != nullptr && !error.IsSet());
+    RenderSnapshot* snapshot = object
+                                   ? runtime->BuildSnapshot(
+                                         object, &window, &app, {}, nullptr,
+                                         &error)
+                                   : nullptr;
+    utassert(snapshot != nullptr && !error.IsSet());
+    if (snapshot) {
+        Arena* arena = ArenaNew();
+        Str tree = snapshot->DebugTree(arena);
+        utassert(StrEq(tree,
+                       "v_flex :id(\"root\") .p(12) .items_center\n"
+                       "  text \"hello\"\n"
+                       "  Button \"save\" :on_click(fn)\n"
+                       "    text \"Save\"\n"));
+        ArenaDelete(arena);
+        utassert(runtime->LiveCallbacks() == 1);
+        shell::CallbackId callback = FirstCallback(snapshot);
+        utassert(callback != UINT64_MAX);
+        if (callback != UINT64_MAX) {
+            ClickEvent event = {};
+            event.clickCount = 3;
+            runtime->DispatchClick(callback, event, &window, &app);
+            utassert(runtime->Eval(
+                StrL("if (globalThis.shellClicks !== 3) throw new Error('callback did not run')"),
+                StrL("callback-check.js"), &error));
+            utassert(!error.IsSet());
+        }
+        delete snapshot;
+        utassert(runtime->LiveCallbacks() == 0);
+    }
+
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void RuntimeAbortsFailedSnapshotTransactions() {
+    App app;
+    Window window;
+    window.app = &app;
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "export default class Main extends View {\n"
+        "  render(cx) {\n"
+        "    const child = div();\n"
+        "    return div().on_click(() => {}).child(child).child(child);\n"
+        "  }\n"
+        "}\n");
+    ViewType* type = runtime->LoadSource(StrL("failed-render.js"), source,
+                                         &error);
+    ViewObject* object = type
+                             ? runtime->Instantiate(type, &window, &app,
+                                                    nullptr, &error)
+                             : nullptr;
+    RenderSnapshot* snapshot = object
+                                   ? runtime->BuildSnapshot(
+                                         object, &window, &app, {}, nullptr,
+                                         &error)
+                                   : nullptr;
+    utassert(snapshot == nullptr);
+    utassert(error.IsSet());
+    utassert(StrFind(error.message, StrL("already added to a parent")) >= 0);
+    utassert(StrFind(error.message, StrL("failed-render.js")) >= 0);
+    utassert(runtime->LiveCallbacks() == 0);
+    delete snapshot;
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static bool WriteTestModule(const char* name, const char* source) {
+    FILE* file = fopen(name, "wb");
+    if (!file) return false;
+    size_t len = strlen(source);
+    bool ok = fwrite(source, 1, len, file) == len;
+    fclose(file);
+    return ok;
+}
+
+static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
+    const char* depName = "shell_runtime_dep.js";
+    const char* mainName = "shell_runtime_main.js";
+    const char* badName = "shell_runtime_bad.js";
+    const char* outsideName = "../shell_runtime_outside.js";
+    utassert(WriteTestModule(depName, "export const label = 'from dependency';\n"));
+    utassert(WriteTestModule(
+        mainName,
+        "import { View, div } from 'gpui';\n"
+        "import { label } from './shell_runtime_dep.js';\n"
+        "export default class Main extends View { render(cx) { return div().child(label); } }\n"));
+    utassert(WriteTestModule(outsideName, "export const escaped = true;\n"));
+    utassert(WriteTestModule(
+        badName,
+        "import { View, div } from 'gpui';\n"
+        "import { escaped } from '../shell_runtime_outside.js';\n"
+        "export default class Main extends View { render(cx) { return div(); } }\n"));
+
+    App app;
+    Window window;
+    window.app = &app;
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    ViewType* type = runtime
+                         ? runtime->LoadApp(StrL("."), Str(mainName), &error)
+                         : nullptr;
+    utassert(type != nullptr && !error.IsSet());
+    ViewObject* object = type
+                             ? runtime->Instantiate(type, &window, &app,
+                                                    nullptr, &error)
+                             : nullptr;
+    Arena* arena = ArenaNew();
+    Str tree = object ? runtime->RenderToSpec(arena, object, &window, &app,
+                                              {}, nullptr, &error)
+                      : Str{};
+    utassert(StrEq(tree, "div\n  text \"from dependency\"\n"));
+
+    ViewType* escaped = runtime
+                            ? runtime->LoadApp(StrL("."), Str(badName), &error)
+                            : nullptr;
+    utassert(escaped == nullptr && error.IsSet());
+    utassert(StrFind(error.message, StrL("outside the application directory")) >= 0);
+
+    ViewTypeRelease(escaped);
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    ArenaDelete(arena);
+    AppGlobalClear(&app);
+    remove(depName);
+    remove(mainName);
+    remove(badName);
+    remove(outsideName);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -329,4 +517,7 @@ void TestShellCore() {
     SpecElementsAreSingleUseValues();
     SpecsAndSnapshotsDumpWithoutEnteringTheVm();
     ThemeTokenNamesAndValuesComeFromTheTheme();
+    RuntimeLoadsRendersAndRetiresCallbacks();
+    RuntimeAbortsFailedSnapshotTransactions();
+    RuntimeLoadsOnlyModulesInsideTheApplicationRoot();
 }

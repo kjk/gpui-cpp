@@ -10,6 +10,7 @@
 #include "base.h"
 
 #include <dirent.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -69,6 +70,25 @@ void PlatGetCwd(char* out, int cap) {
     if (!getcwd(out, (size_t)cap)) {
         out[0] = 0;
     }
+}
+
+bool PlatCanonicalPath(const char* path, char* out, int cap) {
+    if (!path || !path[0] || !out || cap <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    char* resolved = realpath(path, nullptr);
+    if (!resolved) {
+        return false;
+    }
+    int n = (int)strlen(resolved);
+    if (n >= cap) {
+        free(resolved);
+        return false;
+    }
+    memcpy(out, resolved, (size_t)n + 1);
+    free(resolved);
+    return true;
 }
 
 // Strip the file name off an absolute path, in place. PlatGetExeDir on both

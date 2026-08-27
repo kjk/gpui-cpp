@@ -9438,3 +9438,29 @@ capability opener added with the filesystem API; ambiently joining and opening
 it would lose upstream `cap-std`'s symlink/TOCTOU protection. The portable
 tests therefore pin authority selection now and will pin the reparse/symlink
 behavior with the platform implementation. MSVC release passes 21,095 checks.
+
+## Shell QuickJS runtime and module boundary
+
+The first engine-backed shell layer now owns a bounded QuickJS runtime and
+context, installs the `gpui`, `gpui-base`, `gpui-shell` and `gpui-fps` module
+names, evaluates default-exported view classes, instantiates them inside a
+generation-checked host scope and turns `render(cx)` into a published
+`RenderSnapshot`. Script exceptions retain their useful stack, render/layout,
+event/task and detached execution have separate interrupt budgets, promise
+jobs are drained with a hard batch bound, and failed snapshot transactions
+discard every JS callback value registered during the attempt.
+
+Application modules are tagged by generation and resolved only after a real
+canonical-path lookup. Relative imports may omit `.js`, but neither `..` nor a
+symlink/reparse point can move the resolved file outside the application root.
+The private QuickJS header remains a real include in `gpui.cpp` while its C11
+implementation stays a separate translation unit in both development and
+published amalgams. The runtime tests cover built-in and local ES modules,
+class construction, fluent spec generation, callback dispatch and retirement,
+transaction rollback with a JavaScript stack and canonical-root escape
+rejection. MSVC release passes 21,119 checks.
+
+This is the VM/spec boundary, not the completed shell: retained entity handles,
+spec materialization, the scheduler, standard capability APIs, hot reload,
+plugins, dock/root integration, typings, CLI and examples follow in later
+checkpoints.

@@ -264,7 +264,11 @@ function stripInternalIncludes(fromRel: string, text: string): string {
       continue;
     }
     const m = quotedIncRe.exec(line);
-    if (m && resolveQuoted(fromRel, m[1]!)) {
+    const resolved = m ? resolveQuoted(fromRel, m[1]!) : null;
+    // QuickJS is copied beside gpui.cpp and compiled as a separate C11
+    // translation unit. Its API therefore remains a real private include in
+    // gpui.cpp instead of being folded into the public gpui.h amalgam.
+    if (resolved && !resolved.startsWith("src/quickjs/")) {
       keep.push("");
       continue;
     }
