@@ -9063,3 +9063,9 @@ close, document-title, page-load URL, navigation URI/cancel, new-window URI,
 clipboard permission and IPC source/message failures are returned from the
 event handler instead of being converted to successful empty events. The
 application callbacks and successful results are unchanged.
+
+`load_url_with_headers` now keeps the pinned backend's deliberately unusual
+failure boundary: absence of environment 9, webview 10 or a failed navigation
+is an error, while `CreateWebResourceRequest` failure is a successful no-op
+because Wry guards that call with `if let Ok`. The port had treated all four
+paths as errors.

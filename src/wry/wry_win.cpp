@@ -2857,18 +2857,21 @@ static bool LoadUrlWithHeaders(WebView* wv, Str url, const Header* headers, int 
         return false;
     }
     ICoreWebView2WebResourceRequest* request = nullptr;
-    bool ok = false;
-    if (SUCCEEDED(env9->CreateWebResourceRequest(ToCWstrTemp(url), L"GET", nullptr,
-                                                 ToCWstrTemp(block.TakeStr()), &request)) &&
-        request) {
-        ICoreWebView2_10* wv10 = nullptr;
-        if (SUCCEEDED(wv->webview->QueryInterface(__uuidof(ICoreWebView2_10), (void**)&wv10))) {
-            ok = SUCCEEDED(wv10->NavigateWithWebResourceRequest(request));
-            Rel(&wv10);
-        }
-        Rel(&request);
-    }
+    HRESULT hr = env9->CreateWebResourceRequest(ToCWstrTemp(url), L"GET", nullptr,
+                                                ToCWstrTemp(block.TakeStr()), &request);
     Rel(&env9);
+    // This unusual boundary is intentional: pinned Wry uses `if let Ok` for
+    // request creation, so that one failure is a successful no-op.
+    if (FAILED(hr) || !request) {
+        Rel(&request);
+        return true;
+    }
+
+    ICoreWebView2_10* wv10 = nullptr;
+    bool ok = SUCCEEDED(wv->webview->QueryInterface(__uuidof(ICoreWebView2_10), (void**)&wv10)) &&
+              wv10 && SUCCEEDED(wv10->NavigateWithWebResourceRequest(request));
+    Rel(&wv10);
+    Rel(&request);
     return ok;
 }
 
