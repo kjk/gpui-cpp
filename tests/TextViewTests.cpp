@@ -46,8 +46,7 @@ static Str NodeText(Arena* a, MdNode* n) {
 static bool TextIs(Arena* a, MdNode* n, const char* want) {
     Str got = NodeText(a, n);
     int len = (int)strlen(want);
-    return got.len == len &&
-           (len == 0 || memcmp(got.s, want, (size_t)len) == 0);
+    return StrEq(got, Str(want, len));
 }
 
 // The marks on the run covering `needle`, or 0xff when no run holds it.
@@ -55,7 +54,7 @@ static uint8_t MarksOf(MdNode* n, const char* needle) {
     int len = (int)strlen(needle);
     for (MdRun* r = n ? n->runFirst : nullptr; r; r = r->next) {
         for (int i = 0; i + len <= r->text.len; i++) {
-            if (memcmp(r->text.s + i, needle, (size_t)len) == 0) {
+            if (StrEq(Str(r->text.s + i, len), Str(needle, len))) {
                 return r->marks;
             }
         }
@@ -67,7 +66,7 @@ static Str HrefOf(MdNode* n, const char* needle) {
     int len = (int)strlen(needle);
     for (MdRun* r = n ? n->runFirst : nullptr; r; r = r->next) {
         for (int i = 0; i + len <= r->text.len; i++) {
-            if (memcmp(r->text.s + i, needle, (size_t)len) == 0) {
+            if (StrEq(Str(r->text.s + i, len), Str(needle, len))) {
                 return r->href;
             }
         }
@@ -76,8 +75,7 @@ static Str HrefOf(MdNode* n, const char* needle) {
 }
 
 static bool StrIs(Str s, const char* want) {
-    int len = (int)strlen(want);
-    return s.len == len && (len == 0 || memcmp(s.s, want, (size_t)len) == 0);
+    return StrEq(s, Str(want));
 }
 
 // ─── markdown ─────────────────────────────────────────────────────────────
@@ -443,8 +441,7 @@ static Str SrcCopy(SrcDoc* d, SelectionFormat fmt, char* buf, int cap) {
 }
 
 static bool SrcIs(Str got, const char* want) {
-    Str w = Str((char*)want);
-    return got.len == w.len && memcmp(got.s, w.s, (size_t)w.len) == 0;
+    return StrEq(got, Str(want));
 }
 
 // A mark group split over several word elements wraps once, not per word —

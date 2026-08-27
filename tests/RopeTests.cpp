@@ -19,8 +19,7 @@ static const char* kLines = "Hello\nWorld\r\nThis is a test 中文\nRope";
 static const char* kMixed = "a 中文🎉 test\nRope";
 
 static bool StrIs(Str got, const char* want) {
-    int n = (int)strlen(want);
-    return got.len == n && (n == 0 || memcmp(got.s, want, (size_t)n) == 0);
+    return StrEq(got, Str(want));
 }
 
 static void SliceLine() {

@@ -23,8 +23,7 @@ static bool NearByte(float a, float b) {
 
 static bool HexIs(Rgba c, const char* want) {
     Str got = RgbaToHex(GetTempArena(), c);
-    return got.len == (int)strlen(want) &&
-           memcmp(got.s, want, (size_t)got.len) == 0;
+    return StrEq(got, Str(want));
 }
 
 // impl From<Rgba> for Hsla, on the colours whose HSL is known by hand.

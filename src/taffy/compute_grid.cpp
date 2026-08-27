@@ -595,8 +595,7 @@ struct LineNameEntry {
 };
 
 bool StrEqLen(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+    return base::StrEq(a, b);
 }
 
 // Resolves named grid lines and areas into line numbers.

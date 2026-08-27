@@ -8,11 +8,6 @@ namespace component {
 // How long the checkmark stays up after a copy.
 static const int kCopiedMs = 2000;
 
-static bool SameStr(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
-}
-
 ClipboardState::~ClipboardState() {
     StrFree(value);
 }
@@ -65,7 +60,7 @@ El* Clipboard::IntoEl() {
     if (s) {
         // The value and the callback are the caller's every frame, the way
         // HoverCard's delays are.
-        if (!SameStr(s->value, value)) {
+        if (!base::StrEq(s->value, value)) {
             StrFree(s->value);
             s->value = StrDup(value);
         }

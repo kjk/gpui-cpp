@@ -9,7 +9,7 @@
 #include "Test.h"
 
 static bool Same(Str got, const char* want) {
-    return got.len == (int)strlen(want) && memcmp(got.s, want, (size_t)got.len) == 0;
+    return StrEq(got, Str(want));
 }
 
 void TestWryUri() {

@@ -1390,16 +1390,6 @@ inline bool SameFloatBits(float a, float b) {
     return ab == bb;
 }
 
-inline bool SameStr(base::Str a, base::Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    if (a.len == 0) {
-        return true;
-    }
-    return memcmp(a.s, b.s, (size_t)a.len) == 0;
-}
-
 inline bool operator==(MinTrackSizingFunction a, MinTrackSizingFunction b) {
     return a.raw == b.raw;
 }
@@ -1414,7 +1404,7 @@ inline bool operator==(TrackSizingFunction a, TrackSizingFunction b) {
 
 inline bool operator==(const GridPlacement& a, const GridPlacement& b) {
     return a.kind == b.kind && a.line == b.line && a.span == b.span &&
-           SameStr(a.name, b.name);
+           base::StrEq(a.name, b.name);
 }
 
 inline bool operator==(const LinePlacement& a, const LinePlacement& b) {
@@ -1422,7 +1412,7 @@ inline bool operator==(const LinePlacement& a, const LinePlacement& b) {
 }
 
 inline bool operator==(const GridTemplateArea& a, const GridTemplateArea& b) {
-    return SameStr(a.name, b.name) && a.rowStart == b.rowStart &&
+    return base::StrEq(a.name, b.name) && a.rowStart == b.rowStart &&
            a.rowEnd == b.rowEnd && a.columnStart == b.columnStart &&
            a.columnEnd == b.columnEnd;
 }
@@ -1446,7 +1436,7 @@ inline bool SameNames(Slice<base::Str> a, Slice<base::Str> b) {
         return false;
     }
     for (int i = 0; i < a.len; i++) {
-        if (!SameStr(a.els[i], b.els[i])) {
+        if (!base::StrEq(a.els[i], b.els[i])) {
             return false;
         }
     }

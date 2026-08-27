@@ -35,7 +35,7 @@ static bool Eat(JsonParser* jp, char c) {
 static bool Literal(JsonParser* jp, const char* word) {
     SkipSpace(jp);
     int n = (int)strlen(word);
-    if (jp->end - jp->p < n || memcmp(jp->p, word, (size_t)n) != 0) {
+    if (jp->end - jp->p < n || !StrEq(Str(jp->p, n), Str(word, n))) {
         return false;
     }
     jp->p += n;

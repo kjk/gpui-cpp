@@ -29,14 +29,12 @@ static bool MiniTextIs(Arena* a, Node* n, const char* want) {
     }
     Str got = NodeToString(a, n);
     int len = (int)strlen(want);
-    return got.len == len &&
-           (len == 0 || memcmp(got.s, want, (size_t)len) == 0);
+    return StrEq(got, Str(want, len));
 }
 
 static bool MiniStrIs(Str got, const char* want) {
     int len = (int)strlen(want);
-    return got.len == len &&
-           (len == 0 || memcmp(got.s, want, (size_t)len) == 0);
+    return StrEq(got, Str(want, len));
 }
 
 void TestMarkdown() {
@@ -129,7 +127,7 @@ static Node* Child(Node* n, int32_t ix) {
 
 static bool Is(Str s, const char* want) {
     int32_t len = (int32_t)strlen(want);
-    return s.len == len && (len == 0 || memcmp(s.s, want, (size_t)len) == 0);
+    return StrEq(s, Str(want, len));
 }
 
 // One of a node's strings, out of the arena the tree was parsed into.

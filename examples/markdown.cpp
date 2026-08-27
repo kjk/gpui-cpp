@@ -75,7 +75,7 @@ struct MarkdownApp {
 // C string and the markers are plain words.
 static int FindFrom(Str hay, Str needle, int from) {
     for (int i = from; i + needle.len <= hay.len; i++) {
-        if (memcmp(hay.s + i, needle.s, (size_t)needle.len) == 0) {
+        if (StrEq(Str(hay.s + i, needle.len), needle)) {
             return i;
         }
     }
@@ -140,8 +140,7 @@ static const TickerQuote kQuotes[] = {
 static const TickerQuote* QuoteFor(Str symbol) {
     for (const TickerQuote& q : kQuotes) {
         Str name = Str(q.symbol);
-        if (name.len == symbol.len &&
-            memcmp(name.s, symbol.s, (size_t)name.len) == 0) {
+        if (StrEq(name, symbol)) {
             return &q;
         }
     }
@@ -272,7 +271,7 @@ static bool HtmlTagIs(Str raw, const char* name) {
     at++;
     Str want = Str(name);
     if (at + want.len > raw.len ||
-        memcmp(raw.s + at, want.s, (size_t)want.len) != 0) {
+        !StrEq(Str(raw.s + at, want.len), want)) {
         return false;
     }
     char after = at + want.len < raw.len ? raw.s[at + want.len] : '\0';
@@ -288,7 +287,7 @@ static bool HtmlAttr(Str raw, const char* name, Str* out) {
     pattern[n++] = '=';
     pattern[n++] = '"';
     for (int i = 0; i + n <= raw.len; i++) {
-        if (memcmp(raw.s + i, pattern, (size_t)n) != 0) {
+        if (!StrEq(Str(raw.s + i, n), Str(pattern, n))) {
             continue;
         }
         int start = i + n;
@@ -318,7 +317,7 @@ static bool UserCardParse(Ctx* cx, component::MdNode* n, Str text, void*,
     const UserCardDef* found = nullptr;
     for (const UserCardDef& u : kUsers) {
         Str uid = Str(u.id);
-        if (uid.len == id.len && memcmp(uid.s, id.s, (size_t)uid.len) == 0) {
+        if (StrEq(uid, id)) {
             found = &u;
         }
     }
@@ -554,7 +553,7 @@ static Str MathPrettify(Ctx* cx, Str src) {
         for (const MathReplacement& r : kMathNames) {
             Str from = Str(r.from);
             if (i + from.len <= joined.len &&
-                memcmp(joined.s + i, from.s, (size_t)from.len) == 0) {
+                StrEq(Str(joined.s + i, from.len), from)) {
                 hit = &r;
                 break;
             }
@@ -647,8 +646,8 @@ static bool MathEscaped(Str s, int at) {
 // block_math_source: `$$ .. $$` with something between them.
 static bool MathBlockSource(Str text, Str* out) {
     Str t = MathTrim(text);
-    if (t.len < 5 || memcmp(t.s, "$$", 2) != 0 ||
-        memcmp(t.s + t.len - 2, "$$", 2) != 0) {
+    if (t.len < 5 || !StrEq(Str(t.s, 2), StrL("$$")) ||
+        !StrEq(Str(t.s + t.len - 2, 2), StrL("$$"))) {
         return false;
     }
     Str body = MathTrim(Str(t.s + 2, t.len - 4));
@@ -909,8 +908,7 @@ static El* CodeActions(Ctx* cx, void* data, Str code, Str lang) {
     int runnable = -1;
     for (int i = 0; i < 2; i++) {
         Str name = Str(kRunnable[i]);
-        if (lang.len == name.len &&
-            memcmp(lang.s, name.s, (size_t)name.len) == 0) {
+        if (StrEq(lang, name)) {
             runnable = i;
         }
     }

@@ -14,7 +14,7 @@ namespace markdown {
 // `Vec<String>::contains`.
 static bool DefinitionsContain(const Vec<Str>& definitions, Str id) {
     for (int32_t i = 0; i < definitions.len; i++) {
-        if (StrEq(definitions[i], id)) {
+        if (base::StrEq(definitions[i], id)) {
             return true;
         }
     }

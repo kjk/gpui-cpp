@@ -2008,10 +2008,6 @@ static float MeasKeyFont(float fontSize) {
     return floorf(fontSize * 4.f + 0.5f) / 4.f;
 }
 
-static bool memeq(const void* s1, const void* s2, int n) {
-    return 0 == memcmp(s1, s2, (size_t)n);
-}
-
 static uint32_t MurmurHash2(const void* key, int n) {
     if (n <= 0) {
         return 0;
@@ -2099,7 +2095,7 @@ static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
         sl->wrap != (wrap ? 1 : 0) || sl->bold != weight) {
         return false;
     }
-    return memeq(sl->text, s.s, s.len);
+    return StrEq(Str(sl->text, s.len), s);
 }
 
 static uint8_t ElTextWeight(const El* e) {

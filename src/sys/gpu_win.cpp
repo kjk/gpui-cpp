@@ -94,7 +94,7 @@ static Str EngineOf(const WCHAR* name, char* buf, int cap) {
     Str whole = Str(buf, n);
     int typeLen = (int)strlen(kEngineType);
     for (int i = n - typeLen; i >= 0; i--) {
-        if (memcmp(whole.s + i, kEngineType, (size_t)typeLen) == 0) {
+        if (StrEq(Str(whole.s + i, typeLen), Str(kEngineType, typeLen))) {
             return Str(whole.s + i + typeLen, n - i - typeLen);
         }
     }

@@ -213,7 +213,7 @@ static void Lint(EditorApp* self) {
             for (const char* m : kMarkers) {
                 int len = (int)strlen(m);
                 if (i + len <= lineEnd &&
-                    memcmp(text.s + i, m, (size_t)len) == 0) {
+                    StrEq(Str(text.s + i, len), Str(m, len))) {
                     AddDiagnostic(self, i, i + len, DiagnosticSeverity::Warning,
                                   StrL("marker left in the source"));
                     i += len - 1;
@@ -333,8 +333,7 @@ static Str HoverAt(void*, Str text, int offset) {
     Str word(text.s + a, b - a);
     for (int i = 0; i < gNItems; i++) {
         const CompletionItem& item = gItems[i];
-        if (item.label.len != word.len ||
-            memcmp(item.label.s, word.s, (size_t)word.len) != 0) {
+        if (!StrEq(item.label, word)) {
             continue;
         }
         return item.documentation.len > 0 ? item.documentation
@@ -353,7 +352,7 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
             continue;
         }
         if (query.len > 0 &&
-            memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
+            !StrEq(Str(item.label.s, query.len), query)) {
             continue;
         }
         if (n < cap && out) {
@@ -364,8 +363,7 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
             out[n].documentation = Str{};
             // One item brings an import with it, which is what
             // `additionalTextEdits` is for.
-            if (item.label.len == 6 &&
-                memcmp(item.label.s, "unwrap", 6) == 0) {
+            if (StrEq(item.label, StrL("unwrap"))) {
                 out[n].additionalEdits = &kUseImport;
                 out[n].nAdditionalEdits = 1;
             }
@@ -379,9 +377,7 @@ static Str ResolveCompletion(void*, Arena* a, const CompletionItem* item) {
     (void)a;
     LoadCompletionItems();
     for (int i = 0; i < gNItems; i++) {
-        if (gItems[i].label.len == item->label.len &&
-            memcmp(gItems[i].label.s, item->label.s, (size_t)item->label.len) ==
-                0) {
+        if (StrEq(gItems[i].label, item->label)) {
             return gItems[i].documentation;
         }
     }
@@ -464,7 +460,8 @@ static Str InlineCompletionAt(void*, Arena* a, Str text, int offset) {
     Str line(text.s + lineStart, offset - lineStart);
     auto endsWith = [](Str s, const char* suffix) {
         int n = (int)strlen(suffix);
-        return s.len >= n && memcmp(s.s + s.len - n, suffix, (size_t)n) == 0;
+        return s.len >= n &&
+               StrEq(Str(s.s + s.len - n, n), Str(suffix, n));
     };
     if (endsWith(line, "for (")) {
         return StrDup(a, StrL("int i = 0; i < n; i++) {\n}"));
@@ -522,7 +519,7 @@ static int SemanticTokensFor(void*, Str text, Selection range,
             if (i + word.len > range.end) {
                 continue;
             }
-            if (memcmp(text.s + i, word.s, (size_t)word.len) != 0) {
+            if (!StrEq(Str(text.s + i, word.len), word)) {
                 continue;
             }
             RopePoint p = RopeOffsetToPoint(text, i);
@@ -579,7 +576,7 @@ static int DefinitionsAt(void*, Arena* a, Str text, int offset,
     if (StrEqI(word, StrL("Duration"))) {
         int at = -1;
         for (int i = 0; i + word.len <= text.len; i++) {
-            if (memcmp(text.s + i, word.s, (size_t)word.len) == 0 && i != wa) {
+            if (StrEq(Str(text.s + i, word.len), word) && i != wa) {
                 at = i;
                 break;
             }
@@ -766,7 +763,7 @@ static int DocumentColorsIn(void*, Str text, DocumentColor* out, int cap) {
         if (text.s[i] == '#') {
             len = HexColorAt(text, i, &color);
         } else if ((text.s[i] == 'r' && i + 3 < text.len &&
-                    memcmp(text.s + i, "rgb", 3) == 0) &&
+                    StrEq(Str(text.s + i, 3), StrL("rgb"))) &&
                    !WordCharAt(text, i - 1)) {
             len = RgbColorAt(text, i, &color);
         }

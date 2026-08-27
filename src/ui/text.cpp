@@ -32,8 +32,7 @@ void TextViewInitKeys() {
 }
 
 static bool TextStrEq(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || (a.s && b.s && memcmp(a.s, b.s, (size_t)a.len) == 0));
+    return StrEq(a, b);
 }
 
 TextMark& TextMark::Bold() {
@@ -633,9 +632,7 @@ static void MdMarked(MdBuild* b, const md::Node* n, uint8_t mark) {
 // LinkMark holds until the reference is resolved.
 static Str MdDefUrl(MdBuild* b, Str identifier) {
     for (const MdDef& def : b->defs) {
-        if (def.identifier.len == identifier.len &&
-            memcmp(def.identifier.s, identifier.s, (size_t)identifier.len) ==
-                0) {
+        if (StrEq(def.identifier, identifier)) {
             return def.url;
         }
     }
@@ -1010,15 +1007,12 @@ struct MdCache {
     }
 };
 
-// The whole point is to be much cheaper than a parse. memcmp of the story's
+// The whole point is to be much cheaper than a parse. StrEq of the story's
 // 13 KB README costs 0.2us against 52us to parse it, so there is no hash to
-// reject with first: the length check throws out most misses and memcmp stops
+// reject with first: the length check throws out most misses and StrEq stops
 // at the first byte that differs.
 static bool MdSourceEq(Str a, Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    return a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0;
+    return StrEq(a, b);
 }
 
 // The tree for `source`, parsed only when it isn't cached already. Falls back

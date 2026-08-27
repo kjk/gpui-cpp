@@ -186,10 +186,8 @@ static void ThemedPartsAndAlertDefaultsMatchTheSource() {
         ->OkVariant(component::ButtonVariant::Danger)
         ->CancelVariant(component::ButtonVariant::Ghost)
         ->ShowCancel();
-    utassert(props.okText.len == 7 &&
-             memcmp(props.okText.s, "Proceed", 7) == 0);
-    utassert(props.cancelText.len == 4 &&
-             memcmp(props.cancelText.s, "Wait", 4) == 0);
+    utassert(StrEq(props.okText, StrL("Proceed")));
+    utassert(StrEq(props.cancelText, StrL("Wait")));
     utassert(props.okVariant == component::ButtonVariant::Danger);
     utassert(props.cancelVariant == component::ButtonVariant::Ghost);
     utassert(props.showCancel);

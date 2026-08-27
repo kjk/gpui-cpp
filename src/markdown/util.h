@@ -32,7 +32,6 @@ using base::ArenaVec;
 Str StrOwn(Arena* a, Str s);
 Str StrOwn(Arena* a, const char* s, int32_t len);
 
-bool StrEq(Str a, Str b);
 // ASCII case-insensitive, which is what the tag-name lookups want.
 bool StrEqAsciiI(Str a, Str b);
 

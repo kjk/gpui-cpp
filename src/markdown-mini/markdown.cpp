@@ -121,7 +121,7 @@ static Str MiniOwn(Arena* a, Str s) {
 
 static bool MiniEq(Str s, const char* z) {
     int32_t len = (int32_t)strlen(z);
-    return s.len == len && (len == 0 || memcmp(s.s, z, (size_t)len) == 0);
+    return base::StrEq(s, Str(z, len));
 }
 
 static MiniLine MiniReadLine(Str source, int32_t at) {

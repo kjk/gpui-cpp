@@ -1961,8 +1961,7 @@ static void InsertSorted(ThemeRegistry* state, const ThemeConfig& cfg) {
 // A name is a `Str` into the arena, and `StrSame` wants a null terminator
 // nowhere, so this is the plain comparison the table needs.
 static bool SameName(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+    return StrEq(a, b);
 }
 
 static float JsonFloatOr(const JsonValue* v, const char* key, float fallback) {

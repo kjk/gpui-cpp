@@ -15,8 +15,7 @@ static bool RangeIs(Selection s, int lo, int hi) {
 static bool LabelIs(const SearchMatcher* m, const char* want) {
     Arena* a = ArenaNew();
     Str got = SearchMatcherLabel(a, m);
-    int n = (int)strlen(want);
-    bool ok = got.len == n && memcmp(got.s, want, (size_t)n) == 0;
+    bool ok = StrEq(got, Str(want));
     ArenaDelete(a);
     return ok;
 }

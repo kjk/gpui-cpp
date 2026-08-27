@@ -32,8 +32,7 @@ static bool HasPrefixI(Str s, const char* prefix) {
 
 // base.h has no case-sensitive Str compare and a URL is bytes, so this is it.
 static bool UrlEq(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+    return StrEq(a, b);
 }
 
 bool HttpUrlIsRemote(Str url) {

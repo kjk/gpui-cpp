@@ -1388,6 +1388,7 @@ void StrFree(const char*) = delete;
 Str StrDup(Arena*, Str str);
 Str StrDup(Str s);
 
+bool StrEq(Str s1, Str s2);
 bool StrEqI(Str s1, Str s2);
 bool StrContainsI(Str s, Str sub);
 

@@ -329,14 +329,9 @@ static Str TrimQuery(Str query) {
     return query;
 }
 
-static bool SameStr(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || (a.s && b.s && memcmp(a.s, b.s, (size_t)a.len) == 0));
-}
-
 static void StartSearch(ListState* s, Ctx* cx, Str query, bool dedupe) {
     query = TrimQuery(query);
-    if (dedupe && SameStr(query, s->lastQuery)) {
+    if (dedupe && base::StrEq(query, s->lastQuery)) {
         return;
     }
     if (s->onPerformSearch.IsValid()) {

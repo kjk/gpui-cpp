@@ -13,7 +13,7 @@ static SyntaxTok TokAt(SyntaxLang lang, const char* src, const char* needle) {
     Str n(needle);
     int want = -1;
     for (int i = 0; i + n.len <= s.len; i++) {
-        if (memcmp(s.s + i, n.s, (size_t)n.len) == 0) {
+        if (StrEq(Str(s.s + i, n.len), n)) {
             want = i;
             break;
         }
@@ -50,8 +50,7 @@ static bool Partitions(SyntaxLang lang, const char* src) {
 
 static bool NameIs(SyntaxLang lang, const char* want) {
     Str got = SyntaxLangName(lang);
-    int len = (int)strlen(want);
-    return got.len == len && memcmp(got.s, want, (size_t)len) == 0;
+    return StrEq(got, Str(want));
 }
 
 static void TestSyntaxLangFor() {

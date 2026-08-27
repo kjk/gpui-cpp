@@ -52,8 +52,7 @@ static const AccessibilityNode* RoleNode(const Vec<AccessibilityNode>& nodes,
 }
 
 static bool SameText(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || (a.s && b.s && memcmp(a.s, b.s, a.len) == 0));
+    return StrEq(a, b);
 }
 
 static void Increment(int* value) {

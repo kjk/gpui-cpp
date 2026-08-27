@@ -15,8 +15,7 @@ static Arena* Tmp() {
 }
 
 static bool Is(Str got, const char* want) {
-    int n = (int)strlen(want);
-    return got.len == n && (n == 0 || memcmp(got.s, want, (size_t)n) == 0);
+    return StrEq(got, Str(want));
 }
 
 static bool TokenIs(const MaskPattern& p, int pos, MaskToken want,

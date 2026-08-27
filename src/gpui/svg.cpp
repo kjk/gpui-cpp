@@ -663,8 +663,7 @@ static bool ParseSvgPaint(const SvgIcon* ic, Str v, Rgba* out) {
     Str id(idStart, (int)(p - idStart));
     for (int i = 0; i < ic->gradients.len; i++) {
         const SvgGradient& g = ic->gradients[i];
-        if (g.hasColor && g.id.len == id.len && id.len > 0 &&
-            memcmp(g.id.s, id.s, (size_t)id.len) == 0) {
+        if (g.hasColor && id.len > 0 && StrEq(g.id, id)) {
             *out = g.color;
             return true;
         }

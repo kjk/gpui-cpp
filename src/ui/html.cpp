@@ -523,13 +523,13 @@ static uint8_t HtmlInlineMark(Str n) {
 }
 
 static uint8_t HtmlAlignValue(Str v) {
-    if (v.len >= 6 && memcmp(v.s, "center", 6) == 0) {
+    if (v.len >= 6 && StrEq(Str(v.s, 6), StrL("center"))) {
         return MdAlignCenter;
     }
-    if (v.len >= 5 && memcmp(v.s, "right", 5) == 0) {
+    if (v.len >= 5 && StrEq(Str(v.s, 5), StrL("right"))) {
         return MdAlignRight;
     }
-    if (v.len >= 4 && memcmp(v.s, "left", 4) == 0) {
+    if (v.len >= 4 && StrEq(Str(v.s, 4), StrL("left"))) {
         return MdAlignLeft;
     }
     return MdAlignDefault;
@@ -545,7 +545,7 @@ static uint8_t HtmlAlign(Arena* a, Str attrs) {
     }
     Str style = HtmlAttrValue(a, attrs, "style");
     for (int i = 0; i + 10 <= style.len; i++) {
-        if (memcmp(style.s + i, "text-align", 10) != 0) {
+        if (!StrEq(Str(style.s + i, 10), StrL("text-align"))) {
             continue;
         }
         int at = i + 10;
@@ -568,7 +568,7 @@ static float HtmlLength(Arena* a, Str attrs, const char* name) {
         Str style = HtmlAttrValue(a, attrs, "style");
         int nameLen = (int)strlen(name);
         for (int i = 0; i + nameLen <= style.len; i++) {
-            if (memcmp(style.s + i, name, (size_t)nameLen) != 0) {
+            if (!StrEq(Str(style.s + i, nameLen), Str(name, nameLen))) {
                 continue;
             }
             int at = i + nameLen;
@@ -927,7 +927,7 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
     // code block on the web has.
     if (b->cur->kind == MdKind::Code && HtmlNameIs(l->name, "code")) {
         Str cls = HtmlAttrValue(b->a, l->attrs, "class");
-        if (cls.len > 9 && memcmp(cls.s, "language-", 9) == 0) {
+        if (cls.len > 9 && StrEq(Str(cls.s, 9), StrL("language-"))) {
             b->cur->lang = Str(cls.s + 9, cls.len - 9);
         }
         HtmlPush(b, nullptr, name);

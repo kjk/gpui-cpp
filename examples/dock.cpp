@@ -99,8 +99,7 @@ static void SaveLayoutFrom(DockApp* self, DockState* s) {
     StrBuilder sb;
     DockAreaStateWrite(&state, &sb);
     Str json = sb.TakeStr();
-    if (self->lastSaved.s && json.len == self->lastSaved.len &&
-        memcmp(json.s, self->lastSaved.s, (size_t)json.len) == 0) {
+    if (self->lastSaved.s && StrEq(json, self->lastSaved)) {
         StrFree(json);
         return;
     }

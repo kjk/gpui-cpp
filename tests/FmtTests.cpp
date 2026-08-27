@@ -12,8 +12,7 @@
 #include <string.h>
 
 static bool Is(Str got, const char* want) {
-    int n = (int)strlen(want);
-    return got.len == n && memcmp(got.s, want, (size_t)n) == 0;
+    return StrEq(got, Str(want));
 }
 
 static void TheOrdinaryDirectives() {

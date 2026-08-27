@@ -135,7 +135,7 @@ bool NotificationTagId(Str tag, int* outId) {
     if (!tag.s || tag.len <= prefixLen) {
         return false;
     }
-    if (memcmp(tag.s, kSystemTagPrefix, (size_t)prefixLen) != 0) {
+    if (!StrEq(Str(tag.s, prefixLen), Str(kSystemTagPrefix, prefixLen))) {
         return false;
     }
     int id = 0;

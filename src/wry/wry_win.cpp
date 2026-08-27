@@ -881,7 +881,7 @@ static bool StrStartsWith(Str s, Str prefix) {
     if (prefix.len > s.len) {
         return false;
     }
-    return memcmp(s.s, prefix.s, (size_t)prefix.len) == 0;
+    return base::StrEq(Str(s.s, prefix.len), prefix);
 }
 
 // ─── util.rs ─────────────────────────────────────────────────────────────

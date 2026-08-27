@@ -13,8 +13,7 @@ static void CheckInitials(const char* name, const char* want) {
     Str got = AvatarInitials(buf, (int)sizeof(buf), Str(name));
     // Not StrEqI: the point of the last step is the case.
     Str exp = Str(want);
-    utassert(got.len == exp.len);
-    utassert(memcmp(got.s, exp.s, (size_t)exp.len) == 0);
+    utassert(StrEq(got, exp));
 }
 
 void TestAvatar() {

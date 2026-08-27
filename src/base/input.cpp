@@ -1826,13 +1826,6 @@ void InputSelectLine(InputState* s, App* app, Window* win, int offset) {
 
 // ─── the edit path ────────────────────────────────────────────────────────
 
-static bool StrSameBytes(Str a, Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    return a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0;
-}
-
 // is_valid_input: the validator, the mask, and (in Rust) a regex we have no
 // engine for.
 static bool IsValidInput(const InputState* s, Str text) {
@@ -1986,7 +1979,7 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
         }
         if (!MaskIsNone(s->maskPattern)) {
             Str maskText = MaskApply(tmp, s->maskPattern, pending);
-            maskChanged = !StrSameBytes(maskText, pending);
+            maskChanged = !base::StrEq(maskText, pending);
             int grown = text.len + maskText.len - pending.len;
             if (grown < 0) {
                 grown = 0;
@@ -3703,7 +3696,7 @@ static bool DoOutdent(InputState* s, App* app, Window* win) {
         // The caret's own line, whichever column the caret sits in.
         int offset = StartOfLineOfSelection(s);
         if (before.len - offset < tab.len ||
-            memcmp(before.s + offset, tab.s, (size_t)tab.len) != 0) {
+            !StrEq(Str(before.s + offset, tab.len), tab)) {
             s->undo.hasPendingIntent = false;
             return true;
         }
@@ -3724,7 +3717,7 @@ static bool DoOutdent(InputState* s, App* app, Window* win) {
         int lineLen = LineLenAt(src, i);
         int skip = 0;
         if (lineLen >= tab.len &&
-            memcmp(src.s + i, tab.s, (size_t)tab.len) == 0) {
+            StrEq(Str(src.s + i, tab.len), tab)) {
             skip = tab.len;
             removed += tab.len;
         }
@@ -4452,8 +4445,7 @@ void SearchMatcherReset(SearchMatcher* m) {
 void SearchMatcherUpdate(SearchMatcher* m, Str text) {
     // The unchanged text is Rust's early return, and it clears `replacing`
     // on the way out — a replacement that did not move a byte still ends.
-    if (m->text.len == text.len &&
-        (text.len == 0 || memcmp(m->text.els, text.s, (size_t)text.len) == 0)) {
+    if (StrEq(Str(m->text.els, m->text.len), text)) {
         m->replacing = false;
         return;
     }

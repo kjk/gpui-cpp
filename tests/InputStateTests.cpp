@@ -14,8 +14,7 @@
 #include "Test.h"
 
 static bool Is(Str got, const char* want) {
-    int n = (int)strlen(want);
-    return got.len == n && (n == 0 || memcmp(got.s, want, (size_t)n) == 0);
+    return StrEq(got, Str(want));
 }
 
 static bool ValueIs(const InputState& s, const char* want) {
@@ -1778,7 +1777,7 @@ static int Complete(void* data, Str, int, Str query, CompletionItem* out,
             continue;
         }
         if (query.len > 0 &&
-            memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
+            !StrEq(Str(item.label.s, query.len), query)) {
             continue;
         }
         if (n < cap && out) {

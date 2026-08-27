@@ -112,7 +112,7 @@ static bool DataUriBytes(Str src, Vec<uint8_t>* out) {
     Str payload(src.s + comma + 1, src.len - comma - 1);
     bool base64 = false;
     for (int i = 0; i + 6 <= header.len; i++) {
-        if (memcmp(header.s + i, "base64", 6) == 0) {
+        if (StrEq(Str(header.s + i, 6), StrL("base64"))) {
             base64 = true;
             break;
         }
@@ -139,11 +139,6 @@ bool ImageSrcIsLocal(Str src) {
         }
     }
     return true;
-}
-
-static bool SrcEq(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
 }
 
 // The asset a src names. A local path is itself; a remote URL is its last path
@@ -186,7 +181,7 @@ Str ImageAssetFor(Arena* a, Str src) {
         return {};
     }
     for (int i = 0; i < gAssetResolveN; i++) {
-        if (SrcEq(gAssetResolve[i].src, src)) {
+        if (base::StrEq(gAssetResolve[i].src, src)) {
             Str v = gAssetResolve[i].asset;
             return v.s ? StrDup(a, v) : Str{};
         }
@@ -348,7 +343,7 @@ void ImageCacheClear() {
 
 static ImageCacheSlot* ImageSlotFind(Str src) {
     for (int i = 0; i < kImageCacheSlots; i++) {
-        if (gImageCache[i].tried && SrcEq(gImageCache[i].src, src)) {
+        if (gImageCache[i].tried && base::StrEq(gImageCache[i].src, src)) {
             return &gImageCache[i];
         }
     }

@@ -197,7 +197,7 @@ SyntaxLang SyntaxLangFor(Str info) {
     const char* kPrefixes[] = {"language-", "lang-"};
     for (const char* pre : kPrefixes) {
         int n = (int)strlen(pre);
-        if (info.len > n && memcmp(info.s, pre, (size_t)n) == 0) {
+        if (info.len > n && StrEq(Str(info.s, n), Str(pre, n))) {
             info = Str(info.s + n, info.len - n);
         }
     }
@@ -259,7 +259,7 @@ static bool SyntaxIsLiteralWord(Str w) {
                             "True", "False", "NULL", "nullptr", "undefined"};
     for (const char* k : kWords) {
         int n = (int)strlen(k);
-        if (w.len == n && memcmp(w.s, k, (size_t)n) == 0) {
+        if (StrEq(w, Str(k, n))) {
             return true;
         }
     }
@@ -295,7 +295,8 @@ static int SyntaxSkipSpace(const SyntaxLexer* lx, int at) {
 
 static bool SyntaxAt(const SyntaxLexer* lx, int at, const char* s) {
     int n = (int)strlen(s);
-    return at + n <= lx->src.len && memcmp(lx->src.s + at, s, (size_t)n) == 0;
+    return at + n <= lx->src.len &&
+           StrEq(Str(lx->src.s + at, n), Str(s, n));
 }
 
 // A quoted run, to its closing quote. `escapes` is whether a backslash

@@ -24,13 +24,6 @@ Str StrOwn(Arena* a, Str s) {
     return StrOwn(a, s.s, s.len);
 }
 
-bool StrEq(Str a, Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    return a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0;
-}
-
 bool StrEqAsciiI(Str a, Str b) {
     if (a.len != b.len) {
         return false;

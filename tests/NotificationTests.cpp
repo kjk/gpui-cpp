@@ -40,12 +40,12 @@ static void ATagIsNamespacedAndCarriesTheId() {
     // replace the first in the notification center.
     char other[64];
     Str again = NotificationSystemTag(other, (int)sizeof(other), 7);
-    utassert(again.len == tag.len && memcmp(again.s, tag.s, (size_t)tag.len) == 0);
+    utassert(StrEq(again, tag));
 
     // Two ids never collide.
     char third[64];
     Str next = NotificationSystemTag(third, (int)sizeof(third), 8);
-    utassert(next.len != tag.len || memcmp(next.s, tag.s, (size_t)tag.len) != 0);
+    utassert(!StrEq(next, tag));
 
     // A tag the application posted itself is not ours to answer.
     utassert(!NotificationTagId(StrL("com.example.app/own-tag"), &id));
@@ -157,8 +157,7 @@ static NotificationItem Item(int id, const char* message) {
 }
 
 static bool SameNotificationText(Str a, const char* b) {
-    int n = (int)strlen(b);
-    return a.len == n && (n == 0 || memcmp(a.s, b, (size_t)n) == 0);
+    return StrEq(a, Str(b));
 }
 
 static void SettingsAndBuilderMatchThePublicSourceShape() {

@@ -16,7 +16,7 @@ static void CheckWord(const char* text, int off, const char* want) {
     int wantLen = (int)strlen(want);
     utassert(b - a == wantLen);
     if (b - a == wantLen) {
-        utassert(memcmp(text + a, want, (size_t)wantLen) == 0);
+        utassert(StrEq(Str(text + a, wantLen), Str(want, wantLen)));
     }
 }
 
