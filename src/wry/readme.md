@@ -80,7 +80,19 @@ inside a C++ namespace — holding the `wry::WebView*` those ivars would have
 held: the IPC message handler, the navigation delegate, the UI delegate (the
 open panel, the media-capture permission and `window.open`), the title
 observer, and one `WKURLSchemeHandler` class where Rust builds a class per
-scheme at runtime to have somewhere to put the index.
+scheme at runtime to have somewhere to put the index. `WryWebView` is the
+sixth class: like the source it implements `acceptsFirstMouse`, lets a child
+pass Command-key equivalents back to the application's menu and turns mouse
+buttons four and five into DOM back/forward events.
+
+The Darwin builder state is carried in the portable attribute record:
+persistent data-store identifiers on macOS 14+, an optional existing
+`WKWebViewConfiguration`, link previews, the macOS 14 inactive scheduling
+policy and the traffic-light inset. A configuration supplied by the caller
+keeps its data store and any custom scheme it already registered, as Rust's
+builder does. A child does not take first-responder status when it is made;
+the pinned crate documents `focused` as unsupported on macOS and only makes
+a non-child webview first responder.
 
 Two things differ beyond that, and both are in the file's header comment:
 
@@ -94,10 +106,10 @@ Two things differ beyond that, and both are in the file's header comment:
   by it.
 
 `set_theme` and `set_memory_usage_level` answer false there, because both are
-`WebViewExtWindows` in Rust with no WKWebView counterpart, and
-`set_background_color` does too — it is the iOS half of the crate, and on
-macOS the only knob is the `transparent` attribute, which is set on the
-configuration before the webview exists.
+`WebViewExtWindows` in Rust with no WKWebView counterpart.
+`set_background_color` is a successful no-op — the exact macOS arm of the
+Rust method — because on macOS the only creation-time knob is the
+`transparent` attribute.
 
 **It is compile-verified, not run-verified.** `bun cmd/mac-build.ts -rel
 webview` builds it on a Mac over ssh, which is what has been done; a Cocoa
@@ -116,15 +128,16 @@ background colour, theme, the memory usage level, `reparent`, `print`,
 (`window.ipc.postMessage`), initialization scripts, custom protocols with
 their `http://<scheme>.host` work-around and their asynchronous responder,
 navigation / page-load / document-title / new-window handlers, the clipboard
-permission, incognito, the proxy switches and the Windows-only builder
-extensions (browser arguments, accelerator keys, context menus, the https
-scheme, scrollbar style, extensions).
+permission, incognito, background throttling, the proxy switches, the Darwin
+builder extensions named above and the Windows-only builder extensions
+(browser arguments, accelerator keys, context menus, the https scheme,
+scrollbar style, extensions).
 
 The macOS backend has all of that except what the platform does not have: the
 custom protocol work-around is Windows' alone (WKWebView takes a scheme
 handler for the real scheme), the browser arguments and their neighbours are
-WebView2 settings, and the three calls named in the section above answer
-false.
+WebView2 settings, and the two Windows-extension calls named in the section
+above answer false.
 
 Not ported, each for a reason:
 

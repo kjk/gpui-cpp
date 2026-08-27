@@ -40,6 +40,7 @@
 @class GpuiWryUIDelegate;
 @class GpuiWryTitleObserver;
 @class GpuiWrySchemeHandler;
+@class GpuiWryWebView;
 
 namespace wry {
 
@@ -159,6 +160,79 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task);
 }  // namespace wry
 
 // ─── the delegates ───────────────────────────────────────────────────────
+
+/** `WryWebView`. WKWebView itself consumes Command-key equivalents before
+    the containing GPUI window can route its menu actions. The pinned class
+    deliberately declines them for a child webview, and also owns the
+    macOS-only first-click and navigation-button behavior. */
+@interface GpuiWryWebView : WKWebView
+@property(nonatomic, assign) BOOL childWebView;
+@property(nonatomic, assign) BOOL acceptFirstMouseEnabled;
+@end
+
+@implementation GpuiWryWebView
+- (BOOL)performKeyEquivalent:(NSEvent*)event {
+    if (self.childWebView) {
+        return NO;
+    }
+    return [super performKeyEquivalent:event];
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent*)event {
+    (void)event;
+    return self.acceptFirstMouseEnabled;
+}
+
+- (NSString*)syntheticMouseScript:(NSEvent*)event down:(BOOL)down back:(BOOL)back {
+    NSPoint p = [self convertPoint:event.locationInWindow fromView:nil];
+    NSUInteger x = p.x < 0 ? 0 : (NSUInteger)p.x;
+    NSUInteger y = p.y < 0 ? 0 : (NSUInteger)p.y;
+    NSUInteger buttons = [NSEvent pressedMouseButtons];
+    NSEventModifierFlags mods = event.modifierFlags;
+    return [NSString
+        stringWithFormat:
+            @"(() => { const el = document.elementFromPoint(%lu,%lu);"
+             "if (!el) return; const ev = new MouseEvent('%@', {"
+             "view:window,button:%d,buttons:%lu,x:%lu,y:%lu,bubbles:true,"
+             "detail:%ld,cancelBubble:false,cancelable:true,clientX:%lu,"
+             "clientY:%lu,composed:true,layerX:%lu,layerY:%lu,pageX:%lu,"
+             "pageY:%lu,screenX:window.screenX+%lu,screenY:window.screenY+%lu,"
+             "ctrlKey:%s,metaKey:%s,shiftKey:%s,altKey:%s});"
+             "el.dispatchEvent(ev); if (!ev.defaultPrevented && '%@' === "
+             "'mouseup') { if (ev.button === 3) history.back();"
+             "if (ev.button === 4) history.forward(); } })()",
+            (unsigned long)x, (unsigned long)y, down ? @"mousedown" : @"mouseup",
+            back ? 3 : 4, (unsigned long)buttons, (unsigned long)x, (unsigned long)y,
+            (long)event.clickCount, (unsigned long)x, (unsigned long)y,
+            (unsigned long)x, (unsigned long)y, (unsigned long)x, (unsigned long)y,
+            (unsigned long)x, (unsigned long)y,
+            (mods & NSEventModifierFlagControl) ? "true" : "false",
+            (mods & NSEventModifierFlagCommand) ? "true" : "false",
+            (mods & NSEventModifierFlagShift) ? "true" : "false",
+            (mods & NSEventModifierFlagOption) ? "true" : "false",
+            down ? @"mousedown" : @"mouseup"];
+}
+
+- (void)otherMouseDown:(NSEvent*)event {
+    NSInteger button = event.buttonNumber;
+    if (event.type == NSEventTypeOtherMouseDown && (button == 3 || button == 4)) {
+        [self evaluateJavaScript:[self syntheticMouseScript:event down:YES back:button == 3]
+              completionHandler:nil];
+        return;
+    }
+    [self mouseDown:event];
+}
+
+- (void)otherMouseUp:(NSEvent*)event {
+    NSInteger button = event.buttonNumber;
+    if (event.type == NSEventTypeOtherMouseUp && (button == 3 || button == 4)) {
+        [self evaluateJavaScript:[self syntheticMouseScript:event down:NO back:button == 3]
+              completionHandler:nil];
+        return;
+    }
+    [self mouseUp:event];
+}
+@end
 
 /** `WryWebViewDelegate` — the IPC message handler. */
 @interface GpuiWryScriptHandler : NSObject <WKScriptMessageHandler>
@@ -602,6 +676,44 @@ static double ScaleFactor(NSView* view) {
     return window ? window.backingScaleFactor : 1.0;
 }
 
+// `WryWebViewParent::set_traffic_light_inset`. The C++ GPUI window keeps its
+// own content view instead of installing WryWebViewParent, but the controls
+// belong to the NSWindow and can be positioned in exactly the same way.
+static void SetTrafficLightInset(NSWindow* window, Position position) {
+    if (!window) {
+        return;
+    }
+    double scale = window.backingScaleFactor;
+    double x = ToLogical(position.x, position.logical, scale);
+    double y = ToLogical(position.y, position.logical, scale);
+    NSButton* close = [window standardWindowButton:NSWindowCloseButton];
+    NSButton* mini = [window standardWindowButton:NSWindowMiniaturizeButton];
+    NSButton* zoom = [window standardWindowButton:NSWindowZoomButton];
+    NSView* container = close.superview.superview;
+    if (!close || !mini || !container) {
+        return;
+    }
+
+    NSRect closeFrame = close.frame;
+    CGFloat titleHeight = closeFrame.size.height + y;
+    NSRect titleFrame = container.frame;
+    titleFrame.size.height = titleHeight;
+    titleFrame.origin.y = window.frame.size.height - titleHeight;
+    container.frame = titleFrame;
+
+    CGFloat spacing = mini.frame.origin.x - closeFrame.origin.x;
+    closeFrame.origin.x = x;
+    close.frame = closeFrame;
+    NSRect miniFrame = mini.frame;
+    miniFrame.origin.x = x + spacing;
+    mini.frame = miniFrame;
+    if (zoom) {
+        NSRect zoomFrame = zoom.frame;
+        zoomFrame.origin.x = x + 2 * spacing;
+        zoom.frame = zoomFrame;
+    }
+}
+
 // ─── the webview ─────────────────────────────────────────────────────────
 
 WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asChild) {
@@ -615,9 +727,26 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
     NSView* parentView = (__bridge NSView*)parentWindow;
 
-    WKWebViewConfiguration* config = [[WKWebViewConfiguration alloc] init];
-    config.websiteDataStore = attrs->incognito ? [WKWebsiteDataStore nonPersistentDataStore]
-                                               : [WKWebsiteDataStore defaultDataStore];
+    bool usingExistingConfig = attrs->webviewConfiguration != nullptr;
+    WKWebViewConfiguration* config = usingExistingConfig
+                                         ? (__bridge WKWebViewConfiguration*)attrs->webviewConfiguration
+                                         : [[WKWebViewConfiguration alloc] init];
+    if (!usingExistingConfig) {
+        if (attrs->incognito) {
+            config.websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+        } else if (attrs->hasDataStoreIdentifier) {
+            if (@available(macOS 14.0, *)) {
+                NSUUID* identifier =
+                    [[NSUUID alloc] initWithUUIDBytes:attrs->dataStoreIdentifier];
+                config.websiteDataStore =
+                    [WKWebsiteDataStore dataStoreForIdentifier:identifier];
+            } else {
+                config.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
+            }
+        } else {
+            config.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
+        }
+    }
 
     WebView* wv = new WebView();
     wv->parentView = parentView;
@@ -638,23 +767,30 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     // Custom protocols, before the webview exists: a scheme handler can only
     // be set on a configuration.
     for (int i = 0; i < attrs->customProtocolCount; i++) {
+        NSString* scheme = ToNS(attrs->customProtocols[i].name);
+        if (usingExistingConfig && [config urlSchemeHandlerForURLScheme:scheme]) {
+            continue;
+        }
         ProtocolCopy p;
         p.name = StrDup(attrs->customProtocols[i].name);
         p.ctx = attrs->customProtocols[i].ctx;
         p.handler = attrs->customProtocols[i].handler;
+        int protocolIndex = wv->protocols.len;
         wv->protocols.Append(p);
 
         GpuiWrySchemeHandler* handler = [[GpuiWrySchemeHandler alloc] init];
         handler.wv = wv;
-        handler.index = i;
+        handler.index = protocolIndex;
         [wv->schemeHandlers addObject:handler];
         // WebKit raises for a scheme it handles itself (http, https, file …),
         // which is `Error::UrlSchemeRegisterError` in Rust.
         @try {
-            [config setURLSchemeHandler:handler forURLScheme:ToNS(p.name)];
+            [config setURLSchemeHandler:handler forURLScheme:scheme];
         } @catch (NSException* e) {
             (void)e;
             logf("wry: could not register the custom protocol '%s'\n", p.name);
+            WebViewFree(wv);
+            return nullptr;
         }
     }
 
@@ -664,6 +800,18 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
     if (attrs->autoplay) {
         config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
+    }
+    if (attrs->hasBackgroundThrottling) {
+        if (@available(macOS 14.0, *)) {
+            // WKInactiveSchedulingPolicy is Suspend=0, Throttle=1, None=2.
+            int policy = 2;
+            if (attrs->backgroundThrottling == BackgroundThrottlingPolicy::Suspend) {
+                policy = 0;
+            } else if (attrs->backgroundThrottling == BackgroundThrottlingPolicy::Throttle) {
+                policy = 1;
+            }
+            [preferences setValue:@(policy) forKey:@"inactiveSchedulingPolicy"];
+        }
     }
     if (attrs->transparent) {
         [config setValue:@NO forKey:@"drawsBackground"];
@@ -686,7 +834,11 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         frame = parentView.bounds;
     }
 
-    wv->webview = [[WKWebView alloc] initWithFrame:frame configuration:config];
+    GpuiWryWebView* webview =
+        [[GpuiWryWebView alloc] initWithFrame:frame configuration:config];
+    webview.childWebView = asChild ? YES : NO;
+    webview.acceptFirstMouseEnabled = attrs->acceptFirstMouse ? YES : NO;
+    wv->webview = webview;
     wv->manager = config.userContentController;
 
     if (asChild) {
@@ -697,6 +849,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
     wv->webview.allowsBackForwardNavigationGestures =
         attrs->backForwardNavigationGestures ? YES : NO;
+    wv->webview.allowsLinkPreview = attrs->allowLinkPreview ? YES : NO;
     if (!attrs->visible) {
         wv->webview.hidden = YES;
     }
@@ -769,12 +922,25 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     [parentView addSubview:wv->webview];
     if (!asChild) {
         wv->webview.frame = parentView.bounds;
-    }
-    if (attrs->focused) {
         NSWindow* window = parentView.window;
         if (window) {
             [window makeFirstResponder:wv->webview];
         }
+    }
+    // `focused` is unsupported by wry on macOS. A non-child webview is made
+    // first responder by WryWebViewParent; a child must not steal GPUI focus.
+    (void)attrs->focused;
+    NSWindow* window = parentView.window;
+    if (window && [window respondsToSelector:@selector(setTitlebarSeparatorStyle:)]) {
+        window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+    }
+    if (!asChild && attrs->hasTrafficLightInset) {
+        SetTrafficLightInset(window, attrs->trafficLightInset);
+    }
+    if (@available(macOS 14.0, *)) {
+        [NSApp activate];
+    } else {
+        [NSApp activateIgnoringOtherApps:YES];
     }
     return wv;
 }
@@ -992,7 +1158,8 @@ bool WebViewZoom(WebView* wv, double scaleFactor) {
 // comes from the page, and the only knob is the transparency attribute,
 // which is set on the configuration before the webview exists.
 bool WebViewSetBackgroundColor(WebView*, Rgba) {
-    return false;
+    // Rust's macOS arm is an intentional no-op but still returns Ok(()).
+    return true;
 }
 
 // WebViewExtWindows, both of them: no WKWebView counterpart.
@@ -1014,6 +1181,18 @@ bool WebViewReparent(WebView* wv, void* parentWindow) {
     wv->parentView = parent;
     if (!wv->isChild) {
         wv->webview.frame = parent.bounds;
+    }
+    return true;
+}
+
+bool WebViewSetTrafficLightInset(WebView* wv, Position position) {
+    if (!wv) {
+        return false;
+    }
+    // WryWebViewParent only exists for a non-child webview. The extension is
+    // specified as a successful no-op for a child.
+    if (!wv->isChild) {
+        SetTrafficLightInset(wv->webview.window, position);
     }
     return true;
 }

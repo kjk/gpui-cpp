@@ -11,6 +11,17 @@
 void TestWryUri() {
     TestSuite("wry_uri");
 
+    // `WebViewAttributes::default`, including the Darwin fields that live in
+    // Rust's separate `PlatformSpecificWebViewAttributes` builder state.
+    wry::WebViewAttributes attrs;
+    utassert(attrs.visible);
+    utassert(attrs.acceptFirstMouse == false);
+    utassert(attrs.allowLinkPreview);
+    utassert(!attrs.hasDataStoreIdentifier);
+    utassert(!attrs.hasTrafficLightInset);
+    utassert(!attrs.hasBackgroundThrottling);
+    utassert(attrs.webviewConfiguration == nullptr);
+
     // The crate's own case, verbatim.
     Str scheme = StrL("http");
     Str uri = StrL("http://wry.localhost/path/to/page");

@@ -116,6 +116,14 @@ enum class MemoryUsageLevel {
     Low,
 };
 
+/** `wry::BackgroundThrottlingPolicy`. Only WebKit currently honours it,
+    and only on macOS 14 or later. */
+enum class BackgroundThrottlingPolicy {
+    Disabled,
+    Suspend,
+    Throttle,
+};
+
 /** `proxy.rs`: `ProxyConfig` and its endpoint, folded into one struct
     because `ProxyKind::None` is what `Option<ProxyConfig>` said. */
 enum class ProxyKind {
@@ -260,7 +268,26 @@ struct WebViewAttributes {
     bool focused = true;
     /** Only honoured by a child webview. Rust defaults it to 200×200. */
     Rect bounds = {{0, 0, true}, {200, 200, true}};
+    /** `with_background_throttling`; false is Rust's `None`. */
+    bool hasBackgroundThrottling = false;
+    BackgroundThrottlingPolicy backgroundThrottling =
+        BackgroundThrottlingPolicy::Disabled;
     bool javascriptDisabled = false;
+
+    // ── WebViewBuilderExtDarwin / WebViewBuilderExtMacos ──
+    /** A persistent WKWebsiteDataStore identifier. macOS 14+ only;
+        incognito takes precedence. */
+    bool hasDataStoreIdentifier = false;
+    uint8_t dataStoreIdentifier[16] = {};
+    /** Only affects a non-child webview in a hidden-titlebar window. */
+    bool hasTrafficLightInset = false;
+    Position trafficLightInset;
+    /** `with_allow_link_preview`; WebKit's default is true. */
+    bool allowLinkPreview = true;
+    /** Optional `WKWebViewConfiguration*`, kept opaque so this header remains
+        portable and independent of Objective-C headers. The caller retains
+        it through `WebViewNew`. */
+    void* webviewConfiguration = nullptr;
 
     // ── WebViewBuilderExtWindows ──
     /** Empty means wry's own default arguments — see readme.md. */
@@ -333,6 +360,9 @@ bool WebViewSetTheme(WebView* webview, Theme theme);
 bool WebViewSetMemoryUsageLevel(WebView* webview, MemoryUsageLevel level);
 /** `WebViewExtWindows::reparent`. */
 bool WebViewReparent(WebView* webview, void* parentWindow);
+/** `WebViewExtMacOS::set_traffic_light_inset`. Other platforms answer false;
+    a child webview answers true without changing the window, as wry does. */
+bool WebViewSetTrafficLightInset(WebView* webview, Position position);
 /** `WebView::print`. */
 bool WebViewPrint(WebView* webview);
 /** `WebView::clear_all_browsing_data`. */

@@ -8927,3 +8927,29 @@ either crate. MSVC release passes 20,799 checks and strict Linux g++ passes its
 20,785 applicable checks. The final host matrix builds every Windows release
 example, the story gallery with Windows clang-cl and Linux g++, and the wasm
 story page with emscripten.
+
+## macOS webview restores the pinned Darwin builder and native subclass
+
+The WKWebView backend existed, but four source-level seams were still absent
+and one advertised setting was ignored. `WebViewAttributes` now carries
+Wry's background-throttling policy and the Darwin builder state: persistent
+data-store identifiers, traffic-light position, link-preview policy and an
+optional existing `WKWebViewConfiguration`. The backend honors those values,
+preserves the store and already-registered schemes of an existing
+configuration, reports a scheme-registration exception as construction
+failure, and exposes the post-construction traffic-light operation.
+
+The webview is now the source-shaped WKWebView subclass rather than a plain
+system instance. `acceptFirstMouse` works, child webviews decline Command-key
+equivalents so GPUI's application menu can handle them, and mouse buttons
+four and five synthesize the pinned DOM events and default history action.
+Creation no longer lets the portable-but-unsupported `focused` attribute make
+a child steal focus; a non-child still becomes first responder. The macOS
+background-color method is the source's successful no-op rather than a false
+failure.
+
+The remote Mac build first caught and fixed an unrelated one-token regression
+in the scroll-wheel path (`w` instead of `win`) that prevented every current
+macOS build. After that fix, the release webview example compiles and links
+against Cocoa and WebKit. MSVC release passes 20,815 checks and the Windows
+release webview example compiles.

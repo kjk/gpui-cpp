@@ -85,6 +85,9 @@ bool WebViewSetMemoryUsageLevel(WebView*, MemoryUsageLevel) {
 bool WebViewReparent(WebView*, void*) {
     return false;
 }
+bool WebViewSetTrafficLightInset(WebView*, Position) {
+    return false;
+}
 bool WebViewPrint(WebView*) {
     return false;
 }

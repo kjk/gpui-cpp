@@ -2552,6 +2552,10 @@ bool WebViewReparent(WebView* wv, void* parentWindow) {
     return true;
 }
 
+bool WebViewSetTrafficLightInset(WebView*, Position) {
+    return false;
+}
+
 bool WebViewPrint(WebView* wv) {
     return WebViewEval(wv, StrL("window.print()"));
 }
