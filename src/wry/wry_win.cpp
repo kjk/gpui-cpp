@@ -2222,6 +2222,9 @@ static bool ExecuteScript(ICoreWebView2* webview, Str js, EvalCallback cb) {
     HRESULT hr = webview->ExecuteScript(ToCWstrTemp(js), handler);
     handler->Release();
     if (FAILED(hr)) {
+        // A failed asynchronous call does not retain or invoke its handler,
+        // so its separately owned callback state is still ours.
+        delete held;
         logf("wry: ExecuteScript failed, hr 0x%x\n", (int)hr);
         return false;
     }

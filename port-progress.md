@@ -9052,3 +9052,8 @@ making asynchronous registration errors observable. Partial teardown tracks
 whether the parent subclass was actually attached, so an earlier construction
 failure cannot detach another view's parent hook. The release webview example
 builds with the strict MSVC warning set after the change.
+
+Windows script evaluation now releases its copied callback state when
+`ExecuteScript` fails synchronously. WebView2 does not retain or invoke the
+completion handler on that path, so the old code leaked one allocation per
+failed evaluation; the successful asynchronous ownership path is unchanged.
