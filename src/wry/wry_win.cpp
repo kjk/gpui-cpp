@@ -3613,13 +3613,22 @@ static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
     }
     for (UINT32 i = 0; i < count; i++) {
         ICoreWebView2Cookie* source = nullptr;
-        if (SUCCEEDED(wait.cookies->GetValueAtIndex(i, &source)) && source) {
-            Cookie cookie;
-            if (CookieFromWebView2(source, &cookie)) {
-                out->Append(cookie);
-            }
+        HRESULT hr = wait.cookies->GetValueAtIndex(i, &source);
+        if (FAILED(hr) || !source) {
             Rel(&source);
+            Rel(&wait.cookies);
+            CookieListFree(out);
+            return false;
         }
+        Cookie cookie;
+        if (CookieFromWebView2(source, &cookie) && !out->Append(cookie)) {
+            FreeCookieFields(&cookie);
+            Rel(&source);
+            Rel(&wait.cookies);
+            CookieListFree(out);
+            return false;
+        }
+        Rel(&source);
     }
     Rel(&wait.cookies);
     return true;

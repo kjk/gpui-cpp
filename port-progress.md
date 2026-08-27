@@ -9090,3 +9090,9 @@ truncated 64-bit handles and could give two views the same callback id.
 `focus_parent` now reports the `SetFocus` result exactly as Wry's windows-rs
 call does. The old port always answered success after issuing the call and
 therefore hid native focus failures.
+
+Windows cookie enumeration now distinguishes the same two failure classes as
+Wry: a cookie that cannot be converted is skipped, but failure to obtain an
+indexed cookie fails the query. Fatal index or allocation failures also clear
+the partial owned list rather than returning incomplete cookies or leaking the
+last converted value.
