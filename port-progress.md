@@ -7898,3 +7898,27 @@ partial-module spellings and no full-module errors. MSVC debug/release,
 clang-cl release and MSVC ASan pass 20,015 checks; wasm passes its 19,310
 applicable checks. The release story and showcase builds compile their
 vertical list users unchanged.
+
+## Base theme restores its crate-scoped source names
+
+Base's semantic tokens, scrollbar policy/styles, transparent resize-handle
+defaults, per-App global storage and UI-theme projection were already
+complete. The C++ types were named `BaseTheme`, `BaseScrollbarTheme` and
+`BaseResizableTheme` solely because Rust's separate Base and UI crates both
+export a `Theme`, while the amalgam places both in `gpui`.
+
+The Base contract now lives under `gpui::base_theme`: source-named `Theme`,
+`ScrollbarTheme` and `ResizableTheme` coexist with UI's `gpui::Theme` without
+colliding. ScrollbarTheme exposes the New/WithMode/WithMotion/WithStyles
+builder and value accessors, and Theme exposes the source global behavior:
+Global returns a default value when none is installed, while GlobalMut installs
+and returns App-owned state. The old Base-prefixed names are direct aliases,
+so the renderer, base controls and UI projection all use the same objects with
+no copy or adapter boundary.
+
+Tests cover builder values, absent-global defaults, installation, cloned read
+and alias identity in addition to the existing two-App projection suite. Base
+theme is full: the audit moves to 97 full, 24 partial, 8 adapters and 2
+exclusions with 274 unresolved partial-module spellings and no full-module
+errors. MSVC debug/release, clang-cl release and MSVC ASan pass 20,023 checks;
+wasm passes its 19,318 applicable checks.

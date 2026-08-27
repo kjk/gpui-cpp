@@ -127,6 +127,34 @@ static void StyledThemeChangesProjectIntoBase() {
     AppGlobalClear(&second);
 }
 
+static void BaseThemeSourceContractBuildsAndOwnsGlobals() {
+    ScrollbarMotion motion;
+    motion.enter = 0.12f;
+    ScrollbarStyles styles;
+    styles.thumb.hasRadius = true;
+    styles.thumb.radius = 7;
+    base_theme::ScrollbarTheme scrollbar =
+        base_theme::ScrollbarTheme::New()
+            .WithMode(ScrollbarMode::Hover)
+            .WithMotion(motion)
+            .WithStyles(styles);
+    utassert(scrollbar.Mode() == ScrollbarMode::Hover);
+    utassertnear(scrollbar.Motion().enter, 0.12f);
+    utassert(scrollbar.Styles().thumb.hasRadius);
+    utassertnear(scrollbar.Styles().thumb.radius, 7.f);
+
+    App app;
+    base_theme::Theme fallback = base_theme::Theme::Global(&app);
+    utassert(fallback.scrollbar.mode == ScrollbarMode::Scrolling);
+    base_theme::Theme* installed = base_theme::Theme::GlobalMut(&app);
+    utassert(installed);
+    installed->scrollbar = scrollbar;
+    base_theme::Theme copy = base_theme::Theme::Global(&app);
+    utassert(copy.scrollbar.mode == ScrollbarMode::Hover);
+    utassert(BaseThemeGlobal(&app) == installed);
+    AppGlobalClear(&app);
+}
+
 // The renderer sees only the narrow projection. Component-only table, list,
 // sidebar and button families never enter src/gpui's style state.
 static void StyledThemeChangesProjectIntoTheRuntimeSeam() {
@@ -181,5 +209,6 @@ void TestThemeSettings() {
     TheScrollbarModeIsTheThemesUntilAnElementSaysOtherwise();
     ThemeSettingsAreIsolatedPerApplication();
     StyledThemeChangesProjectIntoBase();
+    BaseThemeSourceContractBuildsAndOwnsGlobals();
     StyledThemeChangesProjectIntoTheRuntimeSeam();
 }

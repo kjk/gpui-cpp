@@ -42,22 +42,58 @@ struct ScrollbarStyles {
     ScrollbarThumbStyle thumbActive = {};
 };
 
-struct BaseScrollbarTheme {
+namespace base_theme {
+
+struct ScrollbarTheme {
     ScrollbarMode mode = ScrollbarMode::Scrolling;
     ScrollbarMotion motion = {};
     ScrollbarStyles styles = {};
+
+    static ScrollbarTheme New() { return {}; }
+    ScrollbarTheme WithMode(ScrollbarMode value) const {
+        ScrollbarTheme copy = *this;
+        copy.mode = value;
+        return copy;
+    }
+    ScrollbarTheme WithMotion(ScrollbarMotion value) const {
+        ScrollbarTheme copy = *this;
+        copy.motion = value;
+        return copy;
+    }
+    ScrollbarTheme WithStyles(const ScrollbarStyles& value) const {
+        ScrollbarTheme copy = *this;
+        copy.styles = value;
+        return copy;
+    }
+    ScrollbarMode Mode() const { return mode; }
+    ScrollbarMotion Motion() const { return motion; }
+    const ScrollbarStyles& Styles() const { return styles; }
 };
 
-struct BaseResizableTheme {
+struct ResizableTheme {
     Rgba handle = {};
     Rgba activeHandle = {};
 };
 
-struct BaseTheme {
+struct Theme {
     SemanticThemeTokens tokens = {};
-    BaseScrollbarTheme scrollbar = {};
-    BaseResizableTheme resizable = {};
+    ScrollbarTheme scrollbar = {};
+    ResizableTheme resizable = {};
+
+    // Theme::global clones the installed value or returns Default; global_mut
+    // installs Default on first access and returns the application-owned one.
+    static Theme Global(const App* app);
+    static Theme* GlobalMut(App* app);
 };
+
+} // namespace base_theme
+
+// Compatibility names from before the two Rust crates' Theme types were
+// separated into module namespaces. These are aliases, so all callers and
+// globals share one type and one state.
+using BaseScrollbarTheme = base_theme::ScrollbarTheme;
+using BaseResizableTheme = base_theme::ResizableTheme;
+using BaseTheme = base_theme::Theme;
 
 BaseTheme* BaseThemeGlobal(App* app);
 const BaseTheme* BaseThemeGlobal(const App* app);

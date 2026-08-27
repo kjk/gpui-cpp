@@ -52,7 +52,6 @@ const partialBase = new Set([
   "scrollbar",
   "styled",
   "text_selection",
-  "theme",
   "theme_tokens",
   "toast",
   "tooltip",
