@@ -22,9 +22,8 @@
  *     `CreateWebViewEnvironmentWithClientDll`, whose own mangled signature
  *     names the types.
  *
- * Two smaller deviations, both noted where they happen: an init script is
- * registered without waiting for its completion handler, and the Windows 7
- * branches are gone, since nothing else in this tree runs there.
+ * The Windows 7 branches are gone, since nothing else in this tree runs
+ * there; the remaining behavior follows the pinned backend.
  */
 
 #include "wry/wry.h"
@@ -1716,6 +1715,7 @@ struct WebView {
     HWND parent = nullptr;
     HWND hwnd = nullptr;
     bool isChild = false;
+    bool parentSubclassAttached = false;
     DWORD mainThreadId = 0;
 
     ICoreWebView2Controller* controller = nullptr;
@@ -1757,25 +1757,33 @@ struct RequestResponder {
 
 // ─── settings, theme, background ─────────────────────────────────────────
 
-static bool SetTheme(ICoreWebView2* webview, Theme theme) {
+static HRESULT SetThemeInner(ICoreWebView2* webview, Theme theme) {
     ICoreWebView2_13* wv13 = nullptr;
-    if (FAILED(webview->QueryInterface(__uuidof(ICoreWebView2_13), (void**)&wv13))) {
-        return false;
+    HRESULT hr = webview->QueryInterface(__uuidof(ICoreWebView2_13), (void**)&wv13);
+    if (FAILED(hr)) {
+        return hr;
     }
     ICoreWebView2Profile* profile = nullptr;
-    bool ok = false;
-    if (SUCCEEDED(wv13->get_Profile(&profile)) && profile) {
+    hr = wv13->get_Profile(&profile);
+    if (SUCCEEDED(hr) && !profile) {
+        hr = E_POINTER;
+    }
+    if (SUCCEEDED(hr)) {
         int scheme = kPreferredColorSchemeAuto;
         if (theme == Theme::Dark) {
             scheme = kPreferredColorSchemeDark;
         } else if (theme == Theme::Light) {
             scheme = kPreferredColorSchemeLight;
         }
-        ok = SUCCEEDED(profile->put_PreferredColorScheme(scheme));
+        hr = profile->put_PreferredColorScheme(scheme);
     }
     Rel(&profile);
     Rel(&wv13);
-    return ok;
+    return hr;
+}
+
+static bool SetTheme(ICoreWebView2* webview, Theme theme) {
+    return SUCCEEDED(SetThemeInner(webview, theme));
 }
 
 // mod.rs forces the alpha to 255 on anything but a fully transparent colour,
@@ -1796,47 +1804,63 @@ static bool SetBackgroundColor(ICoreWebView2Controller* controller, Rgba color) 
     return ok;
 }
 
-static void SetWebViewSettings(ICoreWebView2* webview, const WebViewAttributes* attrs) {
+static bool SetWebViewSettings(ICoreWebView2* webview, const WebViewAttributes* attrs) {
     ICoreWebView2Settings* settings = nullptr;
     if (FAILED(webview->get_Settings(&settings)) || !settings) {
-        return;
+        return false;
     }
-    settings->put_IsStatusBarEnabled(FALSE);
-    settings->put_AreDefaultContextMenusEnabled(attrs->defaultContextMenus ? TRUE : FALSE);
-    settings->put_IsZoomControlEnabled(attrs->zoomHotkeysEnabled ? TRUE : FALSE);
-    settings->put_AreDevToolsEnabled(attrs->devtools ? TRUE : FALSE);
-    settings->put_IsScriptEnabled(attrs->javascriptDisabled ? FALSE : TRUE);
+    HRESULT hr = settings->put_IsStatusBarEnabled(FALSE);
+    if (SUCCEEDED(hr)) {
+        hr = settings->put_AreDefaultContextMenusEnabled(attrs->defaultContextMenus ? TRUE : FALSE);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = settings->put_IsZoomControlEnabled(attrs->zoomHotkeysEnabled ? TRUE : FALSE);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = settings->put_AreDevToolsEnabled(attrs->devtools ? TRUE : FALSE);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = settings->put_IsScriptEnabled(attrs->javascriptDisabled ? FALSE : TRUE);
+    }
 
-    if (attrs->userAgent.len > 0) {
+    if (SUCCEEDED(hr) && attrs->userAgent.len > 0) {
         ICoreWebView2Settings2* s2 = nullptr;
         if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings2), (void**)&s2))) {
-            s2->put_UserAgent(ToCWstrTemp(attrs->userAgent));
+            hr = s2->put_UserAgent(ToCWstrTemp(attrs->userAgent));
             Rel(&s2);
         }
     }
-    if (!attrs->browserAcceleratorKeys) {
+    if (SUCCEEDED(hr) && !attrs->browserAcceleratorKeys) {
         ICoreWebView2Settings3* s3 = nullptr;
         if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings3), (void**)&s3))) {
-            s3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+            hr = s3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
             Rel(&s3);
         }
     }
-    ICoreWebView2Settings5* s5 = nullptr;
-    if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings5), (void**)&s5))) {
-        s5->put_IsPinchZoomEnabled(attrs->zoomHotkeysEnabled ? TRUE : FALSE);
-        Rel(&s5);
+    if (SUCCEEDED(hr)) {
+        ICoreWebView2Settings5* s5 = nullptr;
+        if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings5), (void**)&s5))) {
+            hr = s5->put_IsPinchZoomEnabled(attrs->zoomHotkeysEnabled ? TRUE : FALSE);
+            Rel(&s5);
+        }
     }
-    ICoreWebView2Settings6* s6 = nullptr;
-    if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings6), (void**)&s6))) {
-        s6->put_IsSwipeNavigationEnabled(attrs->backForwardNavigationGestures ? TRUE : FALSE);
-        Rel(&s6);
+    if (SUCCEEDED(hr)) {
+        ICoreWebView2Settings6* s6 = nullptr;
+        if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings6), (void**)&s6))) {
+            hr = s6->put_IsSwipeNavigationEnabled(attrs->backForwardNavigationGestures ? TRUE
+                                                                                       : FALSE);
+            Rel(&s6);
+        }
     }
-    ICoreWebView2Settings9* s9 = nullptr;
-    if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings9), (void**)&s9))) {
-        s9->put_IsNonClientRegionSupportEnabled(TRUE);
-        Rel(&s9);
+    if (SUCCEEDED(hr)) {
+        ICoreWebView2Settings9* s9 = nullptr;
+        if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings9), (void**)&s9))) {
+            hr = s9->put_IsNonClientRegionSupportEnabled(TRUE);
+            Rel(&s9);
+        }
     }
     Rel(&settings);
+    return SUCCEEDED(hr);
 }
 
 // ─── bounds ──────────────────────────────────────────────────────────────
@@ -2148,21 +2172,34 @@ static ICoreWebView2Controller* CreateController(HWND hwnd, ICoreWebView2Environ
 
 // ─── init scripts and eval ───────────────────────────────────────────────
 
-// mod.rs waits for the completion handler here. We do not: the registration
-// and the navigation that follows are queued on the browser thread in the
-// order they were made, so a script still runs before the page it was added
-// for, and the wait would re-enter the message loop once per script.
-static void AddScriptToExecuteOnDocumentCreated(ICoreWebView2* webview, Str js) {
+struct ScriptWait {
+    bool done = false;
+    HRESULT result = E_FAIL;
+};
+
+static bool AddScriptToExecuteOnDocumentCreated(ICoreWebView2* webview, Str js) {
+    ScriptWait wait;
     auto* handler = MkHandler<
         Handler2<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, HRESULT,
-                 LPCWSTR>>(nullptr, [](void*, HRESULT code, LPCWSTR) -> HRESULT {
-        if (FAILED(code)) {
-            logf("wry: AddScriptToExecuteOnDocumentCreated failed, hr 0x%x\n", (int)code);
-        }
+                 LPCWSTR>>(&wait, [](void* ctx, HRESULT code, LPCWSTR) -> HRESULT {
+        ScriptWait* wait = (ScriptWait*)ctx;
+        wait->result = code;
+        wait->done = true;
         return S_OK;
     });
-    webview->AddScriptToExecuteOnDocumentCreated(ToCWstrTemp(js), handler);
+    HRESULT hr = webview->AddScriptToExecuteOnDocumentCreated(ToCWstrTemp(js), handler);
     handler->Release();
+    if (FAILED(hr)) {
+        logf("wry: AddScriptToExecuteOnDocumentCreated failed, hr 0x%x\n", (int)hr);
+        return false;
+    }
+    PumpUntil(&wait.done);
+    if (!wait.done || FAILED(wait.result)) {
+        logf("wry: registering a document-created script failed, hr 0x%x\n",
+             (int)wait.result);
+        return false;
+    }
+    return true;
 }
 
 struct EvalCallback {
@@ -2426,7 +2463,7 @@ static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
     return S_OK;
 }
 
-static void AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* token) {
+static bool AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* token) {
     for (int i = 0; i < wv->protocols.len; i++) {
         Str filter =
             base::FormatTemp("%s*", WorkAroundUriPrefix(Str(wv->httpOrHttps), wv->protocols[i].name));
@@ -2434,11 +2471,17 @@ static void AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* tok
         if (SUCCEEDED(wv->webview->QueryInterface(__uuidof(ICoreWebView2_22), (void**)&wv22))) {
             // The newer filter, which is what lets a shared worker or an
             // iframe reach a custom protocol.
-            wv22->AddWebResourceRequestedFilterWithRequestSourceKinds(
+            HRESULT hr = wv22->AddWebResourceRequestedFilterWithRequestSourceKinds(
                 ToCWstrTemp(filter), kWebResourceContextAll, kWebResourceRequestSourceKindsAll);
             Rel(&wv22);
+            if (FAILED(hr)) {
+                return false;
+            }
         } else {
-            wv->webview->AddWebResourceRequestedFilter(ToCWstrTemp(filter), kWebResourceContextAll);
+            if (FAILED(wv->webview->AddWebResourceRequestedFilter(ToCWstrTemp(filter),
+                                                                  kWebResourceContextAll))) {
+                return false;
+            }
         }
     }
 
@@ -2446,10 +2489,14 @@ static void AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* tok
         MkHandler<Handler2<ICoreWebView2WebResourceRequestedEventHandler, ICoreWebView2*,
                            ICoreWebView2WebResourceRequestedEventArgs*>>(wv,
                                                                         OnWebResourceRequested);
-    wv->webview->add_WebResourceRequested(handler, token);
+    HRESULT hr = wv->webview->add_WebResourceRequested(handler, token);
     handler->Release();
+    if (FAILED(hr)) {
+        return false;
+    }
 
     SetWindowSubclass(wv->hwnd, MainThreadDispatcherProc, kMainThreadDispatcherSubclassId, 0);
+    return true;
 }
 
 // ─── the event handlers ──────────────────────────────────────────────────
@@ -2661,46 +2708,65 @@ static HRESULT OnWebMessageReceived(void* ctx, ICoreWebView2*,
     return S_OK;
 }
 
-static void AttachHandlers(WebView* wv, EventRegistrationToken* token) {
+static bool AttachHandlers(WebView* wv, EventRegistrationToken* token) {
     {
         auto* h = MkHandler<Handler2<ICoreWebView2WindowCloseRequestedEventHandler, ICoreWebView2*,
                                      IUnknown*>>(wv->hwnd, OnWindowCloseRequested);
-        wv->webview->add_WindowCloseRequested(h, token);
+        HRESULT hr = wv->webview->add_WindowCloseRequested(h, token);
         h->Release();
+        if (FAILED(hr)) {
+            return false;
+        }
     }
     if (wv->documentTitleChangedHandler) {
         auto* h = MkHandler<Handler2<ICoreWebView2DocumentTitleChangedEventHandler, ICoreWebView2*,
                                      IUnknown*>>(wv, OnDocumentTitleChanged);
-        wv->webview->add_DocumentTitleChanged(h, token);
+        HRESULT hr = wv->webview->add_DocumentTitleChanged(h, token);
         h->Release();
+        if (FAILED(hr)) {
+            return false;
+        }
     }
     if (wv->onPageLoadHandler) {
         auto* started =
             MkHandler<Handler2<ICoreWebView2ContentLoadingEventHandler, ICoreWebView2*,
                                ICoreWebView2ContentLoadingEventArgs*>>(wv, OnContentLoading);
-        wv->webview->add_ContentLoading(started, token);
+        HRESULT hr = wv->webview->add_ContentLoading(started, token);
         started->Release();
+        if (FAILED(hr)) {
+            return false;
+        }
         auto* finished =
             MkHandler<Handler2<ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2*,
                                ICoreWebView2NavigationCompletedEventArgs*>>(wv,
                                                                            OnNavigationCompleted);
-        wv->webview->add_NavigationCompleted(finished, token);
+        hr = wv->webview->add_NavigationCompleted(finished, token);
         finished->Release();
+        if (FAILED(hr)) {
+            return false;
+        }
     }
     if (wv->navigationHandler) {
         auto* h = MkHandler<Handler2<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2*,
                                      ICoreWebView2NavigationStartingEventArgs*>>(
             wv, OnNavigationStarting);
-        wv->webview->add_NavigationStarting(h, token);
+        HRESULT hr = wv->webview->add_NavigationStarting(h, token);
         h->Release();
+        if (FAILED(hr)) {
+            return false;
+        }
     }
     {
         auto* h = MkHandler<Handler2<ICoreWebView2NewWindowRequestedEventHandler, ICoreWebView2*,
                                      ICoreWebView2NewWindowRequestedEventArgs*>>(
             wv, OnNewWindowRequested);
-        wv->webview->add_NewWindowRequested(h, token);
+        HRESULT hr = wv->webview->add_NewWindowRequested(h, token);
         h->Release();
+        if (FAILED(hr)) {
+            return false;
+        }
     }
+    return true;
 }
 
 static bool AttachDownloadHandlers(WebView* wv, EventRegistrationToken* token) {
@@ -2727,16 +2793,19 @@ static bool AttachDownloadHandlers(WebView* wv, EventRegistrationToken* token) {
 
 // `attach_ipc_handler`: the page gets a frozen `window.ipc` whose
 // `postMessage` is WebView2's own.
-static void AttachIpcHandler(WebView* wv, EventRegistrationToken* token) {
-    AddScriptToExecuteOnDocumentCreated(
-        wv->webview,
-        StrL("Object.defineProperty(window, 'ipc', { value: Object.freeze({ postMessage: s=> "
-             "window.chrome.webview.postMessage(s) }) });"));
+static bool AttachIpcHandler(WebView* wv, EventRegistrationToken* token) {
+    if (!AddScriptToExecuteOnDocumentCreated(
+            wv->webview,
+            StrL("Object.defineProperty(window, 'ipc', { value: Object.freeze({ postMessage: s=> "
+                 "window.chrome.webview.postMessage(s) }) });"))) {
+        return false;
+    }
     auto* h = MkHandler<Handler2<ICoreWebView2WebMessageReceivedEventHandler, ICoreWebView2*,
                                  ICoreWebView2WebMessageReceivedEventArgs*>>(wv,
                                                                             OnWebMessageReceived);
-    wv->webview->add_WebMessageReceived(h, token);
+    HRESULT hr = wv->webview->add_WebMessageReceived(h, token);
     h->Release();
+    return SUCCEEDED(hr);
 }
 
 // ─── load_url_with_headers ───────────────────────────────────────────────
@@ -2928,34 +2997,51 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
 
     if (attrs->hasTheme) {
-        SetTheme(webview, attrs->theme);
+        HRESULT hr = SetThemeInner(webview, attrs->theme);
+        if (FAILED(hr) && hr != E_NOINTERFACE) {
+            WebViewFree(wv);
+            return nullptr;
+        }
     }
-    if (hasBackground) {
-        SetBackgroundColor(controller, background);
+    if (hasBackground && !SetBackgroundColor(controller, background)) {
+        WebViewFree(wv);
+        return nullptr;
     }
 
     EventRegistrationToken token = {};
-    SetWebViewSettings(webview, attrs);
-    AttachHandlers(wv, &token);
+    if (!SetWebViewSettings(webview, attrs) || !AttachHandlers(wv, &token)) {
+        WebViewFree(wv);
+        return nullptr;
+    }
     if (!AttachDownloadHandlers(wv, &token)) {
         WebViewFree(wv);
         return nullptr;
     }
-    AttachIpcHandler(wv, &token);
-    if (wv->protocols.len > 0) {
-        AttachCustomProtocolHandler(wv, &token);
+    if (!AttachIpcHandler(wv, &token) ||
+        (wv->protocols.len > 0 && !AttachCustomProtocolHandler(wv, &token))) {
+        WebViewFree(wv);
+        return nullptr;
     }
     for (int i = 0; i < attrs->initializationScriptCount; i++) {
-        AddScriptToExecuteOnDocumentCreated(webview, attrs->initializationScripts[i].script);
+        if (!AddScriptToExecuteOnDocumentCreated(webview,
+                                                 attrs->initializationScripts[i].script)) {
+            WebViewFree(wv);
+            return nullptr;
+        }
     }
     if (attrs->clipboard) {
         auto* h = MkHandler<Handler2<ICoreWebView2PermissionRequestedEventHandler, ICoreWebView2*,
                                      ICoreWebView2PermissionRequestedEventArgs*>>(
             nullptr, OnPermissionRequested);
-        webview->add_PermissionRequested(h, &token);
+        HRESULT hr = webview->add_PermissionRequested(h, &token);
         h->Release();
+        if (FAILED(hr)) {
+            WebViewFree(wv);
+            return nullptr;
+        }
     }
 
+    bool navigated = true;
     if (attrs->url.len > 0) {
         Str url = attrs->url;
         for (int i = 0; i < wv->protocols.len; i++) {
@@ -2968,20 +3054,26 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
             }
         }
         if (attrs->headerCount > 0) {
-            LoadUrlWithHeaders(wv, url, attrs->headers, attrs->headerCount);
+            navigated = LoadUrlWithHeaders(wv, url, attrs->headers, attrs->headerCount);
         } else {
-            webview->Navigate(ToCWstrTemp(url));
+            navigated = SUCCEEDED(webview->Navigate(ToCWstrTemp(url)));
         }
     } else if (attrs->html.len > 0) {
-        webview->NavigateToString(ToCWstrTemp(attrs->html));
+        navigated = SUCCEEDED(webview->NavigateToString(ToCWstrTemp(attrs->html)));
+    }
+    if (!navigated) {
+        WebViewFree(wv);
+        return nullptr;
     }
 
     if (!asChild) {
         AttachParentSubclass(parent, controller);
+        wv->parentSubclassAttached = true;
     }
-    controller->put_IsVisible(attrs->visible ? TRUE : FALSE);
-    if (attrs->focused) {
-        controller->MoveFocus(kMoveFocusReasonProgrammatic);
+    if (FAILED(controller->put_IsVisible(attrs->visible ? TRUE : FALSE)) ||
+        (attrs->focused && FAILED(controller->MoveFocus(kMoveFocusReasonProgrammatic)))) {
+        WebViewFree(wv);
+        return nullptr;
     }
 
     if (attrs->dragDropHandler) {
@@ -2999,9 +3091,15 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
 
     if (asChild) {
-        WebViewSetBounds(wv, attrs->bounds);
+        if (!WebViewSetBounds(wv, attrs->bounds)) {
+            WebViewFree(wv);
+            return nullptr;
+        }
     } else {
-        ResizeToParent(wv);
+        if (!ResizeToParent(wv)) {
+            WebViewFree(wv);
+            return nullptr;
+        }
     }
     if (attrs->browserExtensionsEnabled && attrs->extensionPath.len > 0 &&
         !LoadExtensions(webview, attrs->extensionPath)) {
@@ -3028,7 +3126,9 @@ void WebViewFree(WebView* wv) {
     if (wv->isChild && wv->hwnd) {
         DestroyWindow(wv->hwnd);
     }
-    DetachParentSubclass(wv->parent);
+    if (wv->parentSubclassAttached) {
+        DetachParentSubclass(wv->parent);
+    }
     if (wv->downloadCallbacks) {
         wv->downloadCallbacks->Release();
     }
@@ -3200,6 +3300,7 @@ bool WebViewReparent(WebView* wv, void* parentWindow) {
     if (!wv->isChild) {
         DetachParentSubclass(wv->parent);
         AttachParentSubclass(parent, wv->controller);
+        wv->parentSubclassAttached = true;
         wv->parent = parent;
         return ResizeToParent(wv);
     }

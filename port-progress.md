@@ -9041,3 +9041,14 @@ call remains the compatibility path only when environment 10 is absent.
 background color is installed before creation to avoid a default-color first
 frame and then repeated on the controller exactly as Rust does. The strict
 MSVC and clang-cl release webview builds pass, as do all 20,826 release tests.
+
+Windows construction now propagates the same synchronous WebView2 failures as
+the pinned backend instead of returning a partially configured view. Base and
+versioned settings, event registration, IPC and custom-protocol registration,
+clipboard permission registration, navigation, visibility, focus and initial
+bounds all participate in the result. Document-created scripts now wait for
+their completion handler before navigation, matching Wry's blocking helper and
+making asynchronous registration errors observable. Partial teardown tracks
+whether the parent subclass was actually attached, so an earlier construction
+failure cannot detach another view's parent hook. The release webview example
+builds with the strict MSVC warning set after the change.

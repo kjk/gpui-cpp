@@ -210,11 +210,6 @@ Each is also stated in a comment where it applies.
   from the `cookie` crate; this tree's POD preserves every field the Windows
   conversion reads or writes, but does not add cookie-header parsing or a
   builder DSL that no webview operation uses.
-- **An init script is registered without waiting for it.** Rust blocks on
-  `AddScriptToExecuteOnDocumentCreatedCompletedHandler`; the registration and
-  the navigation after it are queued on the browser thread in order, so the
-  script still runs first, and the wait would re-enter the message loop once
-  per script.
 - **The new-window handler runs where the event arrives.** Rust spawns a
   thread and holds the request open with a deferral, because its closure may
   block. Nothing here can block on the UI thread, so there is no thread and
