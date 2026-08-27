@@ -9122,3 +9122,11 @@ literally. It replaces every non-overlapping protocol occurrence, not only the
 leading one, so an encoded same-protocol URL in a query string or fragment is
 tunnelled and reverted along with the outer URL. The regression test covers
 three occurrences and the full round trip.
+
+All blocking Windows WebView2 waits now keep their completion state alive with
+the COM handler rather than lending it a stack address. If `GetMessage`
+returns `WM_QUIT` or fails before an environment, controller, init-script or
+cookie operation completes, the caller drops its reference and the eventual
+handler safely owns the other one; retained COM results are released when that
+handler is finally destroyed. This restores the memory-safety property Wry
+gets from its channels while preserving the same blocking message pump.

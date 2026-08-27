@@ -1347,6 +1347,13 @@ template <typename I, typename A1, typename A2>
 struct Handler2 : ComObj<I> {
     void* ctx = nullptr;
     HRESULT (*fn)(void* ctx, A1 a1, A2 a2) = nullptr;
+    void (*dropCtx)(void* ctx) = nullptr;
+
+    ~Handler2() override {
+        if (dropCtx) {
+            dropCtx(ctx);
+        }
+    }
 
     HRESULT STDMETHODCALLTYPE Invoke(A1 a1, A2 a2) override { return fn(ctx, a1, a2); }
 };
@@ -1355,16 +1362,29 @@ template <typename I, typename A1>
 struct Handler1 : ComObj<I> {
     void* ctx = nullptr;
     HRESULT (*fn)(void* ctx, A1 a1) = nullptr;
+    void (*dropCtx)(void* ctx) = nullptr;
+
+    ~Handler1() override {
+        if (dropCtx) {
+            dropCtx(ctx);
+        }
+    }
 
     HRESULT STDMETHODCALLTYPE Invoke(A1 a1) override { return fn(ctx, a1); }
 };
 
 template <typename H, typename F>
-static H* MkHandler(void* ctx, F fn) {
+static H* MkHandler(void* ctx, F fn, void (*dropCtx)(void*) = nullptr) {
     H* h = new H();
     h->ctx = ctx;
     h->fn = fn;
+    h->dropCtx = dropCtx;
     return h;
+}
+
+template <typename T>
+static void ReleaseWaitState(void* ctx) {
+    ((T*)ctx)->Release();
 }
 
 // A download completion handler shares this liveness record rather than
@@ -2077,13 +2097,29 @@ static HWND CreateContainerHwnd(HWND parent, const WebViewAttributes* attrs, boo
 // ─── environment and controller ──────────────────────────────────────────
 
 struct EnvWait {
+    LONG refs = 2;
     bool done = false;
     ICoreWebView2Environment* env = nullptr;
+
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            Rel(&env);
+            delete this;
+        }
+    }
 };
 
 struct ControllerWait {
+    LONG refs = 2;
     bool done = false;
     ICoreWebView2Controller* controller = nullptr;
+
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            Rel(&controller);
+            delete this;
+        }
+    }
 };
 
 static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attrs) {
@@ -2122,11 +2158,11 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
         options->language = WStrDup(lang);
     }
 
-    EnvWait wait;
+    EnvWait* wait = new EnvWait();
     auto* handler =
         MkHandler<Handler2<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, HRESULT,
                            ICoreWebView2Environment*>>(
-            &wait, [](void* ctx, HRESULT code, ICoreWebView2Environment* env) -> HRESULT {
+            wait, [](void* ctx, HRESULT code, ICoreWebView2Environment* env) -> HRESULT {
                 EnvWait* w = (EnvWait*)ctx;
                 if (SUCCEEDED(code) && env) {
                     env->AddRef();
@@ -2136,7 +2172,7 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
                 }
                 w->done = true;
                 return S_OK;
-            });
+            }, ReleaseWaitState<EnvWait>);
 
     PCWSTR dataDirectory = attrs->dataDirectory.s ? ToCWstrTemp(attrs->dataDirectory) : nullptr;
     // One of three IUnknown bases, so the cast has to name which.
@@ -2146,19 +2182,26 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
     options->Release();
     if (FAILED(hr)) {
         logf("wry: CreateCoreWebView2EnvironmentWithOptions failed, hr 0x%x\n", (int)hr);
+        wait->Release();
         return nullptr;
     }
-    PumpUntil(&wait.done);
-    return wait.env;
+    PumpUntil(&wait->done);
+    ICoreWebView2Environment* result = nullptr;
+    if (wait->done) {
+        result = wait->env;
+        wait->env = nullptr;
+    }
+    wait->Release();
+    return result;
 }
 
 static ICoreWebView2Controller* CreateController(HWND hwnd, ICoreWebView2Environment* env,
                                                  bool incognito, const Rgba* backgroundColor) {
-    ControllerWait wait;
+    ControllerWait* wait = new ControllerWait();
     auto* handler =
         MkHandler<Handler2<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, HRESULT,
                            ICoreWebView2Controller*>>(
-            &wait, [](void* ctx, HRESULT code, ICoreWebView2Controller* controller) -> HRESULT {
+            wait, [](void* ctx, HRESULT code, ICoreWebView2Controller* controller) -> HRESULT {
                 ControllerWait* w = (ControllerWait*)ctx;
                 if (SUCCEEDED(code) && controller) {
                     controller->AddRef();
@@ -2168,7 +2211,7 @@ static ICoreWebView2Controller* CreateController(HWND hwnd, ICoreWebView2Environ
                 }
                 w->done = true;
                 return S_OK;
-            });
+            }, ReleaseWaitState<ControllerWait>);
 
     HRESULT hr = E_FAIL;
     ICoreWebView2Environment10* env10 = nullptr;
@@ -2208,45 +2251,63 @@ static ICoreWebView2Controller* CreateController(HWND hwnd, ICoreWebView2Environ
     handler->Release();
     if (FAILED(hr)) {
         logf("wry: CreateCoreWebView2Controller failed, hr 0x%x\n", (int)hr);
+        wait->Release();
         return nullptr;
     }
-    PumpUntil(&wait.done);
+    PumpUntil(&wait->done);
+    ICoreWebView2Controller* result = nullptr;
+    if (wait->done) {
+        result = wait->controller;
+        wait->controller = nullptr;
+    }
+    wait->Release();
 
     // init_webview sets this again, as the pinned source does. The options3
     // call above prevents the first frame flashing the runtime default.
-    if (wait.controller && backgroundColor) {
-        SetBackgroundColor(wait.controller, *backgroundColor);
+    if (result && backgroundColor) {
+        SetBackgroundColor(result, *backgroundColor);
     }
-    return wait.controller;
+    return result;
 }
 
 // ─── init scripts and eval ───────────────────────────────────────────────
 
 struct ScriptWait {
+    LONG refs = 2;
     bool done = false;
     HRESULT result = E_FAIL;
+
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            delete this;
+        }
+    }
 };
 
 static bool AddScriptToExecuteOnDocumentCreated(ICoreWebView2* webview, Str js) {
-    ScriptWait wait;
+    ScriptWait* wait = new ScriptWait();
     auto* handler = MkHandler<
         Handler2<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, HRESULT,
-                 LPCWSTR>>(&wait, [](void* ctx, HRESULT code, LPCWSTR) -> HRESULT {
+                 LPCWSTR>>(wait, [](void* ctx, HRESULT code, LPCWSTR) -> HRESULT {
         ScriptWait* wait = (ScriptWait*)ctx;
         wait->result = code;
         wait->done = true;
         return S_OK;
-    });
+    }, ReleaseWaitState<ScriptWait>);
     HRESULT hr = webview->AddScriptToExecuteOnDocumentCreated(ToCWstrTemp(js), handler);
     handler->Release();
     if (FAILED(hr)) {
         logf("wry: AddScriptToExecuteOnDocumentCreated failed, hr 0x%x\n", (int)hr);
+        wait->Release();
         return false;
     }
-    PumpUntil(&wait.done);
-    if (!wait.done || FAILED(wait.result)) {
+    PumpUntil(&wait->done);
+    bool ok = wait->done && SUCCEEDED(wait->result);
+    HRESULT result = wait->result;
+    wait->Release();
+    if (!ok) {
         logf("wry: registering a document-created script failed, hr 0x%x\n",
-             (int)wait.result);
+             (int)result);
         return false;
     }
     return true;
@@ -3632,9 +3693,17 @@ static bool CookieFromWebView2(ICoreWebView2Cookie* source, Cookie* out) {
 }
 
 struct CookieWait {
+    LONG refs = 2;
     bool done = false;
     HRESULT result = E_FAIL;
     ICoreWebView2CookieList* cookies = nullptr;
+
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            Rel(&cookies);
+            delete this;
+        }
+    }
 };
 
 static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
@@ -3646,11 +3715,11 @@ static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
     if (!manager) {
         return false;
     }
-    CookieWait wait;
+    CookieWait* wait = new CookieWait();
     auto* handler =
         MkHandler<Handler2<ICoreWebView2GetCookiesCompletedHandler, HRESULT,
                            ICoreWebView2CookieList*>>(
-            &wait, [](void* ctx, HRESULT code, ICoreWebView2CookieList* cookies) -> HRESULT {
+            wait, [](void* ctx, HRESULT code, ICoreWebView2CookieList* cookies) -> HRESULT {
                 CookieWait* wait = (CookieWait*)ctx;
                 wait->result = code;
                 if (SUCCEEDED(code) && cookies) {
@@ -3659,33 +3728,37 @@ static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
                 }
                 wait->done = true;
                 return S_OK;
-            });
+            }, ReleaseWaitState<CookieWait>);
     HRESULT hr = manager->GetCookies(uri, handler);
     handler->Release();
     Rel(&manager);
     if (FAILED(hr)) {
+        wait->Release();
         return false;
     }
-    PumpUntil(&wait.done);
-    if (!wait.done || FAILED(wait.result)) {
-        Rel(&wait.cookies);
+    PumpUntil(&wait->done);
+    if (!wait->done || FAILED(wait->result)) {
+        wait->Release();
         return false;
     }
-    if (!wait.cookies) {
+    ICoreWebView2CookieList* cookies = wait->cookies;
+    wait->cookies = nullptr;
+    wait->Release();
+    if (!cookies) {
         return true;
     }
 
     UINT32 count = 0;
-    if (FAILED(wait.cookies->get_Count(&count))) {
-        Rel(&wait.cookies);
+    if (FAILED(cookies->get_Count(&count))) {
+        Rel(&cookies);
         return false;
     }
     for (UINT32 i = 0; i < count; i++) {
         ICoreWebView2Cookie* source = nullptr;
-        HRESULT itemHr = wait.cookies->GetValueAtIndex(i, &source);
+        HRESULT itemHr = cookies->GetValueAtIndex(i, &source);
         if (FAILED(itemHr) || !source) {
             Rel(&source);
-            Rel(&wait.cookies);
+            Rel(&cookies);
             CookieListFree(out);
             return false;
         }
@@ -3693,13 +3766,13 @@ static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
         if (CookieFromWebView2(source, &cookie) && !out->Append(cookie)) {
             FreeCookieFields(&cookie);
             Rel(&source);
-            Rel(&wait.cookies);
+            Rel(&cookies);
             CookieListFree(out);
             return false;
         }
         Rel(&source);
     }
-    Rel(&wait.cookies);
+    Rel(&cookies);
     return true;
 }
 
