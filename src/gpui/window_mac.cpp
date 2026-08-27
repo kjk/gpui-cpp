@@ -276,7 +276,7 @@ static bool PressedButton(MouseButton* out) {
     // use; a precise (trackpad) delta is already in points, which is GPUI's
     // ScrollDelta::Pixels.
     bool precise = [event hasPreciseScrollingDeltas];
-    float scale = precise ? 1.f : gpui::WheelNotchPixels(w->app);
+    float scale = precise ? 1.f : gpui::WheelNotchPixels(win->app);
     float dx = (float)[event scrollingDeltaX] * scale;
     float dy = (float)[event scrollingDeltaY] * scale;
     gpui::TouchPhase phase = gpui::TouchPhase::Moved;
