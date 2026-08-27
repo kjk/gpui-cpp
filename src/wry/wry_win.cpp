@@ -1196,12 +1196,14 @@ struct DispatchItem {
     void* data;
 };
 
-static void DispatchToWindow(HWND hwnd, void (*fn)(void*), void* data) {
+static bool DispatchToWindow(HWND hwnd, void (*fn)(void*), void* data) {
     DispatchItem* item = new DispatchItem{fn, data};
     if (!PostMessageW(hwnd, ExecMsgId(), (WPARAM)item, 0)) {
         logf("wry: PostMessage failed; is the message queue full?\n");
         delete item;
+        return false;
     }
+    return true;
 }
 
 static LRESULT CALLBACK MainThreadDispatcherProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
@@ -1354,7 +1356,12 @@ struct WebView {
 // `RequestAsyncResponder`. The args and the deferral are held until the
 // handler answers, which it may do from another thread.
 struct RequestResponder {
-    WebView* wv = nullptr;
+    // These are independent of WebView so a worker can answer after the
+    // owner was closed. Rust's responder closure owns the same COM handles
+    // and dispatch metadata rather than borrowing InnerWebView.
+    ICoreWebView2Environment* env = nullptr;
+    HWND hwnd = nullptr;
+    DWORD mainThreadId = 0;
     ICoreWebView2WebResourceRequestedEventArgs* args = nullptr;
     ICoreWebView2Deferral* deferral = nullptr;
     LONG answered = 0;
@@ -1818,7 +1825,7 @@ static void ApplyResponse(void* data) {
     PendingResponse* p = (PendingResponse*)data;
     RequestResponder* r = p->responder;
     ICoreWebView2WebResourceResponse* response =
-        MakeResponse(r->wv->env, p->status, p->headers, p->body, p->bodyLen);
+        MakeResponse(r->env, p->status, p->headers, p->body, p->bodyLen);
     if (response) {
         r->args->put_Response(response);
         response->Release();
@@ -1828,6 +1835,24 @@ static void ApplyResponse(void* data) {
         r->deferral->Release();
     }
     r->args->Release();
+    r->env->Release();
+    StrFree(p->headers);
+    free(p->body);
+    delete p;
+    delete r;
+}
+
+// A post can fail when the webview's container was destroyed while a worker
+// was preparing its answer. Nothing may call WebView2 from that worker; just
+// release the agile COM references and copied response there. The request is
+// already being torn down with its view.
+static void DiscardResponse(PendingResponse* p) {
+    RequestResponder* r = p->responder;
+    if (r->deferral) {
+        r->deferral->Release();
+    }
+    r->args->Release();
+    r->env->Release();
     StrFree(p->headers);
     free(p->body);
     delete p;
@@ -1863,11 +1888,13 @@ void Respond(RequestResponder* responder, const Response* response) {
     }
     p->headers = StrDup(headers.TakeStr());
 
-    if (GetCurrentThreadId() == responder->wv->mainThreadId) {
+    if (GetCurrentThreadId() == responder->mainThreadId) {
         ApplyResponse(p);
         return;
     }
-    DispatchToWindow(responder->wv->hwnd, ApplyResponse, p);
+    if (!DispatchToWindow(responder->hwnd, ApplyResponse, p)) {
+        DiscardResponse(p);
+    }
 }
 
 // `prepare_request`: the WebView2 request read out into the shape a handler
@@ -1971,14 +1998,23 @@ static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
     }
 
     RequestResponder* responder = new RequestResponder();
-    responder->wv = wv;
+    responder->env = wv->env;
+    responder->env->AddRef();
+    responder->hwnd = wv->hwnd;
+    responder->mainThreadId = wv->mainThreadId;
     responder->args = args;
     args->AddRef();
     ICoreWebView2Deferral* deferral = nullptr;
     if (SUCCEEDED(args->GetDeferral(&deferral))) {
         responder->deferral = deferral;
     }
-    found->handler(found->ctx, wv->id, &request, responder);
+    if (found->handler) {
+        found->handler(found->ctx, wv->id, &request, responder);
+    } else {
+        Response response;
+        response.status = 500;
+        Respond(responder, &response);
+    }
 
     headerStore.FreeEls();
     bodyStore.FreeEls();

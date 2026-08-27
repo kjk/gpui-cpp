@@ -202,3 +202,11 @@ Each is also stated in a comment where it applies.
   `ICoreWebView2ControllerOptions3` for it before the controller exists and
   then sets it again afterwards; only the second is done here, since the
   first interface is newer than the runtime this has to work against.
+
+The Windows custom-protocol responder owns its environment, event arguments,
+deferral and dispatch coordinates independently of the C++ `WebView`. A
+worker may therefore answer after the owner has closed without dereferencing
+freed state, matching the ownership of Rust's responder closure. If teardown
+has already destroyed the dispatch window, the copied response and COM
+references are released instead of leaked; a missing handler receives a 500
+response rather than a null call.

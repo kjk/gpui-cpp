@@ -8966,3 +8966,14 @@ on the remote Mac after this lifetime change. The full native macOS release
 test target also compiles and runs 20,820 checks over ssh; Windows remains
 green at 20,815. Visual WKWebView interaction still requires launching the
 example from the Mac's logged-in desktop session.
+
+## Windows wry closes asynchronous protocol lifetime gaps
+
+The Windows custom-protocol responder used to borrow its owning `WebView` for
+the environment, HWND and main-thread id. A worker answering after the view
+closed therefore dereferenced freed storage. The responder now owns the COM
+environment and copies the dispatch coordinates, exactly the data captured
+by the pinned Rust closure. A failed post during teardown releases the copied
+response and all COM references, and a null protocol callback produces a 500
+response instead of crashing. The MSVC release test target compiles after the
+lifetime change.
