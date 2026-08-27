@@ -1153,10 +1153,19 @@ static int ToPhysical(double logicalOrPhysical, bool logical, double scale) {
 
 // ─── the loader ──────────────────────────────────────────────────────────
 
-// The Evergreen runtime registers itself under EdgeUpdate with this client
-// id; `pv` is the installed version and `location` the folder the versioned
-// directories sit in.
-static const WCHAR* kRuntimeClientId = L"{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+struct RuntimeChannel {
+    const WCHAR* id;
+    const WCHAR* name;
+    int mask;
+};
+
+// The exact public-channel ids embedded in the locked WebView2Loader.
+static const RuntimeChannel kRuntimeChannels[] = {
+    {L"{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", L"", 1},
+    {L"{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}", L"beta", 2},
+    {L"{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}", L"dev", 4},
+    {L"{65C35B14-6C1D-4122-AC46-7148CC9D6497}", L"canary", 8},
+};
 
 static bool RegReadStr(HKEY root, const WCHAR* subKey, const WCHAR* name, DWORD extraFlags,
                        WCHAR* out, DWORD outChars) {
@@ -1237,8 +1246,8 @@ static bool FileVersion(const WCHAR* path, WCHAR* out, int outChars) {
 // Both places the SDK's loader looks: the per-machine key (which a 64-bit
 // process reaches through the WOW6432 view, since EdgeUpdate is 32-bit) and
 // the per-user one.
-static bool RuntimeVersionAndLocation(WCHAR* version, DWORD versionChars, WCHAR* location,
-                                      DWORD locationChars) {
+static bool RuntimeVersionAndLocation(const WCHAR* id, WCHAR* version, DWORD versionChars,
+                                      WCHAR* location, DWORD locationChars) {
     struct Where {
         HKEY root;
         const WCHAR* path;
@@ -1251,7 +1260,7 @@ static bool RuntimeVersionAndLocation(WCHAR* version, DWORD versionChars, WCHAR*
     for (int i = 0; i < (int)(sizeof(places) / sizeof(places[0])); i++) {
         WCHAR key[256];
         wcscpy_s(key, places[i].path);
-        wcscat_s(key, kRuntimeClientId);
+        wcscat_s(key, id);
         if (!RegReadStr(places[i].root, key, L"pv", places[i].flags, version, versionChars)) {
             continue;
         }
@@ -1267,7 +1276,103 @@ static bool RuntimeVersionAndLocation(WCHAR* version, DWORD versionChars, WCHAR*
     return false;
 }
 
-static bool FindRuntime(RuntimeInfo* out) {
+static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out) {
+    struct Place {
+        HKEY root;
+        DWORD flags;
+    };
+    const Place places[] = {
+        {HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY},
+        {HKEY_CURRENT_USER, KEY_WOW64_32KEY},
+    };
+    WCHAR key[256];
+    wcscpy_s(key, L"SOFTWARE\\Microsoft\\EdgeUpdate\\ClientState\\");
+    wcscat_s(key, channel->id);
+    for (int i = 0; i < (int)(sizeof(places) / sizeof(places[0])); i++) {
+        WCHAR folder[MAX_PATH * 2];
+        if (!RegReadStr(places[i].root, key, L"EBWebView", places[i].flags, folder,
+                        (DWORD)(sizeof(folder) / sizeof(folder[0])))) {
+            continue;
+        }
+        swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
+                   ArchFolder());
+        if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+            continue;
+        }
+        FileVersion(out->clientDll, out->version,
+                    (int)(sizeof(out->version) / sizeof(out->version[0])));
+        if (out->version[0] != 0 && channel->name[0] != 0) {
+            wcscat_s(out->version, L" ");
+            wcscat_s(out->version, channel->name);
+        }
+        return true;
+    }
+
+    // Older EdgeUpdate installations expose `pv` and `location` under
+    // Clients rather than the final EBWebView directory under ClientState.
+    WCHAR location[MAX_PATH * 2];
+    WCHAR version[64];
+    if (!RuntimeVersionAndLocation(channel->id, version,
+                                   (DWORD)(sizeof(version) / sizeof(version[0])), location,
+                                   (DWORD)(sizeof(location) / sizeof(location[0])))) {
+        return false;
+    }
+    swprintf_s(out->clientDll, L"%s\\%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", location,
+               version, ArchFolder());
+    if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    wcscpy_s(out->version, version);
+    if (channel->name[0] != 0) {
+        wcscat_s(out->version, L" ");
+        wcscat_s(out->version, channel->name);
+    }
+    return true;
+}
+
+static int ReleaseChannelsFromEnvironment(int fallback) {
+    WCHAR* value = EnvironmentVariableDup(L"WEBVIEW2_RELEASE_CHANNELS");
+    if (!value) {
+        return fallback;
+    }
+    int result = 0;
+    WCHAR* at = value;
+    for (;;) {
+        WCHAR* end = nullptr;
+        long channel = wcstol(at, &end, 10);
+        // Microsoft documents invalid entries as Stable.
+        if (end == at || channel < 0 || channel > 3) {
+            channel = 0;
+        }
+        result |= 1 << channel;
+        if (!end || *end == 0) {
+            break;
+        }
+        WCHAR* comma = wcschr(end, L',');
+        if (!comma) {
+            break;
+        }
+        at = comma + 1;
+    }
+    free(value);
+    return result;
+}
+
+static bool LeastStableFromEnvironment(bool fallback) {
+    WCHAR* legacy = EnvironmentVariableDup(L"WEBVIEW2_RELEASE_CHANNEL_PREFERENCE");
+    if (legacy) {
+        fallback = wcstol(legacy, nullptr, 10) == 1;
+        free(legacy);
+    }
+    WCHAR* value = EnvironmentVariableDup(L"WEBVIEW2_CHANNEL_SEARCH_KIND");
+    if (value) {
+        fallback = wcstol(value, nullptr, 10) == 1;
+        free(value);
+    }
+    return fallback;
+}
+
+static bool FindRuntime(RuntimeInfo* out, IUnknown* options = nullptr) {
     out->version[0] = 0;
     out->clientDll[0] = 0;
     out->runtimeType = 0;
@@ -1288,14 +1393,34 @@ static bool FindRuntime(RuntimeInfo* out) {
         return true;
     }
 
-    WCHAR location[MAX_PATH * 2];
-    if (!RuntimeVersionAndLocation(out->version, (DWORD)(sizeof(out->version) / sizeof(WCHAR)),
-                                   location, (DWORD)(sizeof(location) / sizeof(WCHAR)))) {
-        return false;
+    int releaseChannels = 15;
+    bool leastStable = false;
+    ICoreWebView2EnvironmentOptions7* options7 = nullptr;
+    if (options &&
+        SUCCEEDED(options->QueryInterface(__uuidof(ICoreWebView2EnvironmentOptions7),
+                                          (void**)&options7))) {
+        int searchKind = 0;
+        if (SUCCEEDED(options7->get_ChannelSearchKind(&searchKind))) {
+            leastStable = searchKind == 1;
+        }
+        options7->get_ReleaseChannels(&releaseChannels);
+        options7->Release();
     }
-    swprintf_s(out->clientDll, L"%s\\%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", location,
-               out->version, ArchFolder());
-    return GetFileAttributesW(out->clientDll) != INVALID_FILE_ATTRIBUTES;
+    if (releaseChannels == 0) {
+        // COREWEBVIEW2_RELEASE_CHANNELS_NONE means the default set.
+        releaseChannels = 15;
+    }
+    releaseChannels = ReleaseChannelsFromEnvironment(releaseChannels);
+    leastStable = LeastStableFromEnvironment(leastStable);
+    int count = (int)(sizeof(kRuntimeChannels) / sizeof(kRuntimeChannels[0]));
+    for (int step = 0; step < count; step++) {
+        int i = leastStable ? count - step - 1 : step;
+        if ((releaseChannels & kRuntimeChannels[i].mask) != 0 &&
+            FindInstalledRuntime(&kRuntimeChannels[i], out)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // The export the SDK's own loader calls, with the arguments it passes:
@@ -1331,7 +1456,7 @@ static HRESULT CreateEnvironmentWithOptions(
         userDataFolder = defaultFolder;
     }
     RuntimeInfo rt;
-    if (!FindRuntime(&rt)) {
+    if (!FindRuntime(&rt, options)) {
         logf("wry: no WebView2 runtime found\n");
         free(userDataOverride);
         return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);

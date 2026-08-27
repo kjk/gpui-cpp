@@ -9185,3 +9185,11 @@ environment overrides used by Microsoft's loader (the fixed-runtime
 arguments are appended after Wry's builder/default arguments and an overridden
 profile path is applied before the executable-derived fallback, matching the
 pinned loader's precedence.
+
+Windows runtime discovery now searches the same public channels as the pinned
+WebView2 loader: Evergreen Stable, Beta, Dev and Canary, using EdgeUpdate's
+`ClientState/EBWebView` registration with the older `Clients` shape as a
+compatibility fallback. Options-7 release masks, most/least-stable ordering,
+the legacy release-channel preference, and the current channel/mask environment
+overrides all participate; reported preview versions carry the same channel
+suffix instead of Stable being the only discoverable runtime.
