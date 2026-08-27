@@ -1,8 +1,653 @@
 #include "base/text_selection.h"
+#include "base/auto_scroll.h"
 #include "base/element_ext.h"
 #include "base/global_state.h"
+#include "gpui/paint.h"
 
 namespace gpui {
+
+struct TextSelectionParticipantState {
+    EntityId self = {};
+    Str fallbackCopyText = {};
+    Str projectedCopyText = {};
+    Vec<TextSelectionRun> runs;
+    Vec<Bounds> textBounds;
+    TextSelectionRegistration registration = {};
+    Window* window = nullptr;
+    TextSelectionSnapshot snapshot = {};
+    bool hasSnapshot = false;
+    bool localSelection = false;
+    bool registered = false;
+    bool hasProjectedCopyText = false;
+    uint64_t registrationGeneration = 0;
+    TextSelectionFocusFn focus = nullptr;
+    void* focusUser = nullptr;
+    TextSelectionClearFn clear = nullptr;
+    void* clearUser = nullptr;
+    TextSelectionCopyFn copy = nullptr;
+    void* copyUser = nullptr;
+    TextSelectionContentKeyFn resolveContentKey = nullptr;
+    void* resolveContentKeyUser = nullptr;
+
+    static void Refresh(TextSelectionParticipantState*, Ctx* cx,
+                        const TextSelectionEvent* event) {
+        if (event->kind == TextSelectionEventKind::SelectionChanged &&
+            cx->win) {
+            AppInvalidate(cx->win);
+        }
+    }
+
+    ~TextSelectionParticipantState() {
+        for (int i = 0; i < runs.len; i++) {
+            if (runs[i].layout) TextLayoutRelease(runs[i].layout);
+        }
+        runs.Reset();
+        textBounds.Reset();
+        StrFree(fallbackCopyText);
+        StrFree(projectedCopyText);
+    }
+};
+
+static TextSelectionParticipantState* ParticipantState(
+    const TextSelectionHandle& handle, const App* app) {
+    return app ? handle.state.Get((App*)app) : nullptr;
+}
+
+static bool SamePoint(Point a, Point b) {
+    return a.x == b.x && a.y == b.y;
+}
+
+static bool SameEndpoint(const TextSelectionEndpoint& a,
+                         const TextSelectionEndpoint& b) {
+    return a.entity == b.entity && a.hasEntity == b.hasEntity &&
+           SamePoint(a.point, b.point) &&
+           a.contentKey == b.contentKey &&
+           a.hasContentKey == b.hasContentKey;
+}
+
+static bool SameSnapshot(const TextSelectionSnapshot& a,
+                         const TextSelectionSnapshot& b) {
+    return SameEndpoint(a.anchor, b.anchor) &&
+           SameEndpoint(a.cursor, b.cursor) &&
+           a.selecting == b.selecting &&
+           a.hasWindowPoints == b.hasWindowPoints &&
+           (!a.hasWindowPoints ||
+            (SamePoint(a.windowPoints.anchor, b.windowPoints.anchor) &&
+             SamePoint(a.windowPoints.cursor, b.windowPoints.cursor))) &&
+           a.coverage == b.coverage;
+}
+
+TextSelectionScopeId TextSelectionScopeId::New() {
+    // The source uses a relaxed AtomicU64. Selection scopes are created and
+    // consumed on the UI thread here, so the same monotonic lifetime needs no
+    // cross-thread synchronization in this runtime.
+    static uint64_t next = 1;
+    TextSelectionScopeId out = {next};
+    next++;
+    if (next == 0) next = 1;
+    return out;
+}
+
+TextSelectionEndpoint TextSelectionEndpoint::New(EntityId value, Point p) {
+    TextSelectionEndpoint out;
+    out.entity = value;
+    out.point = p;
+    out.hasEntity = value.IsValid();
+    return out;
+}
+
+TextSelectionEndpoint TextSelectionEndpoint::At(Point p) {
+    TextSelectionEndpoint out;
+    out.point = p;
+    return out;
+}
+
+TextSelectionEndpoint TextSelectionEndpoint::WithContentKey(
+    TextSelectionContentKey value) const {
+    TextSelectionEndpoint out = *this;
+    out.contentKey = value;
+    out.hasContentKey = true;
+    return out;
+}
+
+TextSelectionSnapshot TextSelectionSnapshot::New(TextSelectionEndpoint a,
+                                                 TextSelectionEndpoint c) {
+    TextSelectionSnapshot out;
+    out.anchor = a;
+    out.cursor = c;
+    return out;
+}
+
+TextSelectionSnapshot TextSelectionSnapshot::WithSelecting(bool value) const {
+    TextSelectionSnapshot out = *this;
+    out.selecting = value;
+    return out;
+}
+
+TextSelectionSnapshot TextSelectionSnapshot::WithWindowPoints(
+    TextSelectionWindowPoints value) const {
+    TextSelectionSnapshot out = *this;
+    out.windowPoints = value;
+    out.hasWindowPoints = true;
+    return out;
+}
+
+TextSelectionSnapshot TextSelectionSnapshot::WithCoverage(
+    TextSelectionCoverage value) const {
+    TextSelectionSnapshot out = *this;
+    out.coverage = value;
+    return out;
+}
+
+TextSelectionRegistration TextSelectionRegistration::New(Bounds hit,
+                                                         Bounds value) {
+    TextSelectionRegistration out;
+    out.hitbox = hit;
+    out.bounds = value;
+    return out;
+}
+
+TextSelectionRegistration TextSelectionRegistration::WithScrollOffset(
+    Point value) const {
+    TextSelectionRegistration out = *this;
+    out.scrollOffset = value;
+    return out;
+}
+
+TextSelectionRegistration TextSelectionRegistration::WithScope(
+    TextSelectionScopeId value) const {
+    TextSelectionRegistration out = *this;
+    out.scope = value;
+    return out;
+}
+
+TextSelectionRegistration TextSelectionRegistration::WithDocumentOrder(
+    uint64_t value) const {
+    TextSelectionRegistration out = *this;
+    out.documentOrder = value;
+    return out;
+}
+
+TextSelectionRegistration TextSelectionRegistration::WithTextBounds(
+    const Bounds* values, int count) const {
+    TextSelectionRegistration out = *this;
+    out.textBounds = values;
+    out.textBoundsCount = count > 0 ? count : 0;
+    return out;
+}
+
+TextSelectionRun TextSelectionRun::New(Str value, TextLayout* shaped,
+                                       Bounds valueBounds) {
+    TextSelectionRun out;
+    out.text = value;
+    out.layout = shaped;
+    out.bounds = valueBounds;
+    return out;
+}
+
+TextSelectionRun TextSelectionRun::WithDocumentOrder(uint64_t value) const {
+    TextSelectionRun out = *this;
+    out.documentOrder = value;
+    return out;
+}
+
+static bool ParticipantContains(const TextSelectionParticipantState* state,
+                                Point point) {
+    return state && state->registered &&
+           (state->registration.hitbox.Contains(point) ||
+            state->registration.bounds.Contains(point));
+}
+
+static TextSelectionParticipantState* ParticipantAt(Window* window,
+                                                     Point point,
+                                                     EntityId* outId) {
+    WindowSelection* selection = window ? window->sel : nullptr;
+    if (!selection || !window->app) return nullptr;
+    TextSelectionParticipantState* hit = nullptr;
+    EntityId hitId = {};
+    float hitArea = 3.4e38f;
+    TextSelectionParticipantState* predecessor = nullptr;
+    EntityId predecessorId = {};
+    TextSelectionParticipantState* first = nullptr;
+    EntityId firstId = {};
+    for (int i = 0; i < selection->participants.len; i++) {
+        EntityId id = selection->participants[i];
+        TextSelectionParticipantState* state =
+            (TextSelectionParticipantState*)EntityGet(window->app, id);
+        if (!state || state->window != window || !state->registered ||
+            state->registration.scope != selection->activeScope) {
+            continue;
+        }
+        Bounds bounds = state->registration.bounds;
+        if (!first || bounds.y < first->registration.bounds.y ||
+            (bounds.y == first->registration.bounds.y &&
+             state->registration.documentOrder <
+                 first->registration.documentOrder)) {
+            first = state;
+            firstId = id;
+        }
+        if (bounds.y <= point.y &&
+            (!predecessor ||
+             bounds.y > predecessor->registration.bounds.y ||
+             (bounds.y == predecessor->registration.bounds.y &&
+              state->registration.documentOrder <
+                  predecessor->registration.documentOrder))) {
+            predecessor = state;
+            predecessorId = id;
+        }
+        if (ParticipantContains(state, point)) {
+            float area = bounds.w * bounds.h;
+            if (!hit || area < hitArea ||
+                (area == hitArea &&
+                 state->registration.documentOrder <
+                     hit->registration.documentOrder)) {
+                hit = state;
+                hitId = id;
+                hitArea = area;
+            }
+        }
+    }
+    TextSelectionParticipantState* result = hit ? hit : predecessor
+                                                        ? predecessor
+                                                        : first;
+    if (result && outId) {
+        *outId = hit ? hitId : predecessor ? predecessorId : firstId;
+    }
+    return result;
+}
+
+static TextSelectionEndpoint ParticipantEndpoint(
+    const TextSelectionRegistration& registration,
+    TextSelectionContentKeyFn resolver, void* resolverUser, EntityId id,
+    Point windowPoint, const App* app) {
+    Point content = {
+        windowPoint.x - registration.bounds.x - registration.scrollOffset.x,
+        windowPoint.y - registration.bounds.y - registration.scrollOffset.y,
+    };
+    TextSelectionEndpoint out = TextSelectionEndpoint::New(id, content);
+    if (resolver) {
+        TextSelectionContentKey key;
+        if (resolver(resolverUser, content, app, &key)) {
+            out = out.WithContentKey(key);
+        }
+    }
+    return out;
+}
+
+static bool ComputeParticipantSnapshot(TextSelectionParticipantState* receiver,
+                                       App* app,
+                                       TextSelectionSnapshot* out) {
+    if (!receiver || !receiver->window || !receiver->window->sel ||
+        !receiver->registered || !out) {
+        return false;
+    }
+    WindowSelection* selection = receiver->window->sel;
+    if (!TextSelectionPublishes(&selection->gesture) ||
+        selection->anchor < 0 || selection->cursor < 0 ||
+        selection->anchor == selection->cursor ||
+        !selection->hasWindowPoints ||
+        receiver->registration.scope != selection->activeScope) {
+        return false;
+    }
+    EntityId anchorId = {}, cursorId = {};
+    TextSelectionParticipantState* anchor =
+        ParticipantAt(receiver->window, selection->anchorPoint, &anchorId);
+    TextSelectionParticipantState* cursor =
+        ParticipantAt(receiver->window, selection->cursorPoint, &cursorId);
+    if (!anchor || !cursor) return false;
+    uint64_t first = anchor->registration.documentOrder <
+                             cursor->registration.documentOrder
+                         ? anchor->registration.documentOrder
+                         : cursor->registration.documentOrder;
+    uint64_t last = anchor->registration.documentOrder >
+                            cursor->registration.documentOrder
+                        ? anchor->registration.documentOrder
+                        : cursor->registration.documentOrder;
+    uint64_t order = receiver->registration.documentOrder;
+    if (order < first || order > last) return false;
+
+    TextSelectionCoverage coverage = TextSelectionCoverage::Bounded;
+    if (anchorId != cursorId) {
+        if (receiver->self != anchorId && receiver->self != cursorId) {
+            coverage = TextSelectionCoverage::Full;
+        } else if ((receiver->self == anchorId) ==
+                   (anchor->registration.documentOrder <
+                    cursor->registration.documentOrder)) {
+            coverage = TextSelectionCoverage::ToEnd;
+        } else {
+            coverage = TextSelectionCoverage::FromStart;
+        }
+    } else if (receiver->self != anchorId) {
+        return false;
+    }
+    TextSelectionRegistration anchorRegistration = anchor->registration;
+    TextSelectionRegistration cursorRegistration = cursor->registration;
+    TextSelectionContentKeyFn anchorResolver = anchor->resolveContentKey;
+    TextSelectionContentKeyFn cursorResolver = cursor->resolveContentKey;
+    void* anchorResolverUser = anchor->resolveContentKeyUser;
+    void* cursorResolverUser = cursor->resolveContentKeyUser;
+    Point anchorPoint = selection->anchorPoint;
+    Point cursorPoint = selection->cursorPoint;
+    bool selecting = selection->gesture.selecting;
+    TextSelectionEndpoint anchorEndpoint = ParticipantEndpoint(
+        anchorRegistration, anchorResolver, anchorResolverUser, anchorId,
+        anchorPoint, app);
+    TextSelectionEndpoint cursorEndpoint = ParticipantEndpoint(
+        cursorRegistration, cursorResolver, cursorResolverUser, cursorId,
+        cursorPoint, app);
+    *out = TextSelectionSnapshot::New(
+               anchorEndpoint, cursorEndpoint)
+               .WithSelecting(selecting)
+               .WithWindowPoints(TextSelectionWindowPoints::New(
+                   anchorPoint, cursorPoint))
+               .WithCoverage(coverage);
+    return true;
+}
+
+static void ParticipantSetSnapshot(TextSelectionParticipantState* state,
+                                   App* app, bool hasSnapshot,
+                                   const TextSelectionSnapshot& snapshot) {
+    if (!state) return;
+    if (state->hasSnapshot == hasSnapshot &&
+        (!hasSnapshot || SameSnapshot(state->snapshot, snapshot))) {
+        return;
+    }
+    state->hasSnapshot = hasSnapshot;
+    if (hasSnapshot) state->snapshot = snapshot;
+    StrFree(state->projectedCopyText);
+    state->projectedCopyText = {};
+    state->hasProjectedCopyText = false;
+    TextSelectionEvent event;
+    event.kind = TextSelectionEventKind::SelectionChanged;
+    event.hasSnapshot = hasSnapshot;
+    event.snapshot = snapshot;
+    EntityEmit(app, state->window, state->self, &event);
+}
+
+static void WindowSelectionPublish(Window* window) {
+    WindowSelection* selection = window ? window->sel : nullptr;
+    if (!selection || !window->app || selection->publishing) return;
+    selection->publishing = true;
+    Vec<EntityId> participants;
+    for (int i = 0; i < selection->participants.len; i++) {
+        participants.Append(selection->participants[i]);
+    }
+    for (int i = 0; i < participants.len; i++) {
+        EntityId id = participants[i];
+        TextSelectionParticipantState* state =
+            (TextSelectionParticipantState*)EntityGet(window->app, id);
+        if (!state || state->window != window) {
+            for (int j = 0; j < selection->participants.len; j++) {
+                if (selection->participants[j] != id) continue;
+                for (int k = j; k < selection->participants.len - 1; k++) {
+                    selection->participants[k] =
+                        selection->participants[k + 1];
+                }
+                selection->participants.len--;
+                break;
+            }
+            continue;
+        }
+        TextSelectionSnapshot snapshot;
+        bool has = ComputeParticipantSnapshot(state, window->app, &snapshot);
+        state = (TextSelectionParticipantState*)EntityGet(window->app, id);
+        if (!state || state->window != window) continue;
+        ParticipantSetSnapshot(state, window->app, has, snapshot);
+    }
+    participants.Reset();
+    selection->publishing = false;
+}
+
+static void ParticipantAutoScroll(Window* window, Point point,
+                                  bool stopping) {
+    if (!window || !window->sel || !window->app ||
+        !window->sel->hasWindowPoints) {
+        return;
+    }
+    EntityId id = {};
+    TextSelectionParticipantState* state =
+        ParticipantAt(window, window->sel->anchorPoint, &id);
+    if (!state) return;
+    float delta = 0;
+    bool has = !stopping &&
+               AutoScrollComputeDelta(point.y, state->registration.bounds,
+                                      &delta);
+    TextSelectionEvent event;
+    event.kind = TextSelectionEventKind::AutoScroll;
+    event.autoScroll = delta;
+    event.hasAutoScroll = has;
+    EntityEmit(window->app, window, id, &event);
+}
+
+TextSelectionHandle TextSelectionHandle::New(Str fallbackCopyText, App* app) {
+    TextSelectionHandle out;
+    out.state = EntityNewState<TextSelectionParticipantState>(app);
+    if (TextSelectionParticipantState* state = out.state.Get(app)) {
+        state->self = out.state.id;
+        state->fallbackCopyText = StrDup(fallbackCopyText);
+    }
+    return out;
+}
+
+bool TextSelectionHandle::Snapshot(const App* app,
+                                   TextSelectionSnapshot* out) const {
+    TextSelectionParticipantState* participant = ParticipantState(*this, app);
+    if (!participant || !participant->hasSnapshot) return false;
+    if (out) *out = participant->snapshot;
+    return true;
+}
+
+void TextSelectionHandle::SetFallbackCopyText(Str text, App* app) const {
+    TextSelectionParticipantState* participant = ParticipantState(*this, app);
+    if (!participant) return;
+    StrFree(participant->fallbackCopyText);
+    participant->fallbackCopyText = StrDup(text);
+    StrFree(participant->projectedCopyText);
+    participant->projectedCopyText = {};
+    participant->hasProjectedCopyText = false;
+}
+
+void TextSelectionHandle::SetLocalSelection(bool active, App* app) const {
+    TextSelectionParticipantState* participant = ParticipantState(*this, app);
+    if (!participant || participant->localSelection == active) return;
+    participant->localSelection = active;
+    NotifyEntity(app, participant->self, participant->window);
+}
+
+bool TextSelectionHandle::HasLocalSelection(const App* app) const {
+    TextSelectionParticipantState* participant = ParticipantState(*this, app);
+    return participant && participant->localSelection;
+}
+
+void TextSelectionHandle::Register(TextSelectionRegistration value,
+                                   Window* window, App* app) const {
+    TextSelectionParticipantState* participant = ParticipantState(*this, app);
+    if (!participant || !window) return;
+    participant->window = window;
+    participant->registered = true;
+    participant->registration = value;
+    participant->textBounds.Reset();
+    for (int i = 0; i < value.textBoundsCount; i++) {
+        participant->textBounds.Append(value.textBounds[i]);
+    }
+    participant->registration.textBounds = participant->textBounds.els;
+    participant->registration.textBoundsCount = participant->textBounds.len;
+    WindowSelection* selection = WindowSelectionOf(window);
+    participant->registrationGeneration = selection->frameGeneration;
+    bool found = false;
+    for (int i = 0; i < selection->participants.len; i++) {
+        if (selection->participants[i] == state.id) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) selection->participants.Append(state.id);
+    WindowSelectionPublish(window);
+}
+
+static bool PointInSelectionBand(Point position, float charWidth,
+                                 Point selectionStart, Point selectionEnd,
+                                 float lineHeight) {
+    float top = std::min(selectionStart.y, selectionEnd.y);
+    float bottom = std::max(selectionStart.y, selectionEnd.y);
+    if (position.y + lineHeight <= top || position.y > bottom) return false;
+    bool startInLine = selectionStart.y >= position.y &&
+                       selectionStart.y < position.y + lineHeight;
+    bool endInLine = selectionEnd.y >= position.y &&
+                     selectionEnd.y < position.y + lineHeight;
+    float x = position.x + charWidth * 0.5f;
+    if (startInLine && endInLine) {
+        return x >= std::min(selectionStart.x, selectionEnd.x) &&
+               x <= std::max(selectionStart.x, selectionEnd.x);
+    }
+    Point topPoint = selectionStart.y < selectionEnd.y ? selectionStart
+                                                        : selectionEnd;
+    Point bottomPoint = selectionStart.y < selectionEnd.y ? selectionEnd
+                                                           : selectionStart;
+    if (topPoint.y >= position.y && topPoint.y < position.y + lineHeight) {
+        return x >= topPoint.x;
+    }
+    if (bottomPoint.y >= position.y &&
+        bottomPoint.y < position.y + lineHeight) {
+        return x <= bottomPoint.x;
+    }
+    return true;
+}
+
+static TextSelectionRange ProjectRun(const TextSelectionRun& run,
+    const TextSelectionSnapshot& snapshot) {
+    TextSelectionRange out;
+    if (!run.layout || run.text.len <= 0) return out;
+    if (snapshot.coverage == TextSelectionCoverage::Full) {
+        out.end = run.text.len;
+        out.selected = true;
+        return out;
+    }
+    if (!snapshot.hasWindowPoints) return out;
+    int at = 0;
+    while (at < run.text.len) {
+        uint32_t cp = 0;
+        int bytes = Utf8At(run.text, at, &cp);
+        (void)cp;
+        Bounds rects[2];
+        int n = TextLayoutRangeRects(run.layout, run.text, at, at + bytes,
+                                     rects, 2);
+        bool selected = false;
+        for (int i = 0; i < n; i++) {
+            Point position = {run.bounds.x + rects[i].x,
+                              run.bounds.y + rects[i].y};
+            float width = rects[i].w > 0 ? rects[i].w : rects[i].h * 0.5f;
+            float height = rects[i].h > 0 ? rects[i].h : run.bounds.h;
+            if (PointInSelectionBand(position, width,
+                                     snapshot.windowPoints.anchor,
+                                     snapshot.windowPoints.cursor, height)) {
+                selected = true;
+                break;
+            }
+        }
+        if (selected) {
+            if (!out.selected) out.start = at;
+            out.end = at + bytes;
+            out.selected = true;
+        }
+        at += bytes;
+    }
+    return out;
+}
+
+TextSelectionProjection TextSelectionHandle::UpdateRuns(
+    const TextSelectionRun* values, int count, App* app) const {
+    TextSelectionProjection out;
+    TextSelectionParticipantState* participant = ParticipantState(*this, app);
+    if (!participant) return out;
+    for (int i = 0; i < participant->runs.len; i++) {
+        if (participant->runs[i].layout) {
+            TextLayoutRelease(participant->runs[i].layout);
+        }
+    }
+    participant->runs.Reset();
+    for (int i = 0; i < count; i++) {
+        participant->runs.Append(values[i]);
+        if (values[i].layout) TextLayoutAddRef(values[i].layout);
+    }
+    out.active = participant->hasSnapshot;
+    for (int i = 0; i < count; i++) {
+        out.ranges.Append(participant->hasSnapshot
+                              ? ProjectRun(values[i], participant->snapshot)
+                              : TextSelectionRange{});
+    }
+
+    Vec<int> order;
+    for (int i = 0; i < count; i++) {
+        if (!out.ranges[i].selected) continue;
+        int insert = order.len;
+        while (insert > 0 &&
+               values[order[insert - 1]].documentOrder >
+                   values[i].documentOrder) {
+            insert--;
+        }
+        order.Append(0);
+        for (int j = order.len - 1; j > insert; j--) {
+            order[j] = order[j - 1];
+        }
+        order[insert] = i;
+    }
+    StrBuilder selected;
+    for (int i = 0; i < order.len; i++) {
+        int ix = order[i];
+        const TextSelectionRange& range = out.ranges[ix];
+        selected.Append(Str(values[ix].text.s + range.start,
+                            range.end - range.start));
+    }
+    order.Reset();
+    StrFree(participant->projectedCopyText);
+    participant->projectedCopyText = selected.TakeStr();
+    participant->hasProjectedCopyText = true;
+    return out;
+}
+
+Subscription TextSelectionHandle::RefreshWindowOnChange(App* app) const {
+    Listener listener;
+    listener.fn = (void*)&TextSelectionParticipantState::Refresh;
+    listener.view = state.id;
+    return EntitySubscribeRaw(app, state.id, listener);
+}
+
+void TextSelectionHandle::FocusWith(TextSelectionFocusFn fn, void* user,
+                                    App* app) const {
+    if (TextSelectionParticipantState* participant =
+            ParticipantState(*this, app)) {
+        participant->focus = fn;
+        participant->focusUser = user;
+    }
+}
+
+void TextSelectionHandle::ClearWith(TextSelectionClearFn fn, void* user,
+                                    App* app) const {
+    if (TextSelectionParticipantState* participant =
+            ParticipantState(*this, app)) {
+        participant->clear = fn;
+        participant->clearUser = user;
+    }
+}
+
+void TextSelectionHandle::CopyWith(TextSelectionCopyFn fn, void* user,
+                                   App* app) const {
+    if (TextSelectionParticipantState* participant =
+            ParticipantState(*this, app)) {
+        participant->copy = fn;
+        participant->copyUser = user;
+    }
+}
+
+void TextSelectionHandle::ResolveContentKeyWith(
+    TextSelectionContentKeyFn fn, void* user, App* app) const {
+    if (TextSelectionParticipantState* participant =
+            ParticipantState(*this, app)) {
+        participant->resolveContentKey = fn;
+        participant->resolveContentKeyUser = user;
+    }
+}
 
 void TextSelectionBegin(TextSelectionGesture* g, bool insideText) {
     g->selecting = true;
@@ -38,6 +683,14 @@ El* TextSelection::New(Ctx* cx, Str id, int clickId) {
     return UiRoot(a, id, clickId);
 }
 
+El* TextSelectionLayer::New(Ctx* cx) {
+    return Div(cx->a)->Id(StrL("window-text-selection"))->W(0)->H(0);
+}
+
+El* TextSelectionScope(El* element, TextSelectionScopeId scope) {
+    return element ? element->TrapId(scope.RuntimeScope()) : nullptr;
+}
+
 // ─── the window's selection ───────────────────────────────────────────────
 
 WindowSelection* WindowSelectionOf(Window* win) {
@@ -52,6 +705,8 @@ WindowSelection* WindowSelectionOf(Window* win) {
 
 void WindowSelectionFree(Window* win) {
     if (win && win->sel) {
+        WindowSelectionClear(win);
+        win->sel->participants.Reset();
         delete win->sel;
         win->sel = nullptr;
     }
@@ -59,13 +714,45 @@ void WindowSelectionFree(Window* win) {
 
 void WindowSelectionClear(Window* win) {
     WindowSelection* s = win ? win->sel : nullptr;
-    if (!s) {
+    if (!s || s->clearing) {
         return;
     }
+    s->clearing = true;
+    ParticipantAutoScroll(win, s->cursorPoint, true);
     TextSelectionClear(&s->gesture);
     s->anchor = -1;
     s->cursor = -1;
     s->scope = 0;
+    s->hasWindowPoints = false;
+    if (win->app) {
+        Vec<EntityId> participants;
+        for (int i = 0; i < s->participants.len; i++) {
+            participants.Append(s->participants[i]);
+        }
+        for (int i = 0; i < participants.len; i++) {
+            TextSelectionParticipantState* participant =
+                (TextSelectionParticipantState*)EntityGet(
+                    win->app, participants[i]);
+            if (!participant) continue;
+            TextSelectionClearFn clear = participant->clear;
+            void* clearUser = participant->clearUser;
+            participant->hasSnapshot = false;
+            participant->localSelection = false;
+            StrFree(participant->projectedCopyText);
+            participant->projectedCopyText = {};
+            participant->hasProjectedCopyText = false;
+            TextSelectionEvent cleared;
+            cleared.kind = TextSelectionEventKind::Cleared;
+            EntityEmit(win->app, win, participant->self, &cleared);
+            TextSelectionEvent selectionChanged;
+            selectionChanged.kind = TextSelectionEventKind::SelectionChanged;
+            EntityEmit(win->app, win, participant->self,
+                       &selectionChanged);
+            if (clear) clear(clearUser, win->app);
+        }
+        participants.Reset();
+    }
+    s->clearing = false;
 }
 
 bool WindowSelectionHas(const Window* win) {
@@ -93,10 +780,13 @@ void WindowSelectionPress(Window* win, float x, float y, int clickCount,
         int off = TextHitOffsetIn(ctx, x, y, true, s->scope, nullptr);
         if (off >= 0) {
             s->cursor = off;
+            s->cursorPoint = {x, y};
+            s->hasWindowPoints = true;
             TextSelectionExtend(
                 &s->gesture,
                 TextHitOffsetIn(ctx, x, y, false, s->scope, nullptr) >= 0);
         }
+        WindowSelectionPublish(win);
         return;
     }
     // Two clicks take the word under the pointer, three the whole run —
@@ -106,24 +796,48 @@ void WindowSelectionPress(Window* win, float x, float y, int clickCount,
     int scope = 0;
     int a = 0;
     int b = 0;
-    if (TextMultiClickRangeIn(ctx, x, y, clickCount, -1, &a, &b, &scope)) {
+    int activeScope = s->activeScope.raw != 0
+                          ? s->activeScope.RuntimeScope()
+                          : -1;
+    if (TextMultiClickRangeIn(ctx, x, y, clickCount, activeScope, &a, &b,
+                              &scope)) {
         s->scope = scope;
         s->anchor = a;
         s->cursor = b;
+        if (s->activeScope.raw == 0) {
+            s->activeScope = TextSelectionScopeId::FromRaw((uint64_t)scope);
+        }
+        s->anchorPoint = {x - 0.5f, y};
+        s->cursorPoint = {x + 0.5f, y};
+        s->hasWindowPoints = true;
         TextSelectionBegin(&s->gesture, true);
         TextSelectionEnd(&s->gesture);
+        WindowSelectionPublish(win);
         return;
     }
     // A press in the margin still begins a gesture, so a drag from beside a
     // paragraph into it selects; whether it was on a glyph is what decides
     // if anything is ever published.
-    int anchor = TextHitOffsetIn(ctx, x, y, true, -1, &scope);
+    int anchor = TextHitOffsetIn(ctx, x, y, true, activeScope, &scope);
     if (anchor >= 0) {
         s->scope = scope;
+        if (s->activeScope.raw == 0) {
+            s->activeScope = TextSelectionScopeId::FromRaw((uint64_t)scope);
+        }
         s->anchor = anchor;
         s->cursor = anchor;
+        s->anchorPoint = {x, y};
+        s->cursorPoint = {x, y};
+        s->hasWindowPoints = true;
         TextSelectionBegin(&s->gesture, TextHitOffsetIn(ctx, x, y, false, scope,
                                                         nullptr) >= 0);
+        EntityId participantId = {};
+        TextSelectionParticipantState* participant =
+            ParticipantAt(win, s->anchorPoint, &participantId);
+        if (participant && participant->focus) {
+            participant->focus(participant->focusUser, win, win->app);
+        }
+        WindowSelectionPublish(win);
         return;
     }
     WindowSelectionClear(win);
@@ -143,13 +857,19 @@ void WindowSelectionDrag(Window* win, float x, float y) {
     int off = TextHitOffsetIn(ctx, x, y, true, s->scope, nullptr);
     if (off >= 0) {
         s->cursor = off;
+        s->cursorPoint = {x, y};
+        s->hasWindowPoints = true;
     }
+    ParticipantAutoScroll(win, {x, y}, false);
+    WindowSelectionPublish(win);
 }
 
 void WindowSelectionRelease(Window* win) {
     WindowSelection* s = win ? win->sel : nullptr;
     if (s) {
+        ParticipantAutoScroll(win, s->cursorPoint, true);
         TextSelectionEnd(&s->gesture);
+        WindowSelectionPublish(win);
     }
 }
 
@@ -170,6 +890,127 @@ int WindowSelectionText(Window* win, char* out, int cap) {
     return WindowSelectionTextAs(win, out, cap, WindowSelectionFormat(win));
 }
 
+static bool HasNonWhitespace(Str text) {
+    for (int i = 0; i < text.len; i++) {
+        char c = text.s[i];
+        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') return true;
+    }
+    return false;
+}
+
+struct ParticipantCopyItem {
+    uint64_t documentOrder = 0;
+    TextSelectionCopyFn copy = nullptr;
+    void* copyUser = nullptr;
+    Str text = {};
+};
+
+static int CopyParticipantItem(const ParticipantCopyItem& item, App* app,
+                               char* out, int cap) {
+    if (!out || cap <= 0) return 0;
+    if (item.copy) {
+        int n = item.copy(item.copyUser, app, out, cap);
+        if (n < 0) return 0;
+        return n < cap ? n : cap - 1;
+    }
+    int n = item.text.len < cap - 1 ? item.text.len : cap - 1;
+    if (n > 0) memcpy(out, item.text.s, (size_t)n);
+    out[n] = 0;
+    return n;
+}
+
+int TextSelection::SelectedText(Window* window, App* app, char* out, int cap) {
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    WindowSelection* selection = window ? window->sel : nullptr;
+    if (!selection || !app) return 0;
+    Vec<ParticipantCopyItem> active;
+    for (int i = 0; i < selection->participants.len; i++) {
+        TextSelectionParticipantState* participant =
+            (TextSelectionParticipantState*)EntityGet(
+                app, selection->participants[i]);
+        if (!participant ||
+            (!participant->hasSnapshot && !participant->localSelection)) {
+            continue;
+        }
+        ParticipantCopyItem item;
+        item.documentOrder = participant->registration.documentOrder;
+        item.copy = participant->copy;
+        item.copyUser = participant->copyUser;
+        item.text = StrDup(participant->hasProjectedCopyText
+                               ? participant->projectedCopyText
+                               : participant->fallbackCopyText);
+        int insert = active.len;
+        while (insert > 0 &&
+               active[insert - 1].documentOrder > item.documentOrder) {
+            insert--;
+        }
+        active.Append({});
+        for (int j = active.len - 1; j > insert; j--) {
+            active[j] = active[j - 1];
+        }
+        active[insert] = item;
+    }
+    int written = 0;
+    bool emitted = false;
+    for (int i = 0; i < active.len && written < cap - 1; i++) {
+        const ParticipantCopyItem& item = active[i];
+        if (!item.copy && !HasNonWhitespace(item.text)) {
+            continue;
+        }
+        int before = written;
+        if (emitted && written < cap - 1) out[written++] = '\n';
+        int textStart = written;
+        int n = CopyParticipantItem(item, app, out + written, cap - written);
+        if (n <= 0 || !HasNonWhitespace(Str(out + textStart, n))) {
+            written = before;
+            continue;
+        }
+        written += n;
+        emitted = true;
+    }
+    for (int i = 0; i < active.len; i++) StrFree(active[i].text);
+    active.Reset();
+    out[written] = 0;
+    if (written > 0) return written;
+    return WindowSelectionText(window, out, cap);
+}
+
+bool TextSelection::HasSelection(Window* window, const App* app) {
+    if (WindowSelectionHas(window)) return true;
+    const WindowSelection* selection = window ? window->sel : nullptr;
+    if (!selection || !app) return false;
+    for (int i = 0; i < selection->participants.len; i++) {
+        TextSelectionParticipantState* participant =
+            (TextSelectionParticipantState*)EntityGet(
+                (App*)app, selection->participants[i]);
+        if (participant && participant->localSelection) return true;
+    }
+    return false;
+}
+
+void TextSelection::Clear(Window* window, App*) {
+    WindowSelectionClear(window);
+}
+
+void TextSelection::ClearForWindow(Window* window, App* app) {
+    Clear(window, app);
+}
+
+void TextSelection::End(Window* window, App*) {
+    WindowSelectionRelease(window);
+}
+
+void TextSelection::ActivateScope(TextSelectionScopeId scope, Window* window,
+                                  App*) {
+    WindowSelection* selection = WindowSelectionOf(window);
+    if (!selection || selection->activeScope == scope) return;
+    WindowSelectionClear(window);
+    selection->activeScope = scope;
+    selection->scope = scope.RuntimeScope();
+    WindowSelectionPublish(window);
+}
+
 void WindowSelectionSetFormat(Window* win, SelectionFormat fmt) {
     if (WindowSelection* s = WindowSelectionOf(win)) {
         s->format = fmt;
@@ -182,7 +1023,7 @@ SelectionFormat WindowSelectionFormat(Window* win) {
 }
 
 bool WindowSelectionCopy(Window* win) {
-    if (!WindowSelectionHas(win)) {
+    if (!TextSelection::HasSelection(win, win ? win->app : nullptr)) {
         return false;
     }
     // One frame's worth of selectable text; a document longer than this
@@ -192,7 +1033,7 @@ bool WindowSelectionCopy(Window* win) {
     if (!buf) {
         return false;
     }
-    int n = WindowSelectionText(win, buf, kCap);
+    int n = TextSelection::SelectedText(win, win->app, buf, kCap);
     if (n > 0) {
         ClipboardSetText(win, Str(buf, n));
     }
@@ -211,5 +1052,57 @@ void WindowSelectionApply(Window* win) {
     win->paint.selA = publishes ? s->anchor : -1;
     win->paint.selB = publishes ? s->cursor : -1;
     win->paint.selScope = publishes ? s->scope : -1;
+}
+
+void WindowSelectionFinishFrame(Window* win) {
+    WindowSelection* selection = win ? win->sel : nullptr;
+    if (!selection || !win->app) return;
+    // Rust collects stale ids before clearing their entities. Event and
+    // cleanup callbacks can re-enter selection code, so do not walk the live
+    // participant vector while invoking them.
+    Vec<EntityId> participants;
+    for (int i = 0; i < selection->participants.len; i++) {
+        participants.Append(selection->participants[i]);
+    }
+    for (int i = 0; i < participants.len; i++) {
+        EntityId id = participants[i];
+        TextSelectionParticipantState* participant =
+            (TextSelectionParticipantState*)EntityGet(win->app, id);
+        if (participant && participant->window == win &&
+            participant->registrationGeneration ==
+                selection->frameGeneration) {
+            continue;
+        }
+        for (int j = 0; j < selection->participants.len; j++) {
+            if (selection->participants[j] != id) continue;
+            for (int k = j; k < selection->participants.len - 1; k++) {
+                selection->participants[k] =
+                    selection->participants[k + 1];
+            }
+            selection->participants.len--;
+            break;
+        }
+        if (participant && participant->window == win) {
+            TextSelectionClearFn clear = participant->clear;
+            void* clearUser = participant->clearUser;
+            participant->registered = false;
+            participant->window = nullptr;
+            participant->hasSnapshot = false;
+            participant->localSelection = false;
+            StrFree(participant->projectedCopyText);
+            participant->projectedCopyText = {};
+            participant->hasProjectedCopyText = false;
+            TextSelectionEvent cleared;
+            cleared.kind = TextSelectionEventKind::Cleared;
+            EntityEmit(win->app, win, id, &cleared);
+            TextSelectionEvent changed;
+            changed.kind = TextSelectionEventKind::SelectionChanged;
+            EntityEmit(win->app, win, id, &changed);
+            if (clear) clear(clearUser, win->app);
+        }
+    }
+    participants.Reset();
+    selection->frameGeneration++;
+    WindowSelectionPublish(win);
 }
 } // namespace gpui

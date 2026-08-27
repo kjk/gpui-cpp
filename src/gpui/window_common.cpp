@@ -537,6 +537,12 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     TextMeasEndFrame(&win->paint);
     LayoutDumpFrame(win, root);
 
+    // Text-selection participants report their geometry while their view
+    // renders. Rust schedules this sweep for the next-frame callback after
+    // paint, so registration is independent of whether the lifecycle element
+    // or a participant painted first.
+    WindowSelectionFinishFrame(win);
+
     // The pick a press asked for is settled against the frame it aimed at.
     if (win->inspector.pending) {
         if (win->paint.pickHit) {

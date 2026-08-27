@@ -48,7 +48,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 const partialBase = new Set([
   "dock",
   "input",
-  "text_selection",
 ]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
 const partialUi = new Set([
@@ -66,7 +65,6 @@ const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
   "base/input":
     "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
-  "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",

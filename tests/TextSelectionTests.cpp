@@ -247,6 +247,213 @@ static void AControlPressSuppressesWindowSelection() {
     AppGlobalClear(&app);
 }
 
+struct SelectionParticipantHarness {
+    int changed = 0;
+    int cleared = 0;
+    int autoScroll = 0;
+    int focused = 0;
+    int clearCallbacks = 0;
+
+    static El* Render(SelectionParticipantHarness*, Ctx* cx) {
+        return Div(cx->a);
+    }
+
+    static void OnEvent(SelectionParticipantHarness* self, Ctx*,
+                        const TextSelectionEvent* event) {
+        if (event->kind == TextSelectionEventKind::SelectionChanged) {
+            self->changed++;
+        } else if (event->kind == TextSelectionEventKind::Cleared) {
+            self->cleared++;
+        } else if (event->kind == TextSelectionEventKind::AutoScroll) {
+            self->autoScroll++;
+        }
+    }
+};
+
+static void ParticipantFocus(void* user, Window*, App*) {
+    ((SelectionParticipantHarness*)user)->focused++;
+}
+
+static void ParticipantClear(void* user, App*) {
+    ((SelectionParticipantHarness*)user)->clearCallbacks++;
+}
+
+static bool ParticipantContentKey(void*, Point point, const App*,
+                                  TextSelectionContentKey* out) {
+    *out = TextSelectionContentKey::New((uint64_t)(point.y + 100));
+    return true;
+}
+
+static int ParticipantCopy(void*, App*, char* out, int cap) {
+    const char* value = "custom";
+    int n = std::min(6, cap > 0 ? cap - 1 : 0);
+    if (n > 0) memcpy(out, value, (size_t)n);
+    if (cap > 0) out[n] = 0;
+    return n;
+}
+
+static void SourceParticipantContractsProjectAcrossAWindow() {
+    App app = {};
+    Window win;
+    win.app = &app;
+    AddRun(&win, 0, "first", 0);
+    AddRun(&win, 40, "second", 0);
+    Entity<SelectionParticipantHarness> harness =
+        EntityNew<SelectionParticipantHarness>(&app);
+    SelectionParticipantHarness* observed = harness.Get(&app);
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, &win, arena, harness.id};
+
+    TextSelectionScopeId one = TextSelectionScopeId::New();
+    TextSelectionScopeId two = TextSelectionScopeId::New();
+    utassert(one != two && one.Value() != 0);
+    TextSelectionContentKey key = TextSelectionContentKey::New(77);
+    TextSelectionEndpoint endpoint =
+        TextSelectionEndpoint::New(harness.id, {3, 4}).WithContentKey(key);
+    TextSelectionSnapshot built =
+        TextSelectionSnapshot::New(endpoint, TextSelectionEndpoint::At({8, 9}))
+            .WithSelecting(true)
+            .WithWindowPoints(TextSelectionWindowPoints::New({10, 11},
+                                                              {12, 13}))
+            .WithCoverage(TextSelectionCoverage::ToEnd);
+    utassert(endpoint.hasEntity && endpoint.hasContentKey &&
+             endpoint.contentKey.Value() == 77);
+    utassert(built.IsSelecting() && built.hasWindowPoints &&
+             built.Coverage() == TextSelectionCoverage::ToEnd);
+
+    Bounds firstText[] = {{20, 0, 100, 20}};
+    TextSelectionRegistration firstRegistration =
+        TextSelectionRegistration::New({20, 0, 100, 20},
+                                       {20, 0, 100, 20})
+            .WithDocumentOrder(10)
+            .WithTextBounds(firstText, 1);
+    TextSelectionRegistration secondRegistration =
+        TextSelectionRegistration::New({20, 40, 100, 20},
+                                       {20, 40, 100, 20})
+            .WithDocumentOrder(20)
+            .WithScrollOffset({0, 2});
+    utassert(firstRegistration.documentOrder == 10 &&
+             firstRegistration.textBoundsCount == 1);
+    utassert(secondRegistration.scrollOffset.y == 2);
+
+    TextSelectionHandle first = TextSelectionHandle::New(StrL("first"), &app);
+    TextSelectionHandle second =
+        TextSelectionHandle::New(StrL("second"), &app);
+    TextSelectionHandle outside =
+        TextSelectionHandle::New(StrL("outside"), &app);
+    first.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
+    second.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
+    outside.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
+    Subscription refresh = first.RefreshWindowOnChange(&app);
+    utassert(refresh.IsValid());
+    first.FocusWith(&ParticipantFocus, observed, &app);
+    first.ClearWith(&ParticipantClear, observed, &app);
+    second.ClearWith(&ParticipantClear, observed, &app);
+    outside.ClearWith(&ParticipantClear, observed, &app);
+    first.ResolveContentKeyWith(&ParticipantContentKey, nullptr, &app);
+    second.ResolveContentKeyWith(&ParticipantContentKey, nullptr, &app);
+    first.Register(firstRegistration, &win, &app);
+    second.Register(secondRegistration, &win, &app);
+    outside.Register(
+        TextSelectionRegistration::New({20, 80, 100, 20},
+                                       {20, 80, 100, 20})
+            .WithDocumentOrder(30),
+        &win, &app);
+
+    WindowSelectionPress(&win, 25, 5, 1, false);
+    WindowSelectionDrag(&win, 25, 45);
+    TextSelectionSnapshot firstSnapshot;
+    TextSelectionSnapshot secondSnapshot;
+    utassert(first.Snapshot(&app, &firstSnapshot));
+    utassert(second.Snapshot(&app, &secondSnapshot));
+    utassert(!outside.Snapshot(&app, nullptr));
+    utassert(firstSnapshot.Coverage() == TextSelectionCoverage::ToEnd);
+    utassert(secondSnapshot.Coverage() == TextSelectionCoverage::FromStart);
+    utassert(firstSnapshot.Anchor().entity == first.Entity());
+    utassert(firstSnapshot.Cursor().entity == second.Entity());
+    utassert(firstSnapshot.Anchor().hasContentKey &&
+             firstSnapshot.Cursor().hasContentKey);
+    utassert(observed->focused == 1 && observed->autoScroll > 0);
+
+    char selected[64];
+    int selectedLen =
+        TextSelection::SelectedText(&win, &app, selected, (int)sizeof(selected));
+    utassert(selectedLen == 12 &&
+             memcmp(selected, "first\nsecond", 12) == 0);
+    utassert(TextSelection::HasSelection(&win, &app));
+    WindowSelectionRelease(&win);
+    utassert(first.Snapshot(&app, &firstSnapshot) &&
+             !firstSnapshot.IsSelecting());
+    outside.CopyWith(&ParticipantCopy, nullptr, &app);
+    outside.SetLocalSelection(true, &app);
+    selectedLen =
+        TextSelection::SelectedText(&win, &app, selected, (int)sizeof(selected));
+    utassert(selectedLen == 19 &&
+             memcmp(selected, "first\nsecond\ncustom", 19) == 0);
+    outside.SetLocalSelection(false, &app);
+
+    TextSelectionRun run =
+        TextSelectionRun::New(StrL("middle"), nullptr, {0, 0, 40, 20})
+            .WithDocumentOrder(5);
+    TextSelectionProjection projection = first.UpdateRuns(&run, 1, &app);
+    utassert(projection.IsActive() && projection.Len() == 1);
+    projection.Reset();
+
+    TextSelection::Clear(&win, &app);
+    utassert(!TextSelection::HasSelection(&win, &app));
+    utassert(observed->cleared == 3 && observed->clearCallbacks == 3);
+
+    El* layer = TextSelectionLayer::New(&cx);
+    El* scoped = TextSelectionScope(Div(arena), one);
+    utassert(StrSame(layer->id, StrL("window-text-selection")));
+    utassert(scoped->style.trapId == one.RuntimeScope());
+
+    WindowSelectionFree(&win);
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
+static void FrameSweepDropsOnlyRegistrationsNotRenewed() {
+    App app = {};
+    Window win;
+    win.app = &app;
+    Entity<SelectionParticipantHarness> harness =
+        EntityNew<SelectionParticipantHarness>(&app);
+    SelectionParticipantHarness* observed = harness.Get(&app);
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, &win, arena, harness.id};
+
+    TextSelectionHandle current =
+        TextSelectionHandle::New(StrL("current"), &app);
+    TextSelectionHandle stale =
+        TextSelectionHandle::New(StrL("stale"), &app);
+    current.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
+    stale.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
+    stale.ClearWith(&ParticipantClear, observed, &app);
+    TextSelectionRegistration registration =
+        TextSelectionRegistration::New({0, 0, 100, 20},
+                                       {0, 0, 100, 20});
+    current.Register(registration.WithDocumentOrder(1), &win, &app);
+    stale.Register(registration.WithDocumentOrder(2), &win, &app);
+    stale.SetLocalSelection(true, &app);
+
+    // The first post-paint sweep keeps registrations from that frame. Only
+    // the participant painted again is present after the following frame.
+    WindowSelectionFinishFrame(&win);
+    utassert(win.sel->participants.len == 2);
+    current.Register(registration.WithDocumentOrder(1), &win, &app);
+    WindowSelectionFinishFrame(&win);
+    utassert(win.sel->participants.len == 1 &&
+             win.sel->participants[0] == current.Entity());
+    utassert(!stale.HasLocalSelection(&app));
+    utassert(observed->cleared == 1 && observed->changed == 1 &&
+             observed->clearCallbacks == 1);
+
+    WindowSelectionFree(&win);
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 void TestTextSelection() {
     TestSuite("text_selection");
     ADragThatNeverTouchesTextPublishesNothing();
@@ -264,4 +471,6 @@ void TestTextSelection() {
     TwoClicksTakeTheWordAndThreeTheLine();
     AMultiClickOffTextTakesNothing();
     AControlPressSuppressesWindowSelection();
+    SourceParticipantContractsProjectAcrossAWindow();
+    FrameSweepDropsOnlyRegistrationsNotRenewed();
 }

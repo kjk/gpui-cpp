@@ -4,6 +4,189 @@
 
 namespace gpui {
 
+struct TextSelectionScopeId {
+    uint64_t raw = 0;
+
+    static TextSelectionScopeId New();
+    static TextSelectionScopeId FromRaw(uint64_t value) { return {value}; }
+    uint64_t Value() const { return raw; }
+    int RuntimeScope() const { return (int)(raw & 0x7fffffffU); }
+};
+
+inline bool operator==(TextSelectionScopeId a, TextSelectionScopeId b) {
+    return a.raw == b.raw;
+}
+inline bool operator!=(TextSelectionScopeId a, TextSelectionScopeId b) {
+    return !(a == b);
+}
+
+struct TextSelectionContentKey {
+    uint64_t raw = 0;
+
+    static TextSelectionContentKey New(uint64_t value) { return {value}; }
+    uint64_t Value() const { return raw; }
+};
+
+inline bool operator==(TextSelectionContentKey a,
+                       TextSelectionContentKey b) {
+    return a.raw == b.raw;
+}
+
+enum class TextSelectionCoverage : uint8_t {
+    Bounded,
+    FromStart,
+    ToEnd,
+    Full
+};
+
+struct TextSelectionEndpoint {
+    EntityId entity = {};
+    Point point = {};
+    TextSelectionContentKey contentKey = {};
+    bool hasEntity = false;
+    bool hasContentKey = false;
+
+    static TextSelectionEndpoint New(EntityId entity, Point point);
+    static TextSelectionEndpoint At(Point point);
+    TextSelectionEndpoint WithContentKey(TextSelectionContentKey value) const;
+    EntityId Entity() const { return entity; }
+    Point ContentPoint() const { return point; }
+};
+
+struct TextSelectionWindowPoints {
+    Point anchor = {};
+    Point cursor = {};
+
+    static TextSelectionWindowPoints New(Point anchor, Point cursor) {
+        return {anchor, cursor};
+    }
+    Point Anchor() const { return anchor; }
+    Point Cursor() const { return cursor; }
+};
+
+struct TextSelectionSnapshot {
+    TextSelectionEndpoint anchor = {};
+    TextSelectionEndpoint cursor = {};
+    TextSelectionWindowPoints windowPoints = {};
+    TextSelectionCoverage coverage = TextSelectionCoverage::Bounded;
+    bool selecting = false;
+    bool hasWindowPoints = false;
+
+    static TextSelectionSnapshot New(TextSelectionEndpoint anchor,
+                                     TextSelectionEndpoint cursor);
+    TextSelectionSnapshot WithSelecting(bool value) const;
+    TextSelectionSnapshot WithWindowPoints(
+        TextSelectionWindowPoints value) const;
+    TextSelectionSnapshot WithCoverage(TextSelectionCoverage value) const;
+    TextSelectionEndpoint Anchor() const { return anchor; }
+    TextSelectionEndpoint Cursor() const { return cursor; }
+    bool IsSelecting() const { return selecting; }
+    TextSelectionCoverage Coverage() const { return coverage; }
+};
+
+// GPUI's Hitbox is retained by the source registration. This runtime rebuilds
+// hit testing each frame, so its bounds are the durable part of that value.
+struct TextSelectionRegistration {
+    Bounds hitbox = {};
+    Bounds bounds = {};
+    Point scrollOffset = {};
+    TextSelectionScopeId scope = {};
+    uint64_t documentOrder = 0;
+    const Bounds* textBounds = nullptr;
+    int textBoundsCount = 0;
+
+    static TextSelectionRegistration New(Bounds hitbox, Bounds bounds);
+    TextSelectionRegistration WithScrollOffset(Point value) const;
+    TextSelectionRegistration WithScope(TextSelectionScopeId value) const;
+    TextSelectionRegistration WithDocumentOrder(uint64_t value) const;
+    TextSelectionRegistration WithTextBounds(const Bounds* values,
+                                             int count) const;
+};
+
+// TextLayout is reference-counted by the paint backend. A run borrows it for
+// the call to UpdateRuns; the handle takes its own reference when retaining
+// the source run list.
+struct TextSelectionRun {
+    uint64_t documentOrder = 0;
+    Str text = {};
+    TextLayout* layout = nullptr;
+    Bounds bounds = {};
+
+    static TextSelectionRun New(Str text, TextLayout* layout, Bounds bounds);
+    TextSelectionRun WithDocumentOrder(uint64_t value) const;
+};
+
+struct TextSelectionRange {
+    int start = 0;
+    int end = 0;
+    bool selected = false;
+};
+
+struct TextSelectionProjection {
+    Vec<TextSelectionRange> ranges;
+    bool active = false;
+
+    int Len() const { return ranges.len; }
+    const TextSelectionRange* Ranges() const { return ranges.els; }
+    bool IsActive() const { return active; }
+    void Reset() { ranges.Reset(); }
+};
+
+enum class TextSelectionEventKind : uint8_t {
+    SelectionChanged,
+    AutoScroll,
+    Cleared
+};
+
+// Rust's TextSelectionEvent is a payload enum. The POD projection keeps the
+// discriminator and both optional payloads adjacent.
+struct TextSelectionEvent {
+    TextSelectionEventKind kind = TextSelectionEventKind::SelectionChanged;
+    TextSelectionSnapshot snapshot = {};
+    float autoScroll = 0;
+    bool hasSnapshot = false;
+    bool hasAutoScroll = false;
+};
+
+using TextSelectionFocusFn = void (*)(void* user, Window* window, App* app);
+using TextSelectionClearFn = void (*)(void* user, App* app);
+using TextSelectionCopyFn = int (*)(void* user, App* app, char* out, int cap);
+using TextSelectionContentKeyFn = bool (*)(
+    void* user, Point point, const App* app, TextSelectionContentKey* out);
+
+struct TextSelectionParticipantState;
+
+struct TextSelectionHandle {
+    Entity<TextSelectionParticipantState> state = {};
+
+    static TextSelectionHandle New(Str fallbackCopyText, App* app);
+    EntityId Entity() const { return state.id; }
+    bool Snapshot(const App* app, TextSelectionSnapshot* out) const;
+    void SetFallbackCopyText(Str text, App* app) const;
+    void SetLocalSelection(bool active, App* app) const;
+    bool HasLocalSelection(const App* app) const;
+    void Register(TextSelectionRegistration registration, Window* window,
+                  App* app) const;
+    TextSelectionProjection UpdateRuns(const TextSelectionRun* runs, int count,
+                                       App* app) const;
+    Subscription RefreshWindowOnChange(App* app) const;
+    void FocusWith(TextSelectionFocusFn fn, void* user, App* app) const;
+    void ClearWith(TextSelectionClearFn fn, void* user, App* app) const;
+    void CopyWith(TextSelectionCopyFn fn, void* user, App* app) const;
+    void ResolveContentKeyWith(TextSelectionContentKeyFn fn, void* user,
+                               App* app) const;
+
+    template <typename S>
+    Subscription Subscribe(Ctx* cx,
+                           void (*fn)(S*, Ctx*,
+                                      const TextSelectionEvent*)) const {
+        Listener listener;
+        listener.fn = (void*)fn;
+        listener.view = cx->self;
+        return EntitySubscribeRaw(cx->app, state.id, listener);
+    }
+};
+
 // Rust's did_hit_text, which is the rule the whole module's mouse handling
 // turns on: a gesture that never touched a glyph publishes nothing and copies
 // nothing, however far it dragged. `blank_only_drag_never_publishes_or_copies_
@@ -35,8 +218,29 @@ bool TextSelectionPublishes(const TextSelectionGesture* g);
 void TextSelectionClear(TextSelectionGesture* g);
 
 struct TextSelection {
+    // Compatibility constructor retained for the older root code.
     static El* New(Ctx* cx, Str id, int clickId = 0);
+    static int SelectedText(Window* window, App* app, char* out, int cap);
+    static bool HasSelection(Window* window, const App* app);
+    static void Clear(Window* window, App* app);
+    static void ClearForWindow(Window* window, App* app);
+    static void End(Window* window, App* app);
+    static void ActivateScope(TextSelectionScopeId scope, Window* window,
+                              App* app);
 };
+
+struct TextSelectionLayerPrepaintState {
+    WindowSelection* selection = nullptr;
+};
+
+struct TextSelectionLayer {
+    static El* New(Ctx* cx);
+};
+
+// pub(crate) text_selection_scope. Rust carries the scope through every
+// element phase; the flat runtime carries the same value in the inherited
+// trap id used when selectable TextHits are collected.
+El* TextSelectionScope(El* element, TextSelectionScopeId scope);
 
 // ─── the window's selection ───────────────────────────────────────────────
 //
@@ -58,6 +262,16 @@ struct WindowSelection {
     // TextSelectionScopeId: the trap the gesture began in. Extending stays
     // inside it, and so does what gets painted and copied.
     int scope = 0;
+    TextSelectionScopeId activeScope = {};
+    Point anchorPoint = {};
+    Point cursorPoint = {};
+    bool hasWindowPoints = false;
+    bool publishing = false;
+    bool clearing = false;
+    uint64_t frameGeneration = 0;
+    // Stable handles registered in this window. The participant state owns
+    // its frame geometry; this list only lets window gestures publish events.
+    Vec<EntityId> participants;
     // What a copy says. Rust hangs `selection_format` off the TextView's own
     // state and the document does the copying; the copy here is the window's,
     // so the format is too, and `TextView::SelFormat` sets it as it renders.
@@ -96,4 +310,6 @@ bool WindowSelectionCopy(Window* win);
 // Hand the range to the frame being built, which is what makes it paint.
 // The runtime calls this before the view renders.
 void WindowSelectionApply(Window* win);
+// Sweeps participant registrations not renewed while this frame rendered.
+void WindowSelectionFinishFrame(Window* win);
 } // namespace gpui

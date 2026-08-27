@@ -8443,3 +8443,56 @@ compiles. The complete debug all-target matrix and clang-cl showcase compile
 after the showcase toast finalizes through `IntoEl()` before using the fluent
 style methods; that is the documented C++ `Styled` adapter seam, where Rust's
 trait methods live directly on `El`.
+
+## Base text selection restores participant and lifecycle contracts
+
+The original window selection port implemented drag gestures over the flat
+`TextHit` list used by the renderer, but omitted all thirteen public
+participant declarations from Rust. It had no stable participant handle,
+per-frame registration, cross-participant snapshot, coverage classification,
+content key, projection, event, scope element or lifecycle sweep. Consequently
+it could paint and copy ordinary window text but could not support independent
+selectable views or virtualized content through the source API.
+
+`TextSelectionScopeId`, `TextSelectionContentKey`, `TextSelectionCoverage`,
+`TextSelectionEndpoint`, `TextSelectionWindowPoints`,
+`TextSelectionSnapshot`, `TextSelectionRegistration`, `TextSelectionRun`,
+`TextSelectionRange`, `TextSelectionProjection`, `TextSelectionEvent`,
+`TextSelectionHandle`, `TextSelectionLayerPrepaintState` and
+`TextSelectionLayer` now have source-shaped no-STL counterparts. Stable
+handles own entity state, copy registration geometry, retain projected text
+layouts explicitly, emit typed change and clear events, and expose focus,
+cleanup, copy and stable-content-key callbacks. Window gestures choose the
+smallest hovered participant with Rust's document-order tie break, fall back
+to the preceding participant, publish bounded/from-start/to-end/full snapshots
+across a scoped document interval, focus the anchor owner and drive its
+auto-scroll delta. Aggregate copy preserves participant document order and is
+safe when a callback re-enters selection code.
+
+Registrations are stamped with the window's frame generation and the common
+frame path now performs Rust's post-paint stale-participant sweep. The sweep
+first copies identities, removes each stale registration before invoking its
+events and cleanup callback, then republishes the surviving selection. This
+keeps first-frame registration independent of paint order and prevents a
+callback from invalidating the iteration. Clear and publish follow the same
+copy-before-callback rule.
+
+The representation seams are explicit. Rust's retained `Hitbox` becomes its
+copied `Bounds`, because this runtime rebuilds hit testing every frame; its
+zero-size retained lifecycle element is a source-named facade because the
+window already owns selection input and performs the post-paint hook. `Rc`
+closures become caller-owned function/payload pairs, the projection's `Vec`
+has an explicit `Reset`, and registration borrows its text-bounds array only
+until `Register` deep-copies it. Scope ids use a UI-thread monotonic counter
+instead of an atomic because this runtime creates UI entities and elements on
+that thread.
+
+Tests cover public immutable builders, copied registration data, stable
+content keys, source participant hit ordering, cross-participant coverage,
+focus and auto-scroll, projection, ordered and custom copy, typed events,
+reentrant-safe clear, scope/layer construction and two-frame stale
+registration cleanup. Base text selection is full: the audit moves to 112
+full, 9 partial, 8 adapters and 2 exclusions with 187 unresolved
+partial-module spellings and no full-module errors. MSVC debug/release,
+clang-cl release and MSVC ASan pass 20,464 checks; wasm passes its 19,759
+applicable checks. The release story gallery compiles unchanged.
