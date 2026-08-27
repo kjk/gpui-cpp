@@ -8924,4 +8924,6 @@ highlight resolution, provider installation, cache windowing and overlay
 state. Base input is full: the audit reaches 121 full modules, 0 partial, 8
 adapters and 2 standing exclusions, with no unresolved public declaration in
 either crate. MSVC release passes 20,799 checks and strict Linux g++ passes its
-20,785 applicable checks.
+20,785 applicable checks. The final host matrix builds every Windows release
+example, the story gallery with Windows clang-cl and Linux g++, and the wasm
+story page with emscripten.
