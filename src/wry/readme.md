@@ -141,7 +141,10 @@ navigation / page-load / document-title / new-window handlers, the clipboard
 permission, incognito, background throttling, the proxy switches, the Darwin
 builder extensions named above and the Windows-only builder extensions
 (browser arguments, accelerator keys, context menus, the https scheme,
-scrollbar style, extensions).
+scrollbar style, extensions). Enabling extensions and naming an extension
+path performs the pinned source's second step too: the Windows backend walks
+that directory and loads each unpacked extension through
+`ICoreWebView2Profile7`.
 
 The macOS backend has all of that except what the platform does not have: the
 custom protocol work-around is Windows' alone (WKWebView takes a scheme
@@ -162,9 +165,6 @@ Not ported, each for a reason:
 - **Drag and drop** (`DragDropEvent`, `webview2/drag_drop.rs`). Behind wry's
   own `drag-drop` feature flag, and it is an `IDropTarget` on the container
   plus the composition windows under it.
-- **Browser extension loading**. The attribute is honoured — extensions can be
-  enabled — but `load_extensions`, which walks a directory and calls
-  `ICoreWebView2Profile7::AddBrowserExtension`, is not written.
 - **`NewWindowResponse::Create`**, the arm that hands back a webview to open
   the request in. It needs the opener's `ICoreWebView2` and environment in the
   public API, which would put a COM type in the portable header.

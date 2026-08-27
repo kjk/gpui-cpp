@@ -100,6 +100,7 @@ typedef int COREWEBVIEW2_PREFERRED_COLOR_SCHEME;
 typedef int COREWEBVIEW2_PRINT_DIALOG_KIND;
 typedef int COREWEBVIEW2_SCROLLBAR_STYLE;
 typedef int COREWEBVIEW2_SHARED_BUFFER_ACCESS;
+typedef int COREWEBVIEW2_TRACKING_PREVENTION_LEVEL;
 typedef int COREWEBVIEW2_WEB_RESOURCE_CONTEXT;
 typedef int COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS;
 
@@ -143,8 +144,12 @@ struct ICoreWebView2PrintToPdfStreamCompletedHandler;
 struct ICoreWebView2ProcessFailedEventHandler;
 struct ICoreWebView2ProcessInfoCollection;
 struct ICoreWebView2ProcessInfosChangedEventHandler;
+struct ICoreWebView2BrowserExtension;
+struct ICoreWebView2GetNonDefaultPermissionSettingsCompletedHandler;
+struct ICoreWebView2ProfileGetBrowserExtensionsCompletedHandler;
 struct ICoreWebView2RasterizationScaleChangedEventHandler;
 struct ICoreWebView2ScriptDialogOpeningEventHandler;
+struct ICoreWebView2SetPermissionStateCompletedHandler;
 struct ICoreWebView2ServerCertificateErrorDetectedEventHandler;
 struct ICoreWebView2SharedBuffer;
 struct ICoreWebView2SourceChangedEventHandler;
@@ -203,6 +208,13 @@ struct DECLSPEC_UUID("9e6b0e8f-86ad-4e81-8147-a9b5edb68650") ICoreWebView2Settin
 struct DECLSPEC_UUID("0528a73b-e92d-49f4-927a-e547dddaa37d") ICoreWebView2Settings9;
 struct DECLSPEC_UUID("79110ad3-cd5d-4373-8bc3-c60658f17a5f") ICoreWebView2Profile;
 struct DECLSPEC_UUID("fa740d4b-5eae-4344-a8ad-74be31925397") ICoreWebView2Profile2;
+struct DECLSPEC_UUID("b188e659-5685-4e05-bdba-fc640e0f1992") ICoreWebView2Profile3;
+struct DECLSPEC_UUID("8f4ae680-192e-4ec8-833a-21cfadaef628") ICoreWebView2Profile4;
+struct DECLSPEC_UUID("2ee5b76e-6e80-4df2-bcd3-d4ec3340a01b") ICoreWebView2Profile5;
+struct DECLSPEC_UUID("bd82fa6a-1d65-4c33-b2b4-0393020cc61b") ICoreWebView2Profile6;
+struct DECLSPEC_UUID("7b4c7906-a1aa-4cb4-b723-db09f813d541") ICoreWebView2Profile7;
+struct DECLSPEC_UUID("df1aab27-82b9-4ab6-aae8-017a49398c14")
+    ICoreWebView2ProfileAddBrowserExtensionCompletedHandler;
 struct DECLSPEC_UUID("0f99a40c-e962-4207-9e92-e3d542eff849") ICoreWebView2WebMessageReceivedEventArgs;
 struct DECLSPEC_UUID("453e667f-12c7-49d4-be6d-ddbe7956f57a") ICoreWebView2WebResourceRequestedEventArgs;
 struct DECLSPEC_UUID("97055cd4-512c-4264-8b5f-e3f446cea6a5") ICoreWebView2WebResourceRequest;
@@ -601,6 +613,36 @@ struct ICoreWebView2Profile2 : ICoreWebView2Profile {
 virtual HRESULT STDMETHODCALLTYPE ClearBrowsingData( COREWEBVIEW2_BROWSING_DATA_KINDS dataKinds, ICoreWebView2ClearBrowsingDataCompletedHandler *handler) = 0;
 virtual HRESULT STDMETHODCALLTYPE ClearBrowsingDataInTimeRange( COREWEBVIEW2_BROWSING_DATA_KINDS dataKinds, double startTime, double endTime, ICoreWebView2ClearBrowsingDataCompletedHandler *handler) = 0;
 virtual HRESULT STDMETHODCALLTYPE ClearBrowsingDataAll( ICoreWebView2ClearBrowsingDataCompletedHandler *handler) = 0;
+};
+
+struct ICoreWebView2Profile3 : ICoreWebView2Profile2 {
+virtual HRESULT STDMETHODCALLTYPE get_PreferredTrackingPreventionLevel( COREWEBVIEW2_TRACKING_PREVENTION_LEVEL *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_PreferredTrackingPreventionLevel( COREWEBVIEW2_TRACKING_PREVENTION_LEVEL value) = 0;
+};
+
+struct ICoreWebView2Profile4 : ICoreWebView2Profile3 {
+virtual HRESULT STDMETHODCALLTYPE SetPermissionState( COREWEBVIEW2_PERMISSION_KIND permissionKind, LPCWSTR origin, COREWEBVIEW2_PERMISSION_STATE state, ICoreWebView2SetPermissionStateCompletedHandler *handler) = 0;
+virtual HRESULT STDMETHODCALLTYPE GetNonDefaultPermissionSettings( ICoreWebView2GetNonDefaultPermissionSettingsCompletedHandler *handler) = 0;
+};
+
+struct ICoreWebView2Profile5 : ICoreWebView2Profile4 {
+virtual HRESULT STDMETHODCALLTYPE get_CookieManager( ICoreWebView2CookieManager **value) = 0;
+};
+
+struct ICoreWebView2Profile6 : ICoreWebView2Profile5 {
+virtual HRESULT STDMETHODCALLTYPE get_IsPasswordAutosaveEnabled( BOOL *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_IsPasswordAutosaveEnabled( BOOL value) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_IsGeneralAutofillEnabled( BOOL *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_IsGeneralAutofillEnabled( BOOL value) = 0;
+};
+
+struct ICoreWebView2Profile7 : ICoreWebView2Profile6 {
+virtual HRESULT STDMETHODCALLTYPE AddBrowserExtension( LPCWSTR extensionFolderPath, ICoreWebView2ProfileAddBrowserExtensionCompletedHandler *handler) = 0;
+virtual HRESULT STDMETHODCALLTYPE GetBrowserExtensions( ICoreWebView2ProfileGetBrowserExtensionsCompletedHandler *handler) = 0;
+};
+
+struct ICoreWebView2ProfileAddBrowserExtensionCompletedHandler : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE Invoke( HRESULT errorCode, ICoreWebView2BrowserExtension *result) = 0;
 };
 
 struct ICoreWebView2WebMessageReceivedEventArgs : IUnknown {
@@ -2271,6 +2313,85 @@ static bool LoadUrlWithHeaders(WebView* wv, Str url, const Header* headers, int 
     return ok;
 }
 
+// `load_extensions`: WebView2 expects one unpacked extension directory per
+// call, while the builder attribute names the directory that contains them.
+static bool LoadExtensions(ICoreWebView2* webview, Str extensionRoot) {
+    ICoreWebView2_13* webview13 = nullptr;
+    if (FAILED(webview->QueryInterface(__uuidof(ICoreWebView2_13), (void**)&webview13))) {
+        logf("wry: this WebView2 runtime cannot load browser extensions\n");
+        return false;
+    }
+
+    ICoreWebView2Profile* profile = nullptr;
+    ICoreWebView2Profile7* profile7 = nullptr;
+    bool ok = SUCCEEDED(webview13->get_Profile(&profile)) && profile &&
+              SUCCEEDED(profile->QueryInterface(__uuidof(ICoreWebView2Profile7),
+                                                (void**)&profile7)) &&
+              profile7;
+    Rel(&profile);
+    Rel(&webview13);
+    if (!ok) {
+        logf("wry: this WebView2 profile cannot load browser extensions\n");
+        Rel(&profile7);
+        return false;
+    }
+
+    WCHAR* root = WStrDupUtf8(extensionRoot);
+    size_t rootLen = wcslen(root);
+    bool hasSeparator = rootLen > 0 && (root[rootLen - 1] == L'\\' || root[rootLen - 1] == L'/');
+    size_t prefixLen = rootLen + (hasSeparator ? 0 : 1);
+    size_t pathCap = prefixLen + MAX_PATH + 1;
+    WCHAR* path = new WCHAR[pathCap];
+    wcscpy_s(path, pathCap, root);
+    if (!hasSeparator) {
+        wcscat_s(path, pathCap, L"\\");
+    }
+    wcscat_s(path, pathCap, L"*");
+
+    WIN32_FIND_DATAW found = {};
+    HANDLE iter = FindFirstFileW(path, &found);
+    if (iter == INVALID_HANDLE_VALUE) {
+        logf("wry: cannot enumerate the browser extension directory, error %d\n",
+             (int)GetLastError());
+        ok = false;
+    } else {
+        do {
+            if (found.cFileName[0] == L'.' &&
+                (found.cFileName[1] == 0 ||
+                 (found.cFileName[1] == L'.' && found.cFileName[2] == 0))) {
+                continue;
+            }
+            wcscpy_s(path + prefixLen, pathCap - prefixLen, found.cFileName);
+            auto* handler =
+                MkHandler<Handler2<ICoreWebView2ProfileAddBrowserExtensionCompletedHandler,
+                                   HRESULT, ICoreWebView2BrowserExtension*>>(
+                    nullptr, [](void*, HRESULT code, ICoreWebView2BrowserExtension*) -> HRESULT {
+                        if (FAILED(code)) {
+                            logf("wry: loading a browser extension failed, hr 0x%x\n", (int)code);
+                        }
+                        return S_OK;
+                    });
+            HRESULT hr = profile7->AddBrowserExtension(path, handler);
+            handler->Release();
+            if (FAILED(hr)) {
+                logf("wry: AddBrowserExtension failed, hr 0x%x\n", (int)hr);
+                ok = false;
+                break;
+            }
+        } while (FindNextFileW(iter, &found));
+        if (ok && GetLastError() != ERROR_NO_MORE_FILES) {
+            logf("wry: enumerating browser extensions failed, error %d\n", (int)GetLastError());
+            ok = false;
+        }
+        FindClose(iter);
+    }
+
+    delete[] path;
+    delete[] root;
+    Rel(&profile7);
+    return ok;
+}
+
 // ─── WebViewNew ──────────────────────────────────────────────────────────
 
 WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asChild) {
@@ -2398,6 +2519,11 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         WebViewSetBounds(wv, attrs->bounds);
     } else {
         ResizeToParent(wv);
+    }
+    if (attrs->browserExtensionsEnabled && attrs->extensionPath.len > 0 &&
+        !LoadExtensions(webview, attrs->extensionPath)) {
+        WebViewFree(wv);
+        return nullptr;
     }
     return wv;
 }

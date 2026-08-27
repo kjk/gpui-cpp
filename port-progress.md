@@ -8977,3 +8977,12 @@ by the pinned Rust closure. A failed post during teardown releases the copied
 response and all COM references, and a null protocol callback produces a 500
 response instead of crashing. The MSVC release test target compiles after the
 lifetime change.
+
+The extension builder path is now complete rather than half-wired. When
+browser extensions are enabled and `extensionPath` is present, construction
+queries the pinned `ICoreWebView2Profile7` ABI, enumerates the path exactly as
+Wry's `fs::read_dir` loop does and calls `AddBrowserExtension` for every
+entry. Directory, interface and synchronous WebView2 failures now fail
+construction instead of silently returning a webview with no extensions;
+asynchronous load failures are logged by the completion handler. The release
+webview example compiles with MSVC's strict warning set after the change.
