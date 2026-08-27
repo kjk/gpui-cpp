@@ -1570,6 +1570,20 @@ El* El::BoundsOut(gpui::Bounds* out) {
     boundsOut = out;
     return this;
 }
+El* El::ReportLineSpan(float lineHeight) {
+    lineSpan = true;
+    lineSpanHeight = lineHeight;
+    return this;
+}
+El* El::LineClamp(float cap, Listener onChange) {
+    lineClamp = true;
+    lineClampCap = cap > 0 ? cap : 0;
+    onLineClamp = onChange;
+    style.maxH = lineClampCap;
+    style.overflowX = Overflow::Hidden;
+    style.overflowY = Overflow::Hidden;
+    return this;
+}
 El* El::Cursor(CursorKind c) {
     cursor = c;
     return this;
@@ -4927,6 +4941,126 @@ static void DrawChart(PaintCtx* ctx, El* e) {
 
 static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay);
 
+bool LineSafeClipBottom(const LineSpan* spans, int count, float boxBottom,
+                        float contentBottom, float* outBottom) {
+    const float epsilon = 1.f;
+    float clip = boxBottom;
+    for (int i = 0; spans && i < count; i++) {
+        const LineSpan& span = spans[i];
+        if (span.lineHeight <= 0 || span.top >= boxBottom ||
+            span.bottom <= boxBottom + epsilon) {
+            continue;
+        }
+        float wholeLines = floorf((boxBottom - span.top) / span.lineHeight);
+        float lineTop = span.top + span.lineHeight * wholeLines;
+        // A line beginning on the box edge is below it, not straddling it.
+        if (lineTop < boxBottom - epsilon && lineTop < clip) {
+            clip = lineTop;
+        }
+    }
+
+    bool found = false;
+    float lastBottom = 0;
+    float lastHeight = 0;
+    for (int i = 0; spans && i < count; i++) {
+        const LineSpan& span = spans[i];
+        if (span.lineHeight <= 0) {
+            continue;
+        }
+        float bottom = span.top + span.lineHeight;
+        while (bottom <= span.bottom + epsilon) {
+            if (bottom <= clip + epsilon &&
+                (!found || bottom > lastBottom)) {
+                found = true;
+                lastBottom = bottom;
+                lastHeight = span.lineHeight;
+            }
+            bottom += span.lineHeight;
+        }
+        // A platform shaper can make the final row a little taller than the
+        // regular leading. Inline's own bottom is that row's safe boundary.
+        if (span.bottom <= clip + epsilon &&
+            (!found || span.bottom > lastBottom)) {
+            found = true;
+            lastBottom = span.bottom;
+            lastHeight = span.lineHeight;
+        }
+    }
+    if (!found) {
+        // A first line taller than the whole budget keeps the part that fits;
+        // an empty clamp looks broken where a cut one reads as more to come.
+        return false;
+    }
+    if (contentBottom > boxBottom + epsilon) {
+        float strip = clip - lastBottom;
+        if (strip > epsilon && strip < lastHeight) {
+            clip = lastBottom;
+        }
+    }
+    if (clip >= boxBottom - epsilon) {
+        return false;
+    }
+    if (outBottom) {
+        *outBottom = clip;
+    }
+    return true;
+}
+
+static Bounds BoundsIntersect(Bounds a, Bounds b) {
+    float x = a.x > b.x ? a.x : b.x;
+    float y = a.y > b.y ? a.y : b.y;
+    float right = a.Right() < b.Right() ? a.Right() : b.Right();
+    float bottom = a.Bottom() < b.Bottom() ? a.Bottom() : b.Bottom();
+    return {x, y, right > x ? right - x : 0.f,
+            bottom > y ? bottom - y : 0.f};
+}
+
+static Bounds HitMaskedBounds(PaintCtx* ctx, Bounds bounds) {
+    return ctx->hasHitMask ? BoundsIntersect(bounds, ctx->hitMask) : bounds;
+}
+
+static void LineClampCollect(El* e, Vec<LineSpan>* spans,
+                             float* contentBottom) {
+    if (!e) {
+        return;
+    }
+    if (e->lineSpan && e->lineSpanHeight > 0) {
+        spans->Append(LineSpan{e->y, e->y + e->h, e->lineSpanHeight});
+    }
+    for (El* c = e->first; c; c = c->next) {
+        // Deferred controls over a code block and window-level overlays are
+        // not document content. Rust's TextView state bounds excludes both.
+        if (c->style.absolute || c->style.fixed) {
+            continue;
+        }
+        float bottom = c->y + c->h;
+        if (bottom > *contentBottom) {
+            *contentBottom = bottom;
+        }
+        LineClampCollect(c, spans, contentBottom);
+    }
+}
+
+static bool ResolveLineClamp(PaintCtx* ctx, El* e, float* clipBottom) {
+    if (!e->lineClamp) {
+        return false;
+    }
+    Vec<LineSpan> spans;
+    float contentBottom = e->y + e->h;
+    LineClampCollect(e, &spans, &contentBottom);
+    float boxBottom = e->y + e->h;
+    bool clamped = contentBottom > boxBottom + 1.f;
+    if (e->onLineClamp.IsValid()) {
+        LineClampEvent ev = {clamped};
+        ListenerCall(ctx->app, ctx->window, e->onLineClamp, &ev);
+    }
+    bool tighter = clamped &&
+                   LineSafeClipBottom(spans.els, spans.len, boxBottom,
+                                      contentBottom, clipBottom);
+    spans.Reset();
+    return tighter;
+}
+
 static bool IsOverlay(El* e) {
     return e->style.fixed || e->style.deferred;
 }
@@ -5089,13 +5223,15 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                                       : 0);
     bool better = !ctx->pickHit || tier > ctx->pickTier ||
                   (tier == ctx->pickTier && ctx->paintDepth >= ctx->pick.depth);
-    if (ctx->picking && tier > 0 && better && e->w > 0 && e->h > 0 &&
-        e->Bounds().Contains({ctx->mouseX, ctx->mouseY})) {
+    Bounds maskedBounds = HitMaskedBounds(ctx, e->Bounds());
+    if (ctx->picking && tier > 0 && better && maskedBounds.w > 0 &&
+        maskedBounds.h > 0 &&
+        maskedBounds.Contains({ctx->mouseX, ctx->mouseY})) {
         InspectorPick p;
         p.id = e->clickId;
         p.elId = e->id;
         p.style = e->style;
-        p.bounds = e->Bounds();
+        p.bounds = maskedBounds;
         p.kind = (int)e->kind;
         p.hasBg = e->style.hasBg;
         p.bg = e->style.bg.color;
@@ -5124,7 +5260,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         HitRect hr;
         hr.id = e->clickId;
         hr.focusId = e->style.focusId;
-        hr.bounds = e->Bounds();
+        hr.bounds = maskedBounds;
         hr.onClick = e->onClick;
         hr.clickAction = e->clickAction;
         hr.clickActionArg = e->clickActionArg;
@@ -5276,8 +5412,22 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
 
     bool clip = e->style.overflowY != Overflow::Visible ||
                 e->style.overflowX != Overflow::Visible;
+    float clipBottom = e->y + e->h;
+    ResolveLineClamp(ctx, e, &clipBottom);
+    float clipH = clipBottom - e->y;
+    if (clipH < 0) clipH = 0;
     if (clip) {
-        CanvasPushClip(ctx, e->x, e->y, e->w, e->h);
+        CanvasPushClip(ctx, e->x, e->y, e->w, clipH);
+    }
+
+    Bounds previousHitMask = ctx->hitMask;
+    bool previousHasHitMask = ctx->hasHitMask;
+    if (clip) {
+        Bounds ownMask = {e->x, e->y, e->w, clipH};
+        ctx->hitMask = previousHasHitMask
+                           ? BoundsIntersect(previousHitMask, ownMask)
+                           : ownMask;
+        ctx->hasHitMask = true;
     }
 
     // InputElement's input_bounds: the box a press maps against. The
@@ -5513,6 +5663,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     for (El* c = e->first; c; c = c->next) {
         PaintElNode(ctx, c, skipOverlay);
     }
+    ctx->hitMask = previousHitMask;
+    ctx->hasHitMask = previousHasHitMask;
     ctx->hitParent = outerHitParent;
     ctx->paintDepth--;
 

@@ -9321,3 +9321,13 @@ the outer frame paints `tokens.table`, inner rules use `tableRowBorder`, and
 the first row paints `tokens.tableHead` with `tableHeadFg` at normal weight.
 `TextViewStyle::TableHead` carries the new header-row refinement and
 participates in style equality.
+
+`a9edc3e2` adds `TextView::MaxLines` and the retained
+`TextViewState::IsClamped` answer. The C++ element runtime now keeps the full
+document laid out below the capped fit-content box, gathers one vertical span
+per Markdown Inline, and ports Rust's one-pixel-tolerant whole-line clipping
+algorithm. The resulting content mask also clips descendant hit rectangles,
+so a hidden link cannot remain clickable. Scrollable TextViews ignore the
+cap, selection still covers the full source, and the new `text_max_lines`
+example carries the upstream slider, long/short previews and Show more state.
+Release tests pass 20,901 checks and the release example target builds.

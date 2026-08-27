@@ -174,6 +174,7 @@ export const simpleExamples = [
   "tooltip_top_edge",
   "table_in_scrollable",
   "text_selection",
+  "text_max_lines",
   "markdown_table",
   "rich_text",
   "stream_markdown",

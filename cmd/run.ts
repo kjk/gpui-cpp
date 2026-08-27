@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "26849e063f53a5d1c18a25d42bc6b34f75720176",
+  sha: "a9edc3e294a7209e37561ac92e418e910f86f11e",
   date: "2026-08-26",
-  subject: "markdown: Style tables with the `table_*` theme tokens (#2834)",
+  subject: "text_view: Add `max_lines` to clamp rendered content to whole lines (#2829)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
@@ -728,6 +728,7 @@ const rustExamplePkgs = new Set([
   "system_monitor",
   "table_in_scrollable",
   "text_selection",
+  "text_max_lines",
   "tooltip_top_edge",
   "webview",
   "window_title",

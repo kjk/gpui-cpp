@@ -443,6 +443,17 @@ void TextViewState::OnScroll(TextViewState* state, Ctx* cx,
     Notify(cx);
 }
 
+void TextViewState::OnLineClamp(TextViewState* state, Ctx* cx,
+                                const LineClampEvent* event) {
+    if (!state || !event || state->clamped == event->clamped) {
+        return;
+    }
+    state->clamped = event->clamped;
+    // Rust notifies on a transition so an observer gating an expand button on
+    // is_clamped() gets one more frame with the now-settled answer.
+    Notify(cx);
+}
+
 // What Word and Inline take to mean "name no colour at all", so the run
 // inherits the one the container above the view pushed. A transparent text
 // colour would draw nothing, so nothing else can want it.
@@ -1565,9 +1576,11 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
         }
         if (align == MdAlignCenter || align == MdAlignRight) {
             // The text shrink-wraps so the box around it can push it over.
-            return AlignRow(Div(a)->FlexRow()->W(kFill), align)->Child(t);
+            return AlignRow(Div(a)->FlexRow()->W(kFill), align)
+                ->Child(t)
+                ->ReportLineSpan(font * kLineHeight);
         }
-        return t->W(kFill);
+        return t->W(kFill)->ReportLineSpan(font * kLineHeight);
     }
     // Otherwise the flow is a column of wrapping rows — a hard break ends a
     // row — and each row is a run of styled words. Every word carries its own
@@ -1629,7 +1642,7 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
     }
     flush();
     col->Child(row);
-    return col;
+    return col->ReportLineSpan(font * kLineHeight);
 }
 
 static int RunsLen(MdNode* n) {
@@ -1870,7 +1883,7 @@ El* TextView::CodeBlock(MdNode* n) {
             t->Selectable();
             SrcMark(t, 0);
         }
-        box->Child(t);
+        box->Child(t->ReportLineSpan(codeFont * kLineHeight));
     }
     if (codeActions) {
         // `div().id("actions").absolute().top_2().right_2().bg(muted)
@@ -1904,7 +1917,7 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
     // which keeps a line of code down to a handful.
     char* piece = (char*)Alloc(a, code.len + 1);
     if (!piece) {
-        return col;
+        return col->ReportLineSpan(lineH);
     }
     int len = 0;
     Rgba color = th.foreground;
@@ -1950,7 +1963,7 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
     }
     flush();
     col->Child(row);
-    return col;
+    return col->ReportLineSpan(lineH);
 }
 
 // node.rs render_scroll_table, which is what `style.table` opts a table into
@@ -2530,6 +2543,7 @@ El* TextView::IntoEl() {
         managed->selectable = selectable;
         managed->selectionFormat = selFormat;
         managed->scrollable = scrollable;
+        managed->maxLines = scrollable ? -1 : maxLines;
         managed->textViewStyle = textViewStyle;
     }
 
@@ -2546,6 +2560,17 @@ El* TextView::IntoEl() {
     }
     El* element = Blocks(Div(a)->FlexCol()->W(kFill), doc, 0, false);
     UiTextViewStatePop(cx->app);
+
+    // max_lines is fit-content only: cap at body-text leading, keep the full
+    // subtree laid out underneath, then let paint snap the mask to a whole
+    // Inline boundary. A zero count intentionally produces an empty box.
+    if (!scrollable && maxLines >= 0) {
+        float cap = baseFont * kLineHeight * (float)maxLines;
+        element->LineClamp(
+            cap, state.IsValid()
+                     ? ListenTo(state, &TextViewState::OnLineClamp)
+                     : Listener{});
+    }
 
     if (scrollable && cx->win && managed) {
         uint32_t name = (uint32_t)(state.id.index + 1) * 1000003u +
@@ -2676,6 +2701,11 @@ TextView* TextView::TableScroll(bool on) {
 
 TextView* TextView::Scrollable(bool on) {
     scrollable = on;
+    return this;
+}
+
+TextView* TextView::MaxLines(int count) {
+    maxLines = count >= 0 ? count : 0;
     return this;
 }
 

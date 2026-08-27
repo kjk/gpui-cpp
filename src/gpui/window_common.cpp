@@ -391,6 +391,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.pickHit = false;
     win->paint.paintDepth = 0;
     win->paint.hitParent = -1;
+    win->paint.hasHitMask = false;
+    win->paint.hitMask = {};
     win->paint.pickTier = 0;
     win->paint.pick = {};
     if (win->inspector.pending) {
@@ -478,6 +480,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     IdsCollect(root);
 
     win->paint.app = win->app;
+    win->paint.window = win;
     const RuntimeStyle& th = RuntimeStyleNow(win->app);
     CanvasClear(&win->paint, th.background);
     gFrameLayoutSecs = 0;

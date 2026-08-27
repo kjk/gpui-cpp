@@ -384,6 +384,10 @@ struct TextViewState {
     float scrollY = 0;
     bool selectable = false;
     bool scrollable = false;
+    // TextView::max_lines. -1 is unset; a scrollable view ignores the cap.
+    int maxLines = -1;
+    // Whether the last painted frame overflowed that cap.
+    bool clamped = false;
     gpui::SelectionFormat selectionFormat = gpui::SelectionFormat::Plain;
 
     ~TextViewState();
@@ -394,6 +398,7 @@ struct TextViewState {
     void PushStr(Str value, App* app, Window* window = nullptr);
     void SetSelectable(bool value, App* app, Window* window = nullptr);
     void SetScrollable(bool value, App* app, Window* window = nullptr);
+    bool IsClamped() const { return clamped; }
     void SetSelectionFormat(gpui::SelectionFormat value, App* app,
                             Window* window = nullptr);
     int SelectedText(Window* window, char* out, int cap) const;
@@ -404,6 +409,8 @@ struct TextViewState {
                          const ActionEvent* event);
     static void OnScroll(TextViewState* self, Ctx* cx,
                          const ScrollEvent* event);
+    static void OnLineClamp(TextViewState* self, Ctx* cx,
+                            const LineClampEvent* event);
 
   private:
     void Changed(App* app, Window* window, bool selectionCompatible);
@@ -463,6 +470,8 @@ struct TextView {
     // current runtime lays all blocks rather than virtualizing them through
     // gpui::list, but preserves the state and interaction contract.
     bool scrollable = false;
+    // TextView::max_lines. -1 is absent; zero is a valid empty cap.
+    int maxLines = -1;
     // How many scrolling tables have been built this frame, which is what
     // names each one's scroll offset.
     int tableIx = 0;
@@ -493,6 +502,9 @@ struct TextView {
     TextView* TableColumnWidth(float px);
     TextView* TableScroll(bool on = true);
     TextView* Scrollable(bool on = true);
+    // Clamp fit-content rendering to this many body-text lines. The runtime
+    // snaps the mask to whole descendant Inline lines; ignored by Scrollable.
+    TextView* MaxLines(int count);
     TextView* ParagraphGap(float px);
     // text_view::LinkClickHandlerFn. The handler's intptr_t is the link's
     // href as a NUL-terminated `const char*`; it points into the parse the

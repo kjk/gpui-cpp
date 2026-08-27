@@ -669,6 +669,14 @@ struct HoverEvent {
     bool hovered = false;
 };
 
+// TextView::max_lines reports whether its natural content ran past the capped
+// box after layout. Kept in gpui because the line clamp itself is an element
+// seam: ui/text supplies the state listener, while the runtime owns the final
+// boxes and content mask.
+struct LineClampEvent {
+    bool clamped = false;
+};
+
 // cx.listener(...): a handler plus the entity it runs against. Dispatch looks
 // the entity up and drops the event if the handle went stale.
 //
@@ -1745,6 +1753,17 @@ struct El {
     // report the box layout gave it; a caller that has to answer "what is
     // under the pointer" needs last frame's boxes to do it.
     gpui::Bounds* boundsOut = nullptr;
+    // A descendant Inline reports its laid-out vertical extent to the nearest
+    // line-clamped ancestor. TextView marks one box per Inline, matching
+    // inline.rs; the runtime can then keep a straddling glyph line out whole.
+    bool lineSpan = false;
+    float lineSpanHeight = 0;
+    // TextView::max_lines. lineClampCap is already in DIPs (body line height
+    // times the requested count); the full subtree remains laid out under the
+    // capped box so paint can tell whether it overflowed and find a safe mask.
+    bool lineClamp = false;
+    float lineClampCap = 0;
+    Listener onLineClamp;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
     // their own closures; there are no closures on an element here, so the
@@ -2078,6 +2097,8 @@ struct El {
     // way `OnDrop` names it.
     El* DragOver(Str dragKind, const struct StateStyle& s);
     El* BoundsOut(gpui::Bounds* out);
+    El* ReportLineSpan(float lineHeight);
+    El* LineClamp(float cap, Listener onChange = {});
     El* Cursor(CursorKind c);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
     El* BindSliderBounds(SliderState* s);
@@ -2476,6 +2497,7 @@ struct InspectorState {
 
 struct PaintCtx {
     App* app = nullptr;
+    Window* window = nullptr;
     PaintApp* pa = nullptr;
     PaintTarget* rt = nullptr;
     // Window::element_opacity: the Style::opacity of everything this element
@@ -2525,6 +2547,11 @@ struct PaintCtx {
     // The enclosing hit rect while the tree paints, which is what a hit rect
     // records as its parent.
     int hitParent = -1;
+    // GPUI's current ContentMask, projected onto hitboxes as well as drawing.
+    // Overflow and TextView's whole-line clamp intersect this on the way down
+    // the paint tree, so content hidden by a viewport cannot still be clicked.
+    Bounds hitMask = {};
+    bool hasHitMask = false;
     // The inspector picking an element: every box under the pointer overwrites
     // this as it paints, so the deepest one wins — which is the one a click
     // would land on.
@@ -2564,6 +2591,19 @@ struct PaintCtx {
 
     PaintCtx() = default;
 };
+
+// One Inline's laid-out vertical extent. These helpers are public so the
+// whole-line rule can be tested independently of a platform text backend.
+struct LineSpan {
+    float top = 0;
+    float bottom = 0;
+    float lineHeight = 0;
+};
+
+// Rust's line_safe_clip_bottom. True means `outBottom` is a tighter clip than
+// boxBottom; false leaves the ordinary box-edge overflow clip in force.
+bool LineSafeClipBottom(const LineSpan* spans, int count, float boxBottom,
+                        float contentBottom, float* outBottom);
 
 struct FocusRect {
     int id = 0;

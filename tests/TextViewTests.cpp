@@ -992,6 +992,83 @@ static void TestMarkdownTableThemeTokens() {
     AppGlobalClear(&app);
 }
 
+static int CountReportedLineSpans(El* e) {
+    if (!e) return 0;
+    int count = e->lineSpan ? 1 : 0;
+    for (El* child = e->first; child; child = child->next) {
+        count += CountReportedLineSpans(child);
+    }
+    return count;
+}
+
+static float TextViewSubtreeBottom(El* e) {
+    if (!e) return 0;
+    float bottom = e->y + e->h;
+    for (El* child = e->first; child; child = child->next) {
+        float childBottom = TextViewSubtreeBottom(child);
+        if (childBottom > bottom) bottom = childBottom;
+    }
+    return bottom;
+}
+
+static void TestTextViewMaxLines() {
+    LineSpan spans[] = {
+        {0, 60, 20},
+        {68, 128, 20},
+    };
+    float clip = 0;
+    utassert(LineSafeClipBottom(spans, 2, 100, 400, &clip));
+    utassert(fabsf(clip - 88) < 0.01f);
+    utassert(!LineSafeClipBottom(spans, 2, 88, 400, &clip));
+    utassert(LineSafeClipBottom(spans, 2, 64, 400, &clip));
+    utassert(fabsf(clip - 60) < 0.01f);
+    utassert(!LineSafeClipBottom(spans, 1, 200, 400, &clip));
+    utassert(!LineSafeClipBottom(spans, 2, 130, 128, &clip));
+
+    LineSpan heading[] = {{70, 98, 28}};
+    utassert(!LineSafeClipBottom(heading, 1, 96, 400, &clip));
+    LineSpan rows[] = {{100, 126, 26}, {135, 161, 26}};
+    utassert(LineSafeClipBottom(rows, 2, 148, 400, &clip));
+    utassert(fabsf(clip - 126) < 0.01f);
+
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+    Entity<TextViewState> state = TextViewState::Markdown(
+        &app, StrL("first\n\nsecond\n\nthird\n\nfourth"));
+    El* clamped = TextView::New(&cx, state)->MaxLines(2)->IntoEl();
+    TextViewState* managed = state.Get(&app);
+    utassert(clamped && clamped->lineClamp);
+    utassert(clamped && clamped->style.overflowX == Overflow::Hidden &&
+             clamped->style.overflowY == Overflow::Hidden);
+    utassert(clamped &&
+             fabsf(clamped->lineClampCap - 2 * 16.f * kLineHeight) < 0.01f);
+    utassert(CountReportedLineSpans(clamped) == 4);
+    utassert(managed && managed->maxLines == 2 && !managed->IsClamped());
+    win->paint.app = &app;
+    win->paint.window = win;
+    const Theme& th = ThemeNow(&app);
+    LayoutEl(&win->paint, clamped, 0, 0, 200, 500, th.fontSize,
+             th.foreground);
+    utassert(clamped->h <= clamped->lineClampCap + 0.01f);
+    utassert(TextViewSubtreeBottom(clamped) > clamped->y + clamped->h + 1.f);
+
+    El* scrolling = TextView::New(&cx, state)
+                        ->MaxLines(2)
+                        ->Scrollable()
+                        ->IntoEl();
+    utassert(scrolling && !scrolling->lineClamp);
+    utassert(managed && managed->maxLines == -1);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
 static void TestTextViewKeys() {
     KeymapClear();
     TextViewInitKeys();
@@ -1120,6 +1197,7 @@ void TestTextView() {
     TestTextViewKeys();
     TestManagedTextViewAndParseTimePlugins(a);
     TestMarkdownTableThemeTokens();
+    TestTextViewMaxLines();
 #if GPUI_MARKDOWN_FULL
     TestMarkdownTaskList(a);
 #endif
