@@ -1070,6 +1070,26 @@ static WCHAR* WStrDupUtf8(Str s) {
     return WStrDup(ToCWstrTemp(s));
 }
 
+// The SDK loader treats an absent or empty override as unset. The value is
+// heap-owned because environment variables are not bounded by MAX_PATH and
+// may change between the size and value queries.
+static WCHAR* EnvironmentVariableDup(const WCHAR* name) {
+    DWORD cap = GetEnvironmentVariableW(name, nullptr, 0);
+    if (cap == 0) {
+        return nullptr;
+    }
+    WCHAR* value = (WCHAR*)malloc((size_t)cap * sizeof(WCHAR));
+    if (!value) {
+        return nullptr;
+    }
+    DWORD len = GetEnvironmentVariableW(name, value, cap);
+    if (len == 0 || len >= cap) {
+        free(value);
+        return nullptr;
+    }
+    return value;
+}
+
 static bool StrStartsWith(Str s, Str prefix) {
     if (prefix.len > s.len) {
         return false;
@@ -1301,6 +1321,10 @@ static void DefaultUserDataFolder(WCHAR* out, int cap) {
 static HRESULT CreateEnvironmentWithOptions(
     PCWSTR userDataFolder, IUnknown* options,
     ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler* handler) {
+    WCHAR* userDataOverride = EnvironmentVariableDup(L"WEBVIEW2_USER_DATA_FOLDER");
+    if (userDataOverride) {
+        userDataFolder = userDataOverride;
+    }
     WCHAR defaultFolder[MAX_PATH * 2];
     if (!userDataFolder || userDataFolder[0] == 0) {
         DefaultUserDataFolder(defaultFolder, (int)(sizeof(defaultFolder) / sizeof(WCHAR)));
@@ -1309,22 +1333,29 @@ static HRESULT CreateEnvironmentWithOptions(
     RuntimeInfo rt;
     if (!FindRuntime(&rt)) {
         logf("wry: no WebView2 runtime found\n");
+        free(userDataOverride);
         return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
     }
     HMODULE client = LoadLibraryW(rt.clientDll);
     if (!client) {
+        DWORD error = GetLastError();
         logf("wry: LoadLibrary of the WebView2 client dll failed, error %d\n",
-             (int)GetLastError());
-        return HRESULT_FROM_WIN32(GetLastError());
+             (int)error);
+        HRESULT hr = HRESULT_FROM_WIN32(error);
+        free(userDataOverride);
+        return hr;
     }
     auto create = (CreateWebViewEnvironmentWithOptionsInternalFn)GetProcAddress(
         client, "CreateWebViewEnvironmentWithOptionsInternal");
     if (!create) {
         logf("wry: the WebView2 client dll has no CreateWebViewEnvironmentWithOptionsInternal\n");
         FreeLibrary(client);
+        free(userDataOverride);
         return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
-    return create(TRUE, rt.runtimeType, userDataFolder, options, handler);
+    HRESULT hr = create(TRUE, rt.runtimeType, userDataFolder, options, handler);
+    free(userDataOverride);
+    return hr;
 }
 
 // `platform_webview_version` — the runtime's own version, which is what
@@ -2367,6 +2398,33 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
                                          attrs->proxyConfig.host, attrs->proxyConfig.port));
         }
         options->additionalBrowserArguments = WStrDupUtf8(args.TakeStr());
+    }
+
+    // WebView2Loader appends this override to the options object's own
+    // arguments. Preserve an explicit empty builder value while doing so.
+    WCHAR* browserArgumentsOverride =
+        EnvironmentVariableDup(L"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS");
+    if (browserArgumentsOverride) {
+        size_t ownLen = options->additionalBrowserArguments
+                            ? wcslen(options->additionalBrowserArguments)
+                            : 0;
+        size_t overrideLen = wcslen(browserArgumentsOverride);
+        size_t total = ownLen + (ownLen > 0 ? 1 : 0) + overrideLen + 1;
+        WCHAR* combined = (WCHAR*)malloc(total * sizeof(WCHAR));
+        if (!combined) {
+            free(browserArgumentsOverride);
+            options->Release();
+            return nullptr;
+        }
+        combined[0] = 0;
+        if (ownLen > 0) {
+            wcscpy_s(combined, total, options->additionalBrowserArguments);
+            wcscat_s(combined, total, L" ");
+        }
+        wcscat_s(combined, total, browserArgumentsOverride);
+        free(browserArgumentsOverride);
+        free(options->additionalBrowserArguments);
+        options->additionalBrowserArguments = combined;
     }
 
     options->browserExtensionsEnabled = attrs->browserExtensionsEnabled ? TRUE : FALSE;

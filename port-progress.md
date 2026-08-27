@@ -9177,3 +9177,11 @@ defaults are preserved too: exclusive profile access and custom crash reporting
 off, tracking prevention on, most-stable channel search, and all four public
 release channels enabled. Custom-scheme registration storage and pointer checks
 complete the actual COM contracts even though this Wry backend does not set them.
+
+The written-out WebView2 loader now honors `WEBVIEW2_USER_DATA_FOLDER` and
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, completing the three path/argument
+environment overrides used by Microsoft's loader (the fixed-runtime
+`WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` path was already present). Browser
+arguments are appended after Wry's builder/default arguments and an overridden
+profile path is applied before the executable-derived fallback, matching the
+pinned loader's precedence.
