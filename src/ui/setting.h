@@ -8,6 +8,7 @@
 
 #include "ui/sizing.h"
 #include "ui/searchable_list.h"
+#include "ui/group_box.h"
 
 namespace gpui {
 
@@ -22,7 +23,7 @@ namespace component {
 // does the reading, the writing, the dirty test and the reset itself. Element
 // is Rust's `SettingField::element`, the escape hatch where the caller builds
 // the control.
-enum class SettingFieldKind : uint8_t {
+enum class SettingFieldType : uint8_t {
     Element,
     Switch,
     Checkbox,
@@ -30,6 +31,9 @@ enum class SettingFieldKind : uint8_t {
     NumberInput,
     Dropdown
 };
+
+// Compatibility spelling from the first port. New code uses the source name.
+using SettingFieldKind = SettingFieldType;
 
 // NumberFieldOptions: what a NumberInput field's two steppers obey. Rust's
 // defaults are the whole f64 range and a step of one.
@@ -39,12 +43,171 @@ struct NumberFieldOptions {
     double step = 1;
 };
 
+// The immutable context passed to every field renderer. Rust narrows copies
+// as it descends page -> group -> item; the POD port does the same explicitly.
+struct RenderOptions {
+    int pageIx = 0;
+    int groupIx = 0;
+    int itemIx = 0;
+    UiSize size = UiSize::Medium;
+    GroupBoxVariant groupVariant = GroupBoxVariant::Normal;
+    Axis layout = Axis::Horizontal;
+    bool disabled = false;
+
+    static RenderOptions New();
+    RenderOptions WithPageIx(int value) const;
+    RenderOptions WithGroupIx(int value) const;
+    RenderOptions WithItemIx(int value) const;
+    RenderOptions WithSize(UiSize value) const;
+    RenderOptions WithGroupVariant(GroupBoxVariant value) const;
+    RenderOptions WithLayout(Axis value) const;
+    RenderOptions WithDisabled(bool value) const;
+};
+
+// Rust expresses this as a trait. The C++ port's no-owning-callback seam is a
+// renderer plus its caller-owned payload; it has the same RenderOptions input.
+using SettingFieldElementFn =
+    El* (*)(void* user, const RenderOptions* options, Ctx* cx);
+
+struct SettingFieldElement {
+    void* user = nullptr;
+    SettingFieldElementFn renderField = nullptr;
+
+    bool IsValid() const { return renderField != nullptr; }
+    El* Render(const RenderOptions* options, Ctx* cx) const {
+        return renderField ? renderField(user, options, cx) : nullptr;
+    }
+};
+
+template <typename T>
+using SettingValueFn = T (*)(void* user, const App* app);
+template <typename T>
+using SettingSetValueFn = void (*)(void* user, T value, App* app);
+using SettingDirtyFn = bool (*)(void* user, const App* app);
+using SettingResetFn = void (*)(void* user, Ctx* cx);
+
+template <typename T>
+inline bool SettingValueSame(const T& a, const T& b) {
+    return a == b;
+}
+
+template <>
+inline bool SettingValueSame<Str>(const Str& a, const Str& b) {
+    return StrSame(a, b);
+}
+
+// A source-shaped typed field. Rust retains Rc closures; this tree retains
+// plain function pointers and a caller-owned payload. This contract is useful
+// independently of the Settings frame builder and is type-erased below.
+template <typename T>
+struct SettingField {
+    SettingFieldType fieldType = SettingFieldType::Element;
+    void* user = nullptr;
+    SettingValueFn<T> value = nullptr;
+    SettingSetValueFn<T> setValue = nullptr;
+    T defaultValue = {};
+    bool hasDefault = false;
+    SettingDirtyFn dirty = nullptr;
+    SettingResetFn reset = nullptr;
+    NumberFieldOptions number = {};
+    const SearchableItem* dropdownOptions = nullptr;
+    int dropdownOptionsLen = 0;
+    bool dropdownScrollable = false;
+    SettingFieldElement element = {};
+
+    static SettingField New(SettingFieldType type, void* user,
+                            SettingValueFn<T> getValue,
+                            SettingSetValueFn<T> putValue) {
+        SettingField out;
+        out.fieldType = type;
+        out.user = user;
+        out.value = getValue;
+        out.setValue = putValue;
+        return out;
+    }
+    SettingField& DefaultValue(T value_) {
+        defaultValue = value_;
+        hasDefault = true;
+        return *this;
+    }
+    SettingField& OnReset(SettingDirtyFn isDirty, SettingResetFn doReset) {
+        dirty = isDirty;
+        reset = doReset;
+        return *this;
+    }
+    bool IsResettable(const App* app) const {
+        if (dirty) {
+            return dirty(user, app);
+        }
+        if (fieldType == SettingFieldType::Element || !hasDefault || !value) {
+            return false;
+        }
+        return !SettingValueSame(value(user, app), defaultValue);
+    }
+    void Reset(Ctx* cx) const {
+        if (reset) {
+            reset(user, cx);
+        } else if (hasDefault && setValue) {
+            setValue(user, defaultValue, cx ? cx->app : nullptr);
+        }
+    }
+};
+
+using SettingFieldTypeId = uintptr_t;
+
+template <typename T>
+inline SettingFieldTypeId SettingFieldTypeOf() {
+    static const uint8_t tag = 0;
+    return (SettingFieldTypeId)&tag;
+}
+
+// The Rust trait object, represented without RTTI. It retains the concrete
+// field address and trampolines only the operations Settings needs.
+struct AnySettingField {
+    void* field = nullptr;
+    SettingFieldTypeId typeId = 0;
+    SettingFieldType fieldType = SettingFieldType::Element;
+    bool (*isResettable)(void* field, const App* app) = nullptr;
+    void (*reset)(void* field, Ctx* cx) = nullptr;
+
+    bool IsValid() const { return field != nullptr; }
+    bool IsResettable(const App* app) const {
+        return isResettable && isResettable(field, app);
+    }
+    void Reset(Ctx* cx) const {
+        if (reset) {
+            reset(field, cx);
+        }
+    }
+};
+
+template <typename T>
+inline AnySettingField EraseSettingField(SettingField<T>* field) {
+    AnySettingField out;
+    out.field = field;
+    out.typeId = SettingFieldTypeOf<T>();
+    out.fieldType = field ? field->fieldType : SettingFieldType::Element;
+    out.isResettable = [](void* p, const App* app) {
+        return ((SettingField<T>*)p)->IsResettable(app);
+    };
+    out.reset = [](void* p, Ctx* cx) { ((SettingField<T>*)p)->Reset(cx); };
+    return out;
+}
+
+// Which page and optional group should be selected initially. `-1` is Rust's
+// `None`; group zero remains distinguishable from no deferred group scroll.
+struct SelectIndex {
+    int pageIx = 0;
+    int groupIx = -1;
+};
+
 // SettingItem::Item: the title, what it is for, and the control that changes
 // it. `keywords` is what the search box matches on beyond the two strings.
 struct SettingItem {
     Str title = {};
     Str description = {};
     El* control = nullptr;
+    SettingFieldElement fieldElement = {};
     ArenaVec<Str> keywords;
     bool disabled = false;
     // is_resettable / on_reset: an item that has been changed shows a reset
@@ -137,6 +300,7 @@ struct SettingFieldInput {
 struct SettingsState {
     int page = 0;
     int group = -1;
+    bool selectionInitialized = false;
     // `SettingsState { search_input: cx.new(|cx| InputState::new(window, cx)
     // .placeholder(t!("Settings.search_placeholder"))), .. }`: the pane's own
     // field, made with the state rather than asked of the application. Every
@@ -178,8 +342,12 @@ struct Settings {
     // The three levels grow into the frame arena the builder is on, so a
     // page is as long as the caller makes it.
     ArenaVec<SettingPage> pages;
-    float sidebarWidth = 220;
+    float sidebarWidth = 250;
+    float sidebarMinWidth = 160;
+    float sidebarMaxWidth = 360;
     float h = 480;
+    UiSize size = UiSize::Medium;
+    SelectIndex defaultSelectedIndex = {};
     // GroupBoxVariant: whether a group is a card with a border or a plain
     // run of rows under a heading.
     bool bordered = true;
@@ -191,6 +359,7 @@ struct Settings {
                    Str description = {});
     Settings* Group(Str title, Str description = {});
     Settings* Item(Str title, Str description, El* control = nullptr);
+    Settings* FieldElement(SettingFieldElement element);
     // The typed fields, each filling in the control of the item last added.
     // `defValue` is Rust's `default_value`: naming one is what puts the reset
     // button behind the item, and a Str default has to outlive the frame.
@@ -218,6 +387,9 @@ struct Settings {
     Settings* Resettable(bool dirty, Listener onReset);
     Settings* Layout(Axis axis);
     Settings* SidebarWidth(float v);
+    Settings* SidebarSizeRange(float minWidth, float maxWidth);
+    Settings* WithSize(UiSize value);
+    Settings* DefaultSelectedIndex(SelectIndex value);
     Settings* H(float v);
     Settings* Bordered(bool v);
     El* IntoEl();

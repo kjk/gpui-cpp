@@ -8255,3 +8255,31 @@ full: the audit moves to 106 full, 15 partial, 8 adapters and 2 exclusions
 with 237 unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 20,276 checks; wasm passes
 its 19,571 applicable checks. The release story gallery compiles unchanged.
+
+## UI setting restores typed fields and render context
+
+The settings pane already rendered pages, groups, filtering, reset controls
+and all built-in field kinds, but it flattened the source field model into
+`SettingItem` members. The public `SettingFieldType`, typed `SettingField<T>`,
+`AnySettingField`, `SettingFieldElement`, `RenderOptions` and `SelectIndex`
+contracts were missing, and the pane used port-specific 220-pixel/small-field
+defaults instead of the source defaults.
+
+The exact source types now have no-STL counterparts. Typed fields retain
+caller-owned getter/setter payloads, typed defaults and custom dirty/reset
+handlers; `AnySettingField` erases them through stable template type ids and
+function-pointer trampolines without RTTI. Custom field elements receive the
+same immutable page/group/item, size, group-variant, axis and disabled render
+context as built-in fields. Those options now flow through the actual field
+renderer, including source-default medium sizing. Initial page/group
+selection is applied once, and the sidebar now starts at 250 pixels and
+honors the source 160..360 range when resolving its width. The older
+`SettingFieldKind` spelling remains an alias for compatibility.
+
+Tests cover typed and custom reset precedence, type erasure and distinct type
+ids, element-render callbacks, immutable option narrowing and optional group
+selection. UI setting is full: the audit moves to 107 full, 14 partial, 8
+adapters and 2 exclusions with 231 unresolved partial-module spellings and no
+full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
+20,299 checks; wasm passes its 19,594 applicable checks. The release story
+gallery compiles unchanged.

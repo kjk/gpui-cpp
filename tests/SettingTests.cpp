@@ -79,9 +79,112 @@ static void APageIsShownWhenAnyGroupIs() {
     ArenaDelete(a);
 }
 
+struct BoolSettingTarget {
+    bool value = false;
+    int sets = 0;
+    bool customDirty = false;
+    int customResets = 0;
+};
+
+static bool GetBoolSetting(void* user, const App*) {
+    return ((BoolSettingTarget*)user)->value;
+}
+
+static void SetBoolSetting(void* user, bool value, App*) {
+    BoolSettingTarget* target = (BoolSettingTarget*)user;
+    target->value = value;
+    target->sets++;
+}
+
+static bool IsCustomSettingDirty(void* user, const App*) {
+    return ((BoolSettingTarget*)user)->customDirty;
+}
+
+static void ResetCustomSetting(void* user, Ctx*) {
+    ((BoolSettingTarget*)user)->customResets++;
+}
+
+static void TypedFieldsRetainSourceResetSemanticsWithoutRtti() {
+    BoolSettingTarget target;
+    SettingField<bool> field = SettingField<bool>::New(
+        SettingFieldType::Switch, &target, GetBoolSetting, SetBoolSetting);
+    utassert(field.fieldType == SettingFieldType::Switch);
+    utassert(!field.IsResettable(nullptr));
+
+    field.DefaultValue(false);
+    utassert(!field.IsResettable(nullptr));
+    target.value = true;
+    utassert(field.IsResettable(nullptr));
+
+    AnySettingField any = EraseSettingField(&field);
+    utassert(any.IsValid());
+    utassert(any.typeId == SettingFieldTypeOf<bool>());
+    utassert(any.fieldType == SettingFieldType::Switch);
+    utassert(any.IsResettable(nullptr));
+    any.Reset(nullptr);
+    utassert(!target.value && target.sets == 1);
+
+    field.OnReset(IsCustomSettingDirty, ResetCustomSetting);
+    target.customDirty = false;
+    utassert(!any.IsResettable(nullptr));
+    target.customDirty = true;
+    utassert(any.IsResettable(nullptr));
+    any.Reset(nullptr);
+    utassert(target.customResets == 1 && target.sets == 1);
+
+    SettingField<Str> element = SettingField<Str>::New(
+        SettingFieldType::Element, nullptr, nullptr, nullptr);
+    element.DefaultValue(StrL("unused"));
+    utassert(!element.IsResettable(nullptr));
+    utassert(SettingFieldTypeOf<Str>() != SettingFieldTypeOf<bool>());
+}
+
+struct FieldElementCapture {
+    RenderOptions options = {};
+    int calls = 0;
+};
+
+static El* CaptureFieldOptions(void* user, const RenderOptions* options, Ctx*) {
+    FieldElementCapture* capture = (FieldElementCapture*)user;
+    capture->options = *options;
+    capture->calls++;
+    return nullptr;
+}
+
+static void RenderOptionsNarrowCopiesAndReachCustomFields() {
+    RenderOptions base = RenderOptions::New();
+    RenderOptions item = base.WithPageIx(2)
+                             .WithGroupIx(3)
+                             .WithItemIx(4)
+                             .WithSize(UiSize::Large)
+                             .WithGroupVariant(GroupBoxVariant::Outline)
+                             .WithLayout(Axis::Vertical)
+                             .WithDisabled(true);
+    utassert(base.pageIx == 0 && base.layout == Axis::Horizontal &&
+             !base.disabled && base.size == UiSize::Medium);
+    utassert(item.pageIx == 2 && item.groupIx == 3 && item.itemIx == 4);
+    utassert(item.size == UiSize::Large &&
+             item.groupVariant == GroupBoxVariant::Outline);
+    utassert(item.layout == Axis::Vertical && item.disabled);
+
+    FieldElementCapture capture;
+    SettingFieldElement element = {&capture, CaptureFieldOptions};
+    utassert(element.IsValid());
+    utassert(element.Render(&item, nullptr) == nullptr);
+    utassert(capture.calls == 1 && capture.options.pageIx == 2 &&
+             capture.options.itemIx == 4 && capture.options.disabled);
+
+    SelectIndex selected;
+    utassert(selected.pageIx == 0 && selected.groupIx == -1);
+    selected = {3, 2};
+    utassert(selected.pageIx == 3 && selected.groupIx == 2);
+}
+
 void TestSetting() {
     TestSuite("setting");
     TheQueryMatchesTitleDescriptionAndKeywords();
     AGroupIsShownWhenAnythingInItIs();
     APageIsShownWhenAnyGroupIs();
+    TypedFieldsRetainSourceResetSemanticsWithoutRtti();
+    RenderOptionsNarrowCopiesAndReachCustomFields();
 }

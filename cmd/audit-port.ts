@@ -60,7 +60,6 @@ const partialUi = new Set([
   "input",
   "menu",
   "plot",
-  "setting",
   "text",
   "theme",
   "window_border",

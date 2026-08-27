@@ -12,6 +12,50 @@ namespace gpui {
 
 namespace component {
 
+RenderOptions RenderOptions::New() { return {}; }
+
+RenderOptions RenderOptions::WithPageIx(int value) const {
+    RenderOptions out = *this;
+    out.pageIx = value;
+    return out;
+}
+
+RenderOptions RenderOptions::WithGroupIx(int value) const {
+    RenderOptions out = *this;
+    out.groupIx = value;
+    return out;
+}
+
+RenderOptions RenderOptions::WithItemIx(int value) const {
+    RenderOptions out = *this;
+    out.itemIx = value;
+    return out;
+}
+
+RenderOptions RenderOptions::WithSize(UiSize value) const {
+    RenderOptions out = *this;
+    out.size = value;
+    return out;
+}
+
+RenderOptions RenderOptions::WithGroupVariant(GroupBoxVariant value) const {
+    RenderOptions out = *this;
+    out.groupVariant = value;
+    return out;
+}
+
+RenderOptions RenderOptions::WithLayout(Axis value) const {
+    RenderOptions out = *this;
+    out.layout = value;
+    return out;
+}
+
+RenderOptions RenderOptions::WithDisabled(bool value) const {
+    RenderOptions out = *this;
+    out.disabled = value;
+    return out;
+}
+
 // to_lowercase().contains(q): the query against one string, ignoring case.
 static bool ContainsCI(Str hay, Str needle) {
     if (needle.len <= 0) {
@@ -264,6 +308,8 @@ Settings* Settings::Group(Str title, Str description) {
     return this;
 }
 
+static SettingItem* LastItem(Settings* s);
+
 Settings* Settings::Item(Str title, Str description, El* control) {
     if (pages.len == 0) {
         Group({});
@@ -278,6 +324,16 @@ Settings* Settings::Item(Str title, Str description, El* control) {
     it.description = description;
     it.control = control;
     g.items.Append(a, it);
+    return this;
+}
+
+Settings* Settings::FieldElement(SettingFieldElement element) {
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->field = SettingFieldType::Element;
+        it->fieldElement = element;
+        it->control = nullptr;
+    }
     return this;
 }
 
@@ -427,6 +483,23 @@ Settings* Settings::SidebarWidth(float v) {
     sidebarWidth = v;
     return this;
 }
+
+Settings* Settings::SidebarSizeRange(float minWidth, float maxWidth) {
+    sidebarMinWidth = minWidth;
+    sidebarMaxWidth = maxWidth;
+    return this;
+}
+
+Settings* Settings::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+
+Settings* Settings::DefaultSelectedIndex(SelectIndex value) {
+    defaultSelectedIndex = value;
+    return this;
+}
+
 Settings* Settings::H(float v) {
     h = v;
     return this;
@@ -448,11 +521,14 @@ struct FieldEl {
 };
 
 static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
-                           bool pageResettable) {
+                           bool pageResettable,
+                           const RenderOptions& options) {
     FieldEl out;
     SettingsState* st = s->state.Get(cx);
     if (it.field == SettingFieldKind::Element || !st) {
-        out.el = it.control;
+        out.el = it.fieldElement.IsValid()
+                     ? it.fieldElement.Render(&options, cx)
+                     : it.control;
         out.dirty = it.dirty;
         out.resettable = it.onReset.IsValid();
         out.onReset = it.onReset;
@@ -494,29 +570,32 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     Listener click = ListenTo(s->state, &SettingsState::OnFieldClick, ix);
     // layout(Axis): a field beside the text is w_32, one under it fills.
     float w = it.fieldW > 0 ? it.fieldW
-                            : (it.layout == Axis::Horizontal ? 128.f : kFill);
+                            : (options.layout == Axis::Horizontal ? 128.f
+                                                                 : kFill);
     switch (it.field) {
         case SettingFieldKind::Switch:
             out.el = Switch::New(cx, id)
                          ->Checked(it.boolValue && *it.boolValue)
-                         ->Disabled(it.disabled)
+                         ->Disabled(options.disabled)
                          ->OnClick(click)
+                         ->WithSize(options.size)
                          ->IntoEl();
             out.dirty = it.boolValue && *it.boolValue != it.defBool;
             break;
         case SettingFieldKind::Checkbox:
             out.el = Checkbox::New(cx, id)
                          ->Checked(it.boolValue && *it.boolValue)
-                         ->Disabled(it.disabled)
+                         ->Disabled(options.disabled)
                          ->OnClick(click)
+                         ->WithSize(options.size)
                          ->IntoEl();
             out.dirty = it.boolValue && *it.boolValue != it.defBool;
             break;
         case SettingFieldKind::Input:
             out.el = Input::New(cx, id, input)
                          ->W(w)
-                         ->Disabled(it.disabled)
-                         ->WithSize(UiSize::Small)
+                         ->Disabled(options.disabled)
+                         ->WithSize(options.size)
                          ->IntoEl();
             out.dirty = input && !StrSame(InputValue(input), it.defStr);
             break;
@@ -524,8 +603,8 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
             out.el =
                 NumberInput::New(cx, id, input)
                     ->W(w)
-                    ->Disabled(it.disabled)
-                    ->WithSize(UiSize::Small)
+                    ->Disabled(options.disabled)
+                    ->WithSize(options.size)
                     ->OnInc(ListenTo(s->state, &SettingsState::OnFieldInc, ix))
                     ->OnDec(ListenTo(s->state, &SettingsState::OnFieldDec, ix))
                     ->IntoEl();
@@ -535,7 +614,8 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
             out.el = Select::New(cx, id, it.list)
                          ->Items(it.items, it.nItems)
                          ->W(w)
-                         ->Disabled(it.disabled)
+                         ->Disabled(options.disabled)
+                         ->WithSize(options.size)
                          ->OnToggle(click)
                          ->IntoEl();
             out.dirty = DropdownIndex(it.list.Get(cx)) != it.defIndex;
@@ -560,7 +640,8 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
 // One row: the title and description on the left, the field on the right —
 // or under it, when the item asked for a vertical layout.
 static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
-                      bool first, bool pageResettable, bool* anyDirty) {
+                      int pageIx, int groupIx, int itemIx, bool first,
+                      bool pageResettable, bool* anyDirty) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
     // The row is what names the item, so the control on it and the reset
@@ -589,7 +670,18 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     }
     line->Child(text);
     El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    FieldEl f = RenderField(cx, s, it, StrL("field"), pageResettable);
+    RenderOptions options =
+        RenderOptions::New()
+            .WithPageIx(pageIx)
+            .WithGroupIx(groupIx)
+            .WithItemIx(itemIx)
+            .WithSize(s->size)
+            .WithGroupVariant(s->bordered ? GroupBoxVariant::Outline
+                                          : GroupBoxVariant::Normal)
+            .WithLayout(it.layout)
+            .WithDisabled(it.disabled);
+    FieldEl f =
+        RenderField(cx, s, it, StrL("field"), pageResettable, options);
     if (f.dirty && f.resettable && f.onReset.IsValid()) {
         *anyDirty = true;
     }
@@ -620,6 +712,11 @@ El* Settings::IntoEl() {
     // until this one has painted, which is the same table with the same
     // contents unless the tree itself changed.
     if (st) {
+        if (!st->selectionInitialized) {
+            st->selectionInitialized = true;
+            st->page = defaultSelectedIndex.pageIx;
+            st->group = defaultSelectedIndex.groupIx;
+        }
         st->fields.Clear();
     }
 
@@ -628,12 +725,14 @@ El* Settings::IntoEl() {
     // and the states the fields keep, which is what the id stack is for.
     IdScope scope(cx, id);
     El* row = Div(a)->Id(id)->FlexRow()->W(kFill)->H(h)->ItemsStart();
+    float sideWidth = std::max(sidebarMinWidth,
+                               std::min(sidebarWidth, sidebarMaxWidth));
 
     // The sidebar: the search field, then a row per page, with the groups of
     // the open page under it.
     El* side = Div(a)
                    ->FlexCol()
-                   ->W(sidebarWidth)
+                   ->W(sideWidth)
                    ->H(kFill)
                    ->Pad(8)
                    ->Gap(4)
@@ -678,7 +777,7 @@ El* Settings::IntoEl() {
             Div(a)->Flex1()->ClipY()->Child(TextEl(a, p.title)
                                                 ->Font(16)
                                                 ->Fg(th.foreground)
-                                                ->MaxW(sidebarWidth - 80)
+                                                ->MaxW(sideWidth - 80)
                                                 ->Truncate()));
         if (p.groups.len > 0) {
             item->Child(
@@ -755,7 +854,8 @@ El* Settings::IntoEl() {
                 card->Child(
                     RenderItem(cx, this, it,
                                StrDup(a, fmt("%d-%d-%d", selected, g, itemIx)),
-                               shown == 0, p.resettable, &anyDirty));
+                               selected, g, itemIx, shown == 0, p.resettable,
+                               &anyDirty));
                 shown++;
             }
             body->Child(card);
