@@ -9086,3 +9086,7 @@ z-order.
 The default Windows webview id now formats the full signed pointer-sized HWND,
 matching `(hwnd.0 as isize).to_string()` in Wry. The old `%d` conversion
 truncated 64-bit handles and could give two views the same callback id.
+
+`focus_parent` now reports the `SetFocus` result exactly as Wry's windows-rs
+call does. The old port always answered success after issuing the call and
+therefore hid native focus failures.

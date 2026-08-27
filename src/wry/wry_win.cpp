@@ -3402,8 +3402,9 @@ bool WebViewFocusParent(WebView* wv) {
     if (!wv || !wv->parent) {
         return false;
     }
-    SetFocus(wv->parent);
-    return true;
+    // windows-rs turns a null SetFocus return into an error; keep the same
+    // result boundary even though Win32 also uses null for "no prior focus".
+    return SetFocus(wv->parent) != nullptr;
 }
 
 bool WebViewZoom(WebView* wv, double scaleFactor) {
