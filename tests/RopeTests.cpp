@@ -7,9 +7,9 @@
  * nothing to test and the fourth is TextSplice in InputState.cpp, covered
  * through the edit path in InputStateTests.cpp.
  *
- * `word_range` / `word_at` are not ported: they feed the language-server
- * hover path, and the word range a double click uses is text_boundary.rs's,
- * which TextBoundaryTests.cpp already covers. */
+ * `word_range` / `word_at` are exercised through RopeExt below; the word
+ * range a double click uses is text_boundary.rs's richer classifier, covered
+ * separately by TextBoundaryTests.cpp. */
 
 #include "Test.h"
 
@@ -180,6 +180,22 @@ static void SourceRopeFacadesIterateAndDescribeEdits() {
     utassert(edit.newEndPosition.row == 2 && edit.newEndPosition.column == 4);
 }
 
+static void TabSizeCountsAndBuildsIndent() {
+    Arena* arena = ArenaNew();
+    TabSize soft;
+    soft.tabSize = 4;
+    utassert(StrIs(soft.ToString(arena), "    "));
+    utassert(soft.IndentCount(StrL("  \tabc")) == 6);
+    utassert(soft.IndentCount(StrL("abc")) == 0);
+
+    TabSize hard;
+    hard.tabSize = 8;
+    hard.hardTabs = true;
+    utassert(StrIs(hard.ToString(arena), "\t"));
+    utassert(hard.IndentCount(StrL(" \t abc")) == 10);
+    ArenaDelete(arena);
+}
+
 void TestRope() {
     TestSuite("rope_ext");
     SliceLine();
@@ -192,4 +208,5 @@ void TestRope() {
     ClipOffset();
     CharIndexToOffset();
     SourceRopeFacadesIterateAndDescribeEdits();
+    TabSizeCountsAndBuildsIndent();
 }

@@ -3082,6 +3082,24 @@ enum class DiagnosticSeverity : uint8_t {
     Info
 };
 
+// lsp_types::DiagnosticTag. The numeric values are the LSP wire values, so a
+// provider can translate them without a switch.
+enum class DiagnosticTag : uint8_t {
+    Unnecessary = 1,
+    Deprecated = 2
+};
+
+// lsp_types::DiagnosticRelatedInformation, flattened to this editor's byte
+// range convention. `uri` names the related document; empty means the
+// document already in the field.
+struct DiagnosticRelatedInformation {
+    Str uri = {};
+    Selection range = {};
+    Str message = {};
+};
+
+using RelatedInformation = DiagnosticRelatedInformation;
+
 // One diagnostic over a range of the document. Rust keeps the LSP's own
 // struct — related information, tags and a serde_json payload with it — and
 // this keeps what an editor draws and says: where it is, how bad it is, what
@@ -3092,6 +3110,14 @@ struct Diagnostic {
     Str message = {};
     Str source = {};
     Str code = {};
+    Str codeDescriptionUri = {};
+    const DiagnosticRelatedInformation* relatedInformation = nullptr;
+    int nRelatedInformation = 0;
+    const DiagnosticTag* tags = nullptr;
+    int nTags = 0;
+    // The dependency-free form of LSP's arbitrary JSON `data`: a provider
+    // may preserve its serialized spelling and hand it back with an action.
+    Str data = {};
 };
 
 // lsp_types::CompletionItem, cut to what the menu shows and what accepting

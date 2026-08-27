@@ -4,6 +4,7 @@
    draws it. */
 
 #include "base/input_core.h"
+#include "base/input_editor.h"
 #include "base/input_rope.h"
 
 namespace gpui {

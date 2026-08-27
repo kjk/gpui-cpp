@@ -3,11 +3,10 @@
  *
  * Every Rust case there is a `#[gpui::test]` built on `TestAppContext` and a
  * `VisualTestContext`: it opens a window, paints it, and then asserts. The
- * ones ported here are the ones whose assertion does not need the window —
- * the text, the selection, and the undo history. Their scroll-offset and
- * `last_layout` halves are dropped, and so are the ones that only assert on
- * something this port does not have (number stepping, decorations, soft
- * wrap).
+ * Pure state assertions are kept here: text, selection, history, providers,
+ * decorations and the dependency-free editor facades. Assertions that need
+ * GPUI's VisualTestContext are represented by the runtime layout/input tests
+ * around them rather than by a second test-only window framework.
  *
  * The engine takes `App*` and `Window*` because it pauses a caret and asks
  * for a repaint; both are optional, so a test drives it with nulls. */
@@ -2280,6 +2279,124 @@ static void BaseInputCoreKeepsTheSourceModeAndPresentationSeams() {
     ArenaDelete(arena);
 }
 
+static void DecorationsAreIndependentClippedAndTrackEdits() {
+    InputState state;
+    state.kind = InputKind::Editor;
+    InputSetValue(&state, StrL("héllo"));
+    DecorationCollections collections(&state);
+
+    TextSpan firstStyle;
+    firstStyle.color = Rgb(1, 2, 3);
+    TextSpan secondStyle;
+    secondStyle.bg = Rgb(4, 5, 6);
+    TextDecoration firstValue =
+        TextDecoration::New({2, 4}, firstStyle);
+    TextDecoration secondValue =
+        TextDecoration::New({5, 100}, secondStyle);
+    TextDecorationCollection first = collections.Create(&firstValue, 1);
+    TextDecorationCollection second = collections.Create(&secondValue, 1);
+
+    Selection ranges[2] = {};
+    utassert(first.GetRanges(ranges, 2) == 1);
+    utassert(ranges[0].start == 1 && ranges[0].end == 4);
+    utassert(second.GetRanges(ranges, 2) == 1);
+    utassert(ranges[0].start == 5 && ranges[0].end == 6);
+
+    TextDecoration overlap = TextDecoration::New({3, 6}, secondStyle);
+    utassert(second.Append(&overlap, 1));
+    TextSpan spans[4] = {};
+    int n = collections.BuildSpans(spans, 4);
+    utassert(n == 3);
+    utassert(spans[0].lo == 1 && spans[0].hi == 4);
+    utassert(spans[1].lo == 4 && spans[1].hi == 5);
+    utassert(spans[2].lo == 5 && spans[2].hi == 6);
+
+    collections.AdjustForEdit({0, 0}, 2);
+    utassert(first.GetRanges(ranges, 2) == 1);
+    utassert(ranges[0].start == 3 && ranges[0].end == 6);
+    collections.AdjustForEdit({3, 6}, 1);
+    utassert(first.GetRanges(ranges, 2) == 1);
+    utassert(ranges[0].start == 3 && ranges[0].end == 4);
+}
+
+static void DiagnosticSetOwnsMetadataAndAnswersRanges() {
+    DiagnosticSet set(StrL("Hello, 你好warld!\nThis is a test.\nGoodbye, world!"));
+    DiagnosticRelatedInformation related = {
+        StrL("file:///other.cpp"), {1, 2}, StrL("first declared here")};
+    DiagnosticTag tag = DiagnosticTag::Deprecated;
+    Diagnostic spelling;
+    spelling.range = {7, 19};
+    spelling.severity = DiagnosticSeverity::Warning;
+    spelling.message = StrL("Spelling mistake");
+    spelling.source = StrL("spell");
+    spelling.relatedInformation = &related;
+    spelling.nRelatedInformation = 1;
+    spelling.tags = &tag;
+    spelling.nTags = 1;
+    set.Push(spelling);
+
+    Diagnostic syntax;
+    syntax.range = {45, 50};
+    syntax.severity = DiagnosticSeverity::Error;
+    syntax.message = StrL("Syntax error");
+    set.Push(syntax);
+    utassert(set.Len() == 2);
+    utassert(set.Summary().start == 7 && set.Summary().end == 50);
+
+    const DiagnosticEntry* found = set.ForOffset(10);
+    utassert(found && Is(found->diagnostic.message, "Spelling mistake"));
+    utassert(found->diagnostic.nRelatedInformation == 1);
+    utassert(Is(found->diagnostic.relatedInformation[0].message,
+                "first declared here"));
+    utassert(found->diagnostic.tags[0] == DiagnosticTag::Deprecated);
+    utassert(set.ForOffset(30) == nullptr);
+
+    const DiagnosticEntry* entries[2] = {};
+    utassert(set.Range({6, 48}, entries, 2) == 2);
+    set.Clear();
+    utassert(set.IsEmpty());
+}
+
+static bool ResolveKeyword(void*, Str name, TextSpan* out) {
+    if (!Is(name, "keyword")) {
+        return false;
+    }
+    out->color = Rgb(10, 20, 30);
+    return true;
+}
+
+static Str HighlighterLanguage(void*) {
+    return StrL("cpp");
+}
+
+static int HighlighterStyles(void*, Selection range,
+                             const HighlightStyleResolver* resolver,
+                             TextSpan* out, int cap) {
+    TextSpan style;
+    if (!resolver || !resolver->Style(StrL("keyword"), &style)) {
+        return 0;
+    }
+    style.lo = range.start;
+    style.hi = range.end;
+    if (out && cap > 0) {
+        out[0] = style;
+    }
+    return 1;
+}
+
+static void HighlighterContractsAreDependencyFreeAndFunctional() {
+    HighlightStyleResolver resolver;
+    resolver.style = ResolveKeyword;
+    InputHighlighter highlighter;
+    highlighter.language = HighlighterLanguage;
+    highlighter.styles = HighlighterStyles;
+    utassert(Is(highlighter.Language(), "cpp"));
+    TextSpan span;
+    utassert(highlighter.Styles({2, 5}, &resolver, &span, 1) == 1);
+    utassert(span.lo == 2 && span.hi == 5);
+    utassert(span.color.r == Rgb(10, 20, 30).r);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2359,4 +2476,7 @@ void TestInputState() {
     TwoFindBarsHaveTwoPrevButtons();
     TheUiInputFacadeKeepsTheSourceShapes();
     BaseInputCoreKeepsTheSourceModeAndPresentationSeams();
+    DecorationsAreIndependentClippedAndTrackEdits();
+    DiagnosticSetOwnsMetadataAndAnswersRanges();
+    HighlighterContractsAreDependencyFreeAndFunctional();
 }

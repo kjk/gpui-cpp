@@ -88,10 +88,12 @@ const baseOverrides: Record<string, string[]> = {
   input: [
     "src/base/input.h",
     "src/base/input_core.h",
+    "src/base/input_editor.h",
     "src/base/input_rope.h",
     "src/gpui/gpui.h",
     "src/base/input.cpp",
     "src/base/input_core.cpp",
+    "src/base/input_editor.cpp",
     "src/base/input_rope.cpp",
     "src/base/input_keys.h",
     "src/base/input_keys.cpp",

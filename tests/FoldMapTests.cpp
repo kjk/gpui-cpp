@@ -195,6 +195,34 @@ static void RebuildIsSkippedWhenNothingMoved() {
     utassert(FoldMapDisplayRowCount(&m) == 9);
 }
 
+static void DisplayMapComposesWrappingAndFolding() {
+    DisplayMap map(4);
+    map.SetText(StrL("abcdef\ngh\nijklm"));
+    utassert(map.BufferLineCount() == 3);
+    utassert(map.WrapRowCount() == 5);
+    utassert(map.DisplayRowCount() == 5);
+
+    DisplayPoint display =
+        map.BufferPosToDisplayPos(BufferPoint::New(0, 4));
+    utassert(display.row == 1 && display.col == 0);
+    BufferPoint buffer =
+        map.DisplayPosToBufferPos(DisplayPoint::New(4, 1));
+    utassert(buffer.line == 2 && buffer.col == 5);
+    Selection lineRows = map.BufferLineToDisplayRowRange(2);
+    utassert(lineRows.start == 3 && lineRows.end == 5);
+
+    FoldRange fold = R(0, 2);
+    map.SetFoldCandidates(&fold, 1);
+    map.SetFolded(0, true);
+    utassert(map.IsBufferLineHidden(1));
+    utassert(map.DisplayRowCount() == 4);
+    display = map.BufferPosToDisplayPos(BufferPoint::New(1, 1));
+    utassert(display.row == 0 && display.col == 0);
+
+    map.ClearFolds();
+    utassert(map.DisplayRowCount() == 5);
+}
+
 void TestFoldMap() {
     CandidatesAreSortedAndOnePerStartLine();
     OnlyACandidateFolds();
@@ -206,4 +234,5 @@ void TestFoldMap() {
     AnEditDropsWhatItRanThroughAndShiftsTheRest();
     AnEditOnOneLineMovesNothing();
     RebuildIsSkippedWhenNothingMoved();
+    DisplayMapComposesWrappingAndFolding();
 }
