@@ -105,6 +105,14 @@ Two things differ beyond that, and both are in the file's header comment:
   `removeFromSuperview` plus `addSubview`, which is what the one caller means
   by it.
 
+An asynchronous custom-protocol responder does not retain the C++ `WebView`.
+It retains the live-task set and its `WKURLSchemeTask`; closing the view first
+empties that set, so an answer posted later is discarded on the main thread.
+This is the same lifetime boundary as Rust's global webview-id lookup plus
+per-task UUID. Teardown also nulls every delegate's non-owning pointer before
+ARC releases it, because WebKit is allowed to drain an already-queued
+callback after the view leaves its hierarchy.
+
 `set_theme` and `set_memory_usage_level` answer false there, because both are
 `WebViewExtWindows` in Rust with no WKWebView counterpart.
 `set_background_color` is a successful no-op — the exact macOS arm of the

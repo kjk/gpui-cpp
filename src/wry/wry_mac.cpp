@@ -110,7 +110,11 @@ struct WebView {
 // it may do from another thread; delivery hops to the main thread, the only
 // one WebKit takes a `didReceive*` on.
 struct RequestResponder {
-    WebView* wv = nullptr;
+    // Kept independently of WebView so a worker may answer after the view
+    // was closed. WebViewFree empties the set; the late delivery observes
+    // that its task is no longer live and drops it. This is Rust's global
+    // webview-id plus per-task UUID check without a process-global map.
+    NSMutableSet* liveTasks = nil;
     id<WKURLSchemeTask> task = nil;
     NSURL* url = nil;
     int32_t answered = 0;
@@ -576,12 +580,18 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task) {
     req.bodyLen = bodyStore.len;
 
     RequestResponder* responder = new RequestResponder();
-    responder->wv = wv;
+    responder->liveTasks = wv->liveTasks;
     responder->task = task;
     responder->url = url;
 
     ProtocolCopy& p = wv->protocols[index];
-    p.handler(p.ctx, wv->id, &req, responder);
+    if (p.handler) {
+        p.handler(p.ctx, wv->id, &req, responder);
+    } else {
+        Response response;
+        response.status = 500;
+        Respond(responder, &response);
+    }
 
     headerStore.FreeEls();
     bodyStore.FreeEls();
@@ -593,9 +603,8 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task) {
 // pointer.
 static void DeliverResponse(RequestResponder* responder, NSHTTPURLResponse* response,
                             NSData* data) {
-    WebView* wv = responder->wv;
     NSValue* key = [NSValue valueWithPointer:(__bridge const void*)responder->task];
-    if (wv && wv->liveTasks && [wv->liveTasks containsObject:key]) {
+    if (responder->liveTasks && [responder->liveTasks containsObject:key]) {
         @try {
             [responder->task didReceiveResponse:response];
             [responder->task didReceiveData:data];
@@ -604,8 +613,9 @@ static void DeliverResponse(RequestResponder* responder, NSHTTPURLResponse* resp
             (void)e;
             logf("wry: the custom protocol task went away before it was answered\n");
         }
-        [wv->liveTasks removeObject:key];
+        [responder->liveTasks removeObject:key];
     }
+    responder->liveTasks = nil;
     responder->task = nil;
     responder->url = nil;
     delete responder;
@@ -640,6 +650,11 @@ void Respond(RequestResponder* responder, const Response* response) {
                                                         headerFields:headers];
     if (!http) {
         logf("wry: could not build the response for a custom protocol request\n");
+        if (responder->liveTasks && responder->task) {
+            NSValue* key =
+                [NSValue valueWithPointer:(__bridge const void*)responder->task];
+            [responder->liveTasks removeObject:key];
+        }
         delete responder;
         return;
     }
@@ -960,6 +975,17 @@ void WebViewFree(WebView* wv) {
         wv->webview.UIDelegate = nil;
         [wv->webview removeFromSuperview];
     }
+    // Every Objective-C delegate stores a non-owning WebView pointer. WebKit
+    // may still retain a delegate or scheme handler while queued callbacks
+    // drain, so sever those pointers before deleting the C++ state.
+    wv->ipcDelegate.wv = nullptr;
+    wv->navDelegate.wv = nullptr;
+    wv->uiDelegate.wv = nullptr;
+    wv->titleObserver.wv = nullptr;
+    for (GpuiWrySchemeHandler* handler in wv->schemeHandlers) {
+        handler.wv = nullptr;
+    }
+    [wv->liveTasks removeAllObjects];
     for (int i = 0; i < wv->protocols.len; i++) {
         StrFree(wv->protocols[i].name);
     }

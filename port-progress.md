@@ -8953,3 +8953,13 @@ in the scroll-wheel path (`w` instead of `win`) that prevented every current
 macOS build. After that fix, the release webview example compiles and links
 against Cocoa and WebKit. MSVC release passes 20,815 checks and the Windows
 release webview example compiles.
+
+The custom-protocol responder is now safe across teardown as well. It retains
+the task and the independent live-task set, never a raw `WebView*`; closing a
+view empties that set, and a late worker answer is discarded after hopping to
+the main thread. Teardown severs the non-owning pointer in the IPC,
+navigation, UI, title and scheme delegates before deleting their C++ state,
+so a callback WebKit had already queued cannot re-enter freed storage. A
+missing protocol callback produces a 500 response instead of dereferencing a
+null function pointer. The release webview example still compiles and links
+on the remote Mac after this lifetime change.
