@@ -9108,3 +9108,11 @@ builder boundary, matching Wry's `DuplicateCustomProtocol` error instead of
 registering two filters and dispatching only to the first. The same validation
 also rejects negative counts and non-empty null header, script or protocol
 arrays before any HWND or COM object is created.
+
+Windows builder strings now preserve Rust `Option<String>` semantics using
+the distinction already present in `Str`: null is `None`, while a non-null
+zero-length value is `Some("")`. Empty explicit ids and user agents are no
+longer replaced or ignored; empty URL/HTML values are sent to WebView2; an
+explicit empty header map still takes Wry's request-navigation path; and an
+explicit empty browser-argument or extension-path setting is no longer
+silently treated as absent.

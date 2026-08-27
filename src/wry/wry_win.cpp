@@ -1869,7 +1869,7 @@ static bool SetWebViewSettings(ICoreWebView2* webview, const WebViewAttributes* 
         hr = settings->put_IsScriptEnabled(attrs->javascriptDisabled ? FALSE : TRUE);
     }
 
-    if (SUCCEEDED(hr) && attrs->userAgent.len > 0) {
+    if (SUCCEEDED(hr) && attrs->userAgent.s) {
         ICoreWebView2Settings2* s2 = nullptr;
         if (SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings2), (void**)&s2))) {
             hr = s2->put_UserAgent(ToCWstrTemp(attrs->userAgent));
@@ -2092,7 +2092,7 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
     // The default arguments mod.rs passes: no mini menu (wry#535), no smart
     // screen (tauri#1345), and the autoplay and proxy switches when those
     // attributes ask for them.
-    if (attrs->additionalBrowserArgs.len > 0) {
+    if (attrs->additionalBrowserArgs.s) {
         options->additionalBrowserArguments = WStrDupUtf8(attrs->additionalBrowserArgs);
     } else {
         base::StrBuilder args;
@@ -2138,7 +2138,7 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
                 return S_OK;
             });
 
-    PCWSTR dataDirectory = attrs->dataDirectory.len > 0 ? ToCWstrTemp(attrs->dataDirectory) : nullptr;
+    PCWSTR dataDirectory = attrs->dataDirectory.s ? ToCWstrTemp(attrs->dataDirectory) : nullptr;
     // One of three IUnknown bases, so the cast has to name which.
     IUnknown* optionsUnknown = static_cast<ICoreWebView2EnvironmentOptions*>(options);
     HRESULT hr = CreateEnvironmentWithOptions(dataDirectory, optionsUnknown, handler);
@@ -3037,6 +3037,12 @@ static bool LoadUrlWithHeaders(WebView* wv, Str url, const Header* headers, int 
 // `load_extensions`: WebView2 expects one unpacked extension directory per
 // call, while the builder attribute names the directory that contains them.
 static bool LoadExtensions(ICoreWebView2* webview, Str extensionRoot) {
+    // `fs::read_dir(PathBuf::from(""))` is ERROR_PATH_NOT_FOUND on Windows.
+    // Do not turn that explicit empty Some into a scan of the drive root.
+    if (extensionRoot.len == 0) {
+        logf("wry: cannot enumerate an empty browser extension path\n");
+        return false;
+    }
     ICoreWebView2_13* webview13 = nullptr;
     if (FAILED(webview->QueryInterface(__uuidof(ICoreWebView2_13), (void**)&webview13))) {
         logf("wry: this WebView2 runtime cannot load browser extensions\n");
@@ -3202,7 +3208,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     wv->newWindowReqHandler = attrs->newWindowReqHandler;
     wv->httpOrHttps = attrs->useHttpsScheme ? "https" : "http";
     // `attributes.id.unwrap_or_else(|| hwnd.to_string())`.
-    wv->id = attrs->id.len > 0 ? StrDup(attrs->id)
+    wv->id = attrs->id.s ? StrDup(attrs->id)
                                : StrDup(base::FormatTemp("%lld", (int64_t)(intptr_t)hwnd));
     for (int i = 0; i < attrs->customProtocolCount; i++) {
         ProtocolCopy p;
@@ -3258,7 +3264,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
 
     bool navigated = true;
-    if (attrs->url.len > 0) {
+    if (attrs->url.s) {
         Str url = attrs->url;
         for (int i = 0; i < wv->protocols.len; i++) {
             // A url in one of our own protocols has to go over the
@@ -3269,12 +3275,12 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
                 break;
             }
         }
-        if (attrs->headerCount > 0) {
+        if (attrs->headers) {
             navigated = LoadUrlWithHeaders(wv, url, attrs->headers, attrs->headerCount);
         } else {
             navigated = SUCCEEDED(webview->Navigate(ToCWstrTemp(url)));
         }
-    } else if (attrs->html.len > 0) {
+    } else if (attrs->html.s) {
         navigated = SUCCEEDED(webview->NavigateToString(ToCWstrTemp(attrs->html)));
     }
     if (!navigated) {
@@ -3317,7 +3323,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
             return nullptr;
         }
     }
-    if (attrs->browserExtensionsEnabled && attrs->extensionPath.len > 0 &&
+    if (attrs->browserExtensionsEnabled && attrs->extensionPath.s &&
         !LoadExtensions(webview, attrs->extensionPath)) {
         WebViewFree(wv);
         return nullptr;

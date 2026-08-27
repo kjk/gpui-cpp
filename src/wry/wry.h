@@ -281,7 +281,9 @@ void CookieListFree(Vec<Cookie>* cookies);
 
     Nothing in this struct is copied until `WebViewNew`, and only what a
     backend keeps outlives it: the strings and vectors must stay alive for
-    that call, and the handler `ctx` for as long as the webview does. */
+    that call, and the handler `ctx` for as long as the webview does. For a
+    Rust `Option<String>`, a null `Str::s` is `None`; a present empty `Str` is
+    `Some("")`. */
 struct WebViewAttributes {
     /** Passed to a custom protocol handler; defaults to the container HWND
         written out, the way Rust defaults it. */
