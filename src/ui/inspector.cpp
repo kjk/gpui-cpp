@@ -235,91 +235,74 @@ bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
 // The editor's own state, which has to outlive the frame the panel is built
 // on. Rust's is the `DivInspector` view beside the inspector; this is the
 // window-keyed entity that stands in for one.
-struct InspectorEditor {
-    // The element the text belongs to, so a new pick reloads it.
-    int clickId = 0;
-    Style initial = {};
-    // The text the last parse ran on. A builder has no `InputEvent::Change`
-    // to subscribe to, so an edit is noticed by comparing.
-    Str applied = {};
-    Str error = {};
-    InputState input;
+DivInspector::~DivInspector() {
+    StrFree(applied);
+    StrFree(error);
+}
 
-    ~InspectorEditor() {
-        StrFree(applied);
-        StrFree(error);
-    }
-
-    static void OnReset(InspectorEditor* self, Ctx* cx, const ClickEvent*);
-    static void OnFocus(InspectorEditor* self, Ctx* cx, const ClickEvent*);
-};
-
-static void EditorLoad(InspectorEditor* e, Ctx* cx, const Style& style) {
+static void EditorLoad(DivInspector* e, Ctx* cx, const Style& style) {
     Str json = StyleToJson(cx->a, style);
-    InputSetValue(&e->input, json);
+    InputSetValue(&e->jsonInput, json);
     StrFree(e->applied);
     e->applied = StrDup(json);
     StrFree(e->error);
     e->error = {};
 }
 
-void InspectorEditor::OnReset(InspectorEditor* self, Ctx* cx,
-                              const ClickEvent*) {
-    StyleOverrideClear(self->clickId);
-    EditorLoad(self, cx, self->initial);
+void DivInspector::UpdateInspectedElement(const InspectorPick& pick, Ctx* cx) {
+    if (inspectorId == pick.id) {
+        return;
+    }
+    inspectorId = pick.id;
+    initialStyle = pick.style;
+    jsonInput.kind = InputKind::Textarea;
+    EditorLoad(this, cx, initialStyle);
+}
+
+bool DivInspector::EditJson(Str code, Ctx* cx) {
+    StrFree(applied);
+    applied = StrDup(code);
+    Style style = initialStyle;
+    uint32_t fields = 0;
+    Str parseError = {};
+    if (!StyleFromJson(cx->a, code, &style, &fields, &parseError)) {
+        StrFree(error);
+        error = parseError;
+        Notify(cx);
+        return false;
+    }
+    StyleOverrideSet(inspectorId, fields, style);
+    StrFree(error);
+    error = {};
+    Notify(cx);
+    return true;
+}
+
+void DivInspector::Reset(Ctx* cx) {
+    StyleOverrideClear(inspectorId);
+    EditorLoad(this, cx, initialStyle);
     Notify(cx);
 }
 
-void InspectorEditor::OnFocus(InspectorEditor* self, Ctx* cx,
-                              const ClickEvent*) {
-    self->input.focused = true;
+void DivInspector::OnReset(DivInspector* self, Ctx* cx, const ClickEvent*) {
+    self->Reset(cx);
+}
+
+void DivInspector::OnFocus(DivInspector* self, Ctx* cx, const ClickEvent*) {
+    self->jsonInput.focused = true;
     Notify(cx);
 }
 
-static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
+El* DivInspector::Render(const InspectorPick& p, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
-    // An element with no click id cannot be found again next frame, so there
-    // is nothing an override could be keyed on.
-    if (p.id == 0) {
-        return Div(a)->W(kFill)->Child(
-            TextEl(a, StrL("This element has no id, so its style cannot be "
-                           "edited."))
-                ->Font(14)
-                ->Fg(th.mutedFg));
+    UpdateInspectedElement(p, cx);
+    Str current = InputValue(&jsonInput);
+    if (!StrSame(current, applied)) {
+        EditJson(current, cx);
     }
-    Entity<InspectorEditor> ed = KeyedEntity<InspectorEditor>(
-        cx, KeyedKey((uint32_t)HashClickId(StrL("inspector")),
-                     (uint32_t)HashClickId(StrL("style"))));
-    InspectorEditor* e = ed.Get(cx);
-    if (!e) {
-        return nullptr;
-    }
-    if (e->clickId != p.id) {
-        e->clickId = p.id;
-        e->initial = p.style;
-        e->input.kind = InputKind::Textarea;
-        EditorLoad(e, cx, p.style);
-    } else {
-        Str cur = InputValue(&e->input);
-        if (!StrSame(cur, e->applied)) {
-            StrFree(e->applied);
-            e->applied = StrDup(cur);
-            Style st = e->initial;
-            uint32_t fields = 0;
-            Str err = {};
-            if (StyleFromJson(a, cur, &st, &fields, &err)) {
-                StyleOverrideSet(p.id, fields, st);
-                StrFree(e->error);
-                e->error = {};
-            } else {
-                StrFree(e->error);
-                e->error = err;
-            }
-        }
-    }
-    if (e->input.focused) {
-        cx->win->input = &e->input;
+    if (jsonInput.focused) {
+        cx->win->input = &jsonInput;
     }
 
     // v_flex().flex_1().gap_y_3().h_2_5().flex_shrink_0(): the pane takes what
@@ -334,21 +317,44 @@ static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
     head->Child(Button::New(cx, StrL("style-reset"))
                     ->Label(StrL("Reset"))
                     ->WithSize(UiSize::Small)
-                    ->OnClick(ListenTo(ed, &InspectorEditor::OnReset))
+                    ->OnClick(Listen(cx, &DivInspector::OnReset))
                     ->IntoEl());
     box->Child(head);
     El* body = Div(a)->FlexCol()->W(kFill)->GapY(4)->Flex1();
-    body->Child(Textarea::New(cx, StrL("style-json"), &e->input)
+    body->Child(Textarea::New(cx, StrL("style-json"), &jsonInput)
                     ->H(kFill)
-                    ->OnFocus(ListenTo(ed, &InspectorEditor::OnFocus))
+                    ->OnFocus(Listen(cx, &DivInspector::OnFocus))
                     ->IntoEl());
-    if (e->error.s) {
-        body->Child(Alert::Error(cx, StrL("style-error"), e->error)
+    if (error.s) {
+        body->Child(Alert::Error(cx, StrL("style-error"), error)
                         ->WithSize(UiSize::XSmall)
                         ->IntoEl());
     }
     box->Child(body);
     return box;
+}
+
+static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
+    // An element with no click id cannot be found again next frame, so there
+    // is nothing an override could be keyed on.
+    if (p.id == 0) {
+        const Theme& th = ThemeNow(cx->app);
+        return Div(cx->a)->W(kFill)->Child(
+            TextEl(cx->a, StrL("This element has no id, so its style cannot be "
+                               "edited."))
+                ->Font(14)
+                ->Fg(th.mutedFg));
+    }
+    Entity<DivInspector> editor = KeyedEntity<DivInspector>(
+        cx, KeyedKey((uint32_t)HashClickId(StrL("inspector")),
+                     (uint32_t)HashClickId(StrL("style"))));
+    DivInspector* state = editor.Get(cx);
+    if (!state) {
+        return nullptr;
+    }
+    Ctx editorCx = *cx;
+    editorCx.self = editor.id;
+    return state->Render(p, &editorCx);
 }
 
 El* Inspector::IntoEl() {

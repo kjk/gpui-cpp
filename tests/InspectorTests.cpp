@@ -130,10 +130,68 @@ static void AnOverridePatchesOnlyWhatItNamed() {
     ArenaDelete(a);
 }
 
+static void DivInspectorOwnsUpdateEditAndReset() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    win->frameArena = arena;
+    Entity<DivInspector> entity = EntityNewState<DivInspector>(&app);
+    Ctx cx = {&app, win, arena, entity.id};
+    DivInspector* inspector = entity.Get(&app);
+
+    InspectorPick pick;
+    pick.id = 77;
+    pick.style.gapX = 2;
+    pick.style.gapY = 2;
+    pick.style.radius = 3;
+    inspector->UpdateInspectedElement(pick, &cx);
+    utassert(inspector->inspectorId == 77);
+    utassert(inspector->jsonInput.kind == InputKind::Textarea);
+    utassert(StrSame(InputValue(&inspector->jsonInput), inspector->applied));
+    utassert(InputValue(&inspector->jsonInput).len > 0);
+
+    utassert(inspector->EditJson(StrL("{ \"gap\": 9 }"), &cx));
+    utassert(inspector->error.s == nullptr);
+    El* edited = Div(arena)->Gap(2)->Radius(3);
+    edited->clickId = 77;
+    StyleOverrideApply(edited);
+    utassertnear(edited->style.gapX, 9.f);
+    // The JSON named no radius, so the element keeps its own.
+    utassertnear(edited->style.radius, 3.f);
+
+    utassert(!inspector->EditJson(StrL("{ \"gap\": \"wide\" }"), &cx));
+    utassert(inspector->error.s != nullptr);
+    inspector->Reset(&cx);
+    utassert(inspector->error.s == nullptr);
+    utassert(StrSame(InputValue(&inspector->jsonInput), inspector->applied));
+    El* reset = Div(arena)->Gap(2);
+    reset->clickId = 77;
+    StyleOverrideApply(reset);
+    utassertnear(reset->style.gapX, 2.f);
+
+    // A new inspected identity reloads its independent initial style.
+    pick.id = 78;
+    pick.style.gapX = 5;
+    pick.style.gapY = 5;
+    inspector->UpdateInspectedElement(pick, &cx);
+    utassert(inspector->inspectorId == 78);
+    utassertnear(inspector->initialStyle.gapX, 5.f);
+    ClickEvent focus = {};
+    DivInspector::OnFocus(inspector, &cx, &focus);
+    utassert(inspector->jsonInput.focused);
+
+    StyleOverrideClearAll();
+    delete win;
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 void TestInspector() {
     TestSuite("inspector");
     WhatComesOutReadsBackIn();
     AnEditNamesOnlyWhatItChanged();
     ABadValueIsAnError();
     AnOverridePatchesOnlyWhatItNamed();
+    DivInspectorOwnsUpdateEditAndReset();
 }

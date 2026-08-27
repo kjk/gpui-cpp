@@ -7773,3 +7773,36 @@ moves to 92 full, 29 partial, 8 adapters and 2 exclusions with 289 unresolved
 partial-module spellings and no full-module errors. The implementation itself
 is unchanged; the already passing portable accessibility suite covers its
 semantic-tree side, while the Objective-C forwarding half remains macOS-only.
+
+## UI Inspector restores the DivInspector entity
+
+The inspector could pick an element, report its layout/style and edit the
+supported `Style` fields as JSON, but the persistent editor was an internal
+`InspectorEditor` mixed into the outer panel renderer. Upstream instead owns a
+public `DivInspector` entity whose inspected identity, initial style, editor
+input, applied text and parse error survive frames. The missing public type was
+therefore a real structural mismatch even though the live override worked.
+
+`component::DivInspector` now owns that complete persistent state and exposes
+the source-shaped update, edit, reset and render operations. The outer
+Inspector obtains it as a keyed generational entity, renders it through a Ctx
+bound to that entity, and its retained Reset/focus listeners can safely outlive
+the current frame. Picking another identity reloads an independent initial
+style; successful JSON edits refine only named fields, parse failures retain a
+visible owned error, and Reset clears the override and restores serialized
+initial state. The source's second Rust-code editor depends on GPUI reflection
+and its LSP completion provider; this runtime has no GPUI reflection table and
+an LSP client is a standing exclusion. The dependency-free JSON path edits
+more values than that
+zero-argument reflected source path.
+
+Tests drive the named DivInspector through identity changes, initial JSON
+loading, partial live refinement, parse failure, reset cleanup and focus state,
+in addition to the existing serializer/parser/override coverage. UI Inspector
+is full within the standing exclusion: the audit moves to 93 full, 28 partial,
+8 adapters and 2 exclusions with 288 unresolved partial-module spellings and
+no full-module errors.
+
+MSVC debug/release, clang-cl release and MSVC ASan pass 19,973 checks; wasm
+passes its 19,268 applicable checks. The release story build compiles the keyed
+inspector integration.

@@ -27,6 +27,30 @@ Str StyleToJson(Arena* a, const Style& style);
 bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
                    Str* error);
 
+// The inspected element's persistent editor view. Rust owns one DivInspector
+// entity beside the outer Inspector panel; the C++ panel obtains this state as
+// a keyed entity, so its input, initial style and parse error survive frame
+// arenas in the same way. The JSON editor is the complete dependency-free
+// editing path. Rust's second editor is source reflection plus an LSP
+// completion provider, covered by the repository's standing LSP exclusion.
+struct DivInspector {
+    int inspectorId = 0;
+    Style initialStyle = {};
+    Str applied = {};
+    Str error = {};
+    InputState jsonInput;
+
+    ~DivInspector();
+
+    void UpdateInspectedElement(const InspectorPick& pick, Ctx* cx);
+    bool EditJson(Str code, Ctx* cx);
+    void Reset(Ctx* cx);
+    El* Render(const InspectorPick& pick, Ctx* cx);
+
+    static void OnReset(DivInspector* self, Ctx* cx, const ClickEvent*);
+    static void OnFocus(DivInspector* self, Ctx* cx, const ClickEvent*);
+};
+
 struct Inspector {
     Arena* a = nullptr;
     Ctx* cx = nullptr;

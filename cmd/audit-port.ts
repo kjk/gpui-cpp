@@ -68,7 +68,6 @@ const partialUi = new Set([
   "form",
   "global_state",
   "input",
-  "inspector",
   "menu",
   "plot",
   "searchable_list",
@@ -90,7 +89,6 @@ const partialReasons: Record<string, string> = {
   "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",
-  "ui/inspector": "the inspector is intentionally smaller than GPUI's debug inspector",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
   "ui/theme": "filesystem watch/reload and the richer highlight/list/sheet settings remain smaller than Rust",
   "ui/window_border":
