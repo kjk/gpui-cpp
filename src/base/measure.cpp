@@ -28,21 +28,21 @@ void MeasureEnd(Measure* measure) {
     measure->active = false;
 }
 
-void MeasureRunIf(Str name, bool enabled, MeasureFn fn, void* user) {
-    if (!fn) {
+void MeasureRunIf(Str name, bool enabled, MeasureFn fn) {
+    if (!fn.IsValid()) {
         return;
     }
     if (!enabled || !MeasurementEnabled()) {
-        fn(user);
+        fn.Call();
         return;
     }
     Measure m = MeasureBegin(name);
-    fn(user);
+    fn.Call();
     MeasureEnd(&m);
 }
 
-void MeasureRun(Str name, MeasureFn fn, void* user) {
-    MeasureRunIf(name, true, fn, user);
+void MeasureRun(Str name, MeasureFn fn) {
+    MeasureRunIf(name, true, fn);
 }
 
 } // namespace gpui

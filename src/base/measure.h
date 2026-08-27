@@ -15,8 +15,8 @@ struct Measure {
 Measure MeasureBegin(Str name);
 void MeasureEnd(Measure* measure);
 
-using MeasureFn = void (*)(void* user);
-void MeasureRun(Str name, MeasureFn fn, void* user);
-void MeasureRunIf(Str name, bool enabled, MeasureFn fn, void* user);
+using MeasureFn = Func0;
+void MeasureRun(Str name, MeasureFn fn);
+void MeasureRunIf(Str name, bool enabled, MeasureFn fn);
 
 } // namespace gpui
