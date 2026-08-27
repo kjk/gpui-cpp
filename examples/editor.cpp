@@ -920,7 +920,7 @@ EDITOR_ACTION(ActToggleAppMenuBar, "editor::ToggleAppMenuBar")
 // of its own; this example already owns one dialog, and says it in the place
 // a window says everything else.
 static void OnAboutAction(EditorApp*, Ctx* cx, const ActionEvent*) {
-    WindowPushNotification(cx, component::NotificationKind::Info,
+    WindowPushNotification(cx, component::NotificationType::Info,
                            StrL("Editor example — the C++ port of "
                                 "crates/story/examples/editor.rs"));
 }

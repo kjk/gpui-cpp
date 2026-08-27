@@ -18,10 +18,10 @@
      screen but leaves what the Action Center has kept, and that the app has
      an icon in the notification area for as long as the process runs.
    - macOS, Linux, wasm: not implemented. `SysNotifyAvailable` answers false
-     and a post is dropped, so a caller asking for system delivery degrades
-     to whatever else it was going to do — which is what Rust degrades to on
-     a mac that is not running from a bundled `.app` and on a Linux with no
-     notification daemon.
+     and the system half is dropped. `InAppAndSystem` still shows its in-app
+     half; `System` intentionally remains system-only and therefore shows
+     nothing, matching a Rust post rejected by an unavailable notification
+     center.
 
    Rust's retraction on Linux is unsupported for the same reason it is
    partial here: the platform keeps what it has shown. */

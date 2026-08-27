@@ -5,9 +5,8 @@
    Rust's Linux backend is itself the weakest of the three (it documents that
    a daemon must be running and that retraction is unsupported), and a system
    notification that cannot be retracted is one this component would have to
-   describe as best-effort anyway. `SysNotifyAvailable` answers false, so
-   system delivery degrades to in-app the way it does on a Linux with no
-   daemon. */
+   describe as best-effort anyway. `SysNotifyAvailable` answers false, so the
+   system half is dropped the way it is on a Linux host with no daemon. */
 
 #include "sys/notify.h"
 

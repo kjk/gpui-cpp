@@ -2,8 +2,8 @@
 
    It exists — and it is the one platform here that would need a permission
    prompt driven by a user gesture before anything could be posted. Nothing
-   in this tree asks for one, so `SysNotifyAvailable` answers false and
-   system delivery degrades to the in-app toast. */
+   in this tree asks for one, so `SysNotifyAvailable` answers false and the
+   system half is dropped. `InAppAndSystem` still retains its in-app half. */
 
 #include "sys/notify.h"
 

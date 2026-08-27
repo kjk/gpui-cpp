@@ -114,10 +114,11 @@ void WindowCloseSheet(Ctx* cx);
 Entity<component::NotificationListState> WindowNotifications(Ctx* cx);
 // push_notification. `timeoutMs` of 0 is `autohide(false)`; Rust's default is
 // five seconds. Answers the notification's id.
-int WindowPushNotification(Ctx* cx, component::NotificationItem item,
-                           int timeoutMs = 5000);
+int WindowPushNotification(Ctx* cx, component::Notification item,
+                           int timeoutMs = -1);
+int WindowPushNotification(Ctx* cx, Str message);
 // The shorthand every caller wants: one message, of one kind.
-int WindowPushNotification(Ctx* cx, component::NotificationKind kind,
+int WindowPushNotification(Ctx* cx, component::NotificationType kind,
                            Str message);
 void WindowClearNotifications(Ctx* cx);
 int WindowNotificationCount(Ctx* cx);

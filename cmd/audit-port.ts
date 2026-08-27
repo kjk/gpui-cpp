@@ -80,7 +80,6 @@ const partialUi = new Set([
   "inspector",
   "list",
   "menu",
-  "notification",
   "plot",
   "scroll",
   "searchable_list",

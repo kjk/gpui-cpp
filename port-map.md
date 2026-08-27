@@ -166,6 +166,12 @@ The important non-mechanical mappings are encoded in the audit:
   arbitrary prefix/content/suffix children, local callbacks and refinements;
   the bar owns callback precedence, viewport scrolling, overflow, selection
   motion, suffix spacing and the source theme tokens.
+- UI Notification exposes the pinned `NotificationType`, source-shaped
+  `Notification` value and Theme-owned `NotificationSettings`. Window lists
+  retain owned text, group globally limited notifications into stable
+  per-anchor stacks, measure variable card heights, pause timeouts on focus,
+  hover or inactive windows, and preserve click/close/system delivery order.
+  Rust's retained action/content closures project to renderable entities.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -196,7 +202,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 329 declaration spellings still reported in partial modules,
+  2. Review the 326 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

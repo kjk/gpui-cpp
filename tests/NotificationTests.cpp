@@ -150,10 +150,191 @@ static void RegistriesAreIsolatedByApp() {
 
 // The in-app half, which a null Ctx leaves on its own.
 static NotificationItem Item(int id, const char* message) {
-    NotificationItem it;
+    NotificationItem it = Notification::New();
     it.id = id;
-    it.message = Str(message);
+    it.Message(Str(message));
     return it;
+}
+
+static bool SameNotificationText(Str a, const char* b) {
+    int n = (int)strlen(b);
+    return a.len == n && (n == 0 || memcmp(a.s, b, (size_t)n) == 0);
+}
+
+static void SettingsAndBuilderMatchThePublicSourceShape() {
+    NotificationSettings settings;
+    utassert(settings.placement == Anchor::TopRight);
+    utassertnear(settings.margins.top, 50.f);
+    utassertnear(settings.margins.right, 16.f);
+    utassertnear(settings.margins.bottom, 16.f);
+    utassertnear(settings.margins.left, 16.f);
+    utassert(settings.maxItems == 10);
+    utassertnear(settings.width, 382.f);
+    utassert(settings.delivery == NotificationDelivery::InApp);
+
+    Style refine = {};
+    refine.width = 410.f;
+    Notification n = Notification::Success(StrL("saved"));
+    n.Title(StrL("Done"))
+        .Placement(Anchor::BottomLeft)
+        .System()
+        .Autohide(false)
+        .Icon(IconName::Bell)
+        .Refine(refine, StyleFieldWidth);
+    utassert(n.hasType && n.type == NotificationType::Success);
+    utassert(SameNotificationText(n.title, "Done"));
+    utassert(SameNotificationText(n.message, "saved"));
+    utassert(n.hasPlacement && n.placement == Anchor::BottomLeft);
+    utassert(n.hasDelivery && n.delivery == NotificationDelivery::System);
+    utassert(!n.autohide);
+    utassert(n.hasIcon && n.icon == IconName::Bell);
+    utassert(n.styleSet == StyleFieldWidth && n.style.width == 410.f);
+
+    Notification plain = Notification::New();
+    plain.Message(StrL("plain"));
+    utassert(!plain.hasType);
+    utassert(!plain.hasPlacement);
+    utassert(!plain.hasDelivery);
+    utassert(plain.autohide);
+
+    EntityId action = {7, 2};
+    plain.Action(action);
+    utassert(plain.action == action && !plain.autohide);
+}
+
+static void PushOwnsItsTextAndHonorsBuilderAutohide() {
+    NotificationListState s;
+    char text[] = "borrowed";
+    Notification n = Notification::Info(Str(text));
+    n.Autohide(false);
+    int id = NotificationPush(&s, nullptr, n);
+    text[0] = 'X';
+    utassert(id > 0 && s.items.len == 1);
+    utassert(SameNotificationText(s.items[0].message, "borrowed"));
+    utassert(s.items[0].ownsText);
+    utassert(!s.stack.entries[0].hasTimeout);
+}
+
+namespace {
+struct CloseRecorder {
+    int closed = 0;
+    int clicked = 0;
+    static void OnClose(CloseRecorder* self, Ctx*, const ClickEvent*) {
+        self->closed++;
+    }
+    static void OnClick(CloseRecorder* self, Ctx*, const ClickEvent*) {
+        self->clicked++;
+    }
+};
+} // namespace
+
+static ToastStatus StatusOf(const NotificationListState& s, int id);
+
+static void CloseAndBodyClickFollowTheSourceLifecycle() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<CloseRecorder> recorder = EntityNewState<CloseRecorder>(&app);
+    Ctx cx = {&app, win, nullptr, recorder.id};
+    NotificationListState s;
+
+    Notification passive = Notification::Info(StrL("passive"));
+    passive.Autohide(false).OnClose(Listen(&cx, &CloseRecorder::OnClose));
+    int passiveId = NotificationPush(&s, &cx, passive);
+    ClickEvent left = {};
+    NotificationListState::OnItemClick(&s, &cx, &left, passiveId);
+    utassert(StatusOf(s, passiveId) != ToastStatus::Ending);
+
+    ClickEvent middle = {};
+    middle.button = MouseButton::Middle;
+    NotificationListState::OnItemClick(&s, &cx, &middle, passiveId);
+    utassert(StatusOf(s, passiveId) == ToastStatus::Ending);
+    NotificationAdvance(&s, &cx, kToastExitMs);
+    utassert(recorder.Get(&app)->closed == 1);
+
+    Notification active = Notification::Info(StrL("active"));
+    active.Autohide(false)
+        .OnClick(Listen(&cx, &CloseRecorder::OnClick))
+        .OnClose(Listen(&cx, &CloseRecorder::OnClose));
+    int activeId = NotificationPush(&s, &cx, active);
+    NotificationListState::OnItemClick(&s, &cx, &left, activeId);
+    utassert(recorder.Get(&app)->clicked == 1);
+    utassert(StatusOf(s, activeId) == ToastStatus::Ending);
+    NotificationAdvance(&s, &cx, kToastExitMs);
+    utassert(recorder.Get(&app)->closed == 2);
+
+    delete win;
+    EntityDropAll(&app);
+}
+
+static void PerNotificationPlacementsBuildIndependentStableStacks() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    win->paint.viewW = 800;
+    win->paint.viewH = 600;
+    Arena* a = ArenaNew();
+    Theme themed = ThemeLight();
+    themed.notification.width = 411.f;
+    themed.notification.margins.top = 73.f;
+    ThemeInstall(&app, ThemeMode::Light, themed);
+    Entity<NotificationListState> state =
+        EntityNewState<NotificationListState>(&app);
+    Ctx cx = {&app, win, a, state.id};
+    NotificationListState* s = state.Get(&app);
+    s->useThemeSettings = true;
+    Notification top = Notification::Info(StrL("default"));
+    top.Autohide(false);
+    Notification bottom = Notification::Info(StrL("bottom"));
+    bottom.Placement(Anchor::BottomLeft).Autohide(false);
+    NotificationPush(s, &cx, top);
+    NotificationPush(s, &cx, bottom);
+
+    El* root = NotificationList::New(&cx, state)->IntoEl();
+    utassert(root->first && root->first->next && !root->first->next->next);
+    utassertnear(root->first->style.width, 411.f);
+    utassertnear(root->first->style.absTop, 73.f);
+    utassert(root->first->next->style.absTop != root->first->style.absTop);
+    utassert(s->stackFocus[(int)Anchor::TopRight].IsValid());
+    utassert(s->stackFocus[(int)Anchor::BottomLeft].IsValid());
+
+    HoverEvent hover = {};
+    hover.hovered = true;
+    NotificationListState::OnHover(s, &cx, &hover,
+                                   (intptr_t)Anchor::BottomLeft);
+    utassert(s->stackHovered[(int)Anchor::BottomLeft]);
+    utassert(!s->stackHovered[(int)Anchor::TopRight]);
+    utassert(s->IsExpanded());
+
+    WindowMotionFree(win);
+    delete win;
+    ArenaDelete(a);
+    EntityDropAll(&app);
+}
+
+static void InactiveWindowsAndExpandedStacksPauseOnlyTheTimeout() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {&app, win, nullptr, {}};
+    NotificationListState s;
+    int id = NotificationPush(&s, &cx, Notification::Info(StrL("pause")),
+                              100);
+    NotificationAdvance(&s, &cx, kToastTransitionMs);
+    utassert(StatusOf(s, id) == ToastStatus::Present);
+
+    win->active = false;
+    NotificationAdvance(&s, &cx, 1000);
+    utassert(StatusOf(s, id) == ToastStatus::Present);
+    win->active = true;
+    s.stackHovered[(int)Anchor::TopRight] = true;
+    NotificationAdvance(&s, &cx, 1000);
+    utassert(StatusOf(s, id) == ToastStatus::Present);
+    s.stackHovered[(int)Anchor::TopRight] = false;
+    NotificationAdvance(&s, &cx, 100);
+    utassert(StatusOf(s, id) == ToastStatus::Ending);
+
+    delete win;
 }
 
 static void SystemOnlyDeliveryShowsNoCard() {
@@ -311,6 +492,11 @@ void TestNotification() {
     TheOldestEntriesArePrunedPastTheCap();
     AResponseToAForeignTagIsIgnored();
     RegistriesAreIsolatedByApp();
+    SettingsAndBuilderMatchThePublicSourceShape();
+    PushOwnsItsTextAndHonorsBuilderAutohide();
+    CloseAndBodyClickFollowTheSourceLifecycle();
+    PerNotificationPlacementsBuildIndependentStableStacks();
+    InactiveWindowsAndExpandedStacksPauseOnlyTheTimeout();
     SystemOnlyDeliveryShowsNoCard();
     AutohideExpiryDoesNotRetractTheSystemHalf();
     MaxItemsLimitsVisibilityWithoutEvictingMountedToasts();

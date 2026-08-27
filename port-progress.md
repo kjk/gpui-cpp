@@ -7290,3 +7290,47 @@ full, 43 partial, 8 adapters and 2 exclusions, with the existing 329
 unresolved spellings all belonging to other partial modules. MSVC release
 passes 19,626 checks, the release story build passes, and all five tab variants
 plus dynamic tabs were visually smoke-tested.
+
+## Notification settings and values own the complete in-app lifecycle
+
+The two missing declarations exposed a wider structural mismatch. The port
+named `NotificationType` as a kind with an extra `None` case, kept placement,
+width, delivery and limits on one list rather than Theme, represented retained
+notifications as a string record separate from the public card builder, and
+rendered every notification through one global stack. Consequently a
+per-notification placement changed the default for every card, custom content
+and actions in the story were inert, variable card heights were assumed to be
+76 DIPs, body clicks were not wired, close callbacks never fired after exit,
+and an inactive window did not pause auto-hide.
+
+`NotificationType`, `NotificationDelivery` and `NotificationSettings` now
+live in a leaf header owned by Theme. `Notification` is the source-shaped POD
+builder: optional type/icon/placement/delivery, typed and keyed identity,
+title/message, auto-hide, click/close listeners, style refinement and retained
+action/content entities. The list clones strings at push time and releases
+them at replacement/removal, so frame-arena or stack text cannot dangle.
+Renderable entities are the callback-free C++ projection of Rust's retained
+action/content closures and rebuild their element subtree each frame.
+
+Visibility is still limited globally before grouping, but each effective
+Anchor now receives its own stable id, focus/hover expansion state, measured
+height geometry and motion slots. Theme margins and width position every
+stack; card enter/exit use the pinned 400/200 ms and 96-DIP offset; hover,
+contained focus and inactive windows pause only the Present timeout. Ordinary
+body clicks dismiss only when `on_click` exists, middle-click always dismisses,
+the close button stops bubbling, and `on_close` fires only after the exit.
+The story now uses typed builders, independent placement overrides, a retained
+Retry action, custom Markdown content and typed manual removal.
+
+The remaining visual divergence is renderer-level: `paint.h` has no box-shadow
+primitive, so the source's `toast_shadow` cannot be drawn and the themed border
+continues to separate a card from the page. System delivery remains backed by
+the Windows notification-area bridge; the already-documented macOS, Linux and
+wasm adapters drop the system half, while `InAppAndSystem` still retains its
+in-app half.
+
+UI Notification is full: the audit moves to 79 full, 42 partial, 8 adapters
+and 2 exclusions with 326 unresolved partial-module spellings. MSVC release,
+MSVC ASan and clang-cl release pass 19,670 checks; MSVC and clang-cl release
+story builds pass, and the default top-right notification was visually
+smoke-tested at the pinned width and Theme margin.

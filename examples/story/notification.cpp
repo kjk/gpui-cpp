@@ -11,15 +11,15 @@ enum {
 };
 
 // ANCHORS, and MAX_ITEMS.
-static const component::NotificationAnchor kAnchors[] = {
-    component::NotificationAnchor::TopLeft,
-    component::NotificationAnchor::TopCenter,
-    component::NotificationAnchor::TopRight,
-    component::NotificationAnchor::LeftCenter,
-    component::NotificationAnchor::RightCenter,
-    component::NotificationAnchor::BottomLeft,
-    component::NotificationAnchor::BottomCenter,
-    component::NotificationAnchor::BottomRight,
+static const Anchor kAnchors[] = {
+    Anchor::TopLeft,
+    Anchor::TopCenter,
+    Anchor::TopRight,
+    Anchor::LeftCenter,
+    Anchor::RightCenter,
+    Anchor::BottomLeft,
+    Anchor::BottomCenter,
+    Anchor::BottomRight,
 };
 static const char* const kAnchorNames[] = {
     "TopLeft",     "TopCenter",  "TopRight",     "LeftCenter",
@@ -44,16 +44,16 @@ static void NotifMenuOpen(NotificationStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-// Both dropdowns write into the list itself, which is where Rust keeps them
-// (Theme::notification.placement / max_items).
+// Both dropdowns write Theme::notification, where Rust keeps them.
 static void NotifMenuAct(NotificationStory* self, Ctx* cx, const ClickEvent*,
                          intptr_t act) {
-    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
-    if (st && act >= NotifActMaxItems) {
-        st->maxItems = kMaxItems[act - NotifActMaxItems];
-    } else if (st && act >= NotifActPlacement) {
-        st->placement = kAnchors[act - NotifActPlacement];
+    Theme next = ThemeNow(cx->app);
+    if (act >= NotifActMaxItems) {
+        next.notification.maxItems = kMaxItems[act - NotifActMaxItems];
+    } else if (act >= NotifActPlacement) {
+        next.notification.placement = kAnchors[act - NotifActPlacement];
     }
+    ThemeInstall(cx->app, ThemeGet(cx->app), next);
     self->openMenu = 0;
     Notify(cx);
 }
@@ -63,10 +63,10 @@ static void NotifMenuAct(NotificationStory* self, Ctx* cx, const ClickEvent*,
 // in Rust: the same id replaces rather than stacking a second copy.
 struct NotifySpec {
     int id;
-    component::NotificationKind kind;
+    bool hasType;
+    component::NotificationType type;
     const char* title;
     const char* message;
-    component::NotificationAnchor anchor;
     // autohide(false) is a timeout of zero: it stays until it is dismissed.
     int timeoutMs;
 };
@@ -74,37 +74,36 @@ struct NotifySpec {
 static const int kNotifyTimeout = 5000;
 
 static NotifySpec NotifySpecFor(int which) {
-    using K = component::NotificationKind;
-    using A = component::NotificationAnchor;
+    using K = component::NotificationType;
     switch (which) {
         case 0:
-            return {0,       K::Info,       nullptr, "This is a notification.",
-                    A::None, kNotifyTimeout};
+            return {0, false, K::Info, nullptr, "This is a notification.",
+                    kNotifyTimeout};
         case 1:
             return {0,
+                    true,
                     K::Info,
                     nullptr,
                     "You have been saved file "
                     "successfully.",
-                    A::None,
                     kNotifyTimeout};
         case 2:
-            return {0,       K::Success,
-                    nullptr, "We have received your payment successfully.",
-                    A::None, kNotifyTimeout};
+            return {0, true, K::Success, nullptr,
+                    "We have received your payment successfully.",
+                    kNotifyTimeout};
         case 3:
             return {0,
+                    true,
                     K::Warning,
                     nullptr,
                     "The network is not stable, please check your connection.",
-                    A::None,
                     kNotifyTimeout};
         case 4:
             return {0,
+                    true,
                     K::Error,
                     nullptr,
                     "There have some error occurred. Please try again later.",
-                    A::None,
                     kNotifyTimeout};
         case 5:
         case 6:
@@ -115,58 +114,90 @@ static NotifySpec NotifySpecFor(int which) {
                      : which == 8 ? K::Error
                                   : K::Info;
             return {0,
+                    true,
                     kind,
                     "All changes saved",
                     "Your changes have been saved to the cloud and will sync "
                     "across all of your devices.",
-                    A::None,
                     kNotifyTimeout};
         }
         case 9:
-            return {900,     K::Info,
-                    nullptr, "Only one of these is ever on screen at a time.",
-                    A::None, kNotifyTimeout};
+            return {900, true, K::Info, nullptr,
+                    "Only one of these is ever on screen at a time.",
+                    kNotifyTimeout};
         case 10:
-            return {910,     K::Info,       nullptr, "Notification A",
-                    A::None, kNotifyTimeout};
+            return {910, true, K::Info, nullptr, "Notification A",
+                    kNotifyTimeout};
         case 11:
-            return {911,     K::Info,       nullptr, "Notification B",
-                    A::None, kNotifyTimeout};
+            return {911, true, K::Info, nullptr, "Notification B",
+                    kNotifyTimeout};
         // The system-delivered pair, both under one id: a second push
         // replaces the first in the notification center as it does in the
         // stack.
         case 50:
-            return {950,
+            return {950, true,
                     K::Info,
                     "Build finished",
                     "Delivered straight to the notification center.",
-                    A::None,
                     kNotifyTimeout};
         case 51:
-            return {950,
+            return {950, true,
                     K::Info,
                     "Build finished",
                     "Shown as a toast and in the notification center.",
-                    A::None,
                     0};
         case 21:
-            return {0,
+            return {0, true,
                     K::Info,
                     "on_click vs on_close",
                     "Click the body to fire on_click; click the X to close. "
                     "Watch the console.",
-                    A::None,
                     kNotifyTimeout};
         default:
-            return {0,
+            return {0, false,
                     K::Info,
                     nullptr,
                     "You can close this notification by clicking the Close "
                     "button.",
-                    A::None,
                     0};
     }
 }
+
+namespace {
+struct UniqueNotice {};
+struct KeyedNotice {};
+struct ActionNotice {};
+struct ClickCloseNotice {};
+struct SystemNotice {};
+struct ManualNotice {};
+
+struct RetryActionView {
+    static void OnRetry(RetryActionView*, Ctx* cx, const ClickEvent*) {
+        log(StrL("[notification] retry clicked\n"));
+        WindowRemoveNotification<ActionNotice>(cx);
+    }
+    static El* Render(RetryActionView*, Ctx* cx) {
+        return component::Button::New(cx, StrL("try-again"))
+            ->Primary()
+            ->WithSize(UiSize::Small)
+            ->Label(StrL("Retry"))
+            ->OnClick(Listen(cx, &RetryActionView::OnRetry))
+            ->IntoEl();
+    }
+};
+
+struct NotificationMarkdownView {
+    static El* Render(NotificationMarkdownView*, Ctx* cx) {
+        return component::TextView::New(
+                   cx,
+                   StrL("This is a custom notification.\n\n- List item 1\n- "
+                        "List item 2\n- [Click here](https://github.com/"
+                        "longbridge/gpui-component)"))
+            ->Font(14)
+            ->IntoEl();
+    }
+};
+} // namespace
 
 static void ClickNote(NotificationStory*, Ctx*, const ClickEvent*) {
     log(StrL("[notification] on_click fired\n"));
@@ -176,6 +207,10 @@ static void ClickSystemNote(NotificationStory*, Ctx*, const ClickEvent*) {
     log(StrL("[notification] system notification clicked\n"));
 }
 
+static void CloseNote(NotificationStory*, Ctx*, const ClickEvent*) {
+    log(StrL("[notification] on_close fired\n"));
+}
+
 static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
                        intptr_t which) {
     component::NotificationListState* st = StoryNotifications(cx).Get(cx);
@@ -183,43 +218,58 @@ static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
         return;
     }
     NotifySpec spec = NotifySpecFor((int)which);
-    component::NotificationItem item;
+    component::Notification item = component::Notification::New();
     item.id = spec.id;
-    item.kind = spec.kind;
-    item.title = spec.title ? Str(spec.title) : Str{};
-    item.message = Str(spec.message);
+    item.Message(Str(spec.message)).Autohide(spec.timeoutMs != 0);
+    if (spec.hasType) {
+        item.WithType(spec.type);
+    }
+    if (spec.title) {
+        item.Title(Str(spec.title));
+    }
+    if (which == 9) item.Id<UniqueNotice>();
+    if (which == 10) item.Id1<KeyedNotice>(1);
+    if (which == 11) item.Id1<KeyedNotice>(2);
+    if (which == 20) {
+        item.Id<ActionNotice>()
+            .Title(StrL("Uh oh! Something went wrong."))
+            .Message(StrL("There was a problem with your request."))
+            .Action(EntityNew<RetryActionView>(cx->app));
+    }
     if (which == 21) {
-        item.onClick = Listen(cx, &ClickNote);
+        item.Id<ClickCloseNotice>()
+            .OnClick(Listen(cx, &ClickNote))
+            .OnClose(Listen(cx, &CloseNote))
+            .Autohide(false);
     }
     // .system() and .in_app_and_system(): where this one goes, whatever the
     // list's own delivery is.
     if (which == 50 || which == 51) {
-        item.hasDelivery = true;
-        item.delivery = which == 50
-                            ? component::NotificationDelivery::System
-                            : component::NotificationDelivery::InAppAndSystem;
-        item.onClick = Listen(cx, &ClickSystemNote);
+        item.Id<SystemNotice>()
+            .Delivery(which == 50
+                          ? component::NotificationDelivery::System
+                          : component::NotificationDelivery::InAppAndSystem)
+            .OnClick(Listen(cx, &ClickSystemNote));
     }
-    // Placement per notification: the buttons in that section move the whole
-    // stack, which is the corner a notification without one of its own goes
-    // to as well.
+    // A placement override creates its own stack; it does not move existing
+    // notifications that use the Theme default.
     if (which >= 30 && which < 38) {
-        st->placement =
-            (component::NotificationAnchor)((int)which - 30 +
-                                            (int)component::NotificationAnchor::
-                                                TopLeft);
-        item.message = StrL("This notification is at the new placement.");
+        int ix = (int)which - 30;
+        item.Placement(kAnchors[ix]).Message(
+            StoryFmt(cx, "This notification is at %s.", kAnchorNames[ix]));
     }
-    NotificationPush(st, cx, item, spec.timeoutMs);
+    if (which == 40) {
+        item.Content(EntityNew<NotificationMarkdownView>(cx->app));
+    }
+    if (which == 41) {
+        item.Id<ManualNotice>().Autohide(false);
+    }
+    NotificationPush(st, cx, item);
     Notify(cx);
 }
 
-// Dismiss All: every notification starts on its way out.
-static void DismissAll(NotificationStory*, Ctx* cx, const ClickEvent*) {
-    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
-    if (st) {
-        NotificationClear(st, cx);
-    }
+static void DismissManual(NotificationStory*, Ctx* cx, const ClickEvent*) {
+    WindowRemoveNotification<ManualNotice>(cx);
     Notify(cx);
 }
 
@@ -228,15 +278,16 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     // story_toolbar_group(): the placement and max-items dropdowns.
-    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
+    const component::NotificationSettings& settings =
+        ThemeNow(cx->app).notification;
     int placementIx = 2, maxIx = 4;
     for (int i = 0; i < kNAnchors; i++) {
-        if (st && st->placement == kAnchors[i]) {
+        if (settings.placement == kAnchors[i]) {
             placementIx = i;
         }
     }
     for (int i = 0; i < kNMaxItems; i++) {
-        if (st && st->maxItems == kMaxItems[i]) {
+        if (settings.maxItems == kMaxItems[i]) {
             maxIx = i;
         }
     }
@@ -402,8 +453,8 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
         cx, "System notification",
         "Deliver to the OS notification center; click the system "
         "notification to bring the window back. Windows shows these in the "
-        "Action Center; macOS, Linux and the browser have no backend here "
-        "and fall back to the in-app toast.");
+        "Action Center; macOS, Linux and the browser currently drop the "
+        "system half, while In-app and system still shows its toast.");
     StorySectionAdd(system,
                     component::Button::New(cx, StrL("show-notify-system"))
                         ->OnClick(Listen(cx, &ShowNotify, 50))
@@ -441,7 +492,7 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                         ->IntoEl());
     StorySectionAdd(manual,
                     component::Button::New(cx, StrL("manual-close-notify"))
-                        ->OnClick(Listen(cx, &DismissAll))
+                        ->OnClick(Listen(cx, &DismissManual))
                         ->Outline()
                         ->Label(StrL("Dismiss All"))
                         ->IntoEl());

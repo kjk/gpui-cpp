@@ -141,6 +141,7 @@ Entity<component::NotificationListState> WindowNotifications(Ctx* cx) {
         l->notifications =
             EntityNewState<component::NotificationListState>(cx->app);
         if (component::NotificationListState* st = l->notifications.Get(cx)) {
+            st->useThemeSettings = true;
             // What a system notification's response is dispatched back to,
             // stamped here as well as at render because a push can come
             // before the list has ever drawn.
@@ -157,7 +158,7 @@ Entity<component::NotificationListState> WindowNotifications(Ctx* cx) {
     return l->notifications;
 }
 
-int WindowPushNotification(Ctx* cx, component::NotificationItem item,
+int WindowPushNotification(Ctx* cx, component::Notification item,
                            int timeoutMs) {
     component::NotificationListState* st = WindowNotifications(cx).Get(cx);
     if (!st) {
@@ -168,11 +169,16 @@ int WindowPushNotification(Ctx* cx, component::NotificationItem item,
     return id;
 }
 
-int WindowPushNotification(Ctx* cx, component::NotificationKind kind,
+int WindowPushNotification(Ctx* cx, Str message) {
+    component::Notification item = component::Notification::New();
+    item.Message(message);
+    return WindowPushNotification(cx, item, 5000);
+}
+
+int WindowPushNotification(Ctx* cx, component::NotificationType kind,
                            Str message) {
-    component::NotificationItem item;
-    item.kind = kind;
-    item.message = message;
+    component::Notification item = component::Notification::New();
+    item.Message(message).WithType(kind);
     // Notification::timeout, Duration::from_secs(5).
     return WindowPushNotification(cx, item, 5000);
 }

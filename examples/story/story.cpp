@@ -854,7 +854,7 @@ Entity<component::NotificationListState> StoryNotifications(Ctx* cx) {
 }
 
 void StoryPushNotification(Ctx* cx, Str message) {
-    WindowPushNotification(cx, component::NotificationKind::None, message);
+    WindowPushNotification(cx, message);
 }
 
 static int StoryNotificationCount(Ctx* cx) {

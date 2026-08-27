@@ -2,10 +2,9 @@
 
    UNUserNotificationCenter refuses to hand a notification to an application
    that is not a bundle in a location the system trusts — which is what Rust
-   documents about its own macOS backend, where a plain `cargo run` degrades
-   to in-app only. That degrading is what this is: `SysNotifyAvailable`
-   answers false and a post goes nowhere, so a caller asking for system
-   delivery gets what it would have got from an unbundled Rust build. */
+   documents about its own macOS backend. `SysNotifyAvailable` answers false
+   and a post goes nowhere, which is what an unbundled Rust build gets from
+   the system center; an `InAppAndSystem` notification keeps its in-app half. */
 
 #include "sys/notify.h"
 
