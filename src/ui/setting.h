@@ -93,7 +93,7 @@ inline bool SettingValueSame(const T& a, const T& b) {
 
 template <>
 inline bool SettingValueSame<Str>(const Str& a, const Str& b) {
-    return StrSame(a, b);
+    return base::StrEq(a, b);
 }
 
 // A source-shaped typed field. Rust retains Rc closures; this tree retains

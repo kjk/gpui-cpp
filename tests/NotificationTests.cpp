@@ -156,10 +156,6 @@ static NotificationItem Item(int id, const char* message) {
     return it;
 }
 
-static bool SameNotificationText(Str a, const char* b) {
-    return StrEq(a, Str(b));
-}
-
 static void SettingsAndBuilderMatchThePublicSourceShape() {
     NotificationSettings settings;
     utassert(settings.placement == Anchor::TopRight);
@@ -181,8 +177,8 @@ static void SettingsAndBuilderMatchThePublicSourceShape() {
         .Icon(IconName::Bell)
         .Refine(refine, StyleFieldWidth);
     utassert(n.hasType && n.type == NotificationType::Success);
-    utassert(SameNotificationText(n.title, "Done"));
-    utassert(SameNotificationText(n.message, "saved"));
+    utassert(base::StrEq(n.title, "Done"));
+    utassert(base::StrEq(n.message, "saved"));
     utassert(n.hasPlacement && n.placement == Anchor::BottomLeft);
     utassert(n.hasDelivery && n.delivery == NotificationDelivery::System);
     utassert(!n.autohide);
@@ -209,7 +205,7 @@ static void PushOwnsItsTextAndHonorsBuilderAutohide() {
     int id = NotificationPush(&s, nullptr, n);
     text[0] = 'X';
     utassert(id > 0 && s.items.len == 1);
-    utassert(SameNotificationText(s.items[0].message, "borrowed"));
+    utassert(base::StrEq(s.items[0].message, "borrowed"));
     utassert(s.items[0].ownsText);
     utassert(!s.stack.entries[0].hasTimeout);
 }

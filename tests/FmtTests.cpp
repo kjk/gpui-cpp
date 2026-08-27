@@ -11,78 +11,74 @@
 
 #include <string.h>
 
-static bool Is(Str got, const char* want) {
-    return StrEq(got, Str(want));
-}
-
 static void TheOrdinaryDirectives() {
-    utassert(Is(fmt("%d", 42), "42"));
-    utassert(Is(fmt("%i", -7), "-7"));
-    utassert(Is(fmt("%u", 7), "7"));
-    utassert(Is(fmt("%o", 8), "10"));
-    utassert(Is(fmt("%x", 255), "ff"));
-    utassert(Is(fmt("%X", 255), "FF"));
-    utassert(Is(fmt("%c", 'z'), "z"));
-    utassert(Is(fmt("%f", 1.5), "1.500000"));
-    utassert(Is(fmt("%g", 0.5), "0.5"));
-    utassert(Is(fmt("%s", StrL("hi")), "hi"));
-    utassert(Is(fmt("a%db%dc", 1, 2), "a1b2c"));
-    utassert(Is(fmt("no directives"), "no directives"));
+    utassert(base::StrEq(fmt("%d", 42), "42"));
+    utassert(base::StrEq(fmt("%i", -7), "-7"));
+    utassert(base::StrEq(fmt("%u", 7), "7"));
+    utassert(base::StrEq(fmt("%o", 8), "10"));
+    utassert(base::StrEq(fmt("%x", 255), "ff"));
+    utassert(base::StrEq(fmt("%X", 255), "FF"));
+    utassert(base::StrEq(fmt("%c", 'z'), "z"));
+    utassert(base::StrEq(fmt("%f", 1.5), "1.500000"));
+    utassert(base::StrEq(fmt("%g", 0.5), "0.5"));
+    utassert(base::StrEq(fmt("%s", StrL("hi")), "hi"));
+    utassert(base::StrEq(fmt("a%db%dc", 1, 2), "a1b2c"));
+    utassert(base::StrEq(fmt("no directives"), "no directives"));
 
     // %% is the only escape, and a bare '{' is text — which is what lets a
     // registry path or a CSS template through unformatted.
-    utassert(Is(fmt("100%%"), "100%"));
-    utassert(Is(fmt("a{b}c"), "a{b}c"));
-    utassert(Is(fmt("{ %d }", 1), "{ 1 }"));
+    utassert(base::StrEq(fmt("100%%"), "100%"));
+    utassert(base::StrEq(fmt("a{b}c"), "a{b}c"));
+    utassert(base::StrEq(fmt("{ %d }", 1), "{ 1 }"));
 }
 
 static void FlagsWidthAndPrecision() {
-    utassert(Is(fmt("%5d|", 42), "   42|"));
-    utassert(Is(fmt("%-5d|", 42), "42   |"));
-    utassert(Is(fmt("%05d", 42), "00042"));
-    utassert(Is(fmt("%+d", 42), "+42"));
-    utassert(Is(fmt("%#x", 255), "0xff"));
-    utassert(Is(fmt("%.2f", 1.0), "1.00"));
-    utassert(Is(fmt("%8.3f|", 2.5), "   2.500|"));
+    utassert(base::StrEq(fmt("%5d|", 42), "   42|"));
+    utassert(base::StrEq(fmt("%-5d|", 42), "42   |"));
+    utassert(base::StrEq(fmt("%05d", 42), "00042"));
+    utassert(base::StrEq(fmt("%+d", 42), "+42"));
+    utassert(base::StrEq(fmt("%#x", 255), "0xff"));
+    utassert(base::StrEq(fmt("%.2f", 1.0), "1.00"));
+    utassert(base::StrEq(fmt("%8.3f|", 2.5), "   2.500|"));
 
     // %s does its own padding and truncation, because a Str need not be
     // NUL-terminated and snprintf would walk past the end looking for one.
-    utassert(Is(fmt("%6s|", StrL("hi")), "    hi|"));
-    utassert(Is(fmt("%-6s|", StrL("hi")), "hi    |"));
-    utassert(Is(fmt("%.2s", StrL("hello")), "he"));
-    utassert(Is(fmt("%s", Str(StrL("hello").s, 2)), "he"));
+    utassert(base::StrEq(fmt("%6s|", StrL("hi")), "    hi|"));
+    utassert(base::StrEq(fmt("%-6s|", StrL("hi")), "hi    |"));
+    utassert(base::StrEq(fmt("%.2s", StrL("hello")), "he"));
+    utassert(base::StrEq(fmt("%s", Str(StrL("hello").s, 2)), "he"));
 }
 
 static void TheLengthModifierIsNormalized() {
     int64_t big = 5000000000LL;
-    utassert(Is(fmt("%lld", big), "5000000000"));
-    utassert(Is(fmt("%I64d", big), "5000000000"));
-    utassert(Is(fmt("%jd", big), "5000000000"));
-    utassert(Is(fmt("%zu", (size_t)12), "12"));
-    utassert(Is(fmt("%ld", 12), "12"));
-    utassert(Is(fmt("%hd", 12), "12"));
+    utassert(base::StrEq(fmt("%lld", big), "5000000000"));
+    utassert(base::StrEq(fmt("%I64d", big), "5000000000"));
+    utassert(base::StrEq(fmt("%jd", big), "5000000000"));
+    utassert(base::StrEq(fmt("%zu", (size_t)12), "12"));
+    utassert(base::StrEq(fmt("%ld", 12), "12"));
+    utassert(base::StrEq(fmt("%hd", 12), "12"));
 }
 
 static void TheAnyDirectives() {
     // %v, %{} and %{n} format by the argument's own type.
-    utassert(Is(fmt("%v", 42), "42"));
-    utassert(Is(fmt("%{}", 42), "42"));
-    utassert(Is(fmt("%{0}", 42), "42"));
-    utassert(Is(fmt("%{}", -7), "-7"));
-    utassert(Is(fmt("%{}", 1.5f), "1.5"));
-    utassert(Is(fmt("%{}", 2.25), "2.25"));
-    utassert(Is(fmt("%{}", StrL("hi")), "hi"));
-    utassert(Is(fmt("%{}", 'z'), "z"));
+    utassert(base::StrEq(fmt("%v", 42), "42"));
+    utassert(base::StrEq(fmt("%{}", 42), "42"));
+    utassert(base::StrEq(fmt("%{0}", 42), "42"));
+    utassert(base::StrEq(fmt("%{}", -7), "-7"));
+    utassert(base::StrEq(fmt("%{}", 1.5f), "1.5"));
+    utassert(base::StrEq(fmt("%{}", 2.25), "2.25"));
+    utassert(base::StrEq(fmt("%{}", StrL("hi")), "hi"));
+    utassert(base::StrEq(fmt("%{}", 'z'), "z"));
 
     // Positional, in any order, and the same argument twice.
-    utassert(Is(fmt("%{1}-%{0}", 1, 2), "2-1"));
-    utassert(Is(fmt("%{0}%{0}", 5), "55"));
-    utassert(Is(fmt("a%{0}b%{1}c", 1, 2), "a1b2c"));
+    utassert(base::StrEq(fmt("%{1}-%{0}", 1, 2), "2-1"));
+    utassert(base::StrEq(fmt("%{0}%{0}", 5), "55"));
+    utassert(base::StrEq(fmt("a%{0}b%{1}c", 1, 2), "a1b2c"));
 
     // %{n} does not move the counter a plain directive walks, so the two
     // together are easy to mis-count — which is what the doc block warns of,
     // written down as a fact rather than as advice.
-    utassert(Is(fmt("%d %{0}", 7), "7 7"));
+    utassert(base::StrEq(fmt("%d %{0}", 7), "7 7"));
 }
 
 static void AFormatThatDoesNotHoldUpAnswersNothing() {
@@ -106,8 +102,8 @@ static void AFormatThatDoesNotHoldUpAnswersNothing() {
 
     // An integer directive takes anything integer-like, which is printf's
     // own leniency rather than an accident.
-    utassert(Is(fmt("%c", 122), "z"));
-    utassert(Is(fmt("%d", 'a'), "97"));
+    utassert(base::StrEq(fmt("%c", 122), "z"));
+    utassert(base::StrEq(fmt("%d", 'a'), "97"));
 }
 
 static void OutputLongerThanTheScratchBuffer() {
@@ -127,7 +123,7 @@ static void OutputLongerThanTheScratchBuffer() {
     // fmt() answers temp-arena memory and nothing else.
     Arena* a = ArenaNew();
     Str kept = StrDup(a, fmt("%d + %d", 3, 4));
-    utassert(Is(kept, "3 + 4"));
+    utassert(base::StrEq(kept, "3 + 4"));
     ArenaDelete(a);
 }
 

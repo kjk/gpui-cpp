@@ -153,7 +153,7 @@ void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count) {
 
 int TreeIndexOf(const TreeState* s, Str id) {
     for (int i = 0; i < s->entries.len; i++) {
-        if (StrSame(s->items[s->entries[i]].id, id)) {
+        if (base::StrEq(s->items[s->entries[i]].id, id)) {
             return i;
         }
     }
@@ -206,7 +206,7 @@ void TreeToggleExpand(TreeState* s, Ctx* cx, int entryIx) {
 int TreeRevealItem(TreeState* s, Str id) {
     int item = -1;
     for (int i = 0; i < s->items.len; i++) {
-        if (StrSame(s->items[i].id, id)) {
+        if (base::StrEq(s->items[i].id, id)) {
             item = i;
             break;
         }
@@ -247,7 +247,7 @@ int TreeRevealItem(TreeState* s, Ctx* cx, Str id,
     }
     int item = -1;
     for (int i = 0; i < s->items.len; i++) {
-        if (StrSame(s->items[i].id, id)) {
+        if (base::StrEq(s->items[i].id, id)) {
             item = i;
             break;
         }
@@ -290,7 +290,7 @@ void TreeSetSelectedItem(TreeState* s, Ctx* cx, Str id) {
         if (ix < 0) {
             int item = -1;
             for (int i = 0; i < s->items.len; i++) {
-                if (StrSame(s->items[i].id, id)) {
+                if (base::StrEq(s->items[i].id, id)) {
                     item = i;
                     break;
                 }

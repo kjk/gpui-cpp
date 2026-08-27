@@ -116,7 +116,7 @@ void ComboboxState::SetSelectedValues(const Str* values, int nValues,
             }
         } else {
             for (int i = 0; i < state.nItems; i++) {
-                if (StrSame(state.items[i].value, values[v])) {
+                if (base::StrEq(state.items[i].value, values[v])) {
                     found = i;
                     break;
                 }

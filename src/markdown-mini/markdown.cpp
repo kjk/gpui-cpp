@@ -119,11 +119,6 @@ static Str MiniOwn(Arena* a, Str s) {
     return Str(out, s.len);
 }
 
-static bool MiniEq(Str s, const char* z) {
-    int32_t len = (int32_t)strlen(z);
-    return base::StrEq(s, Str(z, len));
-}
-
 static MiniLine MiniReadLine(Str source, int32_t at) {
     MiniLine line;
     line.start = at;
@@ -1062,17 +1057,17 @@ Node* ToMdast(Arena* a, Str source, const ParseOptions& options) {
 
 Str DecodeNamed(Arena* a, Str name) {
     const char* value = nullptr;
-    if (MiniEq(name, "amp") || MiniEq(name, "AMP")) {
+    if (base::StrEq(name, "amp") || base::StrEq(name, "AMP")) {
         value = "&";
-    } else if (MiniEq(name, "lt") || MiniEq(name, "LT")) {
+    } else if (base::StrEq(name, "lt") || base::StrEq(name, "LT")) {
         value = "<";
-    } else if (MiniEq(name, "gt") || MiniEq(name, "GT")) {
+    } else if (base::StrEq(name, "gt") || base::StrEq(name, "GT")) {
         value = ">";
-    } else if (MiniEq(name, "quot") || MiniEq(name, "QUOT")) {
+    } else if (base::StrEq(name, "quot") || base::StrEq(name, "QUOT")) {
         value = "\"";
-    } else if (MiniEq(name, "apos")) {
+    } else if (base::StrEq(name, "apos")) {
         value = "'";
-    } else if (MiniEq(name, "nbsp")) {
+    } else if (base::StrEq(name, "nbsp")) {
         value = "\xc2\xa0";
     }
     return value ? MiniOwn(a, Str((char*)value)) : Str{};

@@ -15,7 +15,7 @@ static bool RangeIs(Selection s, int lo, int hi) {
 static bool LabelIs(const SearchMatcher* m, const char* want) {
     Arena* a = ArenaNew();
     Str got = SearchMatcherLabel(a, m);
-    bool ok = StrEq(got, Str(want));
+    bool ok = base::StrEq(got, want);
     ArenaDelete(a);
     return ok;
 }

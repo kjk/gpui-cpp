@@ -287,7 +287,7 @@ void TooltipRequestShow(Window* win, Str text, Bounds triggerBounds) {
     }
     // Re-entering the same visible trigger only cancels its pending hide.
     if (overlay->hasContent && overlay->content.text.s &&
-        StrSame(overlay->content.text, text) &&
+        base::StrEq(overlay->content.text, text) &&
         overlay->content.triggerBounds.x == triggerBounds.x &&
         overlay->content.triggerBounds.y == triggerBounds.y &&
         overlay->content.triggerBounds.w == triggerBounds.w &&

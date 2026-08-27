@@ -878,6 +878,10 @@ GPUI_NOINLINE bool StrEqRest(Str s1, Str s2) {
     return memcmp(s1.s, s2.s, (size_t)s1.len) == 0;
 }
 
+bool StrEq(Str s1, const char* s2) {
+    return StrEq(s1, Str(s2));
+}
+
 bool StrEqI(Str s1, Str s2) {
     if (s1.s == s2.s) {
         return true;

@@ -195,7 +195,7 @@ static void SourceNamedTabAndTabBarKeepContentAndCallbackRules() {
     El* root = bar->IntoEl();
     El* tab = FindNamedTab(root, "0");
     utassert(tab != nullptr);
-    utassert(tab && StrSame(tab->accessibility.label,
+    utassert(tab && base::StrEq(tab->accessibility.label,
                             StrL("First accessible")));
     El* prefixWrap = tab ? tab->first : nullptr;
     El* inner = prefixWrap ? prefixWrap->next : nullptr;
@@ -279,7 +279,7 @@ static void TabBarRetainsStyleSpacingScrollAndUnboundedChildren() {
     component::Tab* standalone =
         component::Tab::New(&cx, StrL("Standalone"))->Outline()->Selected();
     El* standaloneEl = standalone->IntoEl();
-    utassert(standaloneEl && StrSame(standaloneEl->id, StrL("0")));
+    utassert(standaloneEl && base::StrEq(standaloneEl->id, StrL("0")));
     utassert(standaloneEl && standaloneEl->accessibility.selected);
 
     WindowMotionFree(win);

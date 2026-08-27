@@ -31,10 +31,6 @@ void TextViewInitKeys() {
     KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
 }
 
-static bool TextStrEq(Str a, Str b) {
-    return StrEq(a, b);
-}
-
 TextMark& TextMark::Bold() {
     bold = true;
     return *this;
@@ -147,7 +143,7 @@ MarkdownExtensions& MarkdownExtensions::BlockRenderer(Arena* a, Str name,
     if (fn) {
         // HashMap::insert replaces a renderer registered for the same name.
         for (int i = 0; i < blockRenderers.len; i++) {
-            if (TextStrEq(blockRenderers[i].name, name)) {
+            if (base::StrEq(blockRenderers[i].name, name)) {
                 blockRenderers[i] = {name, fn, data};
                 revision = NextMarkdownExtensionsRevision();
                 return *this;
@@ -170,7 +166,7 @@ MarkdownExtensions& MarkdownExtensions::Plugin(Arena* a,
 
 const MarkdownBlockRenderer* MarkdownExtensions::Renderer(Str name) const {
     for (int i = 0; i < blockRenderers.len; i++) {
-        if (TextStrEq(blockRenderers[i].name, name)) {
+        if (base::StrEq(blockRenderers[i].name, name)) {
             return &blockRenderers[i];
         }
     }
@@ -353,7 +349,7 @@ void TextViewState::Changed(App* app, Window* window,
 }
 
 void TextViewState::SetText(Str value, App* app, Window* window) {
-    if (TextStrEq(text, value)) return;
+    if (base::StrEq(text, value)) return;
     Str replacement = StrDup(value);
     StrFree(text);
     text = replacement;
@@ -1011,10 +1007,6 @@ struct MdCache {
 // 13 KB README costs 0.2us against 52us to parse it, so there is no hash to
 // reject with first: the length check throws out most misses and StrEq stops
 // at the first byte that differs.
-static bool MdSourceEq(Str a, Str b) {
-    return StrEq(a, b);
-}
-
 // The tree for `source`, parsed only when it isn't cached already. Falls back
 // to the frame arena when there is no window to hang a cache off, which is
 // what the tests and any headless measuring pass see.
@@ -1043,7 +1035,7 @@ static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source, bool html,
         MdCacheSlot* s = &c->slots[i];
         if (s->used != 0 && s->html == html &&
             s->extensionsRevision == extensionRevision &&
-            MdSourceEq(s->source, source)) {
+            base::StrEq(s->source, source)) {
             s->used = c->clock;
             return s->doc;
         }
@@ -2491,7 +2483,7 @@ El* TextView::IntoEl() {
                         : EntityNewState<TextViewState>(cx->app);
         if (TextViewState* managed = state.Get(cx)) {
             if (!managed->self.IsValid()) managed->self = state.id;
-            if (!TextStrEq(managed->text, source)) {
+            if (!base::StrEq(managed->text, source)) {
                 StrFree(managed->text);
                 managed->text = StrDup(source);
                 managed->revision++;

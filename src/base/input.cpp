@@ -5293,7 +5293,7 @@ void UndoRecordTransaction(UndoManager* m, Change change, EditIntent intent) {
     // A no-op edit records nothing, but still ends the run before it, so the
     // undo history keeps whatever it already had.
     if (RangeSame(change.oldRange, change.newRange) &&
-        StrSame(change.oldText, change.newText)) {
+        base::StrEq(change.oldText, change.newText)) {
         ChangeFree(&change);
         UndoBreakCoalescing(m);
         return;
@@ -5338,7 +5338,7 @@ void UndoCommitTransaction(UndoManager* m) {
     Change c = m->pending;
     m->hasPending = false;
     m->pending = {};
-    if (!RangeSame(c.oldRange, c.newRange) || !StrSame(c.oldText, c.newText)) {
+    if (!RangeSame(c.oldRange, c.newRange) || !base::StrEq(c.oldText, c.newText)) {
         PushTransaction(m, c, EditIntent::Atomic);
     } else {
         ChangeFree(&c);

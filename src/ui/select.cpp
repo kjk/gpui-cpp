@@ -124,7 +124,7 @@ void SelectState::SetSelectedValue(Str value, Ctx* cx) {
     SearchableListSearch(&state, state.items, state.nItems, Str{});
     int found = -1;
     for (int i = 0; i < state.nItems; i++) {
-        if (StrSame(state.items[i].value, value)) {
+        if (base::StrEq(state.items[i].value, value)) {
             found = i;
             break;
         }

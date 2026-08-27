@@ -82,7 +82,7 @@ bool SearchableListDelegate::Position(Str value, IndexPath* out) const {
         for (int row = 0; row < ItemsCount(section); row++) {
             const SearchableListItem* foundItem =
                 Item(IndexPathNew(row).Section(section));
-            if (foundItem && StrSame(foundItem->value, value)) {
+            if (foundItem && base::StrEq(foundItem->value, value)) {
                 if (out) {
                     *out = IndexPathNew(row).Section(section);
                 }
@@ -213,7 +213,7 @@ const SearchableListItem* SearchableVec::Item(IndexPath path) const {
 
 bool SearchableVec::Position(Str value, IndexPath* out) const {
     for (int i = 0; i < matchedItems.len; i++) {
-        if (StrSame(matchedItems[i].value, value)) {
+        if (base::StrEq(matchedItems[i].value, value)) {
             if (out) {
                 *out = IndexPathNew(i);
             }
@@ -439,7 +439,7 @@ static int SelectionIndexOfValue(const SearchableListState* s,
                                  Str value) {
     for (int i = 0; i < s->selected.len; i++) {
         int ix = s->selected[i];
-        if (ix >= 0 && ix < nItems && StrSame(items[ix].value, value)) {
+        if (ix >= 0 && ix < nItems && base::StrEq(items[ix].value, value)) {
             return i;
         }
     }

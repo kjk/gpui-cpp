@@ -14,7 +14,7 @@ using namespace gpui::component;
 // first; the story adds French to the same keys, so it is last.
 static void TheCatalogueLeadsWithEnglish() {
     utassert(LocaleCount() >= 2);
-    utassert(StrSame(LocaleAt(0), StrL("en")));
+    utassert(base::StrEq(LocaleAt(0), StrL("en")));
     utassert(LocaleIndex(StrL("en")) == 0);
     utassert(LocaleIndex(StrL("zh-CN")) > 0);
     utassert(LocaleIndex(StrL("fr")) > 0);
@@ -26,33 +26,33 @@ static void TheCatalogueLeadsWithEnglish() {
 // set_locale takes a locale the catalogue has and nothing else: a typo that
 // took would blank every label in the window.
 static void OnlyAKnownLocaleTakes() {
-    utassert(StrSame(LocaleNow(), StrL("en")));
+    utassert(base::StrEq(LocaleNow(), StrL("en")));
     utassert(LocaleSet(StrL("zh-CN")));
-    utassert(StrSame(LocaleNow(), StrL("zh-CN")));
+    utassert(base::StrEq(LocaleNow(), StrL("zh-CN")));
     utassert(!LocaleSet(StrL("kl")));
-    utassert(StrSame(LocaleNow(), StrL("zh-CN")));
+    utassert(base::StrEq(LocaleNow(), StrL("zh-CN")));
     utassert(!LocaleSet(Str{}));
-    utassert(StrSame(LocaleNow(), StrL("zh-CN")));
+    utassert(base::StrEq(LocaleNow(), StrL("zh-CN")));
     utassert(LocaleSet(StrL("en")));
 }
 
 // t!("Dialog.ok"), and the same key again with the locale moved.
 static void AKeyAnswersInTheLocaleInForce() {
     utassert(LocaleSet(StrL("en")));
-    utassert(StrSame(Tr("Dialog.ok"), StrL("OK")));
-    utassert(StrSame(Tr("Calendar.month.August"), StrL("August")));
-    utassert(StrSame(Tr("Pagination.previous"), StrL("Previous")));
+    utassert(base::StrEq(Tr("Dialog.ok"), StrL("OK")));
+    utassert(base::StrEq(Tr("Calendar.month.August"), StrL("August")));
+    utassert(base::StrEq(Tr("Pagination.previous"), StrL("Previous")));
 
     utassert(LocaleSet(StrL("fr")));
-    utassert(StrSame(Tr("Calendar.month.August"), StrL("Août")));
+    utassert(base::StrEq(Tr("Calendar.month.August"), StrL("Août")));
     // The story's file is where that French came from; the component's own
     // file has no French for this one, so it falls back to English rather
     // than showing the key.
-    utassert(StrSame(Tr("Dialog.ok"), StrL("OK")));
+    utassert(base::StrEq(Tr("Dialog.ok"), StrL("OK")));
 
     utassert(LocaleSet(StrL("zh-CN")));
-    utassert(StrSame(Tr("Calendar.week.0"), StrL("日")));
-    utassert(StrSame(Tr("Dock.Zoom In"), StrL("放大")));
+    utassert(base::StrEq(Tr("Calendar.week.0"), StrL("日")));
+    utassert(base::StrEq(Tr("Dock.Zoom In"), StrL("放大")));
     utassert(LocaleSet(StrL("en")));
 }
 
@@ -60,7 +60,7 @@ static void AKeyAnswersInTheLocaleInForce() {
 // a missing translation reads as `Dialog.nope` on screen rather than as an
 // empty label nobody notices.
 static void AnUnknownKeyAnswersWithItself() {
-    utassert(StrSame(Tr("Dialog.nope"), StrL("Dialog.nope")));
+    utassert(base::StrEq(Tr("Dialog.nope"), StrL("Dialog.nope")));
     utassert(Tr(nullptr).len == 0);
     utassert(Tr("").len == 0);
 }

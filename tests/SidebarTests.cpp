@@ -128,7 +128,7 @@ static void SidebarItemAllowsGenericNestedContent() {
     utassert(groupEl != nullptr);
     utassert(nested.renders == 1);
     utassert(!nested.collapsed);
-    utassert(StrSame(nested.id, StrL("0")));
+    utassert(base::StrEq(nested.id, StrL("0")));
 
     CustomSidebarItem direct = {};
     Sidebar* sidebar = Sidebar::New(&cx, StrL("generic-sidebar"))
@@ -213,10 +213,10 @@ static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
     SidebarMenuItem* plainItem = SidebarMenuItem::New(&cx, StrL("Plain"));
     plainItem->collapsed = true;
     El* plainRow = plainItem->IntoEl(StrL("collapsed-plain"))->first;
-    utassert(iconRow && StrSame(iconRow->style.tooltip, StrL("Projects")));
+    utassert(iconRow && base::StrEq(iconRow->style.tooltip, StrL("Projects")));
     utassert(plainRow && !plainRow->style.tooltip.s);
-    utassert(iconRow && StrSame(iconRow->id, StrL("item")));
-    utassert(plainRow && StrSame(plainRow->id, StrL("item")));
+    utassert(iconRow && base::StrEq(iconRow->id, StrL("item")));
+    utassert(plainRow && base::StrEq(plainRow->id, StrL("item")));
     El* activeRow = SidebarMenuItem::New(&cx, StrL("Active"))
                         ->Active(true)
                         ->IntoEl(StrL("active"))
@@ -229,7 +229,7 @@ static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
     El* root = sidebar->IntoEl();
     El* content = root ? root->first : nullptr;
     El* viewport = content ? content->first : nullptr;
-    utassert(root && StrSame(root->id, StrL("scrolling-sidebar")));
+    utassert(root && base::StrEq(root->id, StrL("scrolling-sidebar")));
     utassert(content && content->style.minH == 0);
     utassert(viewport && viewport->style.overflowY == Overflow::Scroll);
     utassert(viewport && viewport->onScroll.IsValid());
@@ -242,7 +242,7 @@ static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
                        ->Refine(fill, StyleFieldWidth | StyleFieldBorderR |
                                           StyleFieldPad)
                        ->IntoEl();
-    utassert(nonPixel && StrSame(nonPixel->id, StrL("fill-sidebar")));
+    utassert(nonPixel && base::StrEq(nonPixel->id, StrL("fill-sidebar")));
     utassertnear(nonPixel->style.width, kFill);
     utassertnear(nonPixel->style.borderR, 5);
     utassertnear(nonPixel->style.pad.left, 0);

@@ -8,10 +8,6 @@
 
 #include "Test.h"
 
-static bool Same(Str got, const char* want) {
-    return StrEq(got, Str(want));
-}
-
 void TestWryUri() {
     TestSuite("wry_uri");
 
@@ -22,20 +18,20 @@ void TestWryUri() {
     utassert(!wry::IsWorkAroundUri(uri, scheme, StrL("asset")));
 
     // The prefix the filter is built from.
-    utassert(Same(wry::WorkAroundUriPrefix(scheme, StrL("wry")), "http://wry."));
-    utassert(Same(wry::WorkAroundUriPrefix(StrL("https"), StrL("asset")), "https://asset."));
+    utassert(base::StrEq(wry::WorkAroundUriPrefix(scheme, StrL("wry")), "http://wry."));
+    utassert(base::StrEq(wry::WorkAroundUriPrefix(StrL("https"), StrL("asset")), "https://asset."));
 
     // What the initial navigation does to a `wry://` url, and what the
     // request handler undoes before the handler sees it.
     Str original = StrL("wry://localhost/path/to/page");
     Str applied = wry::ApplyUriWorkAround(original, scheme, StrL("wry"));
-    utassert(Same(applied, "http://wry.localhost/path/to/page"));
-    utassert(Same(wry::RevertUriWorkAround(applied, scheme, StrL("wry")), original.s));
+    utassert(base::StrEq(applied, "http://wry.localhost/path/to/page"));
+    utassert(base::StrEq(wry::RevertUriWorkAround(applied, scheme, StrL("wry")), original.s));
 
     // A URI in another protocol is left where it is, both ways round.
     Str other = StrL("https://example.com/x");
-    utassert(Same(wry::ApplyUriWorkAround(other, scheme, StrL("wry")), other.s));
-    utassert(Same(wry::RevertUriWorkAround(other, scheme, StrL("wry")), other.s));
+    utassert(base::StrEq(wry::ApplyUriWorkAround(other, scheme, StrL("wry")), other.s));
+    utassert(base::StrEq(wry::RevertUriWorkAround(other, scheme, StrL("wry")), other.s));
 
     // The https variant is a different prefix, so an http-tunnelled URI is
     // not one of its.

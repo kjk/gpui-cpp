@@ -12,8 +12,7 @@ static void CheckInitials(const char* name, const char* want) {
     char buf[8];
     Str got = AvatarInitials(buf, (int)sizeof(buf), Str(name));
     // Not StrEqI: the point of the last step is the case.
-    Str exp = Str(want);
-    utassert(StrEq(got, exp));
+    utassert(base::StrEq(got, want));
 }
 
 void TestAvatar() {

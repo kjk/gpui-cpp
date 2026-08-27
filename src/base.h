@@ -1395,6 +1395,7 @@ inline bool StrEq(Str s1, Str s2) {
     }
     return StrEqRest(s1, s2);
 }
+bool StrEq(Str s1, const char* s2);
 bool StrEqI(Str s1, Str s2);
 bool StrContainsI(Str s, Str sub);
 

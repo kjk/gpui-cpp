@@ -227,7 +227,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                 ThemeRegistryActive(cx->app, ThemeGet(cx->app));
             int at = 0;
             for (int i = 0; i < self->themeItems.len; i++) {
-                if (StrSame(self->themeItems[i].title, active)) {
+                if (base::StrEq(self->themeItems[i].title, active)) {
                     at = i;
                     break;
                 }

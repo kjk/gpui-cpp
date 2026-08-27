@@ -19,7 +19,7 @@ void PanelRegistry::Register(Str panelName, PanelRegistryBuild build,
         return;
     }
     for (int i = 0; i < items.len; i++) {
-        if (StrSame(items[i].name, panelName)) {
+        if (base::StrEq(items[i].name, panelName)) {
             items[i].build = build;
             items[i].data = data;
             return;
@@ -40,7 +40,7 @@ bool PanelRegistry::BuildPanel(Str panelName,
         return false;
     }
     for (int i = 0; i < items.len; i++) {
-        if (!StrSame(items[i].name, panelName)) {
+        if (!base::StrEq(items[i].name, panelName)) {
             continue;
         }
         *out = items[i].build(context, win, app, items[i].data);

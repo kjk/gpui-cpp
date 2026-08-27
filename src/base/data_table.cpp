@@ -714,7 +714,7 @@ void TableState::OnResizeDrag(TableState* self, Ctx* cx,
                               const DragMoveEvent* ev) {
     // `match e.drag(cx) { ResizeColumn(..) }`: a drag carrying anything else
     // is not this handler's.
-    if (!StrSame(ev->drag.kind, kTableResizeDrag)) {
+    if (!base::StrEq(ev->drag.kind, kTableResizeDrag)) {
         return;
     }
     int col = ev->drag.ix;
@@ -764,7 +764,7 @@ void TableMoveColumnEvent(TableState* s, Ctx* cx, int from, int to) {
 
 void TableState::OnColDragMove(TableState* self, Ctx* cx,
                                const DragMoveEvent* ev) {
-    if (!StrSame(ev->drag.kind, kTableColDrag) || !self->colMovable) {
+    if (!base::StrEq(ev->drag.kind, kTableColDrag) || !self->colMovable) {
         return;
     }
     TableEnsureCols(self, self->colCount);
@@ -779,7 +779,7 @@ void TableState::OnColDragMove(TableState* self, Ctx* cx,
 }
 
 void TableState::OnColDrop(TableState* self, Ctx* cx, const DropEvent* ev) {
-    if (!StrSame(ev->drag.kind, kTableColDrag) || !self->colMovable) {
+    if (!base::StrEq(ev->drag.kind, kTableColDrag) || !self->colMovable) {
         return;
     }
     TableEnsureCols(self, self->colCount);

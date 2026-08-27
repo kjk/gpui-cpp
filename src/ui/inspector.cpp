@@ -298,7 +298,7 @@ El* DivInspector::Render(const InspectorPick& p, Ctx* cx) {
     const Theme& th = ThemeNow(cx->app);
     UpdateInspectedElement(p, cx);
     Str current = InputValue(&jsonInput);
-    if (!StrSame(current, applied)) {
+    if (!base::StrEq(current, applied)) {
         EditJson(current, cx);
     }
     if (jsonInput.focused) {

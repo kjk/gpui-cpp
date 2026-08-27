@@ -246,7 +246,7 @@ static void ToastRootOwnsTheExposedTransitionStatus() {
     utassert(toast->Status() == ToastTransitionStatus::Ending);
     El* root = toast->IntoEl();
     utassert(root->accessibility.role == AccessibilityRole::Alert);
-    utassert(root->first && StrSame(root->first->text, StrL("done")));
+    utassert(root->first && base::StrEq(root->first->text, StrL("done")));
     ArenaDelete(a);
 }
 

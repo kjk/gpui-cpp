@@ -148,7 +148,7 @@ static void DivInspectorOwnsUpdateEditAndReset() {
     inspector->UpdateInspectedElement(pick, &cx);
     utassert(inspector->inspectorId == 77);
     utassert(inspector->jsonInput.kind == InputKind::Textarea);
-    utassert(StrSame(InputValue(&inspector->jsonInput), inspector->applied));
+    utassert(base::StrEq(InputValue(&inspector->jsonInput), inspector->applied));
     utassert(InputValue(&inspector->jsonInput).len > 0);
 
     utassert(inspector->EditJson(StrL("{ \"gap\": 9 }"), &cx));
@@ -164,7 +164,7 @@ static void DivInspectorOwnsUpdateEditAndReset() {
     utassert(inspector->error.s != nullptr);
     inspector->Reset(&cx);
     utassert(inspector->error.s == nullptr);
-    utassert(StrSame(InputValue(&inspector->jsonInput), inspector->applied));
+    utassert(base::StrEq(InputValue(&inspector->jsonInput), inspector->applied));
     El* reset = Div(arena)->Gap(2);
     reset->clickId = 77;
     StyleOverrideApply(reset);

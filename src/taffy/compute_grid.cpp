@@ -594,10 +594,6 @@ struct LineNameEntry {
     Vec<uint16_t> lines;
 };
 
-bool StrEqLen(Str a, Str b) {
-    return base::StrEq(a, b);
-}
-
 // Resolves named grid lines and areas into line numbers.
 struct NamedLineResolver {
     Vec<LineNameEntry> rowLines;
@@ -623,7 +619,7 @@ struct NamedLineResolver {
                        uint16_t value) {
         for (int i = 0; i < map->len; i++) {
             LineNameEntry& e = (*map)[i];
-            if (e.suffix == suffix && StrEqLen(e.name, name)) {
+            if (e.suffix == suffix && base::StrEq(e.name, name)) {
                 for (int k = 0; k < e.lines.len; k++) {
                     if (e.lines[k] == value) {
                         return;
@@ -644,7 +640,7 @@ struct NamedLineResolver {
                                      NameSuffix suffix) {
         for (int i = 0; i < map.len; i++) {
             const LineNameEntry& e = map[i];
-            if (e.suffix == suffix && StrEqLen(e.name, name)) {
+            if (e.suffix == suffix && base::StrEq(e.name, name)) {
                 return &e.lines;
             }
         }

@@ -173,7 +173,7 @@ static void AMenuRowFindsAChordBoundInsideAContext() {
     utassert(!KeymapBindingForAction(copy, nullptr, 0, &c));
     utassert(KeymapAnyBindingForAction(copy, &c));
     utassert(c.vk == 'C' && c.ctrl && !c.shift);
-    utassert(StrSame(KeyName(c.vk), StrL("c")));
+    utassert(base::StrEq(KeyName(c.vk), StrL("c")));
 
     // The last binding for an action wins here too.
     KeyBinding later[] = {

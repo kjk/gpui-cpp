@@ -403,7 +403,7 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
 
     El* layer = TextSelectionLayer::New(&cx);
     El* scoped = TextSelectionScope(Div(arena), one);
-    utassert(StrSame(layer->id, StrL("window-text-selection")));
+    utassert(base::StrEq(layer->id, StrL("window-text-selection")));
     utassert(scoped->style.trapId == one.RuntimeScope());
 
     WindowSelectionFree(&win);

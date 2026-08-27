@@ -472,12 +472,6 @@ struct MouseMoveEvent {
     }
 };
 
-// Two strings with the same bytes. `Str` is a pointer and a length, so a
-// kind that names a drag is compared by what it says, not by where it lives.
-inline bool StrSame(Str a, Str b) {
-    return StrEq(a, b);
-}
-
 // What a drag carries. Rust's `on_drag(payload, ..)` takes a value of any
 // type and `DragMoveEvent<T>` only reaches the handlers that named that type;
 // there is no type to match on here, so the payload says what kind of thing

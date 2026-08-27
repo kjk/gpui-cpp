@@ -45,7 +45,7 @@ static void TheModifiersComeFirstInPlatformOrder() {
     Keystroke k;
     k.key = StrL("p");
     k.ctrl = true;
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedCtrlP])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedCtrlP]));
 
     k = Keystroke{};
     k.key = StrL("p");
@@ -55,30 +55,30 @@ static void TheModifiersComeFirstInPlatformOrder() {
     k.platform = true;
     // Ctrl, then Alt, then Shift, then the platform key — Rust's order,
     // spelled as symbols with no separators on macOS.
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedAllModifiers])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedAllModifiers]));
 
     k = Keystroke{};
     k.key = StrL("t");
     k.shift = true;
     k.platform = true;
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedShiftPlatformT])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedShiftPlatformT]));
 }
 
 static void ANamedKeyKeepsItsName() {
     char buf[64];
     Keystroke k;
     k.key = StrL("escape");
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedEscape])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedEscape]));
     k.key = StrL("backspace");
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedBackspace])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedBackspace]));
     k.key = StrL("pagedown");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("Page Down")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("Page Down")));
     k.key = StrL("pageup");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("Page Up")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("Page Up")));
     k.key = StrL("left");
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedLeft])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedLeft]));
     k.key = StrL("enter");
-    utassert(StrSame(Fmt(k, buf, 64), Str(kExpected[ExpectedEnter])));
+    utassert(base::StrEq(Fmt(k, buf, 64), kExpected[ExpectedEnter]));
 }
 
 static void AnythingElseIsCapitalised() {
@@ -86,20 +86,20 @@ static void AnythingElseIsCapitalised() {
     Keystroke k;
     // One character is upper-cased...
     k.key = StrL("c");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("C")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("C")));
     // ...and a symbol is left as it is.
     k.key = StrL("/");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("/")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("/")));
     k.key = StrL("-");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("-")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("-")));
     // A longer name keeps its spelling with the first letter raised, which is
     // how the keys with no table entry of their own read.
     k.key = StrL("home");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("Home")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("Home")));
     k.key = StrL("f12");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("F12")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("F12")));
     k.key = StrL("space");
-    utassert(StrSame(Fmt(k, buf, 64), StrL("Space")));
+    utassert(base::StrEq(Fmt(k, buf, 64), StrL("Space")));
 }
 
 static void ABufferTooSmallStillEndsTheString() {
@@ -111,7 +111,7 @@ static void ABufferTooSmallStillEndsTheString() {
     Str expected = Str(kExpected[ExpectedShortBuffer]);
     utassert(n == expected.len);
     utassert(buf[n] == 0);
-    utassert(StrSame(Str(buf, n), expected));
+    utassert(base::StrEq(Str(buf, n), expected));
 }
 
 // Kbd::binding_for_action_in: the shortcut a row shows is looked up in the
@@ -124,7 +124,7 @@ static void AShortcutComesFromTheBinding() {
     // finds nothing — which is the same rule the matcher applies.
     utassert(!KeystrokeForAction(input::Copy(), nullptr, &k));
     utassert(KeystrokeForAction(input::Copy(), "Input", &k));
-    utassert(StrSame(k.key, StrL("c")));
+    utassert(base::StrEq(k.key, StrL("c")));
 #if GPUI_OS_MAC
     utassert(k.platform && !k.ctrl);
 #else
@@ -136,9 +136,9 @@ static void AShortcutComesFromTheBinding() {
     int n = KbdFormat(k, buf, 32);
     utassert(n > 0);
 #if GPUI_OS_MAC
-    utassert(StrSame(Str(buf, n), StrL("\u2318C")));
+    utassert(base::StrEq(Str(buf, n), StrL("\u2318C")));
 #else
-    utassert(StrSame(Str(buf, n), StrL("Ctrl+C")));
+    utassert(base::StrEq(Str(buf, n), StrL("Ctrl+C")));
 #endif
 
     // An action nothing binds has no shortcut to show, which is a row with

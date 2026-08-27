@@ -597,7 +597,7 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
                          ->Disabled(options.disabled)
                          ->WithSize(options.size)
                          ->IntoEl();
-            out.dirty = input && !StrSame(InputValue(input), it.defStr);
+            out.dirty = input && !base::StrEq(InputValue(input), it.defStr);
             break;
         case SettingFieldKind::NumberInput:
             out.el =
@@ -608,7 +608,7 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
                     ->OnInc(ListenTo(s->state, &SettingsState::OnFieldInc, ix))
                     ->OnDec(ListenTo(s->state, &SettingsState::OnFieldDec, ix))
                     ->IntoEl();
-            out.dirty = input && !StrSame(InputValue(input), it.defStr);
+            out.dirty = input && !base::StrEq(InputValue(input), it.defStr);
             break;
         case SettingFieldKind::Dropdown: {
             out.el = Select::New(cx, id, it.list)

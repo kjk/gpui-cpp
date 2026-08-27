@@ -50,7 +50,7 @@ static bool Partitions(SyntaxLang lang, const char* src) {
 
 static bool NameIs(SyntaxLang lang, const char* want) {
     Str got = SyntaxLangName(lang);
-    return StrEq(got, Str(want));
+    return base::StrEq(got, want);
 }
 
 static void TestSyntaxLangFor() {

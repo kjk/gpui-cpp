@@ -3139,7 +3139,7 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
         StyleApplyFields(&e->style, e->hoverStyle, e->hoverSet);
     }
     if (e->dragOverSet && e->clickId && ctx && e->clickId == ctx->dragOverId &&
-        StrSame(e->dragOverKind, ctx->dragKind)) {
+        base::StrEq(e->dragOverKind, ctx->dragKind)) {
         StyleApplyFields(&e->style, e->dragOverStyle, e->dragOverSet);
     }
     StyleOverrideApply(e);
@@ -5760,7 +5760,7 @@ const HitRect* HitTestDrop(PaintCtx* ctx, float x, float y, Str kind) {
         if (!h.onDrop.IsValid() || h.dropKind.s == nullptr) {
             continue;
         }
-        if (!StrSame(h.dropKind, kind)) {
+        if (!base::StrEq(h.dropKind, kind)) {
             continue;
         }
         if (h.bounds.Contains({x, y})) {

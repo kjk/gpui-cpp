@@ -28,13 +28,7 @@ static bool MiniTextIs(Arena* a, Node* n, const char* want) {
         return false;
     }
     Str got = NodeToString(a, n);
-    int len = (int)strlen(want);
-    return StrEq(got, Str(want, len));
-}
-
-static bool MiniStrIs(Str got, const char* want) {
-    int len = (int)strlen(want);
-    return StrEq(got, Str(want, len));
+    return base::StrEq(got, want);
 }
 
 void TestMarkdown() {
@@ -82,7 +76,7 @@ void TestMarkdown() {
     Node* code = MiniChild(a, root, 2);
     utassert(code && code->kind == NodeKind::Code);
     utassert(MiniTextIs(a, code, "int x;"));
-    utassert(MiniStrIs(NodeGetStr(a, code, NodeStrKind::Lang), "cpp"));
+    utassert(base::StrEq(NodeGetStr(a, code, NodeStrKind::Lang), "cpp"));
 
     root = ToMdast(a, StrL("[home](https://x.dev) ![alt](a.png) &amp; &#65;\n"),
                    options);
@@ -98,8 +92,8 @@ void TestMarkdown() {
     utassert(MiniChild(a, root, 1)->kind == NodeKind::Paragraph);
 
     utassert(DecodeNamed(a, StrL("copy")).s == nullptr);
-    utassert(MiniStrIs(DecodeNamed(a, StrL("amp")), "&"));
-    utassert(MiniStrIs(DecodeNumeric(a, StrL("41"), 16), "A"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("amp")), "&"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), "A"));
     ArenaDelete(a);
 }
 
@@ -125,18 +119,13 @@ static Node* Child(Node* n, int32_t ix) {
     return NodeChild(gParsedInto, n, (int)ix);
 }
 
-static bool Is(Str s, const char* want) {
-    int32_t len = (int32_t)strlen(want);
-    return StrEq(s, Str(want, len));
-}
-
 // One of a node's strings, out of the arena the tree was parsed into.
 static Str S(const Node* n, NodeStrKind k) {
     return NodeGetStr(gParsedInto, n, k);
 }
 
 static bool Is(const Node* n, NodeStrKind k, const char* want) {
-    return Is(S(n, k), want);
+    return base::StrEq(S(n, k), want);
 }
 
 // Whether the node carries this string at all, which is what a null `s` used
@@ -147,7 +136,7 @@ static bool IsUnset(const Node* n, NodeStrKind k) {
 
 // The text of a node and everything under it.
 static bool TextIs(Arena* a, Node* n, const char* want) {
-    return n && Is(NodeToString(a, n), want);
+    return n && base::StrEq(NodeToString(a, n), want);
 }
 
 // ─── src/util/constant.rs: `constants` ────────────────────────────────────
@@ -251,41 +240,41 @@ static void TestMarkdownOptions() {
 
 static void TestMarkdownCharacterReference(Arena* a) {
     TestSuite("markdown character reference");
-    utassert(Is(DecodeNamed(a, StrL("amp")), "&"));
-    utassert(Is(DecodeNamed(a, StrL("AMP")), "&"));
-    utassert(Is(DecodeNamed(a, StrL("copy")), "\xc2\xa9"));
-    utassert(Is(DecodeNamed(a, StrL("CounterClockwiseContourIntegral")),
+    utassert(base::StrEq(DecodeNamed(a, StrL("amp")), "&"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("AMP")), "&"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("copy")), "\xc2\xa9"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("CounterClockwiseContourIntegral")),
                 "\xe2\x88\xb3"));
     // The two values `constant.cpp` writes as `\u` escapes rather than as
     // themselves, because gcc rejects a bidi character in a literal.
-    utassert(Is(DecodeNamed(a, StrL("lrm")), "\xe2\x80\x8e"));
-    utassert(Is(DecodeNamed(a, StrL("rlm")), "\xe2\x80\x8f"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("lrm")), "\xe2\x80\x8e"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("rlm")), "\xe2\x80\x8f"));
     // Not a name: `None`.
     utassert(DecodeNamed(a, StrL("nope")).s == nullptr);
     utassert(DecodeNamed(a, StrL("")).s == nullptr);
 
-    utassert(Is(DecodeNumeric(a, StrL("65"), 10), "A"));
-    utassert(Is(DecodeNumeric(a, StrL("41"), 16), "A"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("65"), 10), "A"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), "A"));
     // Out of range, a surrogate, and a forbidden control: U+FFFD.
-    utassert(Is(DecodeNumeric(a, StrL("1114112"), 10), "\xef\xbf\xbd"));
-    utassert(Is(DecodeNumeric(a, StrL("d800"), 16), "\xef\xbf\xbd"));
-    utassert(Is(DecodeNumeric(a, StrL("0"), 10), "\xef\xbf\xbd"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("1114112"), 10), "\xef\xbf\xbd"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("d800"), 16), "\xef\xbf\xbd"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("0"), 10), "\xef\xbf\xbd"));
 }
 
 // ─── src/util/normalize_identifier.rs ─────────────────────────────────────
 
 static void TestMarkdownNormalizeIdentifier(Arena* a) {
     TestSuite("markdown normalize identifier");
-    utassert(Is(NormalizeIdentifier(a, StrL(" a ")), "A"));
-    utassert(Is(NormalizeIdentifier(a, StrL(" a\n b")), "A B"));
-    utassert(Is(NormalizeIdentifier(a, StrL("")), ""));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL(" a ")), "A"));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL(" a\n b")), "A B"));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL("")), ""));
     // The crate's own quirk, kept: whitespace after a word that starts at
     // offset 0 collapses to nothing rather than to a space, because `start`
     // is what it tests for "have we written anything yet". Its doc comment
     // says `a\t\r\nb` normalizes to `a b`; markdown-rs 1.0.0 answers `ab`,
     // and so does this, so a reference here matches the definitions it does.
-    utassert(Is(NormalizeIdentifier(a, StrL("a\n b")), "AB"));
-    utassert(Is(NormalizeIdentifier(a, StrL("Foo\t\tBar")), "FOOBAR"));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL("a\n b")), "AB"));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL("Foo\t\tBar")), "FOOBAR"));
 }
 
 static void TestMarkdownPositions() {

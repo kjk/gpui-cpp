@@ -181,7 +181,7 @@ int DockPanelByName(const DockState* s, Str name) {
         return -1;
     }
     for (int i = 0; i < s->panels.len; i++) {
-        if (StrSame(s->panels[i].name, name)) {
+        if (base::StrEq(s->panels[i].name, name)) {
             return i;
         }
     }
@@ -970,7 +970,7 @@ void DockState::OnToggleSide(DockState* self, Ctx* cx, const ClickEvent*,
 
 void DockState::OnTabDragMove(DockState* self, Ctx* cx,
                               const DragMoveEvent* ev) {
-    if (!StrSame(ev->drag.kind, kDockPanelDrag) || self->locked) {
+    if (!base::StrEq(ev->drag.kind, kDockPanelDrag) || self->locked) {
         return;
     }
     // The tab group under the pointer, and which of its five zones. Last
@@ -1018,7 +1018,7 @@ void DockState::OnTabDragEnd(DockState* self, Ctx* cx, const MouseUpEvent*) {
 
 void DockState::OnDropPanel(DockState* self, Ctx* cx, const DropEvent* ev,
                             intptr_t node) {
-    if (!StrSame(ev->drag.kind, kDockPanelDrag)) {
+    if (!base::StrEq(ev->drag.kind, kDockPanelDrag)) {
         return;
     }
     DockDrop at = DockDropAt(ev->el, ev->x, ev->y);
@@ -1028,7 +1028,7 @@ void DockState::OnDropPanel(DockState* self, Ctx* cx, const DropEvent* ev,
 
 void DockState::OnDropTab(DockState* self, Ctx* cx, const DropEvent* ev,
                           intptr_t nodeAndIx) {
-    if (!StrSame(ev->drag.kind, kDockPanelDrag)) {
+    if (!base::StrEq(ev->drag.kind, kDockPanelDrag)) {
         return;
     }
     // `will_split_placement = None`: a drop on a tab is always a move into
@@ -1040,7 +1040,7 @@ void DockState::OnDropTab(DockState* self, Ctx* cx, const DropEvent* ev,
 
 void DockState::OnDropTabBar(DockState* self, Ctx* cx, const DropEvent* ev,
                              intptr_t node) {
-    if (!StrSame(ev->drag.kind, kDockPanelDrag)) {
+    if (!base::StrEq(ev->drag.kind, kDockPanelDrag)) {
         return;
     }
     self->dropNode = -1;
@@ -1088,7 +1088,7 @@ void DockState::OnTabBarScroll(DockState* self, Ctx* cx, const ScrollEvent* ev,
 
 void DockState::OnResizeDrag(DockState* self, Ctx* cx,
                              const DragMoveEvent* ev) {
-    if (!StrSame(ev->drag.kind, kDockResizeDrag)) {
+    if (!base::StrEq(ev->drag.kind, kDockResizeDrag)) {
         return;
     }
     self->resizing = true;

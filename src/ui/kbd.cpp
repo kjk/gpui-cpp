@@ -51,7 +51,7 @@ static const char* KbdKeyName(Str key) {
         {"down", "\u2193", "Down"},
     };
     for (size_t i = 0; i < sizeof(kNamed) / sizeof(kNamed[0]); i++) {
-        if (!StrSame(key, Str(kNamed[i].key))) {
+        if (!base::StrEq(key, kNamed[i].key)) {
             continue;
         }
 #if GPUI_OS_MAC

@@ -18,24 +18,20 @@
 static const char* kLines = "Hello\nWorld\r\nThis is a test 中文\nRope";
 static const char* kMixed = "a 中文🎉 test\nRope";
 
-static bool StrIs(Str got, const char* want) {
-    return StrEq(got, Str(want));
-}
-
 static void SliceLine() {
     Str r = Str(kLines);
-    utassert(StrIs(RopeSliceLine(r, 0), "Hello"));
+    utassert(base::StrEq(RopeSliceLine(r, 0), "Hello"));
     // Lines split on LF alone, so the CR stays at the end of the line.
-    utassert(StrIs(RopeSliceLine(r, 1), "World\r"));
-    utassert(StrIs(RopeSliceLine(r, 2), "This is a test 中文"));
-    utassert(StrIs(RopeSliceLine(r, 3), "Rope"));
+    utassert(base::StrEq(RopeSliceLine(r, 1), "World\r"));
+    utassert(base::StrEq(RopeSliceLine(r, 2), "This is a test 中文"));
+    utassert(base::StrEq(RopeSliceLine(r, 3), "Rope"));
     // over bounds
-    utassert(StrIs(RopeSliceLine(r, 6), ""));
+    utassert(base::StrEq(RopeSliceLine(r, 6), ""));
 
     // only have \r end
     Str cr = StrL("Hello\r");
-    utassert(StrIs(RopeSliceLine(cr, 0), "Hello\r"));
-    utassert(StrIs(RopeSliceLine(cr, 1), ""));
+    utassert(base::StrEq(RopeSliceLine(cr, 0), "Hello\r"));
+    utassert(base::StrEq(RopeSliceLine(cr, 1), ""));
 }
 
 static void LinesLen() {
@@ -156,11 +152,11 @@ static void CharIndexToOffset() {
 static void SourceRopeFacadesIterateAndDescribeEdits() {
     RopeExt rope = RopeExt::Of(Str(kLines));
     utassert(rope.LinesLen() == 4);
-    utassert(StrIs(rope.SliceLines(1, 3),
+    utassert(base::StrEq(rope.SliceLines(1, 3),
                    "World\r\nThis is a test 中文"));
     Selection word;
     utassert(rope.WordRange(7, &word));
-    utassert(StrIs(rope.WordAt(7), "World"));
+    utassert(base::StrEq(rope.WordAt(7), "World"));
 
     RopeLines lines = rope.IterLines();
     Str line;
@@ -183,14 +179,14 @@ static void TabSizeCountsAndBuildsIndent() {
     Arena* arena = ArenaNew();
     TabSize soft;
     soft.tabSize = 4;
-    utassert(StrIs(soft.ToString(arena), "    "));
+    utassert(base::StrEq(soft.ToString(arena), "    "));
     utassert(soft.IndentCount(StrL("  \tabc")) == 6);
     utassert(soft.IndentCount(StrL("abc")) == 0);
 
     TabSize hard;
     hard.tabSize = 8;
     hard.hardTabs = true;
-    utassert(StrIs(hard.ToString(arena), "\t"));
+    utassert(base::StrEq(hard.ToString(arena), "\t"));
     utassert(hard.IndentCount(StrL(" \t abc")) == 10);
     ArenaDelete(arena);
 }

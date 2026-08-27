@@ -28,7 +28,7 @@ Str LocaleAt(int i) {
 
 int LocaleIndex(Str name) {
     for (int i = 0; i < kLocaleCount; i++) {
-        if (StrSame(name, Str(kLocaleNames[i]))) {
+        if (base::StrEq(name, kLocaleNames[i])) {
             return i;
         }
     }

@@ -256,7 +256,7 @@ static El* FindTabById(El* root, Str id) {
     if (!root) {
         return nullptr;
     }
-    if (StrSame(root->id, id)) {
+    if (base::StrEq(root->id, id)) {
         return root;
     }
     for (El* child = root->first; child; child = child->next) {

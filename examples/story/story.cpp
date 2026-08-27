@@ -1386,7 +1386,7 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
         themes[i].label = cfg->name;
         themes[i].action = ActSelectTheme();
         themes[i].arg = i;
-        themes[i].checked = StrSame(cfg->name, active);
+        themes[i].checked = base::StrEq(cfg->name, active);
     }
 
     Str locale = component::LocaleNow();
@@ -1395,7 +1395,7 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
         languages[i].label = Str(kStoryLocales[i].label);
         languages[i].action = ActSelectLocale();
         languages[i].arg = i;
-        languages[i].checked = StrSame(Str(kStoryLocales[i].code), locale);
+        languages[i].checked = base::StrEq(Str(kStoryLocales[i].code), locale);
     }
 
     MenuRow* appRows = StoryRows(cx, 9);

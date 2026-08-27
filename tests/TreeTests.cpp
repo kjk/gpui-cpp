@@ -166,7 +166,7 @@ static void ReplacingItemsResetsBothInteractionIndices() {
     TreeSetItems(&s, nullptr, &only, 1);
     utassert(s.items.len == 1 && s.entries.len == 1);
     utassert(s.selected == -1 && s.rightClicked == -1);
-    utassert(StrSame(TreeEntryAt(&s, 0).item->id, StrL("Cargo.toml")));
+    utassert(base::StrEq(TreeEntryAt(&s, 0).item->id, StrL("Cargo.toml")));
 }
 
 static void SelectingHiddenItemExpandsItsAncestors() {
@@ -175,7 +175,7 @@ static void SelectingHiddenItemExpandsItsAncestors() {
     utassert(TreeIndexOf(&s, StrL("b1")) == -1);
     TreeSetSelectedItem(&s, nullptr, StrL("b1"));
     utassert(s.selected == 3);
-    utassert(StrSame(TreeEntryItem(&s, s.selected)->id, StrL("b1")));
+    utassert(base::StrEq(TreeEntryItem(&s, s.selected)->id, StrL("b1")));
     utassert(s.items[0].expanded && s.items[2].expanded);
     TreeSetSelectedItem(&s, nullptr, {});
     utassert(s.selected == -1);

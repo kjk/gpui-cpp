@@ -32,7 +32,7 @@ static void NamedAndCustomPathsUseTheSameSvgElement() {
     El* named = component::Icon::New(
                     &cx, component::IconNamed::From(IconName::Close))
                     ->IntoEl();
-    utassert(StrSame(named->iconPath, StrL("icons/close.svg")));
+    utassert(base::StrEq(named->iconPath, StrL("icons/close.svg")));
 
     El* custom = component::Icon::Empty(&cx)
                      ->Path(StrL("icons/application-logo.svg"))
@@ -40,7 +40,7 @@ static void NamedAndCustomPathsUseTheSameSvgElement() {
                      ->Rotate(0.25f)
                      ->Color(Rgba{10, 20, 30, 255})
                      ->IntoEl();
-    utassert(StrSame(custom->iconPath, StrL("icons/application-logo.svg")));
+    utassert(base::StrEq(custom->iconPath, StrL("icons/application-logo.svg")));
     utassertnear(custom->style.width, 24.f);
     utassertnear(custom->style.height, 24.f);
     utassertnear(custom->style.rotate, 0.25f);
@@ -51,20 +51,20 @@ static void NamedAndCustomPathsUseTheSameSvgElement() {
 }
 
 static void PinnedIconAdditionsHaveExactAssetPaths() {
-    utassert(StrSame(IconNamePath(IconName::ALargeSmall),
+    utassert(base::StrEq(IconNamePath(IconName::ALargeSmall),
                      StrL("icons/a-large-small.svg")));
-    utassert(StrSame(IconNamePath(IconName::BatteryWarning),
+    utassert(base::StrEq(IconNamePath(IconName::BatteryWarning),
                      StrL("icons/battery-warning.svg")));
-    utassert(StrSame(IconNamePath(IconName::EllipsisVertical),
+    utassert(base::StrEq(IconNamePath(IconName::EllipsisVertical),
                      StrL("icons/ellipsis-vertical.svg")));
-    utassert(StrSame(IconNamePath(IconName::ResizeCorner),
+    utassert(base::StrEq(IconNamePath(IconName::ResizeCorner),
                      StrL("icons/resize-corner.svg")));
-    utassert(StrSame(IconNamePath(IconName::SortAscending),
+    utassert(base::StrEq(IconNamePath(IconName::SortAscending),
                      StrL("icons/sort-ascending.svg")));
-    utassert(StrSame(IconNamePath(IconName::Undo2), StrL("icons/undo-2.svg")));
+    utassert(base::StrEq(IconNamePath(IconName::Undo2), StrL("icons/undo-2.svg")));
     // The old C++ spelling remains a compatibility alias, not a replacement
     // for the pinned Close variant.
-    utassert(StrSame(IconNamePath(IconName::X), StrL("icons/x.svg")));
+    utassert(base::StrEq(IconNamePath(IconName::X), StrL("icons/x.svg")));
 }
 
 void TestIcon() {

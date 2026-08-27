@@ -1958,12 +1958,6 @@ static void InsertSorted(ThemeRegistry* state, const ThemeConfig& cfg) {
     state->themes.InsertAt(at, cfg);
 }
 
-// A name is a `Str` into the arena, and `StrSame` wants a null terminator
-// nowhere, so this is the plain comparison the table needs.
-static bool SameName(Str a, Str b) {
-    return StrEq(a, b);
-}
-
 static float JsonFloatOr(const JsonValue* v, const char* key, float fallback) {
     const JsonValue* m = JsonGet(v, key);
     if (!m || m->kind != JsonKind::Number) {
@@ -2443,7 +2437,7 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
     // same directory can only find what is in the registry already.
     Str dirKey = Str(path);
     for (int i = 0; i < state->loadedDirs.len; i++) {
-        if (SameName(state->loadedDirs[i], dirKey)) {
+        if (base::StrEq(state->loadedDirs[i], dirKey)) {
             return 0;
         }
     }
@@ -2504,7 +2498,7 @@ const ThemeConfig* ThemeRegistryFind(const App* app, Str name) {
         return nullptr;
     }
     for (int i = 0; i < state->themes.len; i++) {
-        if (SameName(state->themes[i].name, name)) {
+        if (base::StrEq(state->themes[i].name, name)) {
             return &state->themes[i];
         }
     }
