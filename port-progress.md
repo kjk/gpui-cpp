@@ -9082,3 +9082,7 @@ Windows container creation now includes the initial `SetWindowPos` in its
 result, as Wry does. A positioning failure destroys the just-created HWND and
 fails construction instead of continuing with a container at an unknown
 z-order.
+
+The default Windows webview id now formats the full signed pointer-sized HWND,
+matching `(hwnd.0 as isize).to_string()` in Wry. The old `%d` conversion
+truncated 64-bit handles and could give two views the same callback id.

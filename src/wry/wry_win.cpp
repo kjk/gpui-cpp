@@ -3140,7 +3140,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     wv->httpOrHttps = attrs->useHttpsScheme ? "https" : "http";
     // `attributes.id.unwrap_or_else(|| hwnd.to_string())`.
     wv->id = attrs->id.len > 0 ? StrDup(attrs->id)
-                               : StrDup(base::FormatTemp("%d", (int)(intptr_t)hwnd));
+                               : StrDup(base::FormatTemp("%lld", (int64_t)(intptr_t)hwnd));
     for (int i = 0; i < attrs->customProtocolCount; i++) {
         ProtocolCopy p;
         p.name = StrDup(attrs->customProtocols[i].name);
