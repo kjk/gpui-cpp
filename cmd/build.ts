@@ -391,13 +391,12 @@ function allCppDir(rel: string): string[] {
 function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[] | null {
   if (nonAmalgam) {
     if (name !== "hello_world") return null;
-    // hello_world uses the runtime and platform layer directly. Keep this
-    // smoke build focused on those library translation units; the themed
-    // component .cpp files are separate optional modules and are not pulled
-    // in by the example.
-    return allCppDir("src").filter(
-      (f) => (f === "src/base.cpp" || f.startsWith("src/gpui/") || f.startsWith("src/sys/")) && sourcePlatform(f, plat),
-    );
+    const markdown = process.env.GPUI_MARKDOWN ?? "full";
+    return ["examples/hello_world.cpp", ...allCppDir("src").filter((f) => {
+      if (!sourcePlatform(f, plat)) return false;
+      if (markdown === "full") return !f.startsWith("src/markdown-mini/");
+      return !f.startsWith("src/markdown/") || f === "src/markdown/mdast.cpp";
+    })];
   }
   if (dirExamples.includes(name)) {
     return [...amalgamSrc(), ...cppDir(`examples/${name}`)];
@@ -958,9 +957,9 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
       "/std:c++20",
       "/EHsc",
       "/utf-8",
-      "/I",
-      amalgamDir(),
-      ...(f.nonAmalgam ? ["/I", "src", "/I", "src/gpui"] : []),
+      ...(f.nonAmalgam
+        ? ["/I", "src", "/I", "src/gpui", "/FI", "markdown/markdown.h", "/FI", "base/lib.h", "/FI", "ui/lib.h", "/FI", "gpui/paint.h", "/FI", "gpui/assets.h", "/FI", "gpui/svg.h", "/FI", "gpui/accessibility_win.h"]
+        : ["/I", amalgamDir()]),
       "/DUNICODE",
       "/D_UNICODE",
       "/W4",
@@ -1004,9 +1003,9 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
 
   const flags = [
     "-std=c++20",
-    "-I",
-    amalgamDir(),
-    ...(f.nonAmalgam ? ["-I", "src", "-I", "src/gpui"] : []),
+    ...(f.nonAmalgam
+      ? ["-I", "src", "-I", "src/gpui", "-include", "markdown/markdown.h", "-include", "base/lib.h", "-include", "ui/lib.h", "-include", "gpui/paint.h", "-include", "gpui/assets.h", "-include", "gpui/svg.h", "-include", "gpui/accessibility_win.h"]
+      : ["-I", amalgamDir()]),
     "-Wall",
     "-Wextra",
     "-Werror",

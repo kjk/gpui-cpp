@@ -87,11 +87,24 @@ void CanvasClear(PaintCtx* ctx, Rgba c);
 void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c);
 void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
                      Rgba c);
+inline float ClampRadius(float r, float w, float h) {
+    float lim = (w < h ? w : h) * 0.5f;
+    if (lim < 0) lim = 0;
+    return r > lim ? lim : r;
+}
+inline void FillRound(PaintCtx* ctx, float x, float y, float w, float h,
+                      float r, Rgba c) {
+    CanvasFillRound(ctx, x, y, w, h, ClampRadius(r, w, h), c);
+}
 // `dash` is a two-element {on, off} pattern in stroke widths, or null for a
 // solid line.
 void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
                        float r, float stroke, Rgba c,
                        const float* dash = nullptr);
+inline void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
+                            float r, float stroke, Rgba c) {
+    CanvasStrokeRound(ctx, x, y, w, h, ClampRadius(r, w, h), stroke, c);
+}
 void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
                 float stroke, Rgba c, const float* dash = nullptr);
 // stroke <= 0 fills the ellipse instead of stroking it.
@@ -188,7 +201,10 @@ void TextLayoutRelease(TextLayout* tl);
 // the layout does not know the box it is going into. `clipW` of 0 leaves it
 // to the caller's own clip.
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip, float clipW = 0);
+                     bool clip, float clipW = 0);
+void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
+                float fontSize, Rgba c, bool truncate, bool wrap = false,
+                float measMaxW = -1.f, int weight = 0, float lineH = 0);
 // The UTF-8 offset into `s` nearest the layout-relative point.
 int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY);
 // The rectangles covering UTF-8 range [u8a, u8b), one per line. Returns how

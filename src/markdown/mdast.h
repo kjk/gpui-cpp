@@ -1,5 +1,3 @@
-#ifndef GPUI_MARKDOWN_MDAST_H_
-#define GPUI_MARKDOWN_MDAST_H_
 /* src/mdast.rs — the syntax tree `ToMdast` hands back.
 
    Part of the C++ port of the `markdown` crate 1.0.0 (see
@@ -440,5 +438,4 @@ Str NodeToString(Arena* a, const Node* node);
 
 } // namespace markdown
 
-#endif // GPUI_MARKDOWN_MDAST_H_
 #endif // GPUI_MARKDOWN_MDAST_H_

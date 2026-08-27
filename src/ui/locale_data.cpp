@@ -11,9 +11,9 @@ namespace gpui {
 
 namespace component {
 
-const char* const kLocaleNames[] = {"en",    "zh-CN", "zh-HK",
-                                    "zh-TW", "it",    "fr"};
-const int kLocaleCount = 6;
+extern const char* const kLocaleNames[] = {"en",    "zh-CN", "zh-HK",
+                                           "zh-TW", "it",    "fr"};
+extern const int kLocaleCount = 6;
 
 static const char* const kV_Calendar_month_April[] = {
     "April", "四月", "四月", "四月", "Aprile", "Avril"};
@@ -136,7 +136,7 @@ static const char* const kV_Settings_Reset_All[] = {
 static const char* const kV_Settings_search_placeholder[] = {
     "Search...", "搜索...", "搜索...", "搜尋...", "Ricerca...", nullptr};
 
-const LocaleRow kLocaleRows[] = {
+extern const LocaleRow kLocaleRows[] = {
     {"Calendar.month.April", kV_Calendar_month_April},
     {"Calendar.month.August", kV_Calendar_month_August},
     {"Calendar.month.December", kV_Calendar_month_December},
@@ -193,7 +193,7 @@ const LocaleRow kLocaleRows[] = {
     {"Settings.Reset All", kV_Settings_Reset_All},
     {"Settings.search_placeholder", kV_Settings_search_placeholder},
 };
-const int kLocaleRowCount = 55;
+extern const int kLocaleRowCount = 55;
 
 } // namespace component
 } // namespace gpui

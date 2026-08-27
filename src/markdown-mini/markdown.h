@@ -1,5 +1,3 @@
-#ifndef GPUI_MARKDOWN_MINI_MARKDOWN_H_
-#define GPUI_MARKDOWN_MINI_MARKDOWN_H_
 /* Size-focused implementation of markdown/markdown.h.
 
    The public types live in markdown/ so the full and mini parsers produce the
@@ -12,5 +10,4 @@
 
 #include "markdown/markdown.h"
 
-#endif // GPUI_MARKDOWN_MINI_MARKDOWN_H_
 #endif // GPUI_MARKDOWN_MINI_MARKDOWN_H_

@@ -1,5 +1,3 @@
-#ifndef GPUI_TAFFY_COMPUTE_H_
-#define GPUI_TAFFY_COMPUTE_H_
 /* The layout algorithms — everything under taffy/src/compute.
  *
  * Rust's compute functions take `&mut impl LayoutPartialTree`; here they take
@@ -144,5 +142,4 @@ SizeF ComputeContentSizeContribution(PointF location, SizeF size,
 
 } // namespace taffy
 
-#endif // GPUI_TAFFY_COMPUTE_H_
 #endif // GPUI_TAFFY_COMPUTE_H_

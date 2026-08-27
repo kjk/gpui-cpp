@@ -1,5 +1,3 @@
-#ifndef GPUI_TAFFY_GEOMETRY_H_
-#define GPUI_TAFFY_GEOMETRY_H_
 /* Geometric primitives useful for layout — taffy/src/geometry.rs
  *
  * Part of the C++ port of taffy 0.12.2 (see src/taffy/readme.md).
@@ -444,5 +442,4 @@ Slice<T> SliceOne(Arena* a, const T& v) {
 
 } // namespace taffy
 
-#endif // GPUI_TAFFY_GEOMETRY_H_
 #endif // GPUI_TAFFY_GEOMETRY_H_

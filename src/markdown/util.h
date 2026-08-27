@@ -1,5 +1,3 @@
-#ifndef GPUI_MARKDOWN_UTIL_H_
-#define GPUI_MARKDOWN_UTIL_H_
 /* src/util/ — the helpers the constructs, the resolvers and to_mdast share.
 
    Part of the C++ port of markdown-rs 1.0.0 (see src/markdown/readme.md).
@@ -195,5 +193,4 @@ Str CharacterReferenceDecodeInto(char buf[4], Str value, uint8_t marker);
 
 } // namespace markdown
 
-#endif // GPUI_MARKDOWN_UTIL_H_
 #endif // GPUI_MARKDOWN_UTIL_H_

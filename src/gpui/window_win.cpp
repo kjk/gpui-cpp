@@ -12,6 +12,7 @@
 #include <ole2.h>
 #include <shellapi.h>
 #include <shobjidl.h>
+#include <uiautomation.h>
 
 namespace gpui {
 

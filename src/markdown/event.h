@@ -1,5 +1,3 @@
-#ifndef GPUI_MARKDOWN_EVENT_H_
-#define GPUI_MARKDOWN_EVENT_H_
 /* src/event.rs — the events a tokenize produces.
 
    A parse is a flat list of enter/exit events over the source bytes, and
@@ -210,5 +208,4 @@ struct Event {
 
 } // namespace markdown
 
-#endif // GPUI_MARKDOWN_EVENT_H_
 #endif // GPUI_MARKDOWN_EVENT_H_

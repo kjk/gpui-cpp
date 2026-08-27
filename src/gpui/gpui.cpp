@@ -2709,10 +2709,6 @@ static Vec<El*> gLayoutFixed;
 // keeps the node slots and the records and nothing else.
 static LayoutCache gMeasureCache;
 
-static bool RgbaEq(Rgba a, Rgba b) {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 // Move a laid-out subtree without re-running layout. Positions are absolute,
 // so shifting the origin shifts every descendant by the same delta; sizes are
 // unaffected.
@@ -3936,19 +3932,6 @@ void LayoutScratchFree() {
 // that takes one radius hands it to an API that clamps each axis on its own —
 // D2D's rounded rect does — so a 4-tall rail asked for `radius_full` would
 // come out a lens rather than a pill without this.
-static float ClampRadius(float r, float w, float h) {
-    float lim = (w < h ? w : h) * 0.5f;
-    if (lim < 0) {
-        lim = 0;
-    }
-    return r > lim ? lim : r;
-}
-
-static void FillRound(PaintCtx* ctx, float x, float y, float w, float h,
-                      float r, Rgba c) {
-    CanvasFillRound(ctx, x, y, w, h, ClampRadius(r, w, h), c);
-}
-
 // The four corners of a box, as one path: a quarter turn at each corner that
 // asked for one and a plain corner where it did not. Built here rather than in
 // the two backends because the path API is already portable and a rounded box
@@ -4059,11 +4042,6 @@ static void StrokeCorners(PaintCtx* ctx, float x, float y, float w, float h,
 static const float kFocusRingWidth = 3.f;
 static const float kFocusRingOpacity = 0.5f;
 
-static void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
-                            float r, float stroke, Rgba c) {
-    CanvasStrokeRound(ctx, x, y, w, h, ClampRadius(r, w, h), stroke, c);
-}
-
 // GPUI's renderer blurs an alpha mask for a box shadow. The portable paint
 // seam has no filter primitive, so approximate the same Gaussian falloff by
 // painting nested rounded masks from the blur's outside edge inward. Each
@@ -4140,9 +4118,9 @@ static void DrawLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
     CanvasLine(ctx, x1, y1, x2, y2, stroke, c);
 }
 
-static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
-                       float fontSize, Rgba c, bool truncate, bool wrap = false,
-                       float measMaxW = -1.f, int weight = 0, float lineH = 0) {
+void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
+                float fontSize, Rgba c, bool truncate, bool wrap,
+                float measMaxW, int weight, float lineH) {
     if (!s.s || s.len <= 0 || !ctx->pa) {
         return;
     }

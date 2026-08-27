@@ -1,5 +1,3 @@
-#ifndef GPUI_MARKDOWN_CONSTANT_H_
-#define GPUI_MARKDOWN_CONSTANT_H_
 /* src/util/constant.rs — the sizes and lists the constructs are written
    against.
 
@@ -76,5 +74,4 @@ extern const CharacterReference kCharacterReferences[2125];
 
 } // namespace markdown
 
-#endif // GPUI_MARKDOWN_CONSTANT_H_
 #endif // GPUI_MARKDOWN_CONSTANT_H_

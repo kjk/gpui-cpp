@@ -34,6 +34,9 @@ inline Rgba Rgb(uint8_t r, uint8_t g, uint8_t b) {
 inline Rgba Rgba8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return Rgba{r, g, b, a};
 }
+inline bool RgbaEq(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
 inline Rgba RgbaHex(uint32_t hex) {
     // 0xRRGGBB or 0xAARRGGBB if top byte set
     if (hex > 0xFFFFFFu) {
