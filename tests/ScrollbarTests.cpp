@@ -20,6 +20,7 @@ static void TheThumbShrinksWithWhatIsVisible() {
     utassertnear(ScrollbarThumbSize(400, 100, 100000), 48.f);
     // And never exceeds the track it runs in.
     utassertnear(ScrollbarThumbSize(30, 100, 200), 30.f);
+    utassertnear(ScrollbarThumbSize(400, 100, 100000, 72), 72.f);
 }
 
 static void TheThumbSitsWhereTheOffsetSaysAndStopsAtTheEnds() {
@@ -31,6 +32,8 @@ static void TheThumbSitsWhereTheOffsetSaysAndStopsAtTheEnds() {
     utassertnear(ScrollbarThumbPos(400, 100, 5000, 200, 800), 300.f);
     // Nothing to scroll, nothing to move.
     utassertnear(ScrollbarThumbPos(400, 400, 0, 800, 800), 0.f);
+    // A horizontal bar leaves the vertical track clear at its far end.
+    utassertnear(ScrollbarThumbPos(400, 100, 600, 200, 800, 16), 284.f);
 }
 
 static void ATrackPressCentresTheThumbOnIt() {
@@ -265,6 +268,36 @@ static void ScrollableMasksChainAndTrapLikeTheSource() {
     EntityDropAll(&app);
 }
 
+static void ATrackPressMovesOnceAndOnlyAThumbPressDrags() {
+    App app = {};
+    Window* win = new Window();
+    win->app = &app;
+    Entity<ScrollRecorder> entity = EntityNewState<ScrollRecorder>(&app);
+    ScrollRecorder* state = entity.Get(&app);
+    ScrollRect scroll = TestScrollRect(
+        51, {0, 0, 100, 100}, 100, 400, 0, -1,
+        ListenTo(entity, &ScrollRecorder::Inner));
+    scroll.trackWidth = 20;
+    win->paint.scrolls.Append(scroll);
+
+    PlatformInput track =
+        InputMouseDown(MouseButton::Left, 85, 90, {}, 1, false);
+    WindowDispatchInput(win, &track);
+    utassert(state->innerCalls == 1 && state->innerY > 0);
+    utassert(win->scrollDragId == 0);
+
+    win->paint.scrolls[0].scrollY = 0;
+    PlatformInput thumb =
+        InputMouseDown(MouseButton::Left, 85, 10, {}, 1, false);
+    WindowDispatchInput(win, &thumb);
+    utassert(win->scrollDragId == 51);
+    utassert(!win->scrollDragHorizontal);
+
+    win->paint.scrolls.Reset();
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestScrollbar() {
     TestSuite("scrollbar");
     TheThumbShrinksWithWhatIsVisible();
@@ -275,6 +308,7 @@ void TestScrollbar() {
     PreciseGesturesKeepTheirAxisUntilAStrongTurn();
     ScrollableElementPreservesTheSourceElementAndMask();
     ScrollableMasksChainAndTrapLikeTheSource();
+    ATrackPressMovesOnceAndOnlyAThumbPressDrags();
 }
 
 // The timing a styled layer projects, which is what these assert against.
@@ -383,7 +417,7 @@ static void MotionlessSnaps() {
 // other two fade in place.
 static void HoverModeIsTheOneThatSlides() {
     ScrollbarMotion bare;
-    utassert(bare.idle == 0 && bare.enter == 0 && bare.exit == 0 &&
+    utassert(bare.idle == 2 && bare.enter == 0 && bare.exit == 0 &&
              bare.expand == 0);
     utassert(ScrollbarMotionFor(ScrollbarMode::Hover).thumbHoverEntrance ==
              ScrollbarEntrance::SlideAndFade);
@@ -397,6 +431,151 @@ static void HoverModeIsTheOneThatSlides() {
     utassert(ScrollbarMotionFor(ScrollbarMode::Hover).idle == 2.f);
 }
 
+static void MotionBuildersAreImmutable() {
+    ScrollbarMotion motion;
+    ScrollbarMotion changed =
+        motion.WithIdle(3).WithEnter(.2f).WithExit(.4f).WithExpand(.6f)
+            .WithEntrance(ScrollbarEntrance::SlideAndFade)
+            .WithThumbHoverEntrance(ScrollbarEntrance::Fade);
+    utassert(motion.idle == 2 && motion.enter == 0 && motion.exit == 0 &&
+             motion.expand == 0);
+    utassert(changed.idle == 3 && changed.enter == .2f &&
+             changed.exit == .4f && changed.expand == .6f);
+    utassert(changed.entrance == ScrollbarEntrance::SlideAndFade);
+    utassert(changed.thumbHoverEntrance == ScrollbarEntrance::Fade);
+}
+
+struct TestScrollbarHandleState {
+    Bounds viewport = {1, 2, 30, 40};
+    Point offset = {5, 6};
+    Size content = {300, 400};
+    int starts = 0;
+    int ends = 0;
+};
+
+static Bounds TestHandleViewport(void* user) {
+    return ((TestScrollbarHandleState*)user)->viewport;
+}
+
+static Point TestHandleOffset(void* user) {
+    return ((TestScrollbarHandleState*)user)->offset;
+}
+
+static void TestHandleSetOffset(void* user, Point value) {
+    ((TestScrollbarHandleState*)user)->offset = value;
+}
+
+static Size TestHandleContent(void* user) {
+    return ((TestScrollbarHandleState*)user)->content;
+}
+
+static void TestHandleStart(void* user) {
+    ((TestScrollbarHandleState*)user)->starts++;
+}
+
+static void TestHandleEnd(void* user) {
+    ((TestScrollbarHandleState*)user)->ends++;
+}
+
+static void HandlePreservesTheSourceOperations() {
+    TestScrollbarHandleState state;
+    ScrollbarHandle handle = {&state,
+                              TestHandleViewport,
+                              TestHandleOffset,
+                              TestHandleSetOffset,
+                              TestHandleContent,
+                              TestHandleStart,
+                              TestHandleEnd};
+    utassert(handle.IsValid());
+    utassert(handle.ViewportBounds().x == 1 &&
+             handle.ViewportBounds().h == 40);
+    utassert(handle.Offset().x == 5 && handle.ContentSize().h == 400);
+    handle.SetOffset({17, 19});
+    handle.StartDrag();
+    handle.EndDrag();
+    utassert(state.offset.x == 17 && state.offset.y == 19);
+    utassert(state.starts == 1 && state.ends == 1);
+}
+
+static void StyleBuildersAndPrepaintMatchTheSourceGeometry() {
+    ScrollbarTrackStyle track;
+    ScrollbarTrackStyle styledTrack =
+        track.Bg(Rgba{1, 0, 0, 1}).BorderColor(Rgba{0, 1, 0, 1}).Width(18);
+    utassert(!track.hasBackground && !track.hasBorder && !track.hasWidth);
+    utassert(styledTrack.hasBackground && styledTrack.hasBorder &&
+             styledTrack.hasWidth && styledTrack.width == 18);
+
+    ScrollbarThumbStyle thumb;
+    ScrollbarThumbStyle styledThumb =
+        thumb.Bg(Rgba{0, 0, 1, 1}).Width(8).Inset(4).Radius(20).MinLength(60);
+    utassert(!thumb.hasWidth && !thumb.hasInset && !thumb.hasRadius);
+    utassert(styledThumb.hasBackground && styledThumb.hasWidth &&
+             styledThumb.hasInset && styledThumb.hasRadius &&
+             styledThumb.hasMinLength);
+
+    ScrollbarStyles styles =
+        ScrollbarStyles{}
+            .Track(styledTrack)
+            .TrackHover(ScrollbarTrackStyle{}.Width(99))
+            .Thumb(styledThumb)
+            .ThumbHover(ScrollbarThumbStyle{}.Width(12))
+            .ThumbActive(ScrollbarThumbStyle{}.Inset(6).MinLength(80));
+    utassert(!ScrollbarStyles{}.track.hasWidth);
+    utassert(styles.track.width == 18 && styles.trackHover.width == 99);
+
+    App app = {};
+    Arena* arena = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = arena;
+    El* projected = Scrollbar::ApplyStyles(&cx, Div(arena), styles);
+    // Only normal track width sets the geometry. State variants resolve each
+    // thumb property through the normal local style before source defaults.
+    utassert(projected->scrollThemeSet);
+    utassertnear(projected->scrollTrackWidth, 18.f);
+    utassertnear(projected->scrollThumbWidth, 8.f);
+    utassertnear(projected->scrollThumbHoverWidth, 12.f);
+    utassertnear(projected->scrollThumbHoverInset, 4.f);
+    utassertnear(projected->scrollThumbHoverRadius, 20.f);
+    utassertnear(projected->scrollThumbActiveWidth, 8.f);
+    utassertnear(projected->scrollThumbActiveInset, 6.f);
+    utassertnear(projected->scrollThumbActiveMinLength, 80.f);
+    ArenaDelete(arena);
+
+    AxisPrepaintState vertical = ScrollbarPrepaintAxis(
+        Axis::Vertical, Bounds{10, 20, 16, 200}, 300, 200, 800,
+        styledThumb);
+    // 200 / 800 * 200 = 50, raised to the styled 60-pixel minimum;
+    // the source stores the 52-pixel inset-adjusted clickable length.
+    utassertnear(vertical.thumbSize, 52.f);
+    utassertnear(vertical.thumbBounds.x, 6.f);
+    utassertnear(vertical.thumbBounds.y, 94.f);
+    utassertnear(vertical.thumbBounds.w, 16.f);
+    utassertnear(vertical.thumbFillBounds.x, 14.f);
+    utassertnear(vertical.thumbFillBounds.w, 8.f);
+    utassertnear(vertical.radius, 4.f);
+    utassert(vertical.visibilityRequested &&
+             vertical.visibilityOpacity == 1.f &&
+             vertical.visibilityPosition == 1.f);
+
+    AxisPrepaintState horizontal = ScrollbarPrepaintAxis(
+        Axis::Horizontal, Bounds{20, 30, 200, 16}, 600, 200, 800,
+        styledThumb);
+    utassertnear(horizontal.thumbBounds.x, 164.f);
+    utassertnear(horizontal.thumbBounds.y, 26.f);
+    utassertnear(horizontal.thumbBounds.h, 16.f);
+    utassertnear(horizontal.thumbFillBounds.y, 34.f);
+    utassertnear(horizontal.thumbFillBounds.h, 8.f);
+
+    AxisPrepaintState hidden = ScrollbarPrepaintAxis(
+        Axis::Vertical, Bounds{0, 0, 16, 200}, 0, 200, 200, styledThumb);
+    utassert(!hidden.visibilityRequested && hidden.thumbSize == 0);
+
+    ScrollbarAxis exact = ScrollbarAxis::Both;
+    ScrollAxis compatibility = exact;
+    utassert(compatibility == ScrollAxis::Both);
+}
+
 void TestScrollbarMotion() {
     TestSuite("scrollbar_motion");
     VisibilityUsesDirectionSpecificCurvesAndDurations();
@@ -406,4 +585,7 @@ void TestScrollbarMotion() {
     AReversalStartsFromTheCurrentProgress();
     MotionlessSnaps();
     HoverModeIsTheOneThatSlides();
+    MotionBuildersAreImmutable();
+    HandlePreservesTheSourceOperations();
+    StyleBuildersAndPrepaintMatchTheSourceGeometry();
 }

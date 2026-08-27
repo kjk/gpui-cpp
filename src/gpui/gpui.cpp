@@ -791,12 +791,25 @@ static Background ScrollbarThumbBg(const RuntimeStyle& th, bool hot,
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
+enum class ScrollbarPaintState : uint8_t {
+    Normal,
+    HoverBar,
+    HoverThumb,
+    Active,
+};
+
 static Background ScrollbarThumbBg(const El* e, const RuntimeStyle& th,
-                                   bool hot, float alpha) {
+                                   ScrollbarPaintState state, float alpha) {
     if (!e->scrollThemeSet) {
-        return ScrollbarThumbBg(th, hot, alpha);
+        return ScrollbarThumbBg(th, state == ScrollbarPaintState::HoverThumb ||
+                                        state == ScrollbarPaintState::Active,
+                                alpha);
     }
-    Background c = hot ? e->scrollThumbHover : e->scrollThumb;
+    Background c = state == ScrollbarPaintState::Active
+                       ? e->scrollThumbActive
+                       : (state == ScrollbarPaintState::HoverThumb
+                              ? e->scrollThumbHover
+                              : e->scrollThumb);
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
@@ -808,11 +821,16 @@ static Background ScrollbarBarBg(const RuntimeStyle& th, float alpha) {
 }
 
 static Background ScrollbarBarBg(const El* e, const RuntimeStyle& th,
-                                 bool active, float alpha) {
+                                 ScrollbarPaintState state, float alpha) {
     if (!e->scrollThemeSet) {
         return ScrollbarBarBg(th, alpha);
     }
-    Background c = active ? e->scrollTrackActive : e->scrollTrack;
+    Background c =
+        state == ScrollbarPaintState::Active ||
+                state == ScrollbarPaintState::HoverThumb
+            ? e->scrollTrackActive
+            : (state == ScrollbarPaintState::HoverBar ? e->scrollTrackHover
+                                                       : e->scrollTrack);
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
@@ -822,12 +840,57 @@ static float ThumbRadius(const RuntimeStyle& th, float thumbW) {
     return r > thumbW * 0.5f ? thumbW * 0.5f : r;
 }
 
-static float ThumbRadius(const El* e, const RuntimeStyle& th, float thumbW) {
+static float ThumbRadius(const El* e, const RuntimeStyle& th,
+                         ScrollbarPaintState state, float thumbW,
+                         float thumbLength) {
     if (!e->scrollThemeSet) {
-        return ThumbRadius(th, thumbW);
+        float r = ThumbRadius(th, thumbW);
+        return r > thumbLength * .5f ? thumbLength * .5f : r;
     }
-    float r = e->scrollThumbRadius;
-    return r > thumbW * 0.5f ? thumbW * 0.5f : r;
+    float r = state == ScrollbarPaintState::Active
+                  ? e->scrollThumbActiveRadius
+                  : (state == ScrollbarPaintState::HoverThumb
+                         ? e->scrollThumbHoverRadius
+                         : e->scrollThumbRadius);
+    float max = thumbW < thumbLength ? thumbW * .5f : thumbLength * .5f;
+    return r > max ? max : r;
+}
+
+static float ScrollbarTrackWidth(const El* e) {
+    return e->scrollThemeSet ? e->scrollTrackWidth : kScrollbarBandW;
+}
+
+static float ScrollbarThumbWidth(const El* e, ScrollbarPaintState state) {
+    if (!e->scrollThemeSet) {
+        return state == ScrollbarPaintState::HoverThumb ||
+                       state == ScrollbarPaintState::Active
+                   ? kScrollbarThumbActiveW
+                   : kScrollbarThumbW;
+    }
+    return state == ScrollbarPaintState::Active
+               ? e->scrollThumbActiveWidth
+               : (state == ScrollbarPaintState::HoverThumb
+                      ? e->scrollThumbHoverWidth
+                      : e->scrollThumbWidth);
+}
+
+static float ScrollbarThumbInset(const El* e, ScrollbarPaintState state) {
+    if (!e->scrollThemeSet) return kScrollbarThumbMargin;
+    return state == ScrollbarPaintState::Active
+               ? e->scrollThumbActiveInset
+               : (state == ScrollbarPaintState::HoverThumb
+                      ? e->scrollThumbHoverInset
+                      : e->scrollThumbInset);
+}
+
+static float ScrollbarThumbMinLength(const El* e,
+                                     ScrollbarPaintState state) {
+    if (!e->scrollThemeSet) return 48.f;
+    return state == ScrollbarPaintState::Active
+               ? e->scrollThumbActiveMinLength
+               : (state == ScrollbarPaintState::HoverThumb
+                      ? e->scrollThumbHoverMinLength
+                      : e->scrollThumbMinLength);
 }
 
 // ─── the scrollbar's motion — crates/base/src/scrollbar.rs ───────────────
@@ -5042,6 +5105,18 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.mode = ElScrollMode(e, ctx->app);
         sr.barX = !e->noScrollbar && !e->noScrollbarX;
         sr.barY = !e->noScrollbar && !e->noScrollbarY;
+        if (e->scrollThemeSet) {
+            sr.trackWidth = e->scrollTrackWidth;
+            sr.thumbWidth = e->scrollThumbWidth;
+            sr.thumbHoverWidth = e->scrollThumbHoverWidth;
+            sr.thumbActiveWidth = e->scrollThumbActiveWidth;
+            sr.thumbInset = e->scrollThumbInset;
+            sr.thumbHoverInset = e->scrollThumbHoverInset;
+            sr.thumbActiveInset = e->scrollThumbActiveInset;
+            sr.thumbMinLength = e->scrollThumbMinLength;
+            sr.thumbHoverMinLength = e->scrollThumbHoverMinLength;
+            sr.thumbActiveMinLength = e->scrollThumbActiveMinLength;
+        }
         sr.maskAxes = e->scrollMaskAxes;
         sr.maskHit = e->scrollMaskAxes ? ctx->hitParent : -1;
         sr.onScroll = e->onScroll;
@@ -5390,6 +5465,18 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     bool dragging = ctx->scrollDragId != 0 && ctx->scrollDragId == e->scrollId;
     ScrollbarMotion barMotion =
         e->scrollThemeSet ? e->scrollMotion : ScrollbarMotionFor(barMode);
+    float trackW = ScrollbarTrackWidth(e);
+    if (trackW < 0) trackW = 0;
+    bool canVertical = !e->noScrollbarY &&
+                       e->style.overflowY == Overflow::Scroll &&
+                       e->contentH > e->h + 1.f && e->h > 0;
+    bool canHorizontal = !e->noScrollbarX &&
+                         e->style.overflowX == Overflow::Scroll &&
+                         e->contentW > e->w + 1.f && e->w > 0;
+    bool onBand =
+        overBox &&
+        ((canVertical && ctx->mouseX >= e->x + e->w - trackW) ||
+         (canHorizontal && ctx->mouseY >= e->y + e->h - trackW));
     bool barVisible = !e->noScrollbar;
     float barAlpha = 1.f;
     float barSlide = 0.f;
@@ -5397,14 +5484,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // No ScrollId is no state: the area cannot be found again next frame,
         // so it keeps the bar rather than animating it from nothing every
         // time. Rust's state is keyed the same way, off the element id.
-        barVisible = barMode == ScrollbarMode::Always || overBox;
+        barVisible = barMode == ScrollbarMode::Always || onBand;
     } else if (barVisible) {
         // is_hovered_on_bar: the pointer resting inside the band the thumb
         // runs down. It holds the bar up in hover mode, and in scrolling mode
         // only while the bar is already up — `hover_keeps_visible`.
-        bool onBand =
-            overBox && (ctx->mouseX >= e->x + e->w - kScrollbarBandW ||
-                        ctx->mouseY >= e->y + e->h - kScrollbarBandW);
         double now = TimeNow();
         ScrollFade* f = ScrollFadeFor(e->scrollId, e->scrollY, e->scrollX);
         bool wasVisible = f->opacity.target > 0.f;
@@ -5415,7 +5499,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             f->at = now;
             f->hasLast = true;
         }
-        bool want = ScrollbarWantsVisible(barMode, overBox, dragging, f,
+        bool want = ScrollbarWantsVisible(barMode, onBand, dragging, f,
                                           barMotion.idle, now);
         // `entrance_for`: only a hover mode bar under the pointer's own thumb
         // slides; everything else fades in place.
@@ -5429,7 +5513,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         barAlpha = vis.opacity;
         // `visibility_translation`: the bar sits `track_width` off its edge at
         // the start of the slide and arrives as the progress reaches 1.
-        barSlide = ScrollbarSlideOffset(kScrollbarBandW, vis.position);
+        barSlide = ScrollbarSlideOffset(trackW, vis.position);
         barVisible = barAlpha > 0.f;
         if (vis.running) {
             ctx->wantsAnimFrame = true;
@@ -5446,78 +5530,111 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         }
     }
     // style_for_normal / style_for_hovered_bar / style_for_hovered_thumb /
-    // style_for_active. A bar rests at THUMB_WIDTH only in the fading
-    // `Scrolling` mode; every other mode draws the wide one, and any bar the
-    // pointer is over — or one a drag has hold of — grows to it too, over
-    // `expand`. The colour changes only under the thumb itself, or in a drag.
-    float restW = barMode == ScrollbarMode::Scrolling ? kScrollbarThumbW
-                                                      : kScrollbarThumbActiveW;
+    // style_for_active. Hovering the track keeps the normal thumb style;
+    // hovering the thumb or dragging selects its own full style tuple.
     ScrollFade* barState =
         e->scrollId != 0 ? ScrollFadeFor(e->scrollId, e->scrollY, e->scrollX)
                          : nullptr;
     // The thumb's radius is `theme.radius`, clamped to half the thumb — a
     // wider thumb rounds more, which is what `clamp_thumb_radius` says.
     const RuntimeStyle& barTheme = RuntimeStyleNow(ctx->app);
-    if (barVisible && !e->noScrollbarY &&
-        e->style.overflowY == Overflow::Scroll && e->contentH > e->h + 1.f &&
-        e->h > 0) {
-        bool onBar = overBox && ctx->mouseX >= e->x + e->w - kScrollbarBandW;
-        bool hot = onBar || (dragging && !ctx->scrollDragHorizontal);
-        // The same three numbers the press and drag arithmetic goes by, so
-        // what is drawn and what is grabbed cannot drift apart.
-        float thumbH = ScrollbarThumbSize(e->h, e->h, e->contentH);
-        float wantW = hot ? kScrollbarThumbActiveW : restW;
+    bool hasVertical = barVisible && canVertical;
+    bool hasHorizontal = barVisible && canHorizontal;
+    if (hasVertical) {
+        bool onBar = overBox && ctx->mouseX >= e->x + e->w - trackW;
+        float normalInset = ScrollbarThumbInset(e, ScrollbarPaintState::Normal);
+        float normalRaw = ScrollbarThumbSize(
+            e->h, e->h, e->contentH,
+            ScrollbarThumbMinLength(e, ScrollbarPaintState::Normal));
+        float normalStart =
+            ScrollbarThumbPos(e->h, normalRaw, e->scrollY, e->h, e->contentH);
+        float normalLength = normalRaw - normalInset * 2.f;
+        if (normalLength < 0) normalLength = 0;
+        bool pointerOnThumb =
+            onBar && ctx->mouseX <= e->x + e->w - normalInset &&
+            ctx->mouseY >= e->y + normalStart + normalInset &&
+            ctx->mouseY < e->y + normalStart + normalInset + normalLength;
+        bool axisDragging = dragging && !ctx->scrollDragHorizontal;
+        ScrollbarPaintState state =
+            axisDragging
+                ? ScrollbarPaintState::Active
+                : (pointerOnThumb ? ScrollbarPaintState::HoverThumb
+                                  : (onBar ? ScrollbarPaintState::HoverBar
+                                           : ScrollbarPaintState::Normal));
+        float inset = ScrollbarThumbInset(e, state);
+        float rawThumbH = ScrollbarThumbSize(
+            e->h, e->h, e->contentH, ScrollbarThumbMinLength(e, state));
+        float thumbH = rawThumbH - inset * 2.f;
+        if (thumbH < 0) thumbH = 0;
+        float wantW = ScrollbarThumbWidth(e, state);
         float thumbW = wantW;
         if (barState) {
             thumbW =
                 WidthTarget(&barState->widthY, &barState->widthYSet, wantW,
                             barMotion.expand, TimeNow(), &ctx->wantsAnimFrame);
         }
-        float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
-        float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
-                                                e->contentH);
-        bool onThumb =
-            (dragging && !ctx->scrollDragHorizontal) ||
-            (onBar && ctx->mouseY >= thumbY && ctx->mouseY < thumbY + thumbH);
+        float thumbX = e->x + e->w - thumbW - inset;
+        float thumbY = e->y + inset +
+                       ScrollbarThumbPos(e->h, rawThumbH, e->scrollY, e->h,
+                                         e->contentH);
         // The track, which every default theme leaves transparent — the band
         // is Rust's WIDTH and reaches the whole length of the box. A vertical
         // bar slides in from the right, so the slide is along x.
-        FillBackground(ctx, e->x + e->w - kScrollbarBandW + barSlide, e->y,
-                       kScrollbarBandW, e->h, 0, nullptr,
-                       ScrollbarBarBg(e, barTheme, dragging, barAlpha));
+        FillBackground(ctx, e->x + e->w - trackW + barSlide, e->y, trackW,
+                       e->h, 0, nullptr,
+                       ScrollbarBarBg(e, barTheme, state, barAlpha));
         FillBackground(ctx, thumbX + barSlide, thumbY, thumbW, thumbH,
-                       ThumbRadius(e, barTheme, thumbW), nullptr,
-                       ScrollbarThumbBg(e, barTheme, onThumb, barAlpha));
+                       ThumbRadius(e, barTheme, state, thumbW, thumbH), nullptr,
+                       ScrollbarThumbBg(e, barTheme, state, barAlpha));
     }
-    if (barVisible && !e->noScrollbarX &&
-        e->style.overflowX == Overflow::Scroll && e->contentW > e->w + 1.f &&
-        e->w > 0) {
+    if (hasHorizontal) {
         // The horizontal bar is the same arithmetic along the other axis,
         // which is how Rust writes it: one path, `is_vertical` picking the
         // pair of numbers it reads.
-        bool onBar = overBox && ctx->mouseY >= e->y + e->h - kScrollbarBandW;
-        bool hot = onBar || (dragging && ctx->scrollDragHorizontal);
-        float thumbW = ScrollbarThumbSize(e->w, e->w, e->contentW);
-        float wantH = hot ? kScrollbarThumbActiveW : restW;
+        bool onBar = overBox && ctx->mouseY >= e->y + e->h - trackW;
+        float marginEnd = hasVertical ? trackW : 0;
+        float normalInset = ScrollbarThumbInset(e, ScrollbarPaintState::Normal);
+        float normalRaw = ScrollbarThumbSize(
+            e->w, e->w, e->contentW,
+            ScrollbarThumbMinLength(e, ScrollbarPaintState::Normal));
+        float normalStart = ScrollbarThumbPos(e->w, normalRaw, e->scrollX,
+                                              e->w, e->contentW, marginEnd);
+        float normalLength = normalRaw - normalInset * 2.f;
+        if (normalLength < 0) normalLength = 0;
+        bool pointerOnThumb =
+            onBar && ctx->mouseY <= e->y + e->h - normalInset &&
+            ctx->mouseX >= e->x + normalStart + normalInset &&
+            ctx->mouseX < e->x + normalStart + normalInset + normalLength;
+        bool axisDragging = dragging && ctx->scrollDragHorizontal;
+        ScrollbarPaintState state =
+            axisDragging
+                ? ScrollbarPaintState::Active
+                : (pointerOnThumb ? ScrollbarPaintState::HoverThumb
+                                  : (onBar ? ScrollbarPaintState::HoverBar
+                                           : ScrollbarPaintState::Normal));
+        float inset = ScrollbarThumbInset(e, state);
+        float rawThumbW = ScrollbarThumbSize(
+            e->w, e->w, e->contentW, ScrollbarThumbMinLength(e, state));
+        float thumbW = rawThumbW - inset * 2.f;
+        if (thumbW < 0) thumbW = 0;
+        float wantH = ScrollbarThumbWidth(e, state);
         float thumbH = wantH;
         if (barState) {
             thumbH =
                 WidthTarget(&barState->widthX, &barState->widthXSet, wantH,
                             barMotion.expand, TimeNow(), &ctx->wantsAnimFrame);
         }
-        float thumbY = e->y + e->h - thumbH - kScrollbarThumbMargin;
-        float thumbX = e->x + ScrollbarThumbPos(e->w, thumbW, e->scrollX, e->w,
-                                                e->contentW);
-        bool onThumb =
-            (dragging && ctx->scrollDragHorizontal) ||
-            (onBar && ctx->mouseX >= thumbX && ctx->mouseX < thumbX + thumbW);
+        float thumbY = e->y + e->h - thumbH - inset;
+        float thumbX = e->x + inset +
+                       ScrollbarThumbPos(e->w, rawThumbW, e->scrollX, e->w,
+                                         e->contentW, marginEnd);
         // A horizontal bar slides up from the bottom, so its slide is along y.
-        FillBackground(ctx, e->x, e->y + e->h - kScrollbarBandW + barSlide,
-                       e->w, kScrollbarBandW, 0, nullptr,
-                       ScrollbarBarBg(e, barTheme, dragging, barAlpha));
+        FillBackground(ctx, e->x, e->y + e->h - trackW + barSlide, e->w,
+                       trackW, 0, nullptr,
+                       ScrollbarBarBg(e, barTheme, state, barAlpha));
         FillBackground(ctx, thumbX, thumbY + barSlide, thumbW, thumbH,
-                       ThumbRadius(e, barTheme, thumbH), nullptr,
-                       ScrollbarThumbBg(e, barTheme, onThumb, barAlpha));
+                       ThumbRadius(e, barTheme, state, thumbH, thumbW), nullptr,
+                       ScrollbarThumbBg(e, barTheme, state, barAlpha));
     }
 
     if (focused && RuntimeStyleNow(ctx->app).focusRing) {

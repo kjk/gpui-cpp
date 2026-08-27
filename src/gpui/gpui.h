@@ -842,7 +842,7 @@ enum class ScrollbarEntrance : uint8_t {
 // in `theme/mod.rs`'s `scrollbar_motion`.
 struct ScrollbarMotion {
     // How long visibility is held after the last scroll, drag, or hover.
-    float idle = 0;
+    float idle = 2;
     // How long the bar takes to become fully visible.
     float enter = 0;
     // How long it takes to fade away once the idle hold expires.
@@ -851,6 +851,37 @@ struct ScrollbarMotion {
     float expand = 0;
     ScrollbarEntrance entrance = ScrollbarEntrance::Fade;
     ScrollbarEntrance thumbHoverEntrance = ScrollbarEntrance::Fade;
+
+    ScrollbarMotion WithIdle(float value) const {
+        ScrollbarMotion out = *this;
+        out.idle = value;
+        return out;
+    }
+    ScrollbarMotion WithEnter(float value) const {
+        ScrollbarMotion out = *this;
+        out.enter = value;
+        return out;
+    }
+    ScrollbarMotion WithExit(float value) const {
+        ScrollbarMotion out = *this;
+        out.exit = value;
+        return out;
+    }
+    ScrollbarMotion WithExpand(float value) const {
+        ScrollbarMotion out = *this;
+        out.expand = value;
+        return out;
+    }
+    ScrollbarMotion WithEntrance(ScrollbarEntrance value) const {
+        ScrollbarMotion out = *this;
+        out.entrance = value;
+        return out;
+    }
+    ScrollbarMotion WithThumbHoverEntrance(ScrollbarEntrance value) const {
+        ScrollbarMotion out = *this;
+        out.thumbHoverEntrance = value;
+        return out;
+    }
 };
 
 // The motion this design system projects for a mode. Scrolling and track
@@ -1738,13 +1769,28 @@ struct El {
     // carries its own layer-owned motion and paint styles.
     ScrollbarMotion scrollMotion = {};
     Background scrollTrack = {};
+    Background scrollTrackHover = {};
     Background scrollTrackActive = {};
     Background scrollThumb = {};
     Background scrollThumbHover = {};
+    Background scrollThumbActive = {};
+    Rgba scrollTrackBorder = {};
+    Rgba scrollTrackHoverBorder = {};
     Rgba scrollTrackActiveBorder = {};
+    float scrollTrackWidth = 16;
+    float scrollThumbWidth = 6;
+    float scrollThumbHoverWidth = 8;
+    float scrollThumbActiveWidth = 8;
+    float scrollThumbInset = 4;
+    float scrollThumbHoverInset = 4;
+    float scrollThumbActiveInset = 4;
     float scrollThumbRadius = 0;
+    float scrollThumbHoverRadius = 0;
+    float scrollThumbActiveRadius = 0;
+    float scrollThumbMinLength = 48;
+    float scrollThumbHoverMinLength = 48;
+    float scrollThumbActiveMinLength = 48;
     bool scrollThemeSet = false;
-    bool scrollTrackActiveBorderSet = false;
     // A box that scrolls without showing a bar. In Rust the scrolling
     // container and the Scrollbar are two elements, so a container with no
     // Scrollbar beside it simply has none; the box paints its own bar here,
@@ -2227,6 +2273,16 @@ struct ScrollRect {
     // and its band, and takes no press: `tracks_thumb_hover` and the disabled
     // hitbox in scrollbar.rs say the same thing.
     bool barVisible = true;
+    float trackWidth = 16;
+    float thumbWidth = 6;
+    float thumbHoverWidth = 8;
+    float thumbActiveWidth = 8;
+    float thumbInset = 4;
+    float thumbHoverInset = 4;
+    float thumbActiveInset = 4;
+    float thumbMinLength = 48;
+    float thumbHoverMinLength = 48;
+    float thumbActiveMinLength = 48;
     uint8_t maskAxes = 0;
     // The hit-chain node made for a masked viewport. A topmost hit that is
     // not below this node occludes the mask, so wheel input must not reach the

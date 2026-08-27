@@ -8317,3 +8317,41 @@ full: the audit moves to 108 full, 13 partial, 8 adapters and 2 exclusions
 with 225 unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 20,320 checks; wasm passes
 its 19,615 applicable checks. The release story gallery compiles unchanged.
+
+## Base scrollbar restores source paint, handle and prepaint contracts
+
+The integrated renderer already owned scrollbar input, offset arithmetic and
+visibility animation, but its public surface still used the port-only
+`ScrollAxis` spelling and kept the track/thumb style types in Base theme.
+The source `ScrollbarHandle`, `ScrollbarAxis`, `ScrollbarTrackStyle`,
+`ScrollbarThumbStyle`, `ScrollbarStyles`, `AxisPrepaintState` and
+`PrepaintState` contracts were missing. The default motion also held a newly
+created scrollbar for zero seconds instead of the source two seconds.
+
+The source types now live in `base/scrollbar`. `ScrollbarHandle` is a
+caller-owned function table covering viewport bounds, offset mutation,
+content size and drag lifecycle; `ScrollAxis` remains a compatibility alias.
+The immutable motion and style builders preserve Rust's fluent construction,
+and `Scrollbar::ApplyStyles` is the direct-value C++ counterpart of the Rust
+build closure. The renderer-owned state remains flattened into `El` and
+`ScrollRect`, while the source-shaped prepaint records expose deterministic
+axis geometry for custom painters and tests.
+
+Style resolution now follows the source normal/hover-bar/hover-thumb/active
+precedence all the way through painting and input. Track width controls the
+paint and hit band; thumb width, inset, radius and minimum length control both
+rendered and clickable bounds; horizontal thumbs reserve the vertical track's
+end margin. Track presses move once and no longer incorrectly start a drag,
+whereas thumb presses retain their exact grab point. The runtime still paints
+an integrated bar instead of retaining Rust's separate overlay element and
+`Rc<Cell<ScrollbarState>>`; that documented ownership seam no longer removes
+any public style or interaction contract.
+
+Tests cover custom minimums and end margins, style-builder immutability and
+resolution, source prepaint geometry on both axes, handle callbacks, the
+two-second default, track-versus-thumb presses, and all existing visibility
+curves. Base scrollbar is full: the audit moves to 109 full, 12 partial, 8
+adapters and 2 exclusions with 217 unresolved partial-module spellings and no
+full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
+20,365 checks; wasm passes its 19,660 applicable checks. The release story
+gallery compiles unchanged.

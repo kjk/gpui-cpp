@@ -1168,13 +1168,13 @@ static ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
             continue;
         }
         if (s.barY && ScrollsY(s) && y >= s.bounds.y &&
-            y <= s.bounds.Bottom() && x >= s.bounds.Right() - kScrollbarBandW &&
+            y <= s.bounds.Bottom() && x >= s.bounds.Right() - s.trackWidth &&
             x <= s.bounds.Right()) {
             *horizontal = false;
             return &ctx->scrolls[i];
         }
         if (s.barX && ScrollsX(s) && x >= s.bounds.x && x <= s.bounds.Right() &&
-            y >= s.bounds.Bottom() - kScrollbarBandW &&
+            y >= s.bounds.Bottom() - s.trackWidth &&
             y <= s.bounds.Bottom()) {
             *horizontal = true;
             return &ctx->scrolls[i];
@@ -1214,22 +1214,50 @@ static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
     float content = horizontal ? s->contentW : s->contentH;
     float origin = horizontal ? s->bounds.x : s->bounds.y;
     float at = horizontal ? x : y;
-    float thumb = ScrollbarThumbSize(track, track, content);
-    float thumbStart =
-        origin + ScrollbarThumbPos(track, thumb,
-                                   horizontal ? s->scrollX : s->scrollY, track,
-                                   content);
-    win->scrollDragId = s->id;
-    win->scrollDragHorizontal = horizontal;
-    if (at >= thumbStart && at <= thumbStart + thumb) {
+    float marginEnd =
+        horizontal && s->barY && ScrollsY(*s) ? s->trackWidth : 0;
+    float rawThumb = ScrollbarThumbSize(track, track, content,
+                                        s->thumbMinLength);
+    float rawStart = origin + ScrollbarThumbPos(
+                                  track, rawThumb,
+                                  horizontal ? s->scrollX : s->scrollY, track,
+                                  content, marginEnd);
+    float thumbStart = rawStart + s->thumbInset;
+    float thumbLength = rawThumb - s->thumbInset * 2.f;
+    if (thumbLength < 0) thumbLength = 0;
+    bool crossInside = horizontal
+                           ? y <= s->bounds.Bottom() - s->thumbInset
+                           : x <= s->bounds.Right() - s->thumbInset;
+    bool onThumb = crossInside && at >= thumbStart &&
+                   at <= thumbStart + thumbLength;
+    if (onThumb) {
+        // The pointer has already selected thumb_hover in prepaint. Resolve
+        // that state's potentially different inset and minimum before
+        // retaining the grab point.
+        rawThumb = ScrollbarThumbSize(track, track, content,
+                                      s->thumbHoverMinLength);
+        rawStart = origin + ScrollbarThumbPos(
+                                track, rawThumb,
+                                horizontal ? s->scrollX : s->scrollY, track,
+                                content, marginEnd);
+        thumbStart = rawStart + s->thumbHoverInset;
+        thumbLength = rawThumb - s->thumbHoverInset * 2.f;
+        if (thumbLength < 0) thumbLength = 0;
+        crossInside = horizontal
+                          ? y <= s->bounds.Bottom() - s->thumbHoverInset
+                          : x <= s->bounds.Right() - s->thumbHoverInset;
+        onThumb = crossInside && at >= thumbStart &&
+                  at <= thumbStart + thumbLength;
+    }
+    if (onThumb) {
+        win->scrollDragId = s->id;
+        win->scrollDragHorizontal = horizontal;
         win->scrollDragGrab = at - thumbStart;
         return;
     }
-    // A track press grabs the thumb by its middle, so the drag that may
-    // follow carries on from where it just landed.
-    win->scrollDragGrab = thumb * 0.5f;
-    float off =
-        ScrollbarOffsetForTrackPress(at, origin, track, thumb, track, content);
+    // A track press moves once; only pressing the thumb starts a drag.
+    float off = ScrollbarOffsetForTrackPress(at, origin, track, thumbLength,
+                                             track, content);
     ScrollbarEmit(win, s, horizontal ? off : s->scrollX,
                   horizontal ? s->scrollY : off);
 }
@@ -1254,9 +1282,14 @@ static void ScrollbarDrag(Window* win, float x, float y) {
     float content = horizontal ? s->contentW : s->contentH;
     float origin = horizontal ? s->bounds.x : s->bounds.y;
     float at = horizontal ? x : y;
-    float thumb = ScrollbarThumbSize(track, track, content);
+    float rawThumb = ScrollbarThumbSize(track, track, content,
+                                        s->thumbActiveMinLength);
+    float thumb = rawThumb - s->thumbActiveInset * 2.f;
+    if (thumb < 0) thumb = 0;
+    float marginEnd =
+        horizontal && s->barY && ScrollsY(*s) ? s->trackWidth : 0;
     float off = ScrollbarOffsetForDrag(at, win->scrollDragGrab, origin, track,
-                                       thumb, track, content);
+                                       thumb, track, content, marginEnd);
     ScrollbarEmit(win, s, horizontal ? off : s->scrollX,
                   horizontal ? s->scrollY : off);
 }

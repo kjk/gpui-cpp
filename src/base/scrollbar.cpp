@@ -3,30 +3,140 @@
 
 namespace gpui {
 
+static Background ResolveTrackBackground(const ScrollbarTrackStyle& state,
+                                         const ScrollbarTrackStyle& local,
+                                         const ScrollbarTrackStyle& globalState,
+                                         const ScrollbarTrackStyle& global) {
+    if (state.hasBackground) return state.background;
+    if (local.hasBackground) return local.background;
+    if (globalState.hasBackground) return globalState.background;
+    return global.hasBackground ? global.background : Background{};
+}
+
+static Rgba ResolveTrackBorder(const ScrollbarTrackStyle& state,
+                               const ScrollbarTrackStyle& local,
+                               const ScrollbarTrackStyle& globalState,
+                               const ScrollbarTrackStyle& global) {
+    if (state.hasBorder) return state.border;
+    if (local.hasBorder) return local.border;
+    if (globalState.hasBorder) return globalState.border;
+    return global.hasBorder ? global.border : Rgba{};
+}
+
+struct ResolvedScrollbarThumb {
+    Background background = {};
+    float width = 0;
+    float inset = 0;
+    float radius = 0;
+    float minLength = 0;
+};
+
+static ResolvedScrollbarThumb ResolveThumb(
+    const ScrollbarThumbStyle& state, const ScrollbarThumbStyle& local,
+    const ScrollbarThumbStyle& globalState,
+    const ScrollbarThumbStyle& global, Background defaultBackground,
+    float defaultWidth, float defaultInset, float defaultRadius) {
+    ResolvedScrollbarThumb out;
+    out.background = state.hasBackground
+                         ? state.background
+                         : (local.hasBackground
+                                ? local.background
+                                : (globalState.hasBackground
+                                       ? globalState.background
+                                       : (global.hasBackground
+                                              ? global.background
+                                              : defaultBackground)));
+    out.width = state.hasWidth
+                    ? state.width
+                    : (local.hasWidth
+                           ? local.width
+                           : (globalState.hasWidth
+                                  ? globalState.width
+                                  : (global.hasWidth ? global.width
+                                                     : defaultWidth)));
+    out.inset = state.hasInset
+                    ? state.inset
+                    : (local.hasInset
+                           ? local.inset
+                           : (globalState.hasInset
+                                  ? globalState.inset
+                                  : (global.hasInset ? global.inset
+                                                     : defaultInset)));
+    out.radius = state.hasRadius
+                     ? state.radius
+                     : (local.hasRadius
+                            ? local.radius
+                            : (globalState.hasRadius
+                                   ? globalState.radius
+                                   : (global.hasRadius ? global.radius
+                                                       : defaultRadius)));
+    out.minLength = state.hasMinLength
+                        ? state.minLength
+                        : (local.hasMinLength
+                               ? local.minLength
+                               : (globalState.hasMinLength
+                                      ? globalState.minLength
+                                      : (global.hasMinLength
+                                             ? global.minLength
+                                             : 48.f)));
+    return out;
+}
+
+static void ResolveScrollbarStyles(El* box, const ScrollbarStyles& local,
+                                   const ScrollbarStyles& global) {
+    box->scrollThemeSet = true;
+    box->scrollTrack = ResolveTrackBackground(
+        local.track, local.track, global.track, global.track);
+    box->scrollTrackHover = ResolveTrackBackground(
+        local.trackHover, local.track, global.trackHover, global.track);
+    box->scrollTrackActive = ResolveTrackBackground(
+        local.trackActive, local.track, global.trackActive, global.track);
+    box->scrollTrackBorder = ResolveTrackBorder(
+        local.track, local.track, global.track, global.track);
+    box->scrollTrackHoverBorder = ResolveTrackBorder(
+        local.trackHover, local.track, global.trackHover, global.track);
+    box->scrollTrackActiveBorder = ResolveTrackBorder(
+        local.trackActive, local.track, global.trackActive, global.track);
+    box->scrollTrackWidth = local.track.hasWidth
+                                ? local.track.width
+                                : (global.track.hasWidth ? global.track.width
+                                                         : 16.f);
+
+    Background normalDefault(Rgba8(0, 0, 0, 89));
+    Background activeDefault(Rgba8(0, 0, 0, 140));
+    ResolvedScrollbarThumb normal =
+        ResolveThumb(local.thumb, local.thumb, global.thumb, global.thumb,
+                     normalDefault, 6, 4, 0);
+    ResolvedScrollbarThumb hover = ResolveThumb(
+        local.thumbHover, local.thumb, global.thumbHover, global.thumb,
+        activeDefault, 8, 4, 0);
+    ResolvedScrollbarThumb active = ResolveThumb(
+        local.thumbActive, local.thumb, global.thumbActive, global.thumb,
+        activeDefault, 8, 4, 0);
+    box->scrollThumb = normal.background;
+    box->scrollThumbHover = hover.background;
+    box->scrollThumbActive = active.background;
+    box->scrollThumbWidth = normal.width;
+    box->scrollThumbHoverWidth = hover.width;
+    box->scrollThumbActiveWidth = active.width;
+    box->scrollThumbInset = normal.inset;
+    box->scrollThumbHoverInset = hover.inset;
+    box->scrollThumbActiveInset = active.inset;
+    box->scrollThumbRadius = normal.radius;
+    box->scrollThumbHoverRadius = hover.radius;
+    box->scrollThumbActiveRadius = active.radius;
+    box->scrollThumbMinLength = normal.minLength;
+    box->scrollThumbHoverMinLength = hover.minLength;
+    box->scrollThumbActiveMinLength = active.minLength;
+}
+
 static El* ApplyScrollbarTheme(Ctx* cx, El* box) {
     const BaseTheme* theme = BaseThemeGlobal(cx->app);
     if (!theme) {
         return box;
     }
-    const ScrollbarStyles& styles = theme->scrollbar.styles;
-    box->scrollThemeSet = true;
     box->scrollMotion = theme->scrollbar.motion;
-    box->scrollTrack = styles.track.hasBackground
-                           ? styles.track.background
-                           : Background(Rgba{});
-    box->scrollTrackActive = styles.trackActive.hasBackground
-                                 ? styles.trackActive.background
-                                 : box->scrollTrack;
-    box->scrollTrackActiveBorder = styles.trackActive.border;
-    box->scrollTrackActiveBorderSet = styles.trackActive.hasBorder;
-    box->scrollThumb = styles.thumb.hasBackground
-                           ? styles.thumb.background
-                           : Background(Rgba{});
-    box->scrollThumbHover = styles.thumbHover.hasBackground
-                                ? styles.thumbHover.background
-                                : box->scrollThumb;
-    box->scrollThumbRadius =
-        styles.thumb.hasRadius ? styles.thumb.radius : 0;
+    ResolveScrollbarStyles(box, ScrollbarStyles{}, theme->scrollbar.styles);
     return box;
 }
 
@@ -40,15 +150,20 @@ static float ClampF(float v, float lo, float hi) {
     return v > hi ? hi : v;
 }
 
-float ScrollbarThumbSize(float track, float container, float content) {
+float ScrollbarThumbSize(float track, float container, float content,
+                         float minLength) {
     if (content <= 0 || track <= 0) {
         return 0;
     }
     float thumb = track * (container / content);
-    if (thumb < kMinThumb) {
-        thumb = kMinThumb;
+    if (thumb < minLength) {
+        thumb = minLength;
     }
     return thumb > track ? track : thumb;
+}
+
+float ScrollbarThumbSize(float track, float container, float content) {
+    return ScrollbarThumbSize(track, container, content, kMinThumb);
 }
 
 // The offset a percentage along the track comes to. Rust clamps into
@@ -62,12 +177,81 @@ static float OffsetForPct(float pct, float container, float content) {
 }
 
 float ScrollbarThumbPos(float track, float thumb, float offset, float container,
-                        float content) {
+                        float content, float marginEnd) {
     float max = content - container;
-    if (max <= 0 || track <= thumb) {
+    float travel = track - marginEnd - thumb;
+    if (max <= 0 || travel <= 0) {
         return 0;
     }
-    return ClampF(offset / max, 0.f, 1.f) * (track - thumb);
+    return ClampF(offset / max, 0.f, 1.f) * travel;
+}
+
+float ScrollbarThumbPos(float track, float thumb, float offset, float container,
+                        float content) {
+    return ScrollbarThumbPos(track, thumb, offset, container, content, 0);
+}
+
+AxisPrepaintState ScrollbarPrepaintAxis(
+    Axis axis, Bounds track, float offset, float containerSize,
+    float contentSize, const ScrollbarThumbStyle& style) {
+    AxisPrepaintState out;
+    out.axis = axis;
+    out.barHitbox = track;
+    out.bounds = track;
+    out.scrollSize = contentSize;
+    out.containerSize = containerSize;
+    out.trackWidth = axis == Axis::Vertical ? track.w : track.h;
+
+    float trackLength = axis == Axis::Vertical ? track.h : track.w;
+    if (trackLength <= 0 || containerSize <= 0 ||
+        contentSize <= containerSize) {
+        return out;
+    }
+
+    float minLength = style.hasMinLength ? style.minLength : kMinThumb;
+    float rawThumbSize = containerSize / contentSize * containerSize;
+    if (rawThumbSize < minLength) {
+        rawThumbSize = minLength;
+    }
+    if (rawThumbSize > trackLength) {
+        rawThumbSize = trackLength;
+    }
+    float thumbStart = ScrollbarThumbPos(trackLength, rawThumbSize, offset,
+                                         containerSize, contentSize);
+    float inset = style.hasInset ? style.inset : 4.f;
+    float thumbLength = rawThumbSize - inset * 2.f;
+    if (thumbLength < 0) {
+        thumbLength = 0;
+    }
+    float thumbWidth = style.hasWidth ? style.width : 6.f;
+
+    if (axis == Axis::Vertical) {
+        out.thumbBounds = {track.x + track.w - inset - out.trackWidth,
+                           track.y + inset + thumbStart, out.trackWidth,
+                           thumbLength};
+        out.thumbFillBounds = {track.x + track.w - inset - thumbWidth,
+                               track.y + inset + thumbStart, thumbWidth,
+                               thumbLength};
+    } else {
+        out.thumbBounds = {track.x + inset + thumbStart,
+                           track.y + track.h - inset - out.trackWidth,
+                           thumbLength, out.trackWidth};
+        out.thumbFillBounds = {track.x + inset + thumbStart,
+                               track.y + track.h - inset - thumbWidth,
+                               thumbLength, thumbWidth};
+    }
+
+    out.thumbBg = style.hasBackground ? style.background : Background{};
+    out.thumbSize = thumbLength;
+    float radius = style.hasRadius ? style.radius : 0.f;
+    float maxRadius = out.thumbFillBounds.w < out.thumbFillBounds.h
+                          ? out.thumbFillBounds.w * .5f
+                          : out.thumbFillBounds.h * .5f;
+    out.radius = ClampF(radius, 0.f, maxRadius);
+    out.visibilityOpacity = 1.f;
+    out.visibilityPosition = 1.f;
+    out.visibilityRequested = true;
+    return out;
 }
 
 float ScrollbarOffsetForTrackPress(float pos, float trackOrigin, float track,
@@ -84,13 +268,20 @@ float ScrollbarOffsetForTrackPress(float pos, float trackOrigin, float track,
 
 float ScrollbarOffsetForDrag(float pos, float grab, float trackOrigin,
                              float track, float thumb, float container,
-                             float content) {
-    float span = track - thumb;
+                             float content, float marginEnd) {
+    float span = track - thumb - marginEnd;
     if (span <= 0) {
         return 0;
     }
     float pct = (pos - grab - trackOrigin) / span;
     return OffsetForPct(pct, container, content);
+}
+
+float ScrollbarOffsetForDrag(float pos, float grab, float trackOrigin,
+                             float track, float thumb, float container,
+                             float content) {
+    return ScrollbarOffsetForDrag(pos, grab, trackOrigin, track, thumb,
+                                  container, content, 0);
 }
 
 El* Scrollbar::New(Ctx* cx) {
@@ -148,6 +339,19 @@ El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY,
     box->Id(id.s ? id : StrL("scrollbar"))->ScrollFromPath();
     if (onScroll.IsValid()) {
         box->OnScroll(onScroll);
+    }
+    return box;
+}
+
+El* Scrollbar::ApplyStyles(Ctx* cx, El* element,
+                           const ScrollbarStyles& styles) {
+    El* box = element ? element : Div(cx->a);
+    const BaseTheme* theme = BaseThemeGlobal(cx->app);
+    ScrollbarStyles global = theme ? theme->scrollbar.styles
+                                   : ScrollbarStyles{};
+    ResolveScrollbarStyles(box, styles, global);
+    if (theme) {
+        box->scrollMotion = theme->scrollbar.motion;
     }
     return box;
 }
