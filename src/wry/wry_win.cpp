@@ -2233,6 +2233,76 @@ static bool ExecuteScript(ICoreWebView2* webview, Str js, EvalCallback cb) {
 
 // ─── custom protocols ────────────────────────────────────────────────────
 
+// `http::StatusCode::canonical_reason`, from the pinned http 1.2 crate.
+// Wry falls back to "OK" for extension status codes.
+static LPCWSTR HttpStatusReason(int status) {
+    switch (status) {
+        case 100: return L"Continue";
+        case 101: return L"Switching Protocols";
+        case 102: return L"Processing";
+        case 103: return L"Early Hints";
+        case 200: return L"OK";
+        case 201: return L"Created";
+        case 202: return L"Accepted";
+        case 203: return L"Non Authoritative Information";
+        case 204: return L"No Content";
+        case 205: return L"Reset Content";
+        case 206: return L"Partial Content";
+        case 207: return L"Multi-Status";
+        case 208: return L"Already Reported";
+        case 226: return L"IM Used";
+        case 300: return L"Multiple Choices";
+        case 301: return L"Moved Permanently";
+        case 302: return L"Found";
+        case 303: return L"See Other";
+        case 304: return L"Not Modified";
+        case 305: return L"Use Proxy";
+        case 307: return L"Temporary Redirect";
+        case 308: return L"Permanent Redirect";
+        case 400: return L"Bad Request";
+        case 401: return L"Unauthorized";
+        case 402: return L"Payment Required";
+        case 403: return L"Forbidden";
+        case 404: return L"Not Found";
+        case 405: return L"Method Not Allowed";
+        case 406: return L"Not Acceptable";
+        case 407: return L"Proxy Authentication Required";
+        case 408: return L"Request Timeout";
+        case 409: return L"Conflict";
+        case 410: return L"Gone";
+        case 411: return L"Length Required";
+        case 412: return L"Precondition Failed";
+        case 413: return L"Payload Too Large";
+        case 414: return L"URI Too Long";
+        case 415: return L"Unsupported Media Type";
+        case 416: return L"Range Not Satisfiable";
+        case 417: return L"Expectation Failed";
+        case 418: return L"I'm a teapot";
+        case 421: return L"Misdirected Request";
+        case 422: return L"Unprocessable Entity";
+        case 423: return L"Locked";
+        case 424: return L"Failed Dependency";
+        case 425: return L"Too Early";
+        case 426: return L"Upgrade Required";
+        case 428: return L"Precondition Required";
+        case 429: return L"Too Many Requests";
+        case 431: return L"Request Header Fields Too Large";
+        case 451: return L"Unavailable For Legal Reasons";
+        case 500: return L"Internal Server Error";
+        case 501: return L"Not Implemented";
+        case 502: return L"Bad Gateway";
+        case 503: return L"Service Unavailable";
+        case 504: return L"Gateway Timeout";
+        case 505: return L"HTTP Version Not Supported";
+        case 506: return L"Variant Also Negotiates";
+        case 507: return L"Insufficient Storage";
+        case 508: return L"Loop Detected";
+        case 510: return L"Not Extended";
+        case 511: return L"Network Authentication Required";
+        default: return L"OK";
+    }
+}
+
 // `prepare_web_request_response`: the headers go over as one `name: value`
 // block and the body as a memory stream the runtime reads.
 static ICoreWebView2WebResourceResponse* MakeResponse(ICoreWebView2Environment* env, int status,
@@ -2243,7 +2313,7 @@ static ICoreWebView2WebResourceResponse* MakeResponse(ICoreWebView2Environment* 
         stream = SHCreateMemStream(body, (UINT)bodyLen);
     }
     ICoreWebView2WebResourceResponse* res = nullptr;
-    HRESULT hr = env->CreateWebResourceResponse(stream, status, L"OK",
+    HRESULT hr = env->CreateWebResourceResponse(stream, status, HttpStatusReason(status),
                                                 ToCWstrTemp(headerBlock), &res);
     if (stream) {
         stream->Release();
@@ -2253,6 +2323,12 @@ static ICoreWebView2WebResourceResponse* MakeResponse(ICoreWebView2Environment* 
         return nullptr;
     }
     return res;
+}
+
+static ICoreWebView2WebResourceResponse* MakeBadRequest(ICoreWebView2Environment* env,
+                                                        HRESULT cause) {
+    Str header = base::FormatTemp("X-Wry-Error: HRESULT 0x%08x\n", (uint32_t)cause);
+    return MakeResponse(env, 400, header, nullptr, 0);
 }
 
 // A response copied off the caller's memory, so `Respond` can be answered
@@ -2271,6 +2347,9 @@ static void ApplyResponse(void* data) {
     RequestResponder* r = p->responder;
     ICoreWebView2WebResourceResponse* response =
         MakeResponse(r->env, p->status, p->headers, p->body, p->bodyLen);
+    if (!response) {
+        response = MakeBadRequest(r->env, E_INVALIDARG);
+    }
     if (response) {
         r->args->put_Response(response);
         response->Release();
@@ -2344,38 +2423,57 @@ void Respond(RequestResponder* responder, const Response* response) {
 
 // `prepare_request`: the WebView2 request read out into the shape a handler
 // takes, with the work-around undone on the uri.
-static bool PrepareRequest(WebView* wv, ICoreWebView2WebResourceRequest* req, Str uri,
-                           Str protocol, Request* out, Vec<Header>* headerStore,
-                           Vec<uint8_t>* bodyStore) {
+static HRESULT PrepareRequest(WebView* wv, ICoreWebView2WebResourceRequest* req, Str uri,
+                              Str protocol, Request* out, Vec<Header>* headerStore,
+                              Vec<uint8_t>* bodyStore) {
     LPWSTR method = nullptr;
-    if (FAILED(req->get_Method(&method))) {
-        return false;
+    HRESULT hr = req->get_Method(&method);
+    if (FAILED(hr)) {
+        return hr;
     }
     out->method = TakePwstrTemp(method);
 
     ICoreWebView2HttpRequestHeaders* headers = nullptr;
-    if (SUCCEEDED(req->get_Headers(&headers)) && headers) {
-        ICoreWebView2HttpHeadersCollectionIterator* it = nullptr;
-        if (SUCCEEDED(headers->GetIterator(&it)) && it) {
-            BOOL hasCurrent = FALSE;
-            it->get_HasCurrentHeader(&hasCurrent);
-            while (hasCurrent) {
-                LPWSTR name = nullptr;
-                LPWSTR value = nullptr;
-                if (FAILED(it->GetCurrentHeader(&name, &value))) {
-                    break;
-                }
-                Header h;
-                h.name = TakePwstrTemp(name);
-                h.value = TakePwstrTemp(value);
-                headerStore->Append(h);
-                BOOL hasNext = FALSE;
-                it->MoveNext(&hasNext);
-                hasCurrent = hasNext;
-            }
-            Rel(&it);
-        }
+    hr = req->get_Headers(&headers);
+    if (FAILED(hr) || !headers) {
         Rel(&headers);
+        return FAILED(hr) ? hr : E_POINTER;
+    }
+    ICoreWebView2HttpHeadersCollectionIterator* it = nullptr;
+    hr = headers->GetIterator(&it);
+    Rel(&headers);
+    if (FAILED(hr) || !it) {
+        Rel(&it);
+        return FAILED(hr) ? hr : E_POINTER;
+    }
+    BOOL hasCurrent = FALSE;
+    hr = it->get_HasCurrentHeader(&hasCurrent);
+    while (SUCCEEDED(hr) && hasCurrent) {
+        LPWSTR name = nullptr;
+        LPWSTR value = nullptr;
+        hr = it->GetCurrentHeader(&name, &value);
+        if (SUCCEEDED(hr)) {
+            Header h;
+            h.name = TakePwstrTemp(name);
+            h.value = TakePwstrTemp(value);
+            if (!headerStore->Append(h)) {
+                hr = E_OUTOFMEMORY;
+            }
+        } else {
+            if (name) {
+                CoTaskMemFree(name);
+            }
+            if (value) {
+                CoTaskMemFree(value);
+            }
+        }
+        if (SUCCEEDED(hr)) {
+            hr = it->MoveNext(&hasCurrent);
+        }
+    }
+    Rel(&it);
+    if (FAILED(hr)) {
+        return hr;
     }
     out->headers = headerStore->len > 0 ? &(*headerStore)[0] : nullptr;
     out->headerCount = headerStore->len;
@@ -2385,21 +2483,26 @@ static bool PrepareRequest(WebView* wv, ICoreWebView2WebResourceRequest* req, St
         uint8_t buf[1024];
         for (;;) {
             ULONG read = 0;
-            if (FAILED(content->Read(buf, (ULONG)sizeof(buf), &read)) || read == 0) {
+            hr = content->Read(buf, (ULONG)sizeof(buf), &read);
+            if (FAILED(hr) || read == 0) {
                 break;
             }
             uint8_t* dst = bodyStore->AppendBlanks((int)read);
             if (!dst) {
+                hr = E_OUTOFMEMORY;
                 break;
             }
             memcpy(dst, buf, read);
         }
         content->Release();
+        if (FAILED(hr)) {
+            return hr;
+        }
     }
     out->body = bodyStore->len > 0 ? &(*bodyStore)[0] : nullptr;
     out->bodyLen = bodyStore->len;
     out->uri = RevertUriWorkAround(uri, Str(wv->httpOrHttps), protocol);
-    return true;
+    return S_OK;
 }
 
 static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
@@ -2409,13 +2512,16 @@ static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
         return S_OK;
     }
     ICoreWebView2WebResourceRequest* req = nullptr;
-    if (FAILED(args->get_Request(&req)) || !req) {
-        return S_OK;
+    HRESULT hr = args->get_Request(&req);
+    if (FAILED(hr) || !req) {
+        Rel(&req);
+        return FAILED(hr) ? hr : E_POINTER;
     }
     LPWSTR rawUri = nullptr;
-    if (FAILED(req->get_Uri(&rawUri))) {
+    hr = req->get_Uri(&rawUri);
+    if (FAILED(hr)) {
         Rel(&req);
-        return S_OK;
+        return hr;
     }
     Str uri = TakePwstrTemp(rawUri);
 
@@ -2434,12 +2540,15 @@ static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
     Vec<Header> headerStore;
     Vec<uint8_t> bodyStore;
     Request request;
-    bool ok = PrepareRequest(wv, req, uri, found->name, &request, &headerStore, &bodyStore);
+    hr = PrepareRequest(wv, req, uri, found->name, &request, &headerStore, &bodyStore);
     Rel(&req);
-    if (!ok) {
+    if (FAILED(hr)) {
+        ICoreWebView2WebResourceResponse* response = MakeBadRequest(wv->env, hr);
+        HRESULT responseHr = response ? args->put_Response(response) : E_FAIL;
+        Rel(&response);
         headerStore.FreeEls();
         bodyStore.FreeEls();
-        return S_OK;
+        return responseHr;
     }
 
     RequestResponder* responder = new RequestResponder();

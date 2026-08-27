@@ -9069,3 +9069,11 @@ failure boundary: absence of environment 9, webview 10 or a failed navigation
 is an error, while `CreateWebResourceRequest` failure is a successful no-op
 because Wry guards that call with `if let Ok`. The port had treated all four
 paths as errors.
+
+Windows custom protocols now preserve Wry's request-error response path.
+Failures while reading the method, header iterator or body return a 400
+WebView2 response instead of silently leaving the resource unanswered, while
+failures obtaining the event request or URI propagate through COM. Responses
+also use the pinned `http` crate's canonical reason phrase for every standard
+status code rather than labelling all statuses `OK`; a failed response build
+gets the same 400 fallback.
