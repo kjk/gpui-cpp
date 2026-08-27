@@ -539,6 +539,78 @@ static void AHiddenGroupIsNotASlot() {
     utassert(!DockNodeVisible(&s, split));
 }
 
+struct DockPresentationProbe {
+    int titles = 0;
+};
+
+static El* DockProbeTitle(Ctx* cx, void* data) {
+    DockPresentationProbe* probe = (DockPresentationProbe*)data;
+    probe->titles++;
+    return Div(cx->a)->Id(StrL("probe-title"));
+}
+
+// panel.rs and tab_panel.rs: the concrete handle must preserve the complete
+// presentation function table, and the themed renderer must honor both the
+// custom title and the active panel's inner-padding policy.
+static void TheUiPanelHandleCrossesTheBaseSeam() {
+    App app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = arena;
+
+    Entity<DockState> state = EntityNewState<DockState>(&app);
+    DockPresentationProbe probe;
+    component::PanelView panel;
+    panel.name = StrL("Probe");
+    panel.title = StrL("fallback");
+    panel.titleEl = DockProbeTitle;
+    panel.data = &probe;
+    panel.innerPadding = false;
+
+    component::PanelHandle handle = component::panel_handle(panel);
+    utassert(component::PanelHandle::Of(handle.Get()) == handle.Get());
+    utassert(handle.Get()->titleEl == DockProbeTitle);
+    utassert(!handle.Get()->innerPadding);
+
+    DockState* dock = state.Get(&app);
+    DockAddPanelDef(dock, handle.IntoPanelView());
+    DockPanelDef second;
+    second.title = StrL("Second");
+    DockAddPanelDef(dock, second);
+    int tabs = DockNewTabs(dock);
+    DockTabsAdd(dock, tabs, 0);
+    DockTabsAdd(dock, tabs, 1);
+    dock->center = tabs;
+
+    component::DockSkin skin = component::DockSkin::New(state);
+    skin.SetPanelStyle(&app, nullptr, component::PanelStyle::TabBar);
+    skin.SetToggleButtonVisible(&app, nullptr, false);
+    utassert(skin.GetPanelStyle(&app) == component::PanelStyle::TabBar);
+    utassert(!skin.IsToggleButtonVisible(&app));
+    skin.SetTilesScrollbarMode(&app, nullptr, true, ScrollbarMode::Scrolling);
+    utassert(skin.HasTilesScrollbarMode(&app));
+    utassert(skin.GetTilesScrollbarMode(&app) == ScrollbarMode::Scrolling);
+
+    DockTabGroup group;
+    group.cx = &cx;
+    group.state = state;
+    group.node = tabs;
+    const DockRenderer* renderer = skin.Renderer();
+    El* content = renderer->tabContentFrame(&cx, renderer->data, &group);
+    utassert(content && content->style.pad.top == 0);
+    El* preview = renderer->dragPreview(&cx, renderer->data, handle.Get());
+    utassert(preview && preview->style.width == kDockDragPreviewW);
+    utassert(probe.titles == 1);
+
+    dock->panels[0].innerPadding = true;
+    content = renderer->tabContentFrame(&cx, renderer->data, &group);
+    utassert(content && content->style.pad.top == 8);
+
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 static El* FindNamedDk(El* root, const char* name) {
     if (!root) {
         return nullptr;
@@ -637,5 +709,6 @@ void TestDock() {
     NormalizeClampsTheActiveTab();
     NormalizeKeepsARoot();
     AHiddenGroupIsNotASlot();
+    TheUiPanelHandleCrossesTheBaseSeam();
     TwoAreasHaveTwoSplitHandles();
 }

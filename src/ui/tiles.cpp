@@ -23,6 +23,43 @@ Tiles* Tiles::Panel(Str title, El* content, El* suffix) {
     return this;
 }
 
+Tiles* Tiles::Panel(PanelHandle panel, El* content) {
+    TilePanelDef d;
+    d.view = panel.IntoPanelView();
+    d.hasView = true;
+    d.title = d.view.title;
+    d.content = content;
+    panels.Append(a, d);
+    return this;
+}
+
+Tiles* Tiles::WithSkin(const DockSkin* value) {
+    skin = value;
+    return this;
+}
+
+static El* TilePanelTitle(Ctx* cx, const TilePanelDef& panel, Rgba color) {
+    if (panel.hasView && panel.view.titleEl) {
+        if (El* title = panel.view.titleEl(cx, panel.view.data)) {
+            return title;
+        }
+    }
+    Str title = panel.title;
+    if (!title.s && panel.hasView) {
+        title = panel.view.name;
+    }
+    return TextEl(cx->a, title)->Fg(color);
+}
+
+static bool TilePanelTitleStyle(Ctx* cx, const TilePanelDef& panel,
+                                TitleStyle* out) {
+    if (!panel.hasView || !panel.view.titleStyle || !out) {
+        return false;
+    }
+    return panel.view.titleStyle(cx, panel.view.data, &out->background,
+                                 &out->foreground);
+}
+
 // One of the five grab strips: four along the edges, and the corner that
 // takes the right and the bottom together.
 static El* ResizeHandle(Ctx* cx, Entity<TilesState> st, int ix, int panel,
@@ -61,8 +98,9 @@ static El* ResizeHandle(Ctx* cx, Entity<TilesState> st, int ix, int panel,
             return e;
     }
     int packed = TileResizePack(ix, side);
+    DragResizing resizing = {packed};
     e->OnMouseDown(ListenTo(st, &TilesState::OnResizeDown, (intptr_t)packed));
-    e->OnDrag(kTileResizeDrag, packed);
+    e->OnDrag(kTileResizeDrag, resizing.node);
     e->OnDragMove(ListenTo(st, &TilesState::OnResizeDrag));
     e->OnMouseUp(ListenTo(st, &TilesState::OnDragEnd));
     e->OnMouseUpOut(ListenTo(st, &TilesState::OnDragEnd));
@@ -77,6 +115,9 @@ El* Tiles::IntoEl() {
     El* root = Div(a)->Id(id)->SizeFull()->ClipX()->ClipY();
     if (!s) {
         return root;
+    }
+    if (skin && skin->HasTilesScrollbarMode(cx->app)) {
+        s->scrollbarMode = skin->GetTilesScrollbarMode(cx->app);
     }
     // The area scrolls over whatever the tiles cover: a tile dragged past an
     // edge is still reachable, which is what Rust's scroll_size says.
@@ -128,25 +169,54 @@ El* Tiles::IntoEl() {
                       ->ItemsCenter()
                       ->W(kFill)
                       ->H(kTileDragBarH)
-                      ->PadX(8)
+                      ->Gap(4)
+                      ->PadL(12)
+                      ->PadR(8)
                       ->Bg(th.tokens.secondary)
                       ->Cursor(CursorKind::Arrow);
         // The panel is the caller's, named by the tile — the list is
         // reordered as tiles come to the front, and the panels are not.
         int p = item.panel;
-        if (p >= 0 && p < panels.len && panels[p].title.s) {
-            // Tiles names no text size; a panel title reads at the base.
-            bar->Child(TextEl(a, panels[p].title)->Fg(th.foreground));
+        if (p >= 0 && p < panels.len) {
+            TilePanelDef& panel = panels[p];
+            TitleStyle titleStyle;
+            bool hasStyle = TilePanelTitleStyle(cx, panel, &titleStyle);
+            Rgba titleColor = hasStyle ? titleStyle.foreground : th.foreground;
+            if (hasStyle) {
+                bar->Bg(titleStyle.background)->Fg(titleStyle.foreground);
+            }
+            bar->Child(Div(a)
+                           ->Flex1()
+                           ->MinW(64)
+                           ->ClipX()
+                           ->Fg(titleColor)
+                           ->Child(TilePanelTitle(cx, panel, titleColor)
+                                       ->Truncate()));
         }
-        if (p >= 0 && p < panels.len && panels[p].suffix) {
+        El* suffix = nullptr;
+        if (p >= 0 && p < panels.len) {
+            TilePanelDef& panel = panels[p];
+            suffix = panel.suffix;
+            if (!suffix && panel.hasView && panel.view.titleSuffix) {
+                suffix = panel.view.titleSuffix(cx, panel.view.data);
+            }
+        }
+        if (suffix) {
             // title_suffix sits at the far end of the bar, which is what the
-            // spacer between them makes room for.
-            bar->Child(Div(a)->Flex1());
-            bar->Child(panels[p].suffix);
+            // flexible title before it makes room for.
+            bar->Child(suffix->Shrink0());
+        }
+        if (p >= 0 && p < panels.len && panels[p].hasView &&
+            panels[p].view.toolbarButtons) {
+            if (El* tools = panels[p].view.toolbarButtons(
+                    cx, panels[p].view.data)) {
+                bar->Child(tools->Shrink0());
+            }
         }
         bar->OnMouseDown(
             ListenTo(state, &TilesState::OnMoveDown, (intptr_t)ix));
-        bar->OnDrag(kTileMoveDrag, ix);
+        DragMoving moving = {ix};
+        bar->OnDrag(kTileMoveDrag, moving.node);
         bar->OnDragMove(ListenTo(state, &TilesState::OnMoveDrag));
         bar->OnMouseUp(ListenTo(state, &TilesState::OnDragEnd));
         bar->OnMouseUpOut(ListenTo(state, &TilesState::OnDragEnd));
@@ -155,6 +225,9 @@ El* Tiles::IntoEl() {
         El* body = Div(a)->FlexCol()->W(kFill)->H(kFill)->ClipX()->ClipY();
         if (p >= 0 && p < panels.len && panels[p].content) {
             body->Child(panels[p].content);
+        } else if (p >= 0 && p < panels.len && panels[p].hasView &&
+                   panels[p].view.render) {
+            body->Child(panels[p].view.render(cx, panels[p].view.data));
         }
         tile->Child(body);
 

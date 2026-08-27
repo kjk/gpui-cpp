@@ -8771,3 +8771,43 @@ popover placement. UI input is full: the audit moves to 118 full, 3 partial,
 confined to Base dock/input and UI dock. MSVC release passes 20,635 checks,
 strict Linux g++ passes its 20,621 applicable checks, and the release story
 gallery compiles.
+
+## UI dock restores the presentation handle and retained skin
+
+The component dock already supplied a complete themed renderer for Base's
+docking tree, but the panel presentation trait had been flattened down to a
+string title, optional suffix and zoom policy. That meant a panel could not
+draw the custom title element, title colors, toolbar buttons or menu entries
+the Rust skin asks it for, and tab content was missing the source's conditional
+eight-DIP top padding. `DockSkin`, `PanelView`, `PanelHandle`,
+`DragPanelPreview`, `DragMoving` and `DragResizing` also had no source-named
+counterparts even though pieces of their behavior existed under port-only
+names.
+
+`DockPanelDef` is now the POD/object-safe function table for both halves of
+the source panel traits. Base still stores it without depending on UI; the
+component skin recovers custom title, title-style, toolbar, dropdown-menu and
+inner-padding callbacks through the source-shaped `PanelHandle` facade. A
+single-panel title row and floating tile bar apply a panel's colors and custom
+element, full tabs use the custom title when there is no short tab name,
+toolbar content precedes the zoom/menu controls, panel menu entries are
+separated from the built-in actions, and the drag preview is its own named
+builder with the pinned 96-DIP width, padding, border and opacity. Multi-tab
+content receives `pt_2` only when the active panel accepts inner padding.
+
+`DockSkin` is a retained settings handle over the stable `DockState` entity,
+so copied handles share panel style, dock-toggle visibility and the optional
+tiles scrollbar mode and notify the same rendered state. `DockArea` and
+`Tiles` accept that skin explicitly while their convenience path keeps the
+default themed renderer. Tiles accept a `PanelHandle`, render its content and
+presentation hooks, use the source's 12/8-DIP title-bar side padding, and carry
+move/resize identifiers through the source-named payload records. The one
+visible runtime difference is documented beside the drag preview: GPUI's grab
+cursor has no portable runtime enum here yet, so it uses the ordinary arrow.
+
+Tests cover handle recovery and callback preservation, retained skin settings,
+custom drag titles and the exact active-panel padding policy. UI dock is full:
+the audit moves to 119 full, 2 partial, 8 adapters and 2 exclusions with 100
+unresolved spellings, now confined to Base dock and Base input. MSVC release
+passes 20,646 checks, strict Linux g++ passes its 20,632 applicable checks,
+and the release story gallery compiles.

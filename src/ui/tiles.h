@@ -4,11 +4,23 @@
    along its top and a grab strip along each edge, drawn in z-order over the
    area. */
 
-#include "ui/sizing.h"
+#include "ui/dock.h"
 
 namespace gpui {
 
 namespace component {
+
+// The typed payloads used by the two tile drags. The runtime identifies drag
+// families with kTileMoveDrag/kTileResizeDrag; these preserve Rust's payload
+// shape and prevent the node id from becoming an anonymous integer at call
+// sites.
+struct DragMoving {
+    int node = -1;
+};
+
+struct DragResizing {
+    int node = -1;
+};
 
 // One panel the host handed the tiles, which Rust holds as a TabPanel.
 struct TilePanelDef {
@@ -18,6 +30,8 @@ struct TilePanelDef {
     // — upstream's tiles example hangs a search field there. A DockPanelDef
     // has had one all along; this is the same hook on a tile.
     El* suffix = nullptr;
+    PanelView view = {};
+    bool hasView = false;
 };
 
 struct Tiles {
@@ -25,6 +39,7 @@ struct Tiles {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<TilesState> state = {};
+    const DockSkin* skin = nullptr;
     // One panel per tile the caller adds; the builder is on the frame arena.
     ArenaVec<TilePanelDef> panels;
 
@@ -32,6 +47,8 @@ struct Tiles {
     // The panel for the tile at that index. A tile with no panel draws its
     // frame and nothing inside it.
     Tiles* Panel(Str title, El* content, El* suffix = nullptr);
+    Tiles* Panel(PanelHandle panel, El* content = nullptr);
+    Tiles* WithSkin(const DockSkin* value);
     El* IntoEl();
 };
 

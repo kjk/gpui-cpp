@@ -86,8 +86,11 @@ enum class DockPanelStyle : uint8_t {
     TabBar
 };
 
-// One panel the host handed the dock. Rust's `Arc<dyn PanelView>` is a title,
-// a render and the two questions the tab bar asks it.
+// One panel the host handed the dock. Rust splits this across Base's behavior
+// trait and UI's presentation trait, then carries both through a concrete
+// PanelHandle. C++ has no trait objects, so the same object-safe seam is this
+// POD function table. Base stores and moves it without interpreting the UI
+// callbacks; a renderer that understands them may call them.
 struct DockPanelDef {
     // Panel::panel_name(): what a saved layout stores and what the registry
     // is asked for on the way back. Not the title — that is what the tab
@@ -95,10 +98,23 @@ struct DockPanelDef {
     Str name = {};
     Str title = {};
     El* (*render)(Ctx* cx, void* data) = nullptr;
+    // ui::Panel::title: an element rather than a string, so a title may carry
+    // an icon, badge or styled fragments. Null falls back to `title`.
+    El* (*titleEl)(Ctx* cx, void* data) = nullptr;
+    // ui::Panel::title_style. False means inherit the skin. Two Rgba outputs
+    // keep Base independent of UI's TitleStyle type.
+    bool (*titleStyle)(Ctx* cx, void* data, Rgba* background,
+                       Rgba* foreground) = nullptr;
     // Panel::title_suffix: what the panel puts in its own tab bar, between
     // the tabs and the group's zoom and menu buttons. A panel that wants a
     // search box or a status of its own has nowhere else to put it.
     El* (*titleSuffix)(Ctx* cx, void* data) = nullptr;
+    // ui::Panel::toolbar_buttons. Rust returns Vec<Button>; one row element
+    // is the natural C++ equivalent and still permits any number of buttons.
+    El* (*toolbarButtons)(Ctx* cx, void* data) = nullptr;
+    // ui::Panel::dropdown_menu. The menu is deliberately opaque here: Base
+    // must not depend on the themed PopupMenu type.
+    void (*dropdownMenu)(Ctx* cx, void* data, void* menu) = nullptr;
     // Panel::tab_name(): the short label a tab shows when the title is too
     // much for one. Empty falls back to the title, and the single-panel title
     // row always shows the title.
@@ -109,6 +125,9 @@ struct DockPanelDef {
     // and does not count towards the one that may not be closed or dragged.
     bool visible = true;
     DockPanelControl zoomable = DockPanelControl::Menu;
+    // ui::Panel::inner_padding: only relevant when a full tab bar surrounds
+    // the active panel. Rust's default is true.
+    bool innerPadding = true;
 };
 
 // DockItem. A node is either Tabs — a list of panels with one active — or
@@ -180,6 +199,11 @@ struct DockState {
     // DockArea::toggle_button_visible: whether the three dock toggles are
     // drawn at all.
     bool toggleButtonVisible = true;
+    // UI DockSkin::tiles_scrollbar_mode. Rust retains this on the shared
+    // skin; the C++ entity is the shared retained object, so copies of the
+    // lightweight DockSkin handle continue to observe the same setting.
+    bool hasTilesScrollbarMode = false;
+    ScrollbarMode tilesScrollbarMode = ScrollbarMode::Always;
     // DockArea::version, kept so a layout that was loaded writes back the
     // version it came with.
     bool hasVersion = false;

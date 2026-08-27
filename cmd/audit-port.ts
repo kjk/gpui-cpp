@@ -47,7 +47,7 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 
 const partialBase = new Set(["dock", "input"]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
-const partialUi = new Set(["dock"]);
+const partialUi = new Set<string>();
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
 const partialReasons: Record<string, string> = {
