@@ -231,8 +231,8 @@ static void TestHtmlEntities(Arena* a) {
 
     // The longest HTML5 entity name is well beyond the former twelve-byte
     // lexer window.
-    MdNode* longName = HtmlParse(
-        a, StrL("<p>&CounterClockwiseContourIntegral;</p>"));
+    MdNode* longName =
+        HtmlParse(a, StrL("<p>&CounterClockwiseContourIntegral;</p>"));
     utassert(TextIs(a, Child(longName, 0), "\xE2\x88\xB3"));
 }
 
@@ -358,9 +358,9 @@ static void TestMarkdownImage(Arena* a) {
 // html.rs attr_width_height: the size the tag gives, in pixels. A percentage
 // is not a size this layout can use, so it reads as none.
 static void TestHtmlImage(Arena* a) {
-    MdNode* doc = HtmlParse(
-        a, StrL("<p>a <img src=\"x.png\" alt=\"alt\" width=\"60\" "
-                "height=\"40\"> b</p>"));
+    MdNode* doc =
+        HtmlParse(a, StrL("<p>a <img src=\"x.png\" alt=\"alt\" width=\"60\" "
+                          "height=\"40\"> b</p>"));
     MdRun* img = ImageRunOf(Child(doc, 0));
     utassert(img != nullptr);
     utassert(StrIs(img->imgSrc, "x.png"));
@@ -437,8 +437,8 @@ struct SrcDoc {
 // The whole document, copied in `fmt`.
 static Str SrcCopy(SrcDoc* d, SelectionFormat fmt, char* buf, int cap) {
     // One short of the gap after the last run, so nothing reaches past it.
-    int n = CopyTextHitsIn(&d->ctx, 0, d->ctx.textDocLen - 1, -1, buf, cap,
-                           fmt);
+    int n =
+        CopyTextHitsIn(&d->ctx, 0, d->ctx.textDocLen - 1, -1, buf, cap, fmt);
     return Str(buf, n);
 }
 
@@ -661,8 +661,7 @@ static void TestSourceImageAtTheEnds() {
     SrcDoc lone;
     lone.Image(&img, false);
     lone.Run("after", &below, false);
-    utassert(SrcIs(SrcCopy(&lone, SelectionFormat::Source, buf,
-                          sizeof(buf)),
+    utassert(SrcIs(SrcCopy(&lone, SelectionFormat::Source, buf, sizeof(buf)),
                    "![alt](a.png)\nafter"));
     // The paragraph below it on its own leaves it behind.
     n = CopyTextHitsIn(&lone.ctx, 1, 6, -1, buf, sizeof(buf),
@@ -708,8 +707,9 @@ static void TestTableToMarkdown(Arena* a) {
     utassert(Children(again) == Children(one));
 
     // Alignment rides in the delimiter row, column by column.
-    MdNode* aligned =
-        Child(MdParse(a, StrL("| l | c | r |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n")), 0);
+    MdNode* aligned = Child(
+        MdParse(a, StrL("| l | c | r |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n")),
+        0);
     utassert(StrIs(MdTableToMarkdown(a, aligned),
                    "| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n"));
 }
@@ -832,6 +832,197 @@ static void TestTextCollectionsGrowWithTheDocument(Arena* a) {
     StrFree(tableSource);
 }
 
+static float HeadingIdentity(uint8_t, float base, void*) {
+    return base;
+}
+
+static float HeadingDouble(uint8_t, float base, void*) {
+    return base * 2;
+}
+
+static void TestSourceShapedTextValues(Arena* a) {
+    TextMark mark;
+    mark.Bold().Italic().Code().Underline();
+    TextMark more;
+    LinkMark link;
+    link.url = StrL("https://example.com");
+    more.Strikethrough().Highlight(Rgba8(1, 2, 3, 255)).Link(link);
+    mark.Merge(more);
+    utassert(mark.bold && mark.italic && mark.code && mark.underline);
+    utassert(mark.strikethrough && mark.hasHighlight && mark.hasLink);
+    utassert(StrIs(mark.link.url, "https://example.com"));
+
+    ImageNode image;
+    image.alt = StrL("fallback");
+    utassert(StrIs(image.Title(a), "fallback"));
+    image.title = StrL("title");
+    utassert(StrIs(image.Title(a), "title"));
+
+    MarkdownNode node = MarkdownNode::New(StrL("demo"), &image);
+    node.Text(StrL("plain")).Markdown(StrL("**plain**"));
+    utassert(StrIs(node.ToMarkdown(), "**plain**"));
+    node.markdown = {};
+    utassert(StrIs(node.ToMarkdown(), "plain"));
+
+    TextViewStyle base = TextViewStyle::Default();
+    TextViewStyle same = TextViewStyle::Default();
+    utassert(base.Equals(same));
+    same.HeadingFontSize(&HeadingIdentity);
+    utassert(!base.Equals(same));
+    base.HeadingFontSize(&HeadingIdentity);
+    utassert(base.Equals(same));
+    same.HeadingFontSize(&HeadingDouble);
+    utassert(!base.Equals(same));
+    utassert(same.HeadingSize(2) == 28);
+
+    TextViewStyle styledA = TextViewStyle::Default();
+    TextViewStyle styledB = TextViewStyle::Default();
+    gpui::Style codeA;
+    gpui::Style codeB;
+    codeA.bg = Rgb(10, 20, 30);
+    codeB.bg = codeA.bg;
+    codeB.fontSize = 99;
+    styledA.CodeBlock(codeA, StyleFieldBg);
+    styledB.CodeBlock(codeB, StyleFieldBg);
+    utassert(styledA.Equals(styledB));
+    codeB.bg = Rgb(30, 20, 10);
+    styledB.CodeBlock(codeB, StyleFieldBg);
+    utassert(!styledA.Equals(styledB));
+}
+
+static void TestHtmlMinifier(Arena* a) {
+    Minifier minifier;
+    utassert(StrIs(minifier.WriteCollapseWhitespace(a, StrL(" x   \n  \t y  ")),
+                   " x y "));
+    minifier.precedingWhitespace = true;
+    utassert(StrIs(minifier.WriteCollapseWhitespace(a, StrL("   x")), "x"));
+
+    minifier = {};
+    minifier.OmitDoctype();
+    Str minified =
+        minifier.Minify(a, StrL("<!doctype html><p> a   b </p><!-- gone -->"
+                                "<pre> x   y </pre>"));
+    utassert(StrIs(minified, "<p> a b </p><pre> x   y </pre>"));
+    minifier = {};
+    minifier.PreserveComments();
+    utassert(StrIs(minifier.Minify(a, StrL("<p>x</p><!-- keep -->")),
+                   "<p>x</p><!-- keep -->"));
+}
+
+static int gParseTimePluginCalls = 0;
+static int gParseTimeRenderCalls = 0;
+
+static bool ParseCodeNode(const markdown::Node* source,
+                          const MarkdownParseContext* context, void*,
+                          MarkdownNode* out) {
+    gParseTimePluginCalls++;
+    if (source->kind != markdown::NodeKind::Code) return false;
+    *out = MarkdownNode::New(context->Copy(StrL("code-card")));
+    out->Text(context->Value(source, markdown::NodeStrKind::Value));
+    out->Markdown(context->Copy(StrL("```demo\nclaimed\n```")));
+    return true;
+}
+
+static El* RenderCodeNode(Ctx* cx, const MarkdownNode* node, void*) {
+    gParseTimeRenderCalls++;
+    return TextEl(cx->a, node->text);
+}
+
+static bool FindSelectionOwner(El* element, EntityId owner) {
+    if (!element) return false;
+    if (element->kind == ElKind::Text && element->selectionOwner == owner) {
+        return true;
+    }
+    for (El* child = element->first; child; child = child->next) {
+        if (FindSelectionOwner(child, owner)) return true;
+    }
+    return false;
+}
+
+static void TestTextViewKeys() {
+    KeymapClear();
+    TextViewInitKeys();
+
+    uint32_t context = KeyContextOf(StrL("TextView"));
+    KeyChord chord = {};
+    utassert(KeyChordParse(StrL("secondary-c"), &chord));
+    utassert(KeymapMatch(chord, &context, 1).action == input::Copy());
+    utassert(KeyChordParse(StrL("secondary-a"), &chord));
+    utassert(KeymapMatch(chord, &context, 1).action == input::SelectAll());
+
+    uint32_t other = KeyContextOf(StrL("Other"));
+    utassert(KeymapMatch(chord, &other, 1).action == 0);
+    KeymapClear();
+}
+
+static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
+    App app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    Entity<TextViewState> state =
+        TextViewState::Markdown(&app, StrL("```cpp\nclaimed\n```"));
+    TextViewState* managed = state.Get(&app);
+    utassert(managed && StrIs(managed->Source(), "```cpp\nclaimed\n```"));
+    uint64_t revision = managed->revision;
+    managed->PushStr(StrL("\n"), &app);
+    utassert(managed->revision == revision + 1);
+    utassert(managed->selectionRevision == 0);
+    managed->SetText(StrL("```cpp\nclaimed\n```"), &app);
+    utassert(managed->selectionRevision == 1);
+
+    gParseTimePluginCalls = 0;
+    gParseTimeRenderCalls = 0;
+    El* element =
+        TextView::New(&cx, state)
+            ->Selectable()
+            ->MarkdownBlockParser(&ParseCodeNode)
+            ->MarkdownBlockRenderer(StrL("code-card"), &RenderCodeNode)
+            ->IntoEl();
+    utassert(gParseTimePluginCalls > 0);
+    utassert(gParseTimeRenderCalls == 1);
+    utassert(ElementTextBytes(element) == 7);
+    El* owned = TextView::New(&cx, state)->Selectable()->IntoEl();
+    utassert(FindSelectionOwner(owned, state.id));
+    utassert(!UiTextViewStateCurrent(&app).IsValid());
+
+    Window window;
+    window.app = &app;
+    TextHit first;
+    first.text = StrL("alpha");
+    first.docOff = 0;
+    first.owner = state.id;
+    first.bounds = {0, 0, 40, 20};
+    window.paint.texts.Append(first);
+    TextHit other;
+    other.text = StrL("other");
+    other.docOff = 6;
+    other.owner = EntityId{100, 1};
+    other.bounds = {0, 20, 40, 20};
+    window.paint.texts.Append(other);
+    TextHit last;
+    last.text = StrL("omega");
+    last.docOff = 12;
+    last.owner = state.id;
+    last.bounds = {0, 40, 40, 20};
+    window.paint.texts.Append(last);
+    window.paint.textDocLen = 18;
+
+    managed->SelectAll(&window, &app);
+    utassert(managed->HasSelection(&window));
+    char selected[64] = {};
+    int n = managed->SelectedText(&window, selected, (int)sizeof(selected));
+    utassert(SrcIs(Str(selected, n), "alpha\nomega"));
+    managed->ClearSelection(&window, &app);
+    utassert(!managed->HasSelection(&window));
+
+    WindowSelectionFree(&window);
+    window.paint.texts.Reset();
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
@@ -871,6 +1062,10 @@ void TestTextView() {
     TestSourceImageAtTheEnds();
     TestSourceIgnoresPlainRuns();
     TestTextCollectionsGrowWithTheDocument(a);
+    TestSourceShapedTextValues(a);
+    TestHtmlMinifier(a);
+    TestTextViewKeys();
+    TestManagedTextViewAndParseTimePlugins(a);
 #if GPUI_MARKDOWN_FULL
     TestMarkdownTaskList(a);
 #endif

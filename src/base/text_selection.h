@@ -299,6 +299,11 @@ void WindowSelectionClear(Window* win);
 // format is the window's unless one is named, which is what the tests do.
 int WindowSelectionText(Window* win, char* out, int cap);
 int WindowSelectionTextAs(Window* win, char* out, int cap, SelectionFormat fmt);
+// TextViewState's view-local projection of the window selection.
+int WindowSelectionTextForEntity(Window* win, EntityId owner, char* out,
+                                 int cap, SelectionFormat fmt);
+bool WindowSelectionHasEntity(const Window* win, EntityId owner);
+void WindowSelectionSelectAll(Window* win, EntityId owner);
 // TextView::selection_format, on the window that does the copying.
 void WindowSelectionSetFormat(Window* win, SelectionFormat fmt);
 SelectionFormat WindowSelectionFormat(Window* win);

@@ -8669,3 +8669,56 @@ than to global state itself.
 UI global state is full: the audit moves to 116 full, 5 partial, 8 adapters
 and 2 exclusions with 132 unresolved partial-module spellings and no
 full-module errors. MSVC release passes 20,567 checks.
+
+## UI text restores retained state, plugins and source-shaped styling
+
+The Markdown/HTML renderer already covered the visible document vocabulary,
+but its public structure still collapsed most of `crates/ui/src/text`: direct
+frame strings stood in for `TextViewState`, plugins parsed at render time,
+selection belonged only to the whole window, and the source's node, mark,
+extension and style records were absent. That left mutable/streamed documents,
+view-local selection, extension caching and the exact keyboard boundary with
+no faithful representation.
+
+`Span`, `LinkMark`, `TextMark`, `ImageNode`, `MarkdownNode`, parse context,
+plugin/extension records, `TextViewStyle`, `TextViewFormat` and
+`TextViewLayoutState` now mirror the source-facing vocabulary. Custom block
+parsers run while mdast is converted, without a window or app, and store a
+named node in the cached tree; the matching renderer resolves that stable name
+when the element subtree is built. Extension revisions participate in the
+parse key, replacement renderers keep the source's map semantics, and the old
+render-time callback remains only as a compatibility adapter for existing
+callers. Code blocks, tables, cells and inline code apply the same independent
+style refinements, headings use the callback/default size policy, and the
+outer view accepts the runtime's named-field refinement mask.
+
+`TextViewState` is now a generational entity that owns its source string,
+format, style, mutation and selection revisions, selection options and scroll
+offset. Both explicit managed views and direct-string convenience views build
+through one state path. While a document subtree is built, the UI-global state
+stack identifies its owner; every selectable text/image leaf carries that
+entity into the paint hit list. Select-all, selection queries and source/plain
+copy can consequently project the window selection back to exactly one text
+view even when other documents share the window. The selectable root declares
+the pinned `TextView` key context, focuses on press and handles platform Copy
+and Select All actions. Whole-document scrolling retains its offset on the
+same state instead of an unrelated keyed slot.
+
+The dependency-free `Minifier` restores the HTML helper's doctype, comment and
+whitespace policy while preserving raw `pre`, `textarea`, `script` and `style`
+content. Two source-only seams stay explicit: the ported markdown crate does
+not parse MDX or retain byte ranges on every mdast node, so enabling MDX cannot
+create MDX nodes and `MarkdownParseContext::NodeSource` is empty. Parsing is
+synchronous behind the existing LRU because cancellable async tasks are a
+runtime non-goal, and the vertical viewport lays all blocks instead of using
+GPUI's retained virtual list.
+
+Tests cover mark merging, source-shaped nodes/styles, minification, managed
+state revisions, parse-time plugin dispatch, stack balance, selection-owner
+stamping, view-scoped select-all/copy and TextView key bindings. UI text is
+full: the audit moves to 117 full, 4 partial, 8 adapters and 2 exclusions with
+117 unresolved spellings, all confined to dock and input. Strict Linux g++
+passes its 20,586 applicable checks and the MSVC release story gallery builds.
+The MSVC suite compiles all 20,600 checks; on this host its two source-named
+motion assertions observe the OS reduce-motion setting, a test isolation issue
+to fix independently of text.

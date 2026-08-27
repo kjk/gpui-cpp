@@ -1,15 +1,443 @@
 #include "ui/text.h"
 
+#include "base/input_keys.h"
 #include "base/text_selection.h"
 #include "gpui/image.h"
+#include "gpui/keymap.h"
 #include "gpui/paint.h"
 #include "markdown/markdown.h"
+#include "ui/global_state.h"
 #include "ui/html.h"
 #include "ui/scroll.h"
 
 namespace gpui {
 
 namespace component {
+
+void TextViewInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) return;
+    bound = KeymapGeneration();
+    const char* context = "TextView";
+    KeyBinding bindings[] = {
+#if GPUI_OS_MAC
+        {"cmd-c", input::Copy(), context},
+        {"cmd-a", input::SelectAll(), context},
+#else
+        {"ctrl-c", input::Copy(), context},
+        {"ctrl-a", input::SelectAll(), context},
+#endif
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+static bool TextStrEq(Str a, Str b) {
+    return a.len == b.len &&
+           (a.len == 0 || (a.s && b.s && memcmp(a.s, b.s, (size_t)a.len) == 0));
+}
+
+TextMark& TextMark::Bold() {
+    bold = true;
+    return *this;
+}
+TextMark& TextMark::Italic() {
+    italic = true;
+    return *this;
+}
+TextMark& TextMark::Strikethrough() {
+    strikethrough = true;
+    return *this;
+}
+TextMark& TextMark::Underline() {
+    underline = true;
+    return *this;
+}
+TextMark& TextMark::Code() {
+    code = true;
+    return *this;
+}
+TextMark& TextMark::Highlight(Rgba color) {
+    highlight = color;
+    hasHighlight = true;
+    return *this;
+}
+TextMark& TextMark::Link(LinkMark value) {
+    link = value;
+    hasLink = true;
+    return *this;
+}
+void TextMark::Merge(const TextMark& other) {
+    bold |= other.bold;
+    italic |= other.italic;
+    strikethrough |= other.strikethrough;
+    underline |= other.underline;
+    code |= other.code;
+    if (other.hasHighlight) {
+        highlight = other.highlight;
+        hasHighlight = true;
+    }
+    if (other.hasLink) {
+        link = other.link;
+        hasLink = true;
+    }
+}
+
+Str ImageNode::Title(Arena* a) const {
+    return StrDup(a, title.s ? title : alt);
+}
+
+Str MarkdownParseContext::Value(const markdown::Node* node,
+                                markdown::NodeStrKind kind) const {
+    return arena && node ? markdown::NodeGetStr(arena, node, kind) : Str{};
+}
+
+Str MarkdownParseContext::Copy(Str value) const {
+    return arena ? StrDup(arena, value) : Str{};
+}
+
+MarkdownNode MarkdownNode::New(Str value, void* payload) {
+    MarkdownNode out;
+    out.name = value;
+    out.data = payload;
+    return out;
+}
+
+MarkdownNode& MarkdownNode::Text(Str value) {
+    text = value;
+    return *this;
+}
+
+MarkdownNode& MarkdownNode::Markdown(Str value) {
+    markdown = value;
+    return *this;
+}
+
+Str MarkdownNode::ToMarkdown() const {
+    return markdown.len > 0 ? markdown : text;
+}
+
+static uint64_t gMarkdownExtensionsRevision = 1;
+
+static uint64_t NextMarkdownExtensionsRevision() {
+    uint64_t out = gMarkdownExtensionsRevision++;
+    if (gMarkdownExtensionsRevision == 0) {
+        gMarkdownExtensionsRevision = 1;
+    }
+    return out;
+}
+
+MarkdownExtensions& MarkdownExtensions::Mdx() {
+    enableMdx = true;
+    revision = NextMarkdownExtensionsRevision();
+    return *this;
+}
+
+MarkdownExtensions& MarkdownExtensions::BlockParser(Arena* a,
+                                                    MarkdownBlockParserFn fn,
+                                                    void* data) {
+    if (fn) {
+        blockParsers.Append(a, {fn, data});
+        revision = NextMarkdownExtensionsRevision();
+    }
+    return *this;
+}
+
+MarkdownExtensions& MarkdownExtensions::BlockRenderer(Arena* a, Str name,
+                                                      MarkdownBlockRenderFn fn,
+                                                      void* data) {
+    if (fn) {
+        // HashMap::insert replaces a renderer registered for the same name.
+        for (int i = 0; i < blockRenderers.len; i++) {
+            if (TextStrEq(blockRenderers[i].name, name)) {
+                blockRenderers[i] = {name, fn, data};
+                revision = NextMarkdownExtensionsRevision();
+                return *this;
+            }
+        }
+        blockRenderers.Append(a, {name, fn, data});
+        revision = NextMarkdownExtensionsRevision();
+    }
+    return *this;
+}
+
+MarkdownExtensions& MarkdownExtensions::Plugin(Arena* a,
+                                               const MarkdownPlugin& plugin) {
+    if (plugin.isBlock && plugin.parse && plugin.render) {
+        BlockParser(a, plugin.parse, plugin.data);
+        BlockRenderer(a, plugin.name, plugin.render, plugin.data);
+    }
+    return *this;
+}
+
+const MarkdownBlockRenderer* MarkdownExtensions::Renderer(Str name) const {
+    for (int i = 0; i < blockRenderers.len; i++) {
+        if (TextStrEq(blockRenderers[i].name, name)) {
+            return &blockRenderers[i];
+        }
+    }
+    return nullptr;
+}
+
+TextView* TextViewPlugin::Setup(TextView* view) const {
+    return setup ? setup(view, data) : view;
+}
+
+TextViewStyle TextViewStyle::Default() {
+    return {};
+}
+
+float TextViewStyle::HeadingSize(uint8_t level) const {
+    if (headingFontSize) {
+        return headingFontSize(level, headingBaseFontSize, headingFontSizeData);
+    }
+    switch (level) {
+        case 1:
+            return headingBaseFontSize * 2.f;
+        case 2:
+            return headingBaseFontSize * 1.5f;
+        case 3:
+            return headingBaseFontSize * 1.25f;
+        case 4:
+            return headingBaseFontSize * 1.125f;
+        default:
+            return headingBaseFontSize;
+    }
+}
+
+TextViewStyle& TextViewStyle::ParagraphGap(float gap) {
+    paragraphGap = gap;
+    return *this;
+}
+
+TextViewStyle& TextViewStyle::HeadingFontSize(HeadingFontSizeFn fn,
+                                              void* data) {
+    headingFontSize = fn;
+    headingFontSizeData = data;
+    return *this;
+}
+
+TextViewStyle& TextViewStyle::CodeBlock(const gpui::Style& value,
+                                        uint32_t fields) {
+    codeBlock = value;
+    codeBlockFields = fields;
+    return *this;
+}
+
+TextViewStyle& TextViewStyle::Table(const gpui::Style& value, uint32_t fields) {
+    table = value;
+    tableFields = fields;
+    return *this;
+}
+
+TextViewStyle& TextViewStyle::TableCell(const gpui::Style& value,
+                                        uint32_t fields) {
+    tableCell = value;
+    tableCellFields = fields;
+    return *this;
+}
+
+TextViewStyle& TextViewStyle::InlineCode(const gpui::Style& value,
+                                         uint32_t fields) {
+    inlineCode = value;
+    inlineCodeFields = fields;
+    return *this;
+}
+
+static bool TextRgbaEq(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+static bool TextBackgroundEq(const Background& a, const Background& b) {
+    return TextRgbaEq(a.color, b.color) &&
+           TextRgbaEq(a.from.color, b.from.color) &&
+           a.from.percentage == b.from.percentage &&
+           TextRgbaEq(a.to.color, b.to.color) &&
+           a.to.percentage == b.to.percentage && a.angle == b.angle &&
+           a.gradient == b.gradient;
+}
+
+static bool TextEdgesEq(Edges a, Edges b) {
+    return a == b;
+}
+
+static bool StyleFieldsEqual(const gpui::Style& a, const gpui::Style& b,
+                             uint32_t fields) {
+    if ((fields & StyleFieldBg) && !TextBackgroundEq(a.bg, b.bg)) return false;
+    if ((fields & StyleFieldColor) && !TextRgbaEq(a.color, b.color))
+        return false;
+    if ((fields & StyleFieldBorderColor) &&
+        !TextRgbaEq(a.borderColor, b.borderColor))
+        return false;
+    if ((fields & StyleFieldPad) && !TextEdgesEq(a.pad, b.pad)) return false;
+    if ((fields & StyleFieldMargin) && !TextEdgesEq(a.margin, b.margin))
+        return false;
+    if ((fields & StyleFieldGap) &&
+        (a.gapX != b.gapX || a.gapY != b.gapY))
+        return false;
+    if ((fields & StyleFieldRadius) && a.radius != b.radius) return false;
+    if ((fields & StyleFieldBorder) && a.border != b.border) return false;
+    if ((fields & StyleFieldBorderT) && a.borderT != b.borderT) return false;
+    if ((fields & StyleFieldBorderB) && a.borderB != b.borderB) return false;
+    if ((fields & StyleFieldBorderL) && a.borderL != b.borderL) return false;
+    if ((fields & StyleFieldBorderR) && a.borderR != b.borderR) return false;
+    if ((fields & StyleFieldFontSize) && a.fontSize != b.fontSize) return false;
+    if ((fields & StyleFieldWidth) && a.width != b.width) return false;
+    if ((fields & StyleFieldHeight) && a.height != b.height) return false;
+    if ((fields & StyleFieldOpacity) && a.opacity != b.opacity) return false;
+    if ((fields & StyleFieldHoverBg) &&
+        !TextBackgroundEq(a.hoverBg, b.hoverBg))
+        return false;
+    if ((fields & StyleFieldHoverFg) && !TextRgbaEq(a.hoverFg, b.hoverFg))
+        return false;
+    if ((fields & StyleFieldActiveBg) &&
+        !TextBackgroundEq(a.activeBg, b.activeBg))
+        return false;
+    return true;
+}
+
+bool TextViewStyle::Equals(const TextViewStyle& other) const {
+    if (paragraphGap != other.paragraphGap ||
+        headingBaseFontSize != other.headingBaseFontSize ||
+        codeBlockFields != other.codeBlockFields ||
+        tableFields != other.tableFields ||
+        tableCellFields != other.tableCellFields ||
+        inlineCodeFields != other.inlineCodeFields || isDark != other.isDark ||
+        !StyleFieldsEqual(codeBlock, other.codeBlock, codeBlockFields) ||
+        !StyleFieldsEqual(table, other.table, tableFields) ||
+        !StyleFieldsEqual(tableCell, other.tableCell, tableCellFields) ||
+        !StyleFieldsEqual(inlineCode, other.inlineCode, inlineCodeFields)) {
+        return false;
+    }
+    if ((headingFontSize == nullptr) != (other.headingFontSize == nullptr)) {
+        return false;
+    }
+    if (!headingFontSize) return true;
+    for (uint8_t level = 1; level <= 6; level++) {
+        if (HeadingSize(level) != other.HeadingSize(level)) return false;
+    }
+    return true;
+}
+
+TextViewState::~TextViewState() {
+    StrFree(text);
+}
+
+static Entity<TextViewState> NewTextViewState(App* app, Str text,
+                                              TextViewFormat format) {
+    Entity<TextViewState> entity;
+    if (!app) return entity;
+    entity = EntityNewState<TextViewState>(app);
+    if (TextViewState* state = entity.Get(app)) {
+        state->self = entity.id;
+        state->text = StrDup(text);
+        state->format = format;
+    }
+    return entity;
+}
+
+Entity<TextViewState> TextViewState::Markdown(App* app, Str text) {
+    return NewTextViewState(app, text, TextViewFormat::Markdown);
+}
+
+Entity<TextViewState> TextViewState::Html(App* app, Str text) {
+    return NewTextViewState(app, text, TextViewFormat::Html);
+}
+
+void TextViewState::Changed(App* app, Window* window,
+                            bool selectionCompatible) {
+    revision++;
+    if (!selectionCompatible) {
+        selectionRevision++;
+        WindowSelectionClear(window);
+    }
+    if (app && self.IsValid()) NotifyEntity(app, self, window);
+}
+
+void TextViewState::SetText(Str value, App* app, Window* window) {
+    if (TextStrEq(text, value)) return;
+    Str replacement = StrDup(value);
+    StrFree(text);
+    text = replacement;
+    Changed(app, window, false);
+}
+
+void TextViewState::PushStr(Str value, App* app, Window* window) {
+    if (value.len <= 0) return;
+    int oldLen = text.len;
+    char* joined = (char*)Alloc(nullptr, (size_t)oldLen + value.len + 1);
+    if (!joined) return;
+    if (oldLen > 0) memcpy(joined, text.s, (size_t)oldLen);
+    memcpy(joined + oldLen, value.s, (size_t)value.len);
+    joined[oldLen + value.len] = 0;
+    StrFree(text);
+    text = Str(joined, oldLen + value.len);
+    Changed(app, window, true);
+}
+
+void TextViewState::SetSelectable(bool value, App* app, Window* window) {
+    if (selectable == value) return;
+    selectable = value;
+    if (!value) WindowSelectionClear(window);
+    Changed(app, window, true);
+}
+
+void TextViewState::SetScrollable(bool value, App* app, Window* window) {
+    if (scrollable == value) return;
+    scrollable = value;
+    Changed(app, window, true);
+}
+
+void TextViewState::SetSelectionFormat(gpui::SelectionFormat value, App* app,
+                                       Window* window) {
+    if (selectionFormat == value) return;
+    selectionFormat = value;
+    Changed(app, window, true);
+}
+
+int TextViewState::SelectedText(Window* window, char* out, int cap) const {
+    return WindowSelectionTextForEntity(window, self, out, cap,
+                                        format == TextViewFormat::Html
+                                            ? gpui::SelectionFormat::Plain
+                                            : selectionFormat);
+}
+
+bool TextViewState::HasSelection(const Window* window) const {
+    return WindowSelectionHasEntity(window, self);
+}
+
+void TextViewState::ClearSelection(Window* window, App*) {
+    WindowSelectionClear(window);
+}
+
+void TextViewState::SelectAll(Window* window, App*) {
+    WindowSelectionSelectAll(window, self);
+}
+
+void TextViewState::OnAction(TextViewState* state, Ctx* cx,
+                             const ActionEvent* event) {
+    if (!state || !state->selectable) {
+        const_cast<ActionEvent*>(event)->propagate = true;
+        return;
+    }
+    if (event->action == input::Copy()) {
+        if (!WindowSelectionCopy(cx->win)) {
+            const_cast<ActionEvent*>(event)->propagate = true;
+        }
+        return;
+    }
+    if (event->action == input::SelectAll()) {
+        state->SelectAll(cx->win, cx->app);
+        Notify(cx);
+        return;
+    }
+    const_cast<ActionEvent*>(event)->propagate = true;
+}
+
+void TextViewState::OnScroll(TextViewState* state, Ctx* cx,
+                             const ScrollEvent* event) {
+    state->scrollY = event->offsetY;
+    Notify(cx);
+}
 
 // What Word and Inline take to mean "name no colour at all", so the run
 // inherits the one the container above the view pushed. A transparent text
@@ -35,6 +463,8 @@ struct MdDef {
 
 struct MdBuild {
     Arena* a = nullptr;
+    Str source = {};
+    const MarkdownExtensions* extensions = nullptr;
     MdNode* cur = nullptr;
     // The marks in effect, from the enclosing inline nodes.
     uint8_t marks = 0;
@@ -344,6 +774,25 @@ static void MdTable(MdBuild* b, const md::Node* n) {
 }
 
 static void MdBlockNode(MdBuild* b, const md::Node* n) {
+    if (b->extensions) {
+        MarkdownParseContext context;
+        context.arena = b->a;
+        context.source = b->source;
+        for (int i = 0; i < b->extensions->blockParsers.len; i++) {
+            const MarkdownBlockParser& parser = b->extensions->blockParsers[i];
+            MarkdownNode custom;
+            if (!parser.fn || !parser.fn(n, &context, parser.data, &custom)) {
+                continue;
+            }
+            MdNode* node = Push(b, MdKind::Custom);
+            node->custom = custom;
+            node->custom.name = StrDup(b->a, custom.name);
+            node->custom.text = StrDup(b->a, custom.text);
+            node->custom.markdown = StrDup(b->a, custom.markdown);
+            Pop(b);
+            return;
+        }
+    }
     switch (n->kind) {
         case md::NodeKind::Paragraph:
             Push(b, MdKind::Paragraph);
@@ -493,7 +942,8 @@ static void MdExpandHtml(Arena* a, MdNode* n) {
     HtmlParseInto(a, n, Str(buf, at));
 }
 
-MdNode* MdParse(Arena* a, Str source) {
+static MdNode* MdParseWithExtensions(Arena* a, Str source,
+                                     const MarkdownExtensions* extensions) {
     MdNode* doc = ArenaNew<MdNode>(a);
     doc->kind = MdKind::Doc;
     if (!source.s || source.len <= 0) {
@@ -507,11 +957,17 @@ MdNode* MdParse(Arena* a, Str source) {
 
     MdBuild b;
     b.a = a;
+    b.source = source;
+    b.extensions = extensions;
     b.cur = doc;
     MdCollectDefs(&b, root);
     MdBlockChildren(&b, root);
     MdExpandHtml(a, doc);
     return doc;
+}
+
+MdNode* MdParse(Arena* a, Str source) {
+    return MdParseWithExtensions(a, source, nullptr);
 }
 
 // ─── parse cache ──────────────────────────────────────────────────────────
@@ -535,6 +991,7 @@ struct MdCacheSlot {
     // Which parser made `doc`. The same bytes are a different tree read as
     // HTML than read as markdown, so it is part of the key.
     bool html = false;
+    uint64_t extensionsRevision = 0;
 };
 
 // One story page is on screen at a time and a page holds a handful of these.
@@ -567,7 +1024,9 @@ static bool MdSourceEq(Str a, Str b) {
 // The tree for `source`, parsed only when it isn't cached already. Falls back
 // to the frame arena when there is no window to hang a cache off, which is
 // what the tests and any headless measuring pass see.
-static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source, bool html) {
+static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source, bool html,
+                             const MarkdownExtensions* extensions) {
+    uint64_t extensionRevision = extensions ? extensions->revision : 0;
     MdCache* c = nullptr;
     if (cx && cx->win) {
         auto* slot = KeyedState<Entity<MdCache>>(
@@ -580,14 +1039,17 @@ static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source, bool html) {
         }
     }
     if (!c) {
-        return html ? HtmlParse(frame, source) : MdParse(frame, source);
+        return html ? HtmlParse(frame, source)
+                    : MdParseWithExtensions(frame, source, extensions);
     }
 
     c->clock++;
     MdCacheSlot* lru = &c->slots[0];
     for (int i = 0; i < kMdCacheSlots; i++) {
         MdCacheSlot* s = &c->slots[i];
-        if (s->used != 0 && s->html == html && MdSourceEq(s->source, source)) {
+        if (s->used != 0 && s->html == html &&
+            s->extensionsRevision == extensionRevision &&
+            MdSourceEq(s->source, source)) {
             s->used = c->clock;
             return s->doc;
         }
@@ -603,8 +1065,9 @@ static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source, bool html) {
     }
     lru->source = StrDup(lru->a, source);
     lru->html = html;
-    lru->doc =
-        html ? HtmlParse(lru->a, lru->source) : MdParse(lru->a, lru->source);
+    lru->extensionsRevision = extensionRevision;
+    lru->doc = html ? HtmlParse(lru->a, lru->source)
+                    : MdParseWithExtensions(lru->a, lru->source, extensions);
     lru->used = c->clock;
     return lru->doc;
 }
@@ -873,6 +1336,7 @@ El* TextView::SrcMark(El* t, uint8_t marks, Str href) {
     if (!selectable || !t) {
         return t;
     }
+    t->SelectionOwner(UiTextViewStateCurrent(cx->app));
     // One record per mark group: an adjacent run with the same marks and the
     // same href reuses it, and the copier closes a group only when the record
     // changes — so a bold phrase split into word elements copies as
@@ -917,7 +1381,9 @@ El* TextView::SrcImage(El* e, MdRun* r) {
     s->block = srcBlock;
     // The image has no text of its own — the whole of it is the affix — and
     // the copier knows that from the run being an image element.
-    e->Selectable()->SelSrc(s, !srcLineStart);
+    e->Selectable()
+        ->SelectionOwner(UiTextViewStateCurrent(cx->app))
+        ->SelSrc(s, !srcLineStart);
     srcLineStart = false;
     // Not a mark group anything can join: the words after the picture open
     // one of their own.
@@ -1037,6 +1503,9 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
         // and says nothing else: an inline code span is the paragraph's own
         // font at the paragraph's own size, with a background behind it.
         t->Bg(th.tokens.accent);
+        if (textViewStyle.inlineCodeFields) {
+            t->Refine(textViewStyle.inlineCode, textViewStyle.inlineCodeFields);
+        }
     }
     if (selectable) {
         t->Selectable();
@@ -1371,6 +1840,9 @@ El* TextView::CodeBlock(MdNode* n) {
             SrcCat(a, StrL("\n"), srcLinePre, StrL("```")));
     El* box = Div(a)->FlexCol()->W(kFill)->Pad(12)->Radius(th.radius)->Bg(
         th.tokens.muted);
+    if (textViewStyle.codeBlockFields) {
+        box->Refine(textViewStyle.codeBlock, textViewStyle.codeBlockFields);
+    }
     // The runs are verbatim text with embedded newlines. They go into one
     // TextEl rather than one per line: the text engine then lays every line
     // out against the same metrics, so a line that needs a font fallback (box
@@ -1582,6 +2054,9 @@ El* TextView::ScrollTable(MdNode* n) {
                     ->MinW(minTotal)
                     ->Border(1, th.border)
                     ->Radius(th.radius);
+    if (textViewStyle.tableFields) {
+        track->Refine(textViewStyle.table, textViewStyle.tableFields);
+    }
     for (MdNode* r = n->first; r; r = r->next) {
         El* row = Div(a)->FlexRow()->W(kFill);
         if (r->next) {
@@ -1600,6 +2075,10 @@ El* TextView::ScrollTable(MdNode* n) {
                            ->ClipX()
                            ->PadX(8)
                            ->PadY(4);
+            if (textViewStyle.tableCellFields) {
+                cell->Refine(textViewStyle.tableCell, textViewStyle
+                                                          .tableCellFields);
+            }
             if (c->next) {
                 cell->BorderR(1, th.border);
             }
@@ -1700,6 +2179,9 @@ El* TextView::Table(MdNode* n) {
 
     El* table =
         Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Radius(th.radius);
+    if (textViewStyle.tableFields) {
+        table->Refine(textViewStyle.table, textViewStyle.tableFields);
+    }
     for (MdNode* r = n->first; r; r = r->next) {
         El* row = Div(a)->FlexRow()->W(kFill);
         if (r->next) {
@@ -1709,6 +2191,10 @@ El* TextView::Table(MdNode* n) {
         for (MdNode* c = r->first; c; c = c->next, ix++) {
             float frac = ix < nCols ? (float)colLen[ix] / total : 1.f / total;
             El* cell = Div(a)->WFrac(frac)->MinW(tableColW)->PadX(8)->PadY(4);
+            if (textViewStyle.tableCellFields) {
+                cell->Refine(textViewStyle.tableCell, textViewStyle
+                                                          .tableCellFields);
+            }
             if (c->next) {
                 cell->BorderR(1, th.border);
             }
@@ -1863,6 +2349,23 @@ El* TextView::PluginBlock(MdNode* n) {
 
 El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
     const Theme& th = ThemeNow(cx->app);
+    if (n->kind == MdKind::Custom) {
+        float pad = (inList || isLast) ? 0.f : paragraphGap;
+        const struct MarkdownBlockRenderer* renderer =
+            markdownExtensions.Renderer(n->custom.name);
+        El* content = renderer && renderer->fn
+                          ? renderer->fn(cx, &n->custom, renderer->data)
+                          : nullptr;
+        if (!content && n->custom.text.s) {
+            SrcOpen({}, {});
+            content = TextEl(a, n->custom.text)->Font(baseFont)->Wrap();
+            if (selectable) {
+                content->Selectable();
+                SrcMark(content, 0);
+            }
+        }
+        return content ? Div(a)->W(kFill)->PadB(pad)->Child(content) : nullptr;
+    }
     // A plugin's block stands in for whatever markdown made of it, and takes
     // the paragraph gap the block it replaced would have carried.
     if (El* claimed = PluginBlock(n)) {
@@ -1879,7 +2382,9 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
             return Div(a)->W(kFill)->PadB(mb)->Child(
                 Inline(n, baseFont, BlockFg(), 0));
         case MdKind::Heading: {
-            float font = headingFont * HeadingScale(n->level);
+            float font = textViewStyle.headingFontSize
+                             ? textViewStyle.HeadingSize(n->level)
+                             : headingFont * HeadingScale(n->level);
             // node.rs prefixes the heading marker in source mode so a
             // selected heading round-trips as `## Title`.
             char hashes[8] = {};
@@ -1977,21 +2482,86 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
         case MdKind::Doc:
         case MdKind::Row:
         case MdKind::Cell:
+        case MdKind::Custom:
             return nullptr;
     }
     return nullptr;
 }
 
 El* TextView::IntoEl() {
-    MdNode* doc = MdParseCached(cx, a, source, html);
+    if (!state.IsValid()) {
+        uint32_t kind = (uint32_t)HashClickId(
+            html ? StrL("TextViewStateHtml") : StrL("TextViewStateMarkdown"));
+        uint32_t key = KeyedKey(KeyedName(cx, source), kind);
+        state = cx->win ? KeyedEntity<TextViewState>(cx, key)
+                        : EntityNewState<TextViewState>(cx->app);
+        if (TextViewState* managed = state.Get(cx)) {
+            if (!managed->self.IsValid()) managed->self = state.id;
+            if (!TextStrEq(managed->text, source)) {
+                StrFree(managed->text);
+                managed->text = StrDup(source);
+                managed->revision++;
+                managed->selectionRevision++;
+            }
+            managed->format =
+                html ? TextViewFormat::Html : TextViewFormat::Markdown;
+        }
+    }
+    TextViewState* managed = state.Get(cx);
+    if (managed) {
+        source = managed->text;
+        html = managed->format == TextViewFormat::Html;
+        managed->selectable = selectable;
+        managed->selectionFormat = selFormat;
+        managed->scrollable = scrollable;
+        managed->textViewStyle = textViewStyle;
+    }
+
+    UiTextViewStatePush(cx->app, state.id);
+    MdNode* doc = MdParseCached(cx, a, source, html,
+                                html ? nullptr : &markdownExtensions);
     // Rust keeps selection_format on the view's own state and reconstructs
     // the source when the copy asks for it. The copy is the window's here,
     // so the view says what format it wants and the runs it builds below
     // carry the Markdown that format needs.
     if (selectable) {
-        WindowSelectionSetFormat(cx->win, selFormat);
+        WindowSelectionSetFormat(
+            cx->win, html ? gpui::SelectionFormat::Plain : selFormat);
     }
-    return Blocks(Div(a)->FlexCol()->W(kFill), doc, 0, false);
+    El* element = Blocks(Div(a)->FlexCol()->W(kFill), doc, 0, false);
+    UiTextViewStatePop(cx->app);
+
+    if (scrollable && cx->win && managed) {
+        uint32_t name = (uint32_t)(state.id.index + 1) * 1000003u +
+                        (uint32_t)(state.id.gen + 1);
+        uint32_t key =
+            KeyedKey(name, (uint32_t)HashClickId(StrL("TextViewScrollState")));
+        element =
+            Div(a)
+                ->FlexCol()
+                ->W(kFill)
+                ->H(kFill)
+                ->ClipY()
+                ->ScrollY(managed->scrollY)
+                ->ScrollId((int)key)
+                ->OnScroll(ListenTo(state, &TextViewState::OnScroll))
+                ->Child(element);
+    }
+    if (outerStyleFields) {
+        element->Refine(outerStyle, outerStyleFields);
+    }
+    if (selectable && state.IsValid()) {
+        TextViewInitKeys();
+        int focus = HashClickId(StrDup(
+            a, fmt("text-view-%d-%u", state.id.index, state.id.gen)));
+        Listener onAction = ListenTo(state, &TextViewState::OnAction);
+        element->KeyContext(StrL("TextView"))
+            ->FocusId(focus)
+            ->FocusOnPress()
+            ->OnAction(input::Copy(), onAction)
+            ->OnAction(input::SelectAll(), onAction);
+    }
+    return element;
 }
 
 // ─── builder ──────────────────────────────────────────────────────────────
@@ -2002,12 +2572,19 @@ TextView* TextView::New(Ctx* cx, Str source) {
     t->a = a;
     t->cx = cx;
     t->source = source;
+    t->textViewStyle = TextViewStyle::Default();
     return t;
 }
 
 TextView* TextView::NewHtml(Ctx* cx, Str source) {
     TextView* t = TextView::New(cx, source);
     t->html = true;
+    return t;
+}
+
+TextView* TextView::New(Ctx* cx, Entity<TextViewState> managed) {
+    TextView* t = TextView::New(cx, Str{});
+    t->state = managed;
     return t;
 }
 
@@ -2044,6 +2621,20 @@ TextView* TextView::Font(float px) {
 
 TextView* TextView::HeadingFont(float px) {
     headingFont = px;
+    textViewStyle.headingBaseFontSize = px;
+    return this;
+}
+
+TextView* TextView::Style(const TextViewStyle& value) {
+    textViewStyle = value;
+    headingFont = value.headingBaseFontSize;
+    paragraphGap = value.paragraphGap;
+    return this;
+}
+
+TextView* TextView::Refine(const gpui::Style& value, uint32_t fields) {
+    StyleApplyFields(&outerStyle, value, fields);
+    outerStyleFields |= fields;
     return this;
 }
 
@@ -2067,9 +2658,51 @@ TextView* TextView::TableScroll(bool on) {
     return this;
 }
 
+TextView* TextView::Scrollable(bool on) {
+    scrollable = on;
+    return this;
+}
+
 TextView* TextView::ParagraphGap(float px) {
     paragraphGap = px;
+    textViewStyle.paragraphGap = px;
     return this;
+}
+
+TextView* TextView::MarkdownExtensionsSet(
+    const MarkdownExtensions& extensions) {
+    markdownExtensions.enableMdx = extensions.enableMdx;
+    markdownExtensions.revision = extensions.revision;
+    for (int i = 0; i < extensions.blockParsers.len; i++) {
+        markdownExtensions.blockParsers.Append(a, extensions.blockParsers[i]);
+    }
+    for (int i = 0; i < extensions.blockRenderers.len; i++) {
+        markdownExtensions.blockRenderers
+            .Append(a, extensions.blockRenderers[i]);
+    }
+    return this;
+}
+
+TextView* TextView::MarkdownBlockParser(MarkdownBlockParserFn parser,
+                                        void* data) {
+    markdownExtensions.BlockParser(a, parser, data);
+    return this;
+}
+
+TextView* TextView::MarkdownBlockRenderer(Str name,
+                                          MarkdownBlockRenderFn renderer,
+                                          void* data) {
+    markdownExtensions.BlockRenderer(a, name, renderer, data);
+    return this;
+}
+
+TextView* TextView::Plugin(const MarkdownPlugin& plugin) {
+    markdownExtensions.Plugin(a, plugin);
+    return this;
+}
+
+TextView* TextView::Plugin(const TextViewPlugin& plugin) {
+    return plugin.Setup(this);
 }
 
 } // namespace component

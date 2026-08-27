@@ -47,6 +47,138 @@ static bool HtmlNamesEqual(Str a, Str b) {
     return true;
 }
 
+Minifier& Minifier::OmitDoctype(bool value) {
+    omitDoctype = value;
+    return *this;
+}
+
+Minifier& Minifier::CollapseWhitespace(bool value) {
+    collapseWhitespace = value;
+    return *this;
+}
+
+Minifier& Minifier::PreserveComments(bool value) {
+    preserveComments = value;
+    return *this;
+}
+
+Str Minifier::WriteCollapseWhitespace(Arena* a, Str source) {
+    if (!a || source.len <= 0) return {};
+    char* out = (char*)Alloc(a, source.len + 1);
+    if (!out) return {};
+    int n = 0;
+    bool whitespace = precedingWhitespace;
+    for (int i = 0; i < source.len; i++) {
+        char c = source.s[i];
+        if (HtmlIsSpace(c)) {
+            if (!whitespace) out[n++] = ' ';
+            whitespace = true;
+        } else {
+            out[n++] = c;
+            whitespace = false;
+        }
+    }
+    precedingWhitespace = whitespace;
+    out[n] = 0;
+    return Str(out, n);
+}
+
+static bool HtmlStartsI(Str source, int at, const char* value) {
+    int len = (int)strlen(value);
+    if (at < 0 || at + len > source.len) return false;
+    for (int i = 0; i < len; i++) {
+        if (HtmlLower(source.s[at + i]) != HtmlLower(value[i])) return false;
+    }
+    return true;
+}
+
+Str Minifier::Minify(Arena* a, Str source) {
+    if (!a || source.len <= 0) return {};
+    char* out = (char*)Alloc(a, source.len + 1);
+    if (!out) return {};
+    int n = 0;
+    int at = 0;
+    bool whitespace = precedingWhitespace;
+    Str raw = {};
+    while (at < source.len) {
+        if (HtmlStartsI(source, at, "<!--")) {
+            int end = at + 4;
+            while (end + 2 < source.len &&
+                   !(source.s[end] == '-' && source.s[end + 1] == '-' &&
+                     source.s[end + 2] == '>')) {
+                end++;
+            }
+            end = end + 2 < source.len ? end + 3 : source.len;
+            if (preserveComments) {
+                memcpy(out + n, source.s + at, (size_t)(end - at));
+                n += end - at;
+                whitespace = false;
+            }
+            at = end;
+            continue;
+        }
+        if (omitDoctype && HtmlStartsI(source, at, "<!doctype")) {
+            while (at < source.len && source.s[at] != '>') at++;
+            if (at < source.len) at++;
+            continue;
+        }
+        if (source.s[at] == '<') {
+            int end = at + 1;
+            char quote = 0;
+            while (end < source.len) {
+                char c = source.s[end];
+                if (quote) {
+                    if (c == quote) quote = 0;
+                } else if (c == '\'' || c == '"') {
+                    quote = c;
+                } else if (c == '>') {
+                    end++;
+                    break;
+                }
+                end++;
+            }
+            int nameAt = at + 1;
+            bool close = nameAt < source.len && source.s[nameAt] == '/';
+            if (close) nameAt++;
+            int nameEnd = nameAt;
+            while (nameEnd < source.len && HtmlIsNameChar(source.s[nameEnd])) {
+                nameEnd++;
+            }
+            Str name(source.s + nameAt, nameEnd - nameAt);
+            if (!close && (HtmlNamesEqual(name, StrL("pre")) ||
+                           HtmlNamesEqual(name, StrL("textarea")) ||
+                           HtmlNamesEqual(name, StrL("script")) ||
+                           HtmlNamesEqual(name, StrL("style")))) {
+                raw = name;
+            } else if (close && raw.s && HtmlNamesEqual(name, raw)) {
+                raw = {};
+            }
+            memcpy(out + n, source.s + at, (size_t)(end - at));
+            n += end - at;
+            whitespace = false;
+            at = end;
+            continue;
+        }
+        char c = source.s[at++];
+        if (collapseWhitespace && !raw.s && HtmlIsSpace(c)) {
+            if (!whitespace) out[n++] = ' ';
+            whitespace = true;
+        } else {
+            out[n++] = c;
+            whitespace = false;
+        }
+    }
+    precedingWhitespace = whitespace;
+    out[n] = 0;
+    return Str(out, n);
+}
+
+Str HtmlMinify(Arena* a, Str source) {
+    Minifier minifier;
+    minifier.OmitDoctype();
+    return minifier.Minify(a, source);
+}
+
 struct HtmlLex {
     Str src = {};
     int at = 0;

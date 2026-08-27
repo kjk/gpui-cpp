@@ -18,6 +18,7 @@ void Init(App* app) {
     NotificationInitSystem(app);
     PopupMenuInitKeys();
     TableInitKeys();
+    TextViewInitKeys();
     SelectInitKeys();
 }
 

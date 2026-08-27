@@ -890,6 +890,83 @@ int WindowSelectionText(Window* win, char* out, int cap) {
     return WindowSelectionTextAs(win, out, cap, WindowSelectionFormat(win));
 }
 
+bool WindowSelectionHasEntity(const Window* win, EntityId owner) {
+    if (!owner.IsValid() || !WindowSelectionHas(win)) return false;
+    const WindowSelection* selection = win->sel;
+    int a = selection->anchor;
+    int b = selection->cursor;
+    if (a > b) {
+        int swap = a;
+        a = b;
+        b = swap;
+    }
+    const PaintCtx* paint = &win->paint;
+    for (int i = 0; i < paint->texts.len; i++) {
+        const TextHit& hit = paint->texts[i];
+        if (hit.owner != owner || hit.scope != selection->scope) continue;
+        int len = hit.atom ? 1 : hit.text.len;
+        if (a < hit.docOff + len && b > hit.docOff) return true;
+    }
+    return false;
+}
+
+int WindowSelectionTextForEntity(Window* win, EntityId owner, char* out,
+                                 int cap, SelectionFormat fmt) {
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!WindowSelectionHasEntity(win, owner)) return 0;
+    WindowSelection* selection = win->sel;
+    return CopyTextHitsInEntity(&win->paint, selection->anchor,
+                                selection->cursor, selection->scope, owner,
+                                out, cap, fmt);
+}
+
+void WindowSelectionSelectAll(Window* win, EntityId owner) {
+    if (!win || !owner.IsValid()) return;
+    WindowSelection* selection = WindowSelectionOf(win);
+    if (!selection) return;
+    int scope = 0;
+    bool found = false;
+    int first = 0;
+    int last = 0;
+    Bounds firstBounds = {};
+    Bounds lastBounds = {};
+    int activeScope = selection->activeScope.raw != 0
+                          ? selection->activeScope.RuntimeScope()
+                          : -1;
+    for (int i = 0; i < win->paint.texts.len; i++) {
+        const TextHit& hit = win->paint.texts[i];
+        if (hit.owner != owner ||
+            (activeScope >= 0 && hit.scope != activeScope)) {
+            continue;
+        }
+        if (!found) {
+            found = true;
+            scope = hit.scope;
+            first = hit.docOff;
+            firstBounds = hit.bounds;
+        }
+        if (hit.scope != scope) continue;
+        last = hit.docOff + (hit.atom ? 1 : hit.text.len);
+        lastBounds = hit.bounds;
+    }
+    if (!found || first == last) return;
+    selection->scope = scope;
+    if (selection->activeScope.raw == 0) {
+        selection->activeScope =
+            TextSelectionScopeId::FromRaw((uint64_t)scope);
+    }
+    selection->anchor = first;
+    selection->cursor = last;
+    selection->anchorPoint = {firstBounds.x, firstBounds.y};
+    selection->cursorPoint = {lastBounds.x + lastBounds.w,
+                              lastBounds.y + lastBounds.h};
+    selection->hasWindowPoints = true;
+    TextSelectionBegin(&selection->gesture, true);
+    TextSelectionEnd(&selection->gesture);
+    WindowSelectionPublish(win);
+}
+
 static bool HasNonWhitespace(Str text) {
     for (int i = 0; i < text.len; i++) {
         char c = text.s[i];

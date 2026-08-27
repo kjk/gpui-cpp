@@ -1779,6 +1779,10 @@ El* El::Selectable() {
     selectable = true;
     return this;
 }
+El* El::SelectionOwner(EntityId owner) {
+    selectionOwner = owner;
+    return this;
+}
 El* El::SelSrc(const SelSource* s, bool join) {
     selSrc = s;
     selJoin = join;
@@ -5324,6 +5328,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         TextHit th;
         th.bounds = e->Bounds();
         th.docOff = ctx->textDocLen;
+        th.owner = e->selectionOwner;
         th.src = e->selSrc;
         th.join = e->selJoin;
         th.atom = true;
@@ -5352,6 +5357,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             th.maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
             th.wrap = e->style.wrap;
             th.docOff = docOff;
+            th.owner = e->selectionOwner;
             th.src = e->selSrc;
             th.join = e->selJoin;
             // The trap this run sits in — a dialog, a sheet — which is the
@@ -6018,11 +6024,18 @@ static void CopyPutLines(CopyOut* o, Str s, Str linePre) {
 // The run before ends one byte before the image's own place in the document
 // order, and the run after starts one past it — the gap of one the
 // registration leaves between runs.
-static bool AtomReached(PaintCtx* ctx, int i, int a, int b) {
+static bool TextHitOwnerMatches(const TextHit& hit, EntityId owner) {
+    return !owner.IsValid() || hit.owner == owner;
+}
+
+static bool AtomReached(PaintCtx* ctx, int i, int a, int b,
+                        EntityId owner) {
     const TextHit& t = ctx->texts[i];
     const SelBlock* blk = t.src ? t.src->block : nullptr;
     const TextHit* prev = i > 0 ? &ctx->texts[i - 1] : nullptr;
     const TextHit* next = i + 1 < ctx->texts.len ? &ctx->texts[i + 1] : nullptr;
+    if (prev && !TextHitOwnerMatches(*prev, owner)) prev = nullptr;
+    if (next && !TextHitOwnerMatches(*next, owner)) next = nullptr;
     // Only a run of the same block is a run of this paragraph.
     if (prev && (!prev->src || prev->src->block != blk)) {
         prev = nullptr;
@@ -6049,8 +6062,9 @@ static bool AtomReached(PaintCtx* ctx, int i, int a, int b) {
     return a < pos - 1 && b >= pos - 1;
 }
 
-int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
-                   SelectionFormat fmt) {
+static int CopyTextHitsFiltered(PaintCtx* ctx, int a, int b, int scope,
+                                EntityId owner, char* out, int cap,
+                                SelectionFormat fmt) {
     if (!out || cap <= 0) {
         return 0;
     }
@@ -6078,7 +6092,8 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
     bool sep = false;
     for (int i = 0; i < ctx->texts.len && o.n < cap - 1; i++) {
         const TextHit& t = ctx->texts[i];
-        if (scope >= 0 && t.scope != scope) {
+        if ((scope >= 0 && t.scope != scope) ||
+            !TextHitOwnerMatches(t, owner)) {
             continue;
         }
         int pos = t.docOff;
@@ -6093,7 +6108,8 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
         // block walk below emits; the piece of text after it is empty. Plain
         // skips it: `Paragraph::text` lays the children's text end to end and
         // an image child has none.
-        bool atom = t.atom && src && t.src && AtomReached(ctx, i, a, b);
+        bool atom =
+            t.atom && src && t.src && AtomReached(ctx, i, a, b, owner);
         if ((lo >= hi || !t.text.s) && !atom) {
             sep = sep || spansGap;
             continue;
@@ -6161,6 +6177,17 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
     }
     out[o.n] = 0;
     return o.n;
+}
+
+int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
+                   SelectionFormat fmt) {
+    return CopyTextHitsFiltered(ctx, a, b, scope, {}, out, cap, fmt);
+}
+
+int CopyTextHitsInEntity(PaintCtx* ctx, int a, int b, int scope,
+                         EntityId owner, char* out, int cap,
+                         SelectionFormat fmt) {
+    return CopyTextHitsFiltered(ctx, a, b, scope, owner, out, cap, fmt);
 }
 
 // A trap is a property of the container, the way Rust hangs it off the one

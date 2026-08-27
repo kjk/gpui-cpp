@@ -1867,6 +1867,10 @@ struct El {
     int markLo = -1;
     int markHi = -1;
     bool selectable = false;
+    // ui/text's retained TextViewState. The UI global stack stamps this on
+    // each selectable leaf while it builds the subtree, so selection queries
+    // can be scoped back to one managed view after the frame tree is gone.
+    EntityId selectionOwner = {};
     // What a copy of this run says, and whether it continues the run before
     // it on the same line. The record is owned by whoever built the element —
     // the frame arena, in practice — and is null on every run that is not
@@ -2106,6 +2110,7 @@ struct El {
     El* Strikethrough();
     El* Italic();
     El* Selectable();
+    El* SelectionOwner(EntityId owner);
     // The Markdown this run came from, and whether it continues the run
     // before it rather than starting a line of its own.
     El* SelSrc(const SelSource* s, bool join);
@@ -2343,6 +2348,7 @@ struct TextHit {
     float maxW = 0;
     bool wrap = false;
     int docOff = 0;
+    EntityId owner = {};
     // El::SelSrc, for a copy in SelectionFormat::Source. Null otherwise, and
     // then the run copies as its plain text in both formats.
     const SelSource* src = nullptr;
@@ -4239,6 +4245,9 @@ int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
 // carries a SelSource — the Markdown it was rendered from.
 int CopyTextHitsIn(PaintCtx* ctx, int selA, int selB, int scope, char* out,
                    int cap, SelectionFormat fmt = SelectionFormat::Plain);
+int CopyTextHitsInEntity(PaintCtx* ctx, int selA, int selB, int scope,
+                         EntityId owner, char* out, int cap,
+                         SelectionFormat fmt = SelectionFormat::Plain);
 // points_for_multi_click: the document range a press of `clickCount` selects
 // under (x, y) — 2 takes the word, 3 or more the whole run — in the same
 // offsets TextHitOffsetAt and CopyTextHits speak. False for a single click,

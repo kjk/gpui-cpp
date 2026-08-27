@@ -18,6 +18,26 @@ namespace gpui {
 
 namespace component {
 
+// format/html5minify Minifier. The Rust type writes to io::Write after an
+// html5ever DOM pass; this dependency-free projection writes to an Arena and
+// preserves its configurable whitespace/comment/doctype policy. HtmlParse's
+// tokenizer already performs the same cleanup while folding the tree, so
+// parsing does not serialize and tokenize the document a second time.
+struct Minifier {
+    bool omitDoctype = false;
+    bool collapseWhitespace = true;
+    bool preserveComments = false;
+    bool precedingWhitespace = false;
+
+    Minifier& OmitDoctype(bool value = true);
+    Minifier& CollapseWhitespace(bool value = true);
+    Minifier& PreserveComments(bool value = true);
+    Str Minify(Arena* a, Str source);
+    Str WriteCollapseWhitespace(Arena* a, Str source);
+};
+
+Str HtmlMinify(Arena* a, Str source);
+
 // A whole HTML document. The returned node is MdKind::Doc, the same root
 // MdParse returns.
 MdNode* HtmlParse(Arena* a, Str source);

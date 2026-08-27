@@ -34,10 +34,150 @@
 
 #include "ui/sizing.h"
 #include "ui/syntax.h"
+#include "markdown/markdown.h"
 
 namespace gpui {
 
 namespace component {
+
+struct TextView;
+
+// text/node.rs's public value vocabulary. The renderer stores the compact
+// equivalents on MdRun, but callers and plugins can use the source-shaped
+// values without depending on that representation.
+struct Span {
+    int start = 0;
+    int end = 0;
+};
+
+struct LinkMark {
+    Str url = {};
+    Str identifier = {};
+    Str title = {};
+};
+
+struct TextMark {
+    bool bold = false;
+    bool italic = false;
+    bool strikethrough = false;
+    bool underline = false;
+    bool code = false;
+    Rgba highlight = {};
+    LinkMark link = {};
+    bool hasHighlight = false;
+    bool hasLink = false;
+
+    TextMark& Bold();
+    TextMark& Italic();
+    TextMark& Strikethrough();
+    TextMark& Underline();
+    TextMark& Code();
+    TextMark& Highlight(Rgba color);
+    TextMark& Link(LinkMark value);
+    void Merge(const TextMark& other);
+};
+
+struct ImageNode {
+    Str url = {};
+    LinkMark link = {};
+    Str title = {};
+    Str alt = {};
+    float width = 0;
+    float height = 0;
+    bool hasLink = false;
+
+    Str Title(Arena* a) const;
+};
+
+// The markdown crate port deliberately omits the per-node unist Position
+// (see markdown/mdast.h), so NodeSource cannot recover a source slice. Value
+// exposes the mdast string fields custom parsers actually consume, and Copy
+// gives their results the same parse-arena lifetime as the document.
+struct MarkdownParseContext {
+    Arena* arena = nullptr;
+    Str source = {};
+    int offset = 0;
+
+    Str Source() const { return source; }
+    int Offset() const { return offset; }
+    Str NodeSource(const markdown::Node*) const { return {}; }
+    Str Value(const markdown::Node* node, markdown::NodeStrKind kind) const;
+    Str Copy(Str value) const;
+};
+
+// markdown_ext.rs MarkdownNode. Rust's Arc<dyn Any> becomes an opaque POD
+// payload owned by the caller; parsed strings and the record itself live in
+// the document arena.
+struct MarkdownNode {
+    Str name = {};
+    Str text = {};
+    Str markdown = {};
+    void* data = nullptr;
+    Span span = {};
+    bool hasSpan = false;
+
+    static MarkdownNode New(Str name, void* data = nullptr);
+    MarkdownNode& Text(Str value);
+    MarkdownNode& Markdown(Str value);
+    Str ToMarkdown() const;
+};
+
+using MarkdownBlockParserFn = bool (*)(const markdown::Node* node,
+                                       const MarkdownParseContext* context,
+                                       void* data, MarkdownNode* out);
+using MarkdownBlockRenderFn = El* (*)(Ctx * cx, const MarkdownNode* node,
+                                      void* data);
+
+// MarkdownPlugin's object-safe C++ projection. Function pointers plus an
+// opaque payload are the repository-wide replacement for boxed closures.
+struct MarkdownPlugin {
+    Str name = {};
+    MarkdownBlockParserFn parse = nullptr;
+    MarkdownBlockRenderFn render = nullptr;
+    void* data = nullptr;
+    bool isBlock = true;
+};
+
+struct MarkdownBlockParser {
+    MarkdownBlockParserFn fn = nullptr;
+    void* data = nullptr;
+};
+
+struct MarkdownBlockRenderer {
+    Str name = {};
+    MarkdownBlockRenderFn fn = nullptr;
+    void* data = nullptr;
+};
+
+// markdown_ext.rs MarkdownExtensions. MDX remains unavailable because the
+// pinned markdown crate port excludes MDX itself; Mdx records the request so
+// callers can detect that it cannot be honored instead of silently parsing
+// the document as a different dialect.
+struct MarkdownExtensions {
+    ArenaVec<MarkdownBlockParser> blockParsers = {};
+    ArenaVec<MarkdownBlockRenderer> blockRenderers = {};
+    uint64_t revision = 0;
+    bool enableMdx = false;
+
+    MarkdownExtensions& Mdx();
+    MarkdownExtensions& BlockParser(Arena* a, MarkdownBlockParserFn fn,
+                                    void* data = nullptr);
+    MarkdownExtensions& BlockRenderer(Arena* a, Str name,
+                                      MarkdownBlockRenderFn fn,
+                                      void* data = nullptr);
+    MarkdownExtensions& Plugin(Arena* a, const MarkdownPlugin& plugin);
+    const MarkdownBlockRenderer* Renderer(Str name) const;
+};
+
+// text_view.rs TextViewPlugin. This is deliberately a setup operation over
+// the frame builder, just as the Rust trait consumes and returns TextView.
+using TextViewSetupFn = TextView* (*)(TextView * view, void* data);
+struct TextViewPlugin {
+    TextViewSetupFn setup = nullptr;
+    void* data = nullptr;
+
+    TextView* Setup(TextView* view) const;
+};
 
 // text/node.rs TextMark.
 enum MdMark : uint8_t {
@@ -92,6 +232,9 @@ enum class MdKind : uint8_t {
     // wrapper, <figure>. BlockNode::Root in Rust: it contributes its
     // children and no box.
     Group,
+    // markdown_ext.rs BlockNode::Custom. Parsed during mdast conversion and
+    // rendered later through the extension registry.
+    Custom,
 };
 
 // mdast's AlignKind, repeated so ui/html.cpp — which has no mdast of its own
@@ -133,20 +276,11 @@ struct MdNode {
     // what format/html.rs does.
     bool hasCheck = false;
     bool checked = false;
+    MarkdownNode custom = {};
 };
 
-// text_view.rs MarkdownNode: one block a plugin claimed, with the payload its
-// parser made and the two strings a copy of it would carry.
-struct MdPluginNode {
-    // MarkdownNode::name — the plugin that owns it.
-    Str name = {};
-    // as_text / as_markdown: what the block reads as, and the markdown that
-    // would produce it again.
-    Str text = {};
-    Str markdown = {};
-    // The parser's own payload, on the frame arena the parse ran in.
-    void* data = nullptr;
-};
+// Compatibility name from the earlier render-time plugin seam.
+using MdPluginNode = MarkdownNode;
 
 // MarkdownPlugin::parse. `node` is the block, `text` its flattened text —
 // the raw source for an HTML block, which is what a tag plugin matches on.
@@ -196,6 +330,87 @@ struct TableData {
 // a copy or a download button, say. Answers null to add nothing.
 using TableActionsFn = El* (*)(Ctx * cx, void* data, const TableData* table);
 
+using HeadingFontSizeFn = float (*)(uint8_t level, float base, void* data);
+
+// style.rs TextViewStyle. A Style plus its named-field mask is this tree's
+// StyleRefinement representation; the three refinements therefore preserve
+// the same "only fields the caller named win" behavior.
+struct TextViewStyle {
+    float paragraphGap = 16;
+    float headingBaseFontSize = 14;
+    HeadingFontSizeFn headingFontSize = nullptr;
+    void* headingFontSizeData = nullptr;
+    gpui::Style codeBlock = {};
+    uint32_t codeBlockFields = 0;
+    gpui::Style table = {};
+    uint32_t tableFields = 0;
+    gpui::Style tableCell = {};
+    uint32_t tableCellFields = 0;
+    gpui::Style inlineCode = {};
+    uint32_t inlineCodeFields = 0;
+    bool isDark = false;
+
+    static TextViewStyle Default();
+    float HeadingSize(uint8_t level) const;
+    TextViewStyle& ParagraphGap(float gap);
+    TextViewStyle& HeadingFontSize(HeadingFontSizeFn fn, void* data = nullptr);
+    TextViewStyle& CodeBlock(const gpui::Style& style, uint32_t fields);
+    TextViewStyle& Table(const gpui::Style& style, uint32_t fields);
+    TextViewStyle& TableCell(const gpui::Style& style, uint32_t fields);
+    TextViewStyle& InlineCode(const gpui::Style& style, uint32_t fields);
+    bool Equals(const TextViewStyle& other) const;
+};
+
+enum class TextViewFormat : uint8_t {
+    Markdown,
+    Html
+};
+
+// state.rs TextViewState. Parsing remains synchronous behind the existing
+// per-window LRU because this runtime has no cancellable Task<T>; ownership,
+// mutation revisions, selection and managed-view identity are retained.
+struct TextViewState {
+    EntityId self = {};
+    Str text = {};
+    TextViewFormat format = TextViewFormat::Markdown;
+    TextViewStyle textViewStyle = {};
+    uint64_t revision = 0;
+    uint64_t selectionRevision = 0;
+    float scrollY = 0;
+    bool selectable = false;
+    bool scrollable = false;
+    gpui::SelectionFormat selectionFormat = gpui::SelectionFormat::Plain;
+
+    ~TextViewState();
+    static Entity<TextViewState> Markdown(App* app, Str text);
+    static Entity<TextViewState> Html(App* app, Str text);
+    Str Source() const { return text; }
+    void SetText(Str value, App* app, Window* window = nullptr);
+    void PushStr(Str value, App* app, Window* window = nullptr);
+    void SetSelectable(bool value, App* app, Window* window = nullptr);
+    void SetScrollable(bool value, App* app, Window* window = nullptr);
+    void SetSelectionFormat(gpui::SelectionFormat value, App* app,
+                            Window* window = nullptr);
+    int SelectedText(Window* window, char* out, int cap) const;
+    bool HasSelection(const Window* window) const;
+    void ClearSelection(Window* window, App* app);
+    void SelectAll(Window* window, App* app);
+    static void OnAction(TextViewState* self, Ctx* cx,
+                         const ActionEvent* event);
+    static void OnScroll(TextViewState* self, Ctx* cx,
+                         const ScrollEvent* event);
+
+  private:
+    void Changed(App* app, Window* window, bool selectionCompatible);
+};
+
+// text_view.rs RequestLayoutState. Layout and prepaint are fused into El in
+// this runtime, so `element` is the requested subtree rather than AnyElement.
+struct TextViewLayoutState {
+    Entity<TextViewState> state = {};
+    El* element = nullptr;
+};
+
 // `Table::to_markdown`: a table node written back out as GFM — outer pipes,
 // a delimiter row carrying each column's alignment, and cells escaped so a
 // pipe inside one does not end the row. What `TableData::markdown` holds.
@@ -205,6 +420,7 @@ struct TextView {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str source = {};
+    Entity<TextViewState> state = {};
     // Body text size. In Rust this is whatever the TextView inherits, which
     // is theme.font_size — 16 — and is separate from the heading base below.
     float baseFont = 16;
@@ -238,6 +454,10 @@ struct TextView {
     // their floors — node.rs render_scroll_table, which is what the markdown
     // example defaults to.
     bool tableScroll = false;
+    // TextView::scrollable: a vertically scrolling document viewport. The
+    // current runtime lays all blocks rather than virtualizing them through
+    // gpui::list, but preserves the state and interaction contract.
+    bool scrollable = false;
     // How many scrolling tables have been built this frame, which is what
     // names each one's scroll offset.
     int tableIx = 0;
@@ -246,12 +466,20 @@ struct TextView {
     // selection here is the window's, so the view pushes the format onto it
     // and every run carries the Markdown around it (gpui::SelSource).
     gpui::SelectionFormat selFormat = gpui::SelectionFormat::Plain;
+    TextViewStyle textViewStyle = {};
+    MarkdownExtensions markdownExtensions = {};
+    gpui::Style outerStyle = {};
+    uint32_t outerStyleFields = 0;
 
     // text_view.rs TextView::markdown / TextView::html.
     static TextView* New(Ctx* cx, Str source);
     static TextView* NewHtml(Ctx* cx, Str source);
+    // TextView::new(&state), for caller-managed streaming/mutable content.
+    static TextView* New(Ctx* cx, Entity<TextViewState> state);
     TextView* Font(float px);
     TextView* HeadingFont(float px);
+    TextView* Style(const TextViewStyle& style);
+    TextView* Refine(const gpui::Style& style, uint32_t fields);
     TextView* Selectable(bool on = true);
     // `.selection_format(..)`: whether a copy of the selection is the text as
     // rendered or the Markdown it was rendered from. Only meaningful on a
@@ -259,6 +487,7 @@ struct TextView {
     TextView* SelFormat(gpui::SelectionFormat fmt);
     TextView* TableColumnWidth(float px);
     TextView* TableScroll(bool on = true);
+    TextView* Scrollable(bool on = true);
     TextView* ParagraphGap(float px);
     // text_view::LinkClickHandlerFn. The handler's intptr_t is the link's
     // href as a NUL-terminated `const char*`; it points into the parse the
@@ -278,6 +507,13 @@ struct TextView {
     // order they were added, and the first that claims one renders it.
     TextView* Plugin(Str name, MdPluginParseFn parse, MdPluginRenderFn render,
                      void* data = nullptr);
+    TextView* MarkdownExtensionsSet(const MarkdownExtensions& extensions);
+    TextView* MarkdownBlockParser(MarkdownBlockParserFn parser,
+                                  void* data = nullptr);
+    TextView* MarkdownBlockRenderer(Str name, MarkdownBlockRenderFn renderer,
+                                    void* data = nullptr);
+    TextView* Plugin(const MarkdownPlugin& plugin);
+    TextView* Plugin(const TextViewPlugin& plugin);
     El* IntoEl();
 
   private:
@@ -374,6 +610,9 @@ struct TextView {
 
 // Parses `source` into a block tree allocated from `a`. Exposed for tests.
 MdNode* MdParse(Arena* a, Str source);
+
+// state.rs::init: Copy and SelectAll in the TextView key context.
+void TextViewInitKeys();
 
 // "&amp;" -> "&", for the entities that show up in prose. Returns the text
 // unchanged when it is not an entity we know. Shared with ui/html.cpp.
