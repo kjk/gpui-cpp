@@ -138,6 +138,7 @@ int GpuiMain(int argc, char** argv) {
     TestChart();
     TestForm();
     TestQuickJs();
+    TestShellCore();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

@@ -9411,3 +9411,30 @@ CRT; clang/GCC/emscripten use GNU C11. A linked runtime test covers ordinary
 evaluation, modules, promise jobs and exceptions. MSVC release passes 20,976
 checks, and `hello_world` builds with `/W4 /WX` against the four-file source
 set.
+
+## Shell engine-independent core
+
+The first `crates/shell` layer is ported under `src/shell`: the four-value
+script bridge and JavaScript truthiness, semantic color/spacing/radius token
+resolution, runtime timing counters, deny-first capability grants, frozen
+policies, call-scope generations, the declarative spec arena and retained
+render snapshots. The spec covers every upstream component kind and preserves
+Rust's move semantics at the language boundary: a child can be parented once,
+detached state/slot nodes are claimed, one child view cannot be mounted twice,
+and reset makes all old ids expire. Its stable debug tree lets tests inspect a
+snapshot without a renderer or VM.
+
+`CallScopeGuard` keeps `Window`/`App` pointers reachable only during a legal
+host call, supports the one intentional adopted generation used by virtual
+list layout, and refuses both stale `cx` values and re-entrant host borrows.
+Policies retain a frozen capability set while sharing a placeholder live
+configuration block for the module and storage registries that follow.
+Snapshots own their spec arena and retire the callback generation through a
+weak runtime lease when dropped.
+
+Filesystem grants currently produce a `{root, relative}` authority pair and
+reject lexical traversal. That pair must be consumed by the platform
+capability opener added with the filesystem API; ambiently joining and opening
+it would lose upstream `cap-std`'s symlink/TOCTOU protection. The portable
+tests therefore pin authority selection now and will pin the reparse/symlink
+behavior with the platform implementation. MSVC release passes 21,095 checks.
