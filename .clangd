@@ -1,0 +1,62 @@
+# clangd configuration for gpui-cpp
+# This tells clangd to understand MSVC-style compiler flags used by the build.
+#
+# The project builds with cl.exe or clang-cl (bun cmd/build.ts). clangd needs
+# to know the MSVC include paths and that /I flags point to .work/ (amalgam).
+#
+# For best results on Windows:
+#   1. Install "C++ Clang Compiler for Windows" via VS Installer (clang-cl)
+#   2. Open this folder in VS Code with clangd extension, or use clangd in Zed
+#   3. Optionally run: powershell -File cmd/gen-compile-commands.ps1
+
+CompileFlags:
+  # Project-wide defines and includes (matching cflagsFor in cmd/build.ts)
+  Add:
+    - "-std=c++20"
+    - "-DUNICODE"
+    - "-D_UNICODE"
+    - "-I.work"
+    # MSVC build uses /W4 /WX; clangd should not treat warnings as errors
+    - "-Wno-everything"
+    # Restore a reasonable set so real issues still surface:
+    - "-Wall"
+    - "-Wextra"
+    # MSVC-specific idioms the tree intentionally uses:
+    - "-Wno-microsoft-exception-spec"
+    - "-Wno-delete-non-abstract-non-virtual-dtor"
+    - "-Wno-missing-field-initializers"
+    - "-Wno-unused-command-line-argument"
+    - "-Wno-unused-function"   # amalgam concatenates files; some helpers are single-use
+
+  # Strip MSVC-only flags that clangd does not understand
+  Remove:
+    - "/nologo"
+    - "/std:c++20"
+    - "/EHsc"
+    - "/utf-8"
+    - "/W4"
+    - "/WX"
+    - "/wd*"
+    - "/MP"
+    - "/FS"
+    - "/Zi"
+    - "/Z7"
+    - "/MT"
+    - "/MTd"
+    - "/O2"
+    - "/Od"
+    - "/Gy"
+    - "/Gw"
+    - "/DDEBUG"
+    - "/DNDEBUG"
+    - "/fsanitize=address"
+
+# Tell clangd the amalgam is the actual source of truth for indexing
+Index:
+  Background: Build
+
+# On Windows, clangd can auto-discover MSVC includes if clang-cl is on PATH.
+# If you get "fatal error: 'windows.h' file not found", ensure either:
+#   - clang-cl is on PATH (VS Installer → C++ Clang Compiler for Windows), or
+#   - run from a Developer Command Prompt, or
+#   - set CPATH/INCLUDE in your shell before starting your editor.
