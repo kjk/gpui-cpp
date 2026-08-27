@@ -645,7 +645,7 @@ struct HtmlBuild {
     bool raw = false;
     // html5ever's open-element stack is a Vec. Arena-backed segments keep the
     // same shape here without imposing a port-only nesting depth.
-    ArenaVec<HtmlOpen> stack = {};
+    ArenaVec<HtmlOpen> stack {};
 };
 
 static MdNode* HtmlNewNode(HtmlBuild* b, MdKind k) {

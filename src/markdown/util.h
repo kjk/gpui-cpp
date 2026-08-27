@@ -114,7 +114,7 @@ struct EditMap {
     struct Entry {
         int32_t at = 0;
         int32_t remove = 0;
-        ArenaVec<Event> add = {};
+        ArenaVec<Event> add {};
     };
 
     // The added events live here rather than in a Vec of Vecs: `Vec<T>` is

@@ -156,8 +156,8 @@ struct MarkdownBlockRenderer {
 // callers can detect that it cannot be honored instead of silently parsing
 // the document as a different dialect.
 struct MarkdownExtensions {
-    ArenaVec<MarkdownBlockParser> blockParsers = {};
-    ArenaVec<MarkdownBlockRenderer> blockRenderers = {};
+    ArenaVec<MarkdownBlockParser> blockParsers {};
+    ArenaVec<MarkdownBlockRenderer> blockRenderers {};
     uint64_t revision = 0;
     bool enableMdx = false;
 
@@ -445,7 +445,7 @@ struct TextView {
     void* tableActionsData = nullptr;
     void* codeActionsData = nullptr;
     // Rust stores plugins in a Vec and offers them in registration order.
-    ArenaVec<MdPlugin> plugins = {};
+    ArenaVec<MdPlugin> plugins {};
     // node.rs min_w_16: the floor a table column shrinks to. Above the floor
     // a column's width is a fraction of the table, proportional to the length
     // of its content, the way render_wrap_table distributes the space.

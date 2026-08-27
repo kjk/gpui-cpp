@@ -36,8 +36,8 @@ struct TreeFrame {
     // not move, so the pointer stays good for as long as the tree does, and
     // the innermost node is one read off the end of this rather than a walk
     // that indexes `children` once per level.
-    ArenaVec<Node*> stack = {};
-    ArenaVec<int32_t> eventStack = {};
+    ArenaVec<Node*> stack {};
+    ArenaVec<int32_t> eventStack {};
 };
 
 struct CompileContext {

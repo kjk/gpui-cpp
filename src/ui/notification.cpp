@@ -780,7 +780,7 @@ El* NotificationList::IntoEl() {
 
     // Group after applying the global visibility limit. A notification-level
     // placement creates a separate stable stack, exactly as grouped() does.
-    ArenaVec<int> groups[8] = {};
+    ArenaVec<int> groups[8] {};
     int groupOrder[8] = {};
     int groupCount = 0;
     bool present[8] = {};

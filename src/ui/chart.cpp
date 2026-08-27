@@ -592,8 +592,8 @@ static void PaintPieLabels(PaintCtx* ctx, PieChart* p, float cx, float cy,
     const Theme& th = ThemeNow(ctx->app);
     Rgba color = p->hasLabelColor ? p->labelColor : th.foreground;
     float labelR = p->outerRadius + p->labelGap;
-    ArenaVec<PieLabelLayout> right = {};
-    ArenaVec<PieLabelLayout> left = {};
+    ArenaVec<PieLabelLayout> right {};
+    ArenaVec<PieLabelLayout> left {};
     float angle = -kPi * 0.5f;
     for (int i = 0; i < p->slices.len; i++) {
         const PieSlice& s = p->slices[i];

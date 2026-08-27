@@ -194,7 +194,7 @@ State DocumentFlowEnd(Tokenizer* t) {
                       : StateNext(StateName::FlowStart);
     t->tokenizeState.documentChildStateSome = false;
 
-    ArenaVec<Event> emptyExits = {};
+    ArenaVec<Event> emptyExits {};
     t->tokenizeState.documentExits.Append(emptyExits);
 
     state = Push(child, child->point.index, child->point.vs, t->point.index,
@@ -274,7 +274,7 @@ static void ExitContainers(Tokenizer* t, Phase phase) {
     if (stackClose.len > 0) {
         int32_t index = t->tokenizeState.documentExits.len -
                         (phase == Phase::After ? 2 : 1);
-        ArenaVec<Event> exits = {};
+        ArenaVec<Event> exits {};
         while (stackClose.len > 0) {
             ContainerState container = stackClose[--stackClose.len];
             Name name = Name::BlockQuote;

@@ -503,7 +503,7 @@ State AutolinkEmailValue(Tokenizer* t) {
 // parse's scratch arena, and is only ever read.
 struct Sequence {
     uint8_t marker = 0;
-    ArenaVec<int32_t> stack = {};
+    ArenaVec<int32_t> stack {};
     int32_t index = 0;
     Point startPoint = {};
     Point endPoint = {};
@@ -555,7 +555,7 @@ static bool StackEq(const ArenaVec<int32_t>& a, const ArenaVec<int32_t>& b) {
 static void GetSequences(Tokenizer* t, Vec<Sequence>& sequences) {
     Arena* a = t->parseState->scratch;
     int32_t index = 0;
-    ArenaVec<int32_t> stack = {};
+    ArenaVec<int32_t> stack {};
     while (index < t->events.len) {
         const Event& enter = t->events[index];
         if (enter.name == Name::AttentionSequence) {

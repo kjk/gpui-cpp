@@ -1054,7 +1054,7 @@ void GfmAutolinkLiteralResolve(Tokenizer* t) {
                     SliceFromPosition(t->parseState->bytes, position);
                 Str bytes = slice.bytes;
                 int32_t byteIndex = 0;
-                ArenaVec<Event> replace = {};
+                ArenaVec<Event> replace {};
                 Point point = t->events[index - 1].point;
                 int32_t startIndex = point.index;
                 int32_t min = 0;

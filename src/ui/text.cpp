@@ -464,7 +464,7 @@ struct MdBuild {
     // The marks in effect, from the enclosing inline nodes.
     uint8_t marks = 0;
     Str href = {};
-    ArenaVec<MdDef> defs = {};
+    ArenaVec<MdDef> defs {};
 };
 
 // A node's strings are ArenaStr — an offset into the arena the tree was
