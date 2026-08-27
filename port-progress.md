@@ -9206,3 +9206,10 @@ wrapper. A transient asynchronous runtime failure starts the same creation once
 more before Wry's waiter sees it; the wrapper owns the profile path, options and
 original COM handler, so both the retry and cancellation paths remain valid
 after `CreateEnvironmentWithOptions` returns.
+
+The Windows loader now balances each successful `LoadLibrary` exactly like
+Wry's pinned `WebView2LoaderStatic.lib`: after the internal creation entry point
+returns, a client that exports `DllCanUnloadNow` has the loader's reference
+released. The WebView2 client pins itself for its asynchronous work and live COM
+objects; clients without that unload contract remain loaded. Repeated webview
+construction therefore no longer leaks one module reference per view.

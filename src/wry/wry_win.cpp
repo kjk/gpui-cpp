@@ -1671,6 +1671,12 @@ static HRESULT CreateEnvironmentWithOptions(
                      ? create(TRUE, rt.runtimeType, retry->userDataFolder, options, retry)
                      : E_OUTOFMEMORY;
     retry->Release();
+    // WebView2LoaderStatic releases its loader reference when this export is
+    // present. The client pins its own module for asynchronous work and live
+    // COM objects; absence of the export is the loader's signal to keep it.
+    if (GetProcAddress(client, "DllCanUnloadNow")) {
+        FreeLibrary(client);
+    }
     free(userDataOverride);
     return hr;
 }
