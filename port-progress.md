@@ -9200,3 +9200,9 @@ legacy user, each keyed by application id, executable name and finally `*`.
 This applies to browser/runtime folder, user-data folder, appended arguments,
 channel order and release masks, so centrally managed WebView2 deployments no
 longer diverge from Wry merely because this tree writes out the loader.
+
+Windows environment creation now has the pinned loader's one-retry completion
+wrapper. A transient asynchronous runtime failure starts the same creation once
+more before Wry's waiter sees it; the wrapper owns the profile path, options and
+original COM handler, so both the retry and cancellation paths remain valid
+after `CreateEnvironmentWithOptions` returns.

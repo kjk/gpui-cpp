@@ -1550,6 +1550,64 @@ typedef HRESULT(STDMETHODCALLTYPE* CreateWebViewEnvironmentWithOptionsInternalFn
     BOOL fromClientDll, int runtimeType, PCWSTR userDataFolder, IUnknown* environmentOptions,
     ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler* handler);
 
+// WebView2Loader retries one failed asynchronous environment creation before
+// forwarding the result. Own every argument because Invoke runs after the
+// caller's stack and its override buffers are gone.
+struct EnvironmentCreatedRetryHandler
+    : ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler {
+    LONG refs = 1;
+    CreateWebViewEnvironmentWithOptionsInternalFn create = nullptr;
+    int runtimeType = 0;
+    WCHAR* userDataFolder = nullptr;
+    IUnknown* options = nullptr;
+    ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler* original = nullptr;
+    int retries = 1;
+
+    ~EnvironmentCreatedRetryHandler() {
+        free(userDataFolder);
+        if (options) {
+            options->Release();
+        }
+        if (original) {
+            original->Release();
+        }
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) {
+            return E_POINTER;
+        }
+        if (riid == IID_IUnknown ||
+            riid == __uuidof(ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler)) {
+            *ppv = (ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler*)this;
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return (ULONG)InterlockedIncrement(&refs); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG left = InterlockedDecrement(&refs);
+        if (left == 0) {
+            delete this;
+        }
+        return (ULONG)left;
+    }
+    HRESULT STDMETHODCALLTYPE Invoke(HRESULT result,
+                                     ICoreWebView2Environment* environment) override {
+        if (SUCCEEDED(result) || retries <= 0) {
+            return original->Invoke(result, environment);
+        }
+        retries--;
+        HRESULT hr = create(TRUE, runtimeType, userDataFolder, options, this);
+        if (FAILED(hr)) {
+            return original->Invoke(hr, nullptr);
+        }
+        return S_OK;
+    }
+};
+
 // What the SDK's loader hands the runtime when the caller named no data
 // directory: the exe's own path with ".WebView2" after it. The runtime does
 // not fill one in itself — it answers ERROR_FILE_NOT_FOUND for a null one.
@@ -1599,7 +1657,20 @@ static HRESULT CreateEnvironmentWithOptions(
         free(userDataOverride);
         return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
-    HRESULT hr = create(TRUE, rt.runtimeType, userDataFolder, options, handler);
+    EnvironmentCreatedRetryHandler* retry = new EnvironmentCreatedRetryHandler();
+    retry->create = create;
+    retry->runtimeType = rt.runtimeType;
+    retry->userDataFolder = WStrDup(userDataFolder);
+    retry->options = options;
+    retry->original = handler;
+    if (options) {
+        options->AddRef();
+    }
+    handler->AddRef();
+    HRESULT hr = retry->userDataFolder
+                     ? create(TRUE, rt.runtimeType, retry->userDataFolder, options, retry)
+                     : E_OUTOFMEMORY;
+    retry->Release();
     free(userDataOverride);
     return hr;
 }
