@@ -1,10 +1,10 @@
 # gpui-cpp-dist
 
-The single-file build of [gpui-cpp](https://github.com/kjk/gpui-cpp): the whole
-library is `gpui.h` and `gpui.cpp`, amalgamated from that repo's `src/**` by its
-`cmd/update-dist.ts`. Everything beside those two files is here so you can run
-them before you commit to them — every example, the assets they load, and the
-build and run scripts, which are the same ones the source repo uses.
+The amalgamated build of [gpui-cpp](https://github.com/kjk/gpui-cpp): GPUI is
+`gpui.h` and `gpui.cpp`, and its QuickJS-NG engine is the separate generated
+`quickjs/quickjs.h` and `quickjs/quickjs.c`. Everything beside those four files
+is here so you can run them before you commit to them — every example, the
+assets they load, and the build and run scripts used by the source repo.
 
 Nothing here is written by hand, so issues and pull requests belong in the
 source repo.
@@ -38,21 +38,22 @@ bun run.ts -wasm story         # build for the browser, serve it, open a tab
 ## What is here
 
 ```
-gpui.h, gpui.cpp   the library, and the only two files you need
-examples/          every example, including story/ and showcase/
-assets/            icons, images and documents the examples load at runtime
-web/shell.html     the page a -wasm build is served in
-build.ts, run.ts   the source repo's own build and run scripts
+gpui.h, gpui.cpp     the C++20 library amalgam
+quickjs/             pinned QuickJS-NG as one C11 header and one C source
+examples/            every example, including story/ and showcase/
+assets/              icons, images and documents the examples load at runtime
+web/shell.html       the page a -wasm build is served in
+build.ts, run.ts     the source repo's own build and run scripts
 ```
 
 `out/` is where builds land. Nothing else is generated in place.
 
 ## Use it
 
-Drop both files into your tree, `#include "gpui.h"` where you need the API,
-and compile `gpui.cpp` as one more source file. It is C++20, and the platform
-halves are already inside it behind `GPUI_OS_*` guards, so the same pair
-builds on all four:
+Drop the GPUI pair and `quickjs/` into your tree, `#include "gpui.h"` where you
+need the API, compile `gpui.cpp` as C++20, and compile `quickjs/quickjs.c` as
+C11. The platform halves are already inside `gpui.cpp` behind `GPUI_OS_*`
+guards, so the same source set builds on all four:
 
 - **Windows** — `cl /std:c++20 /EHsc /utf-8 /DUNICODE /D_UNICODE`, static CRT;
   links against the Win32, Direct2D and DirectWrite import libraries.
@@ -63,7 +64,12 @@ builds on all four:
   draws through Canvas2D and needs no library at all. em++ rather than emcc:
   the link needs the C++ runtime and emcc leaves it out.
 
-No other dependencies, no build system, no STL containers.
+Compile QuickJS with `/TC /std:c11 /experimental:c11atomics` under MSVC
+(`/experimental:c11atomics` is not needed by clang-cl), or with
+`-x c -std=gnu11` under clang, GCC and emscripten. `build.ts` supplies the full
+warning and platform flags.
+
+No other dependencies, no nested build system, no STL containers.
 
 ## This copy
 

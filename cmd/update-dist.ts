@@ -1,5 +1,7 @@
-// Amalgamate src/**/*.h and src/**/*.cpp into two files: gpui.h and gpui.cpp.
-// Both are the same on every platform.
+// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h and gpui.cpp. QuickJS is
+// the one source that stays separate: its generated C11 amalgam and public
+// header are copied as quickjs/quickjs.c + quickjs.h. All four are the same on
+// every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
 // _mac.cpp, _wasm.cpp, _mem_posix.cpp for the Linux and macOS halves both,
@@ -9,7 +11,7 @@
 // drops the two halves that are not this platform's before anything parses
 // them. On macOS the whole file is Objective-C++, because the mac half is.
 //
-// The published pair lives in a repo of its own and this script run by hand is
+// The published source set lives in a repo of its own and this script run by hand is
 // the only thing that writes it. Nothing automatic may: the three platform
 // builds, the test runner and CI all amalgamate into .work/, which is
 // gitignored, so an ordinary build never touches what gets published. `outDir`
@@ -17,16 +19,16 @@
 //
 //   bun cmd/update-dist.ts              # sync, build, check, copy, readme, publish
 //   bun cmd/update-dist.ts -no-publish  # everything but the commit and push
-//   bun cmd/update-dist.ts -work        # just the .work/ pair a build compiles
+//   bun cmd/update-dist.ts -work        # just the .work/ sources a build compiles
 //
 // import { buildDist } from "./update-dist.ts";
 // buildDist({ outDir: ".work" });   // what a build script may do
 //
-// The two destinations differ. dist/ is what a reader opens: the comments are
+// The two destinations differ. dist/ is what a reader opens: GPUI comments are
 // stripped, runs of blank lines collapse to one, and the #include lines are
 // lifted out of the chunks to the top of gpui.cpp and de-duplicated, since one
 // translation unit only needs each header once. .work/ is the copy every build
-// compiles, and it is the sources concatenated and nothing else -- comments and
+// compiles, and GPUI is the sources concatenated and nothing else -- comments and
 // all -- so a line in it is the line the `#line 1 "src/..."` marker above it
 // says, and a debugger or a compiler diagnostic lands where you expect.
 
@@ -35,9 +37,9 @@ import { dirname, join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 
-// Where the source lives, and where the published pair lives. The two files
-// are the whole of gpui-cpp-dist: it has no history of its own worth reading,
-// it is a snapshot of this repo you can drop into a project.
+// Where the source lives, and where the published source set lives. The GPUI
+// pair plus the QuickJS pair are the compiled part of gpui-cpp-dist; it has no
+// history of its own worth reading, it is a snapshot of this repo.
 export const srcRepoUrl = "https://github.com/kjk/gpui-cpp";
 export const srcBranch = "main";
 export const distRepoUrl = "https://github.com/kjk/gpui-cpp-dist.git";
@@ -63,6 +65,12 @@ export type BuildDistResult = {
   outDir: string;
   headerPath: string;
   sourcePath: string;
+  quickjsHeaderPath: string;
+  quickjsSourcePath: string;
+  quickjsHeaderBytes: number;
+  quickjsSourceBytes: number;
+  quickjsHeaderLines: number;
+  quickjsSourceLines: number;
   headerBytes: number;
   sourceBytes: number;
   headerLines: number;
@@ -496,7 +504,10 @@ function checkIsolation(files: string[]): void {
 export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const outDir = opts.outDir;
   const markdown = markdownVariant();
-  const headers = listSrc(".h");
+  // QuickJS is already its own upstream-generated amalgam, compiled as C11.
+  // Folding it into gpui.h/gpui.cpp would both expose its API as GPUI's and
+  // ask a C++ compiler to parse C source.
+  const headers = listSrc(".h").filter((rel) => !rel.startsWith("src/quickjs/"));
   const foundCpps = preferredCppOrder(listSrc(".cpp"));
   checkIsolation([...headers, ...foundCpps]);
   const allCpps = foundCpps.filter((rel) => {
@@ -657,19 +668,34 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   mkdirSync(absOut, { recursive: true });
   const headerPath = join(absOut, "gpui.h");
   const sourcePath = join(absOut, "gpui.cpp");
+  const quickjsDir = join(absOut, "quickjs");
+  const quickjsHeaderPath = join(quickjsDir, "quickjs.h");
+  const quickjsSourcePath = join(quickjsDir, "quickjs.c");
   const writeIfChanged = (path: string, text: string) => {
     if (existsSync(path) && readFileSync(path, "utf8") === text) {
       return;
     }
+    rmSync(path, { force: true });
     writeFileSync(path, text, "utf8");
   };
   writeIfChanged(headerPath, headerText);
   writeIfChanged(sourcePath, sourceText);
+  mkdirSync(quickjsDir, { recursive: true });
+  const quickjsHeaderText = readLf("src/quickjs/quickjs.h");
+  const quickjsSourceText = readLf("src/quickjs/quickjs.c");
+  writeIfChanged(quickjsHeaderPath, quickjsHeaderText);
+  writeIfChanged(quickjsSourcePath, quickjsSourceText);
 
   return {
     outDir,
     headerPath: srcRel(headerPath),
     sourcePath: srcRel(sourcePath),
+    quickjsHeaderPath: srcRel(quickjsHeaderPath),
+    quickjsSourcePath: srcRel(quickjsSourcePath),
+    quickjsHeaderBytes: Buffer.byteLength(quickjsHeaderText, "utf8"),
+    quickjsSourceBytes: Buffer.byteLength(quickjsSourceText, "utf8"),
+    quickjsHeaderLines: countLines(quickjsHeaderText),
+    quickjsSourceLines: countLines(quickjsSourceText),
     headerBytes: Buffer.byteLength(headerText, "utf8"),
     sourceBytes: Buffer.byteLength(sourceText, "utf8"),
     headerLines: countLines(headerText),
@@ -691,7 +717,7 @@ function countLines(text: string): number {
   return text.endsWith("\n") ? n - 1 : n;
 }
 
-// 123,434 — thousands separated, so the two files' sizes can be compared at a
+// 123,434 — thousands separated, so generated file sizes can be compared at a
 // glance rather than counted digit by digit.
 function formatCount(n: number): string {
   return n.toLocaleString("en-US");
@@ -780,7 +806,7 @@ function syncDistRepo(): void {
 const distScripts = ["build.ts", "run.ts", "winapi.ts", "mac-window-place.m"];
 const distDirs = ["examples", "assets", "web"];
 
-// The snapshot is a working checkout, not just two files: `bun run.ts -rel
+// The snapshot is a working checkout, not just the generated sources: `bun run.ts -rel
 // showcase` writes out/, `-compare` clones .work/gpui-component, and a -wasm
 // build may install .emsdk/. None of that is the snapshot, and the publish
 // step commits whatever git reports, so it has to be ignored over there too.
@@ -820,7 +846,7 @@ function writeDistReadme(sha: string): string {
 }
 
 // Build every example against the amalgam that was just written, which is the
-// only check that matters: it is what someone downloading these two files
+// only check that matters: it is what someone downloading these sources
 // does. GPUI_AMALGAM_DIR points the platform build at this copy instead of
 // .work/, and its objects go to their own out/ tree.
 function checkExamples(): void {

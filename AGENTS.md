@@ -63,12 +63,22 @@ this tree, `src/markdown/` parses every `TextView`, and `src/wry/` is the
 webview `crates/webview` puts in a window. See `src/taffy/readme.md`,
 `src/markdown/readme.md` and `src/wry/readme.md`.
 
+`crates/shell` is in scope too. Its JavaScript engine is the explicit vendoring
+exception: the exact QuickJS-NG revision recorded in `cmd/run.ts` is checked out
+only under `.work/quickjs-ng`, and `bun cmd/update-quickjs.ts` regenerates the one
+tracked C header and one tracked C source under `src/quickjs/`. Ordinary builds
+never fetch it. `quickjs-libc.c` is not included; Shell owns its sandboxed
+module loader, scheduler and capability-gated system APIs.
+
 ## Non-goals
 
 These are the standing exclusions. Everything else in gpui-component is in
 scope, and a module being large or unglamorous is not a reason to skip it.
 
-- Zed's scene graph as a whole, and `async` anything. Two halves of it are
+- Zed's scene graph as a whole, and general-purpose C++ futures/coroutines.
+  Shell's JavaScript promises are the narrow exception: they are implemented
+  over callback jobs, `ExecSpawn`, `WindowPost` and window timers, with no C++
+  async runtime. Two halves of the scene graph are
   here and neither is the whole. `src/gpui/paintgpu.h` is the renderer half —
   one instance buffer a frame, SDF rounded rects and borders, a glyph atlas,
   stencil-and-cover paths, which is what Blade and `directx_renderer.rs` do —
@@ -93,11 +103,14 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   cancel
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
 - Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
-- A network beyond one GET. `src/sys/http.h` fetches the bytes at an http(s)
+- A general network beyond one GET. `src/sys/http.h` fetches the bytes at an http(s)
   URL with the OS's own client — WinHTTP, NSURLSession, libcurl — because a
   remote image needs it. There is no POST, no session, no socket and no TLS
   of ours, and a bigger client wants a bigger reason than "it would be tidy".
-  What it is for: `gpui/image.h`
+  What it is for: `gpui/image.h`. Shell's default-denied capabilities are the
+  exception: its private platform seams implement the bounded HTTP, TCP and
+  WebSocket surface upstream exposes, without turning `src/sys/http.h` into a
+  general client.
 - Anything that needs a third-party C++ library, by hard rule 3: tree-sitter
   and syntect (so `highlighter` stays the small hand-written lexer it is), an
   LSP client, resvg, ropey, html5ever. Where Rust reaches for one of these and
@@ -120,7 +133,7 @@ rediscover it.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout, and it is `namespace base`. Everything else in `src/` lives in `namespace gpui` (themed widgets in `gpui::component`), which takes the base in with a using-directive, so gpui code writes `Str` unqualified and `gpui::Str` still names it from outside. Examples `#include "gpui.h"` and `using namespace gpui;`.
 
    The two ported crates are the reason for the split. `src/taffy` and `src/markdown` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/update-dist.ts` fails the build if that stops being true. Keep it that way when adding to either — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
-3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs — plus WinHTTP for `src/sys/http_win.cpp`. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`, and libcurl the same way when it is installed (the one soft dependency: without it the tree still builds and only loses remote images). macOS: clang++ with Cocoa, Core Graphics, Core Text, IOKit and Foundation's NSURLSession from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no vendored library and no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). Vendoring one would need a bar nothing has cleared: no build system of its own, no transitive dependencies, and a reason neither of those two routes works.
+3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs — plus WinHTTP for `src/sys/http_win.cpp`. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`, and libcurl the same way when it is installed (the one soft dependency: without it the tree still builds and only loses remote images). macOS: clang++ with Cocoa, Core Graphics, Core Text, IOKit and Foundation's NSURLSession from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). QuickJS-NG is the sole vendored-source exception, pinned and reduced by `cmd/update-quickjs.ts` to `src/quickjs/quickjs.h` plus `quickjs.c`; it is compiled directly as C11 and brings no build system or transitive library.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
 6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/run.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
@@ -302,13 +315,14 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 `Key*` constants in `Gpui.h` (the Win32 `VK_*` values, which the X11 window
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
-`cmd/update-dist.ts` amalgamates `src/` into two files:
-`gpui.h` and `gpui.cpp`. Both are the same on every platform. `.work/` is gitignored and is what
+`cmd/update-dist.ts` amalgamates `src/` into `gpui.h` and `gpui.cpp`, then copies
+the separately compiled `quickjs/quickjs.h` and `quickjs/quickjs.c`. All four
+are the same on every platform. `.work/` is gitignored and is what
 every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
 it. The published copy is a repo of its own,
 [gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to
 `.work/gpui-cpp-dist` and refreshed only by running `bun cmd/update-dist.ts` by
-hand: that syncs the clone, writes the pair into it, builds every example
+hand: that syncs the clone, writes the GPUI and QuickJS pairs into it, builds every example
 against it (`GPUI_AMALGAM_DIR` points the platform build at that copy, and its
 objects go to their own `out/*_dist` tree), rewrites its readme with the
 gpui-cpp commit it came from and a compare link showing what it is behind by,
@@ -319,7 +333,7 @@ on `main` is removed and cloned again rather than repaired: the script writes
 the whole of it and commits whatever `git status` reports, so a stray file
 would be published.
 
-The snapshot is a checkout, not two files. Beside the pair go every example,
+The snapshot is a checkout, not four source files. Beside both pairs go every example,
 `assets/`, `web/shell.html`, `build.ts` and `run.ts` at the top level, and
 `winapi.ts` + `mac-window-place.m` because `run.ts -compare` reaches for them
 by name — so `bun run.ts story` works in a fresh clone of it. Its `.gitignore`

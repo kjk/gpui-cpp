@@ -9387,3 +9387,27 @@ entity destructor hides the native child immediately, while native destruction
 waits for the final handle, matching Rust's `Rc<wry::WebView>` lifetime and its
 parent-window warning. The public pin metadata now names `gpui-wry` among the
 ported crates. MSVC release tests pass 20,961 checks.
+
+## Shell foundation: pinned QuickJS-NG
+
+Shell is no longer excluded. The runtime/network exceptions are explicit and
+bounded to `src/shell`, and its JavaScript engine is QuickJS-NG master at
+`5cbbc675f13067ae2113b2ccacbdd05db2595496` (`v0.16.2-9-g5cbbc67`). The
+disposable source checkout is `.work/quickjs-ng`; `cmd/update-quickjs.ts`
+follows upstream's `amalgam.js` order and vendors exactly one public header and
+one C source under `src/quickjs`. It deliberately omits `quickjs-libc.c` so the
+port owns module loading, scheduling and every capability-gated system API.
+
+Both generated files have comments removed, trailing line whitespace removed
+and blank-line runs collapsed. The revision stays machine-readable in the
+header, while all QuickJS and Unicode notices remain as inactive string
+literals rather than comments. The updater verifies that no comment tokens
+remain and that its shorter output round-trips through disk; the explicit
+replace avoids Bun on Windows leaving a prior file's tail behind.
+
+QuickJS remains a separate C11 translation unit beside the C++ amalgam in both
+`.work` and the published snapshot. MSVC uses its C11 atomics mode and static
+CRT; clang/GCC/emscripten use GNU C11. A linked runtime test covers ordinary
+evaluation, modules, promise jobs and exceptions. MSVC release passes 20,976
+checks, and `hello_world` builds with `/W4 /WX` against the four-file source
+set.

@@ -134,3 +134,4 @@ void TestGroupBox();
 void TestSizing();
 void TestChart();
 void TestForm();
+void TestQuickJs();

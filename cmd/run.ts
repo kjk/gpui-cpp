@@ -506,7 +506,7 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 // gpui-cpp-dist carries: a snapshot has to be able to fetch and cargo-build
 // the Rust twin without the rest of cmd/ coming along for the ride.
 
-/** Spec we port: crates/base, crates/ui, crates/story, crates/webview, examples. */
+/** Spec we port: crates/base, crates/ui, crates/story, crates/webview, crates/shell, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
   sha: "6d07863fe7077f85abfa0ec2fcb05f3e17c573b2",
@@ -517,6 +517,7 @@ export const gpuiComponent = {
     "gpui-component": "0.5.2",
     "gpui-component-story": "0.5.1",
     "gpui-wry": "0.5.0",
+    "gpui-shell": "0.1.0",
   },
   dir: ".work/gpui-component",
 } as const;
@@ -577,6 +578,17 @@ export const wry = {
   version: "0.53.3",
   crateSha256: "d9cfe72bff8acf9af0d6d276569be5b9cb3f313f9882761ada5a50d3044214d4",
   dir: "src/wry",
+} as const;
+
+/** JavaScript engine used by the C++ port of crates/shell. */
+export const quickjsNg = {
+  repo: "https://github.com/quickjs-ng/quickjs",
+  sha: "5cbbc675f13067ae2113b2ccacbdd05db2595496",
+  date: "2026-08-26",
+  subject: "docs: add Vayu to projects",
+  version: "v0.16.2-9-g5cbbc67",
+  checkout: ".work/quickjs-ng",
+  dir: "src/quickjs",
 } as const;
 
 export function rustTreeDir(repoRoot: string): string {
@@ -674,6 +686,7 @@ function printVersions(): never {
   console.log("crates ported", `taffy ${taffy.version} -> ${taffy.dir}`);
   console.log("             ", `markdown ${markdown.version} -> ${markdown.dir}`);
   console.log("             ", `${wry.crate} ${wry.version} -> ${wry.dir}`);
+  console.log("engine       ", `quickjs-ng ${quickjsNg.version} ${quickjsNg.sha} -> ${quickjsNg.dir}`);
   try {
     const dir = ensureRustTree(root);
     console.log("tree", dir, headSha(dir));
