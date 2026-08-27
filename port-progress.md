@@ -8392,3 +8392,53 @@ is full: the audit moves to 110 full, 11 partial, 8 adapters and 2 exclusions
 with 208 unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 20,396 checks; wasm passes
 its 19,691 applicable checks. The release story gallery compiles unchanged.
+
+## UI button restores source icon, variant and toggle contracts
+
+The button renderer already covered the ordinary visual variants, split
+dropdowns and multi-select button groups, but it flattened the source's custom
+variant and button-icon enums, omitted configurable rounding and arbitrary
+children, and had no themed `Toggle` or `ToggleGroup`. The toggle story had
+therefore recreated those widgets from unstyled base elements, including a
+wrapper clip that does not exist in Rust.
+
+`ButtonCustomVariant`, `ButtonRounded`, `ButtonIcon`, `ButtonIconVariant`,
+`ButtonVariants`, `ToggleVariant`, `ToggleVariants`, `Toggle` and
+`ToggleGroup` now have source-shaped POD counterparts. Enum payloads live
+beside their discriminators, and Rust extension traits become stateless
+operations over concrete builders. Custom normal/hover/active colors,
+foregrounds, source radius multipliers, exact pixel rounding, per-corner
+rounding, typed icon/spinner/progress content and loading substitution all flow
+through the actual renderer. A loading text-only button no longer invents an
+icon, loading no longer leaks the original icon color into its spinner, and
+content order is the source order: icon, label, children, trailing
+compatibility icon and caret.
+
+The themed toggle uses the accessible base toggle for state and input while
+retaining the source size, outline, selected, hover, disabled, corner and edge
+rules. `ToggleGroupEvent` carries the complete ordered bool vector, and
+segmented groups put borders and rounding on their children rather than a
+clipped wrapper. Button groups and dropdown buttons now do the same. Group
+`children(...)` retains each child's existing disabled state, while an
+explicit group callback still replaces child callbacks when the group is
+disabled and suppresses only emission, preserving the source builder order.
+The story now exercises the real themed toggles and typed progress icon path.
+
+Two representation seams remain explicit. `ButtonCustomVariant::shadow` is
+retained but cannot paint until the runtime has a general box-shadow primitive,
+and a custom loading icon whose source payload is a path can only map to the
+spinner's supported `IconName`. A payload-free `ButtonVariant::Custom` passed
+through the older dialog discriminator setter deliberately retains the default
+palette rather than fabricating one; concrete buttons, groups and dropdowns
+accept the complete custom value.
+
+Tests cover immutable custom builders, variant helpers, radii, typed icon
+variants and content order, loading behavior, toggle state and sizing,
+segmented geometry, vector event emission and group corners. UI button is full:
+the audit moves to 111 full, 10 partial, 8 adapters and 2 exclusions with 200
+unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan tests pass 20,436 checks; wasm
+builds and passes its 19,731 applicable checks. The release story gallery
+compiles. The complete debug/clang showcase matrix still stops at the existing
+`Toast::Absolute` call whose source builder is absent; the next slice repairs
+that independently.

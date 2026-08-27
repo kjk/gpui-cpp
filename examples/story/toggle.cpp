@@ -8,67 +8,45 @@ struct ToggleStory {
     static El* Render(ToggleStory* self, Ctx* cx);
 };
 
-static void OnToggle(ToggleStory* self, Ctx* cx, const ClickEvent*,
-                     intptr_t slot) {
-    if (slot < 0) {
-        self->toggleSel = self->toggleSel == 1 ? 0 : 1;
-    } else if (slot < 10) {
-        self->toggles[slot] = !self->toggles[slot];
-    }
+static void OnPreview(ToggleStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t checked) {
+    self->toggleSel = checked ? 1 : 0;
     Notify(cx);
 }
 
-// `seg` is where this chip sits in a segmented group: -1 for a chip on its
-// own, 0 for the first, 1 for a middle one and 2 for the last. A segmented
-// group is a row of outline toggles that drop their left edge after the
-// first, so the border between two of them is one line rather than two, and
-// only the ends are rounded (button/toggle.rs ToggleGroup::render).
-static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
-                      IconName icon, bool on, bool outline, int seg = -1) {
-    Arena* a = cx->a;
-    const Theme& th = ThemeNow(cx->app);
-    // The toggle takes the press itself; the page still needs to know which
-    // chip it was, so the slot rides on the listener the way Rust captures it
-    // in the closure.
-    El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", slot)), on, false,
-                        ListenerArg(onToggle, slot))
-                ->H(28)
-                ->PadX(label ? 10.f : 8.f)
-                ->ItemsCenter()
-                ->JustifyCenter()
-                ->Gap(6);
-    // A chip in a group takes its rounding from the group's own clip, the
-    // way a joined Button does.
-    t->Radius(seg < 0 ? th.radius : 0.f);
-    if (outline) {
-        if (seg <= 0) {
-            t->Border(1, th.border);
-        } else {
-            t->BorderT(1, th.border)
-                ->BorderR(1, th.border)
-                ->BorderB(1, th.border);
-        }
-    }
-    if (on) {
-        t->Bg(th.tokens.accent);
-    } else {
-        t->HoverBg(th.tokens.muted);
-    }
-    if (icon != IconName::None) {
-        t->Child(IconEl(a, icon, 14)->Fg(th.foreground));
-    }
-    if (label) {
-        // Toggle is text_xs at XSmall and text_sm at Small; Medium and Large
-        // name no size and read at the base (button/toggle.rs).
-        t->Child(StoryTxt(cx, Str(label), 16, th.foreground));
-    }
-    return t;
+static void OnFavorite(ToggleStory* self, Ctx* cx, const ClickEvent*,
+                       intptr_t checked) {
+    self->toggles[0] = checked != 0;
+    Notify(cx);
+}
+
+static void CopyToggleGroup(ToggleStory* self, Ctx* cx,
+                            const component::ToggleGroupEvent* event,
+                            int first) {
+    int count = std::min(event->count, 10 - first);
+    for (int i = 0; i < count; i++) self->toggles[first + i] = event->checked[i];
+    Notify(cx);
+}
+
+static void OnGhostGroup(ToggleStory* self, Ctx* cx,
+                         const component::ToggleGroupEvent* event) {
+    CopyToggleGroup(self, cx, event, 1);
+}
+
+static void OnOutlineGroup(ToggleStory* self, Ctx* cx,
+                           const component::ToggleGroupEvent* event) {
+    CopyToggleGroup(self, cx, event, 4);
+}
+
+static void OnSegmentedGroup(ToggleStory* self, Ctx* cx,
+                             const component::ToggleGroupEvent* event) {
+    CopyToggleGroup(self, cx, event, 7);
 }
 
 El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
-    Listener onToggle = Listen(cx, &OnToggle);
+    UiSize size = self->toolbar.size;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
@@ -76,11 +54,18 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
                            "Text and icon toggles with clear selected states.");
     StorySectionBody(def)->FlexCol()->W(512)->ItemsCenter()->Gap(12);
     El* defRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    // Neither of the two says .outline(), so both are ghost.
-    defRow->Child(ToggleChip(cx, onToggle, -1, "Preview", IconName::None,
-                             self->toggleSel == 1, false));
-    defRow->Child(ToggleChip(cx, onToggle, 0, nullptr, IconName::Star,
-                             self->toggles[0], false));
+    defRow->Child(component::Toggle::New(cx, StrL("preview"))
+                      ->Label(StrL("Preview"))
+                      ->WithSize(size)
+                      ->Checked(self->toggleSel == 1)
+                      ->OnClick(Listen(cx, &OnPreview))
+                      ->IntoEl());
+    defRow->Child(component::Toggle::New(cx, StrL("favorite"))
+                      ->Icon(IconName::Star)
+                      ->WithSize(size)
+                      ->Checked(self->toggles[0])
+                      ->OnClick(Listen(cx, &OnFavorite))
+                      ->IntoEl());
     StorySectionAdd(def, defRow);
     page->Child(def);
 
@@ -89,40 +74,58 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     StorySectionBody(vars)->W(512)->FlexCol()->ItemsCenter()->Gap(16);
     StorySectionAdd(vars, StoryTxt(cx, StrL("Ghost"), 14, th.foreground)
                               ->Medium());
-    El* ghost = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    ghost->Child(ToggleChip(cx, onToggle, 1, nullptr, IconName::Bell,
-                            self->toggles[1], false));
-    ghost->Child(ToggleChip(cx, onToggle, 2, nullptr, IconName::Inbox,
-                            self->toggles[2], false));
-    ghost->Child(ToggleChip(cx, onToggle, 3, nullptr, IconName::Check,
-                            self->toggles[3], false));
-    StorySectionAdd(vars, ghost);
+    component::ToggleGroup* ghost =
+        component::ToggleGroup::New(cx, StrL("ghost-group"))
+            ->WithSize(size)
+            ->OnClick(Listen(cx, &OnGhostGroup));
+    ghost->Child(component::Toggle::New(cx, StrL("ghost-bell"))
+                     ->Icon(IconName::Bell)
+                     ->Checked(self->toggles[1]));
+    ghost->Child(component::Toggle::New(cx, StrL("ghost-inbox"))
+                     ->Icon(IconName::Inbox)
+                     ->Checked(self->toggles[2]));
+    ghost->Child(component::Toggle::New(cx, StrL("ghost-check"))
+                     ->Icon(IconName::Check)
+                     ->Checked(self->toggles[3]));
+    StorySectionAdd(vars, ghost->IntoEl());
     StorySectionAdd(vars, StoryTxt(cx, StrL("Outline"), 14, th.foreground)
                               ->Medium());
-    El* outline = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    outline->Child(ToggleChip(cx, onToggle, 4, nullptr, IconName::Bell,
-                              self->toggles[4], true));
-    outline->Child(ToggleChip(cx, onToggle, 5, nullptr, IconName::Inbox,
-                              self->toggles[5], true));
-    outline->Child(ToggleChip(cx, onToggle, 6, nullptr, IconName::Check,
-                              self->toggles[6], true));
-    StorySectionAdd(vars, outline);
+    component::ToggleGroup* outline =
+        component::ToggleGroup::New(cx, StrL("outline-group"))
+            ->Outline()
+            ->WithSize(size)
+            ->OnClick(Listen(cx, &OnOutlineGroup));
+    outline->Child(component::Toggle::New(cx, StrL("outline-bell"))
+                       ->Icon(IconName::Bell)
+                       ->Checked(self->toggles[4]));
+    outline->Child(component::Toggle::New(cx, StrL("outline-inbox"))
+                       ->Icon(IconName::Inbox)
+                       ->Checked(self->toggles[5]));
+    outline->Child(component::Toggle::New(cx, StrL("outline-check"))
+                       ->Icon(IconName::Check)
+                       ->Checked(self->toggles[6]));
+    StorySectionAdd(vars, outline->IntoEl());
     page->Child(vars);
 
     El* grp = StorySection(cx, "Group",
                            "Connected toggles keep related choices together.");
     StorySectionBody(grp)->W(512)->FlexCol()->ItemsCenter();
-    // `.segmented().outline()`: the group has no box of its own — each
-    // toggle carries the edges it needs.
-    El* g =
-        Div(a)->FlexRow()->ItemsCenter()->Radius(th.radius)->ClipX()->ClipY();
-    g->Child(ToggleChip(cx, onToggle, 7, "Bold", IconName::None,
-                        self->toggles[7], true, 0));
-    g->Child(ToggleChip(cx, onToggle, 8, "Italic", IconName::None,
-                        self->toggles[8], true, 1));
-    g->Child(ToggleChip(cx, onToggle, 9, "Code", IconName::None,
-                        self->toggles[9], true, 2));
-    StorySectionAdd(grp, g);
+    component::ToggleGroup* segmented =
+        component::ToggleGroup::New(cx, StrL("segmented-group"))
+            ->Segmented()
+            ->Outline()
+            ->WithSize(size)
+            ->OnClick(Listen(cx, &OnSegmentedGroup));
+    segmented->Child(component::Toggle::New(cx, StrL("bold"))
+                         ->Label(StrL("Bold"))
+                         ->Checked(self->toggles[7]));
+    segmented->Child(component::Toggle::New(cx, StrL("italic"))
+                         ->Label(StrL("Italic"))
+                         ->Checked(self->toggles[8]));
+    segmented->Child(component::Toggle::New(cx, StrL("code"))
+                         ->Label(StrL("Code"))
+                         ->Checked(self->toggles[9]));
+    StorySectionAdd(grp, segmented->IntoEl());
     page->Child(grp);
     return page;
 }

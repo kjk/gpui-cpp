@@ -44,6 +44,12 @@ static void ApplyDialogButtonVariant(Button* button, ButtonVariant variant) {
         case ButtonVariant::Text:
             button->Text();
             break;
+        case ButtonVariant::Custom:
+            // The Rust enum carries ButtonCustomVariant in this case. The
+            // dialog's compatibility setter accepts only the discriminator,
+            // so a payload-free Custom is the default button rather than a
+            // fabricated custom palette.
+            break;
         case ButtonVariant::Default:
             break;
     }

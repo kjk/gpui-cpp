@@ -1,9 +1,175 @@
 #include "ui/button.h"
+#include "ui/icon.h"
 #include "ui/menu.h"
+#include "ui/progress.h"
+#include "ui/spinner.h"
 
 namespace gpui {
 
 namespace component {
+
+ButtonCustomVariant ButtonCustomVariant::New(const App* app) {
+    ButtonCustomVariant out;
+    out.color = Rgba8(0, 0, 0, 0);
+    out.foreground = ThemeNow(app).foreground;
+    out.hover = Rgba8(0, 0, 0, 0);
+    out.active = Rgba8(0, 0, 0, 0);
+    return out;
+}
+
+ButtonCustomVariant ButtonCustomVariant::Color(Rgba value) const {
+    ButtonCustomVariant out = *this;
+    out.color = value;
+    return out;
+}
+
+ButtonCustomVariant ButtonCustomVariant::Foreground(Rgba value) const {
+    ButtonCustomVariant out = *this;
+    out.foreground = value;
+    return out;
+}
+
+ButtonCustomVariant ButtonCustomVariant::Hover(Rgba value) const {
+    ButtonCustomVariant out = *this;
+    out.hover = value;
+    return out;
+}
+
+ButtonCustomVariant ButtonCustomVariant::Active(Rgba value) const {
+    ButtonCustomVariant out = *this;
+    out.active = value;
+    return out;
+}
+
+ButtonCustomVariant ButtonCustomVariant::Shadow(bool value) const {
+    ButtonCustomVariant out = *this;
+    out.shadow = value;
+    return out;
+}
+
+static ButtonIcon* ButtonIconAlloc(Ctx* cx, ButtonIconVariant variant) {
+    ButtonIcon* out = ArenaNew<ButtonIcon>(cx->a);
+    out->cx = cx;
+    out->variant = variant;
+    return out;
+}
+
+ButtonIcon* ButtonIcon::New(Ctx* cx, IconName value) {
+    ButtonIcon* out = ButtonIconAlloc(cx, ButtonIconVariant::Icon);
+    out->iconName = value;
+    return out;
+}
+
+ButtonIcon* ButtonIcon::New(Ctx* cx, component::Icon* value) {
+    ButtonIcon* out = ButtonIconAlloc(cx, ButtonIconVariant::Icon);
+    out->icon = value;
+    return out;
+}
+
+ButtonIcon* ButtonIcon::New(Ctx* cx, component::Spinner* value) {
+    ButtonIcon* out = ButtonIconAlloc(cx, ButtonIconVariant::Spinner);
+    out->spinner = value;
+    return out;
+}
+
+ButtonIcon* ButtonIcon::New(Ctx* cx, component::ProgressCircle* value) {
+    ButtonIcon* out = ButtonIconAlloc(cx, ButtonIconVariant::Progress);
+    out->progress = value;
+    return out;
+}
+
+ButtonIcon* ButtonIcon::LoadingIcon(IconName value) {
+    loadingIconName = value;
+    loadingIcon = nullptr;
+    return this;
+}
+
+ButtonIcon* ButtonIcon::LoadingIcon(component::Icon* value) {
+    loadingIcon = value;
+    loadingIconName = IconName::None;
+    return this;
+}
+
+ButtonIcon* ButtonIcon::Loading(bool value) {
+    loading = value;
+    return this;
+}
+
+ButtonIcon* ButtonIcon::WithSize(UiSize value) {
+    size = value;
+    sizePx = 0;
+    return this;
+}
+
+ButtonIcon* ButtonIcon::Size(float value) {
+    sizePx = value;
+    return this;
+}
+
+static float ButtonIconSizePx(UiSize size, float exact) {
+    if (exact > 0) return exact;
+    if (size == UiSize::XSmall) return 12.f;
+    if (size == UiSize::Small) return 14.f;
+    if (size == UiSize::Large) return 24.f;
+    return 16.f;
+}
+
+El* ButtonIcon::IntoEl() {
+    float px = ButtonIconSizePx(size, sizePx);
+    if (loading && variant == ButtonIconVariant::Icon) {
+        Spinner* wait = Spinner::New(cx)->Size(px);
+        if (loadingIcon) {
+            if (loadingIcon->name != IconName::None) wait->Icon(loadingIcon->name);
+            if (loadingIcon->hasColor) wait->Color(loadingIcon->color);
+        } else if (loadingIconName != IconName::None) {
+            wait->Icon(loadingIconName);
+        }
+        return wait->IntoEl();
+    }
+    if (variant == ButtonIconVariant::Spinner) {
+        return spinner ? spinner->Size(px)->IntoEl() : Spinner::New(cx)->Size(px)->IntoEl();
+    }
+    if (variant == ButtonIconVariant::Progress) {
+        return progress ? progress->Size(px)->IntoEl() : nullptr;
+    }
+    if (icon) return icon->Size(px)->IntoEl();
+    return IconEl(cx->a, iconName, px);
+}
+
+Button* ButtonVariants::WithVariant(Button* button, ButtonVariant variant) {
+    return button ? button->WithVariant(variant) : nullptr;
+}
+Button* ButtonVariants::Primary(Button* button) {
+    return button ? button->Primary() : nullptr;
+}
+Button* ButtonVariants::Secondary(Button* button) {
+    return button ? button->Secondary() : nullptr;
+}
+Button* ButtonVariants::Danger(Button* button) {
+    return button ? button->Danger() : nullptr;
+}
+Button* ButtonVariants::Warning(Button* button) {
+    return button ? button->Warning() : nullptr;
+}
+Button* ButtonVariants::Success(Button* button) {
+    return button ? button->Success() : nullptr;
+}
+Button* ButtonVariants::Info(Button* button) {
+    return button ? button->Info() : nullptr;
+}
+Button* ButtonVariants::Ghost(Button* button) {
+    return button ? button->Ghost() : nullptr;
+}
+Button* ButtonVariants::Link(Button* button) {
+    return button ? button->Link() : nullptr;
+}
+Button* ButtonVariants::Text(Button* button) {
+    return button ? button->Text() : nullptr;
+}
+Button* ButtonVariants::Custom(Button* button,
+                               const ButtonCustomVariant& variant) {
+    return button ? button->Custom(variant) : nullptr;
+}
 
 Button* Button::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -20,6 +186,17 @@ Button* Button::Label(Str s) {
 }
 Button* Button::Icon(IconName n) {
     icon = n;
+    buttonIcon = nullptr;
+    return this;
+}
+Button* Button::Icon(ButtonIcon* value) {
+    buttonIcon = value;
+    icon = IconName::None;
+    return this;
+}
+Button* Button::WithVariant(ButtonVariant value) {
+    variant = value;
+    if (value != ButtonVariant::Custom) hasCustom = false;
     return this;
 }
 
@@ -33,43 +210,44 @@ Button* Button::IconRight(IconName n) {
     return this;
 }
 Button* Button::Primary() {
-    variant = ButtonVariant::Primary;
-    return this;
+    return WithVariant(ButtonVariant::Primary);
 }
 Button* Button::Secondary() {
-    variant = ButtonVariant::Secondary;
-    return this;
+    return WithVariant(ButtonVariant::Secondary);
 }
 Button* Button::Danger() {
-    variant = ButtonVariant::Danger;
-    return this;
+    return WithVariant(ButtonVariant::Danger);
 }
 Button* Button::Warning() {
-    variant = ButtonVariant::Warning;
-    return this;
+    return WithVariant(ButtonVariant::Warning);
 }
 Button* Button::Success() {
-    variant = ButtonVariant::Success;
-    return this;
+    return WithVariant(ButtonVariant::Success);
 }
 Button* Button::Info() {
-    variant = ButtonVariant::Info;
-    return this;
+    return WithVariant(ButtonVariant::Info);
 }
 Button* Button::Ghost() {
-    variant = ButtonVariant::Ghost;
-    return this;
+    return WithVariant(ButtonVariant::Ghost);
 }
 Button* Button::Link() {
-    variant = ButtonVariant::Link;
-    return this;
+    return WithVariant(ButtonVariant::Link);
 }
 Button* Button::Text() {
-    variant = ButtonVariant::Text;
-    return this;
+    return WithVariant(ButtonVariant::Text);
 }
 Button* Button::Outline() {
     outline = true;
+    return this;
+}
+Button* Button::Rounded(ButtonRounded value) {
+    rounded = value;
+    if (value != ButtonRounded::Size) roundedPx = 0;
+    return this;
+}
+Button* Button::Rounded(float px) {
+    rounded = ButtonRounded::Size;
+    roundedPx = px;
     return this;
 }
 Button* Button::JustifyStart(bool v) {
@@ -99,12 +277,33 @@ Button* Button::DropdownCaret(bool v) {
     return this;
 }
 Button* Button::Custom(Rgba c) {
-    custom = c;
+    return Custom(ButtonCustomVariant::New(cx->app)
+                      .Color(c)
+                      .Foreground(c)
+                      .Hover(RgbaOpacity(c, 0.1f))
+                      .Active(RgbaOpacity(c, 0.2f)));
+}
+Button* Button::Custom(const ButtonCustomVariant& value) {
+    customVariant = value;
+    custom = value.color;
     hasCustom = true;
+    variant = ButtonVariant::Custom;
     return this;
 }
 Button* Button::Extra(El* e) {
     extra = e;
+    if (e) children.Append(a, e);
+    return this;
+}
+Button* Button::Child(El* e) {
+    if (e) {
+        if (!extra) extra = e;
+        children.Append(a, e);
+    }
+    return this;
+}
+Button* Button::Children(El** values, int count) {
+    for (int i = 0; values && i < count; i++) Child(values[i]);
     return this;
 }
 Button* Button::Loading(bool v) {
@@ -161,6 +360,10 @@ Button* Button::OnClick(Listener l) {
     onClick = l;
     return this;
 }
+Button* Button::OnHover(Listener l) {
+    onHover = l;
+    return this;
+}
 Button* Button::OnClickAction(uint32_t action, intptr_t arg) {
     clickAction = action;
     clickActionArg = arg;
@@ -170,6 +373,7 @@ Button* Button::OnClickAction(uint32_t action, intptr_t arg) {
 El* Button::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     const Rgba clear = Rgba8(0, 0, 0, 0);
+    const Rgba transparentWhite = Rgba8(255, 255, 255, 0);
     const bool dark = ThemeGet(cx->app) == ThemeMode::Dark;
     // ButtonVariant::bg_color / hovered / active / border_color / text_color,
     // in button.rs. Every fill a variant paints is a *token* there —
@@ -283,11 +487,13 @@ El* Button::IntoEl() {
             break;
     }
     if (hasCustom) {
-        fg = custom;
-        bd = custom;
-        bg = outline ? th.background : RgbaOpacity(custom, 0.12f);
-        hover = RgbaOpacity(custom, 0.2f);
-        press = RgbaOpacity(custom, 0.3f);
+        fg = customVariant.foreground;
+        bd = outline ? RgbaMixOklab(customVariant.color, transparentWhite,
+                                    0.4f)
+                     : customVariant.color;
+        bg = RgbaMixOklab(customVariant.color, clear, 0.2f);
+        hover = customVariant.hover;
+        press = customVariant.active;
     }
     if (outline && !hasCustom) {
         // outline_background(state): the semantic token at 0.1 / 0.2 / 0.4,
@@ -414,7 +620,7 @@ El* Button::IntoEl() {
     // a square of the size's own side and no padding at all, rather than the
     // h/px pair a labelled button takes. `.icon()` is not a child in Rust, so
     // an icon alone still lands here; `extra` is what a `.child()` is here.
-    bool iconOnly = !label.s && !extra;
+    bool iconOnly = !label.s && children.len == 0;
     if (iconOnly) {
         h = size == UiSize::XSmall ? 20.f : size == UiSize::Small ? 24.f : 32.f;
         padX = 0;
@@ -445,6 +651,12 @@ El* Button::IntoEl() {
     // without taking disabled styling, so its visual state stays separate
     // while Base still removes its focus and activation behavior.
     bool interactive = !(disabled || loading);
+    float rounding = th.radius;
+    if (rounded == ButtonRounded::None) rounding = 0;
+    else if (rounded == ButtonRounded::Small) rounding = th.radius * 0.5f;
+    else if (rounded == ButtonRounded::Large) rounding = th.radius * 2.f;
+    else if (rounded == ButtonRounded::Size) rounding = roundedPx;
+    if (resolved.Has(StateFieldRadius)) rounding = resolved.style.radius;
     AccessibilityRole role =
         hasAccessibilityRole
             ? accessibilityRole
@@ -461,8 +673,10 @@ El* Button::IntoEl() {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Gap(gap)
-                ->Radius(resolved.Has(StateFieldRadius) ? resolved.style.radius
-                                                        : th.radius);
+                ->Corners(cornerTL ? rounding : 0.f,
+                          cornerTR ? rounding : 0.f,
+                          cornerBR ? rounding : 0.f,
+                          cornerBL ? rounding : 0.f);
     if (accessibilityId.s) {
         e->AccessibilityId(accessibilityId);
     }
@@ -493,8 +707,7 @@ El* Button::IntoEl() {
     if (bd.a) {
         if (joined) {
             // A joined child draws only the edges the group left it, and
-            // takes its rounding from the group's own clip.
-            e->Radius(0);
+            // keeps only the corner radii the group assigned it.
             if (edgeT) {
                 e->BorderT(borderW, bd);
             }
@@ -536,6 +749,7 @@ El* Button::IntoEl() {
             e->HoverFg(fgHover);
         }
     }
+    if (interactive && onHover.IsValid()) e->OnHover(onHover);
     // button.rs: `cursor_default`, and the hand only for the two variants that
     // look like a link rather than a button. A ghost button is still a button,
     // so it keeps the arrow.
@@ -552,13 +766,22 @@ El* Button::IntoEl() {
     if (loading && !disabled) {
         e->Opacity(0.8f);
     }
-    if (extra) {
-        e->Child(extra);
-    } else if (loading) {
-        e->Child(IconEl(a, loadingIcon, iconPx));
+    // button_icon.rs only substitutes a spinner when an icon exists. Loading
+    // a text-only button dims and gates it without inventing new content.
+    if (buttonIcon) {
+        buttonIcon->Loading(loading)->Size(iconPx);
+        if (loadingIcon != IconName::None) buttonIcon->LoadingIcon(loadingIcon);
+        if (El* ic = buttonIcon->IntoEl()) e->Child(ic);
     } else if (icon != IconName::None) {
-        El* ic = IconEl(a, icon, iconPx);
-        if (hasIconColor) {
+        El* ic = nullptr;
+        if (loading) {
+            Spinner* wait = Spinner::New(cx)->Size(iconPx);
+            if (loadingIcon != IconName::None) wait->Icon(loadingIcon);
+            ic = wait->IntoEl();
+        } else {
+            ic = IconEl(a, icon, iconPx);
+        }
+        if (hasIconColor && !loading) {
             ic->Fg(iconColor);
         }
         e->Child(ic);
@@ -582,6 +805,7 @@ El* Button::IntoEl() {
         }
         e->Child(text);
     }
+    for (El* child : children) e->Child(child);
     if (iconRight != IconName::None) {
         e->Child(IconEl(a, iconRight, iconPx));
     }
@@ -598,6 +822,246 @@ El* Button::IntoEl() {
                      ->Fg(RgbaOpacity(fg, 0.75f)));
     }
     return e;
+}
+
+Toggle* Toggle::New(Ctx* cx, Str id) {
+    Toggle* out = ArenaNew<Toggle>(cx->a);
+    out->a = cx->a;
+    out->cx = cx;
+    out->id = id;
+    return out;
+}
+
+Toggle* Toggle::Tooltip(Str value) {
+    tooltip = value;
+    return this;
+}
+Toggle* Toggle::Label(Str value) {
+    label = value;
+    return this;
+}
+Toggle* Toggle::Icon(IconName value) {
+    icon = value;
+    return this;
+}
+Toggle* Toggle::Child(El* value) {
+    if (value) children.Append(a, value);
+    return this;
+}
+Toggle* Toggle::Checked(bool value) {
+    checked = value;
+    return this;
+}
+Toggle* Toggle::OnClick(Listener value) {
+    onClick = value;
+    return this;
+}
+Toggle* Toggle::BorderCorners(bool tl, bool tr, bool br, bool bl) {
+    cornerTL = tl;
+    cornerTR = tr;
+    cornerBR = br;
+    cornerBL = bl;
+    return this;
+}
+Toggle* Toggle::BorderEdges(bool top, bool right, bool bottom, bool left) {
+    edgeT = top;
+    edgeR = right;
+    edgeB = bottom;
+    edgeL = left;
+    return this;
+}
+Toggle* Toggle::WithVariant(ToggleVariant value) {
+    variant = value;
+    return this;
+}
+Toggle* Toggle::Ghost() {
+    return WithVariant(ToggleVariant::Ghost);
+}
+Toggle* Toggle::Outline() {
+    return WithVariant(ToggleVariant::Outline);
+}
+Toggle* Toggle::Disabled(bool value) {
+    disabled = value;
+    return this;
+}
+Toggle* Toggle::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+
+El* Toggle::IntoEl() {
+    const Theme& th = ThemeNow(cx->app);
+    StateStyle pressed;
+    pressed.Bg(th.tokens.accent).Fg(th.accentFg);
+    gpui::ToggleStyles styles;
+    styles.Pressed(pressed);
+    StateStyle instance;
+    instance.Fg(th.foreground);
+    if (variant == ToggleVariant::Outline) {
+        if (edgeL) instance.BorderL(1, th.border);
+        if (edgeR) instance.BorderR(1, th.border);
+        if (edgeT) instance.BorderT(1, th.border);
+        if (edgeB) instance.BorderB(1, th.border);
+        instance.Bg(th.tokens.background);
+    }
+    El* root = gpui::Toggle::New(cx, id, checked, disabled, onClick, &styles,
+                                 &instance)
+                   ->FlexRow()
+                   ->ItemsCenter()
+                   ->JustifyCenter();
+
+    float h = 32.f;
+    float pad = 8.f;
+    float font = 16.f;
+    if (size == UiSize::XSmall) {
+        h = 20.f;
+        pad = 2.f;
+        font = 12.f;
+    } else if (size == UiSize::Small) {
+        h = 24.f;
+        pad = 4.f;
+        font = 14.f;
+    } else if (size == UiSize::Large) {
+        h = 36.f;
+        pad = 12.f;
+        font = 18.f;
+    }
+    root->MinW(h)
+        ->H(h)
+        ->PadX(pad)
+        ->Corners(cornerTL ? th.radius : 0.f,
+                  cornerTR ? th.radius : 0.f,
+                  cornerBR ? th.radius : 0.f,
+                  cornerBL ? th.radius : 0.f);
+    if (!disabled && !checked) {
+        root->HoverBg(th.tokens.accent)->HoverFg(th.accentFg);
+    }
+    if (tooltip.s) root->Tip(tooltip)->AriaLabel(tooltip);
+    if (icon != IconName::None) root->Child(IconEl(a, icon, 16.f));
+    if (label.s) root->Child(TextEl(a, label)->Font(font));
+    for (El* child : children) root->Child(child);
+    return root;
+}
+
+Toggle* ToggleVariants::WithVariant(Toggle* toggle, ToggleVariant variant) {
+    return toggle ? toggle->WithVariant(variant) : nullptr;
+}
+Toggle* ToggleVariants::Ghost(Toggle* toggle) {
+    return toggle ? toggle->Ghost() : nullptr;
+}
+Toggle* ToggleVariants::Outline(Toggle* toggle) {
+    return toggle ? toggle->Outline() : nullptr;
+}
+
+ToggleGroup* ToggleGroup::New(Ctx* cx, Str id) {
+    ToggleGroup* out = ArenaNew<ToggleGroup>(cx->a);
+    out->a = cx->a;
+    out->cx = cx;
+    out->id = id;
+    return out;
+}
+ToggleGroup* ToggleGroup::Child(Toggle* value) {
+    if (value) items.Append(a, value);
+    return this;
+}
+ToggleGroup* ToggleGroup::Children(Toggle** values, int count) {
+    for (int i = 0; values && i < count; i++) Child(values[i]);
+    return this;
+}
+ToggleGroup* ToggleGroup::OnClick(Listener value) {
+    onClick = value;
+    return this;
+}
+ToggleGroup* ToggleGroup::Segmented(bool value) {
+    segmented = value;
+    return this;
+}
+ToggleGroup* ToggleGroup::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+ToggleGroup* ToggleGroup::WithVariant(ToggleVariant value) {
+    variant = value;
+    return this;
+}
+ToggleGroup* ToggleGroup::Ghost() {
+    return WithVariant(ToggleVariant::Ghost);
+}
+ToggleGroup* ToggleGroup::Outline() {
+    return WithVariant(ToggleVariant::Outline);
+}
+ToggleGroup* ToggleGroup::Disabled(bool value) {
+    disabled = value;
+    return this;
+}
+
+struct ToggleGroupState {
+    Vec<bool> checked;
+    Listener onClick = {};
+
+    ~ToggleGroupState() { checked.Reset(); }
+
+    static void OnChildClick(ToggleGroupState* self, Ctx* cx,
+                             const ClickEvent*, intptr_t ix) {
+        if (ix < 0 || ix >= self->checked.len) return;
+        self->checked[(int)ix] = !self->checked[(int)ix];
+        ToggleGroupEvent event{self->checked.els, self->checked.len};
+        ListenerCall(cx->app, cx->win, self->onClick, &event);
+    }
+};
+
+El* ToggleGroup::IntoEl() {
+    Entity<ToggleGroupState> state;
+    ToggleGroupState* stored = nullptr;
+    if (onClick.IsValid() && !disabled) {
+        state = ElementStateEntity<ToggleGroupState>(
+            cx, id, StrL("gpui::component::ToggleGroupState"));
+        stored = state.Get(cx);
+        if (stored) {
+            stored->checked.Clear();
+            for (Toggle* item : items) stored->checked.Append(item->checked);
+            stored->onClick = onClick;
+        }
+    }
+
+    El* root = gpui::ToggleGroup::New(cx, id, Axis::Horizontal);
+    El* row = Div(a)->FlexRow()->ItemsCenter();
+    if (!segmented) row->Gap(8);
+    int n = items.len;
+    for (int i = 0; i < n; i++) {
+        Toggle* item = items[i];
+        item->Disabled(disabled || item->disabled)
+            ->WithSize(size)
+            ->WithVariant(variant);
+        if (segmented && n > 1) {
+            if (i == 0) {
+                item->BorderCorners(true, false, false, true)
+                    ->BorderEdges(true, true, true, true);
+            } else if (i == n - 1) {
+                item->BorderCorners(false, true, true, false)
+                    ->BorderEdges(true, true, true, false);
+            } else {
+                item->BorderCorners(false, false, false, false)
+                    ->BorderEdges(true, true, true, false);
+            }
+        }
+        if (stored) {
+            item->OnClick(ListenTo(state, &ToggleGroupState::OnChildClick, i));
+        }
+        row->Child(item->IntoEl());
+    }
+    return root->Child(row);
+}
+
+ToggleGroup* ToggleVariants::WithVariant(ToggleGroup* group,
+                                         ToggleVariant variant) {
+    return group ? group->WithVariant(variant) : nullptr;
+}
+ToggleGroup* ToggleVariants::Ghost(ToggleGroup* group) {
+    return group ? group->Ghost() : nullptr;
+}
+ToggleGroup* ToggleVariants::Outline(ToggleGroup* group) {
+    return group ? group->Outline() : nullptr;
 }
 
 DropdownButton* DropdownButton::New(Ctx* cx, Str id) {
@@ -630,7 +1094,39 @@ DropdownButton* DropdownButton::Outline() {
 DropdownButton* DropdownButton::WithVariant(ButtonVariant v) {
     hasVariant = true;
     variant = v;
+    if (v != ButtonVariant::Custom) customVariant = {};
     return this;
+}
+DropdownButton* DropdownButton::Primary() {
+    return WithVariant(ButtonVariant::Primary);
+}
+DropdownButton* DropdownButton::Secondary() {
+    return WithVariant(ButtonVariant::Secondary);
+}
+DropdownButton* DropdownButton::Danger() {
+    return WithVariant(ButtonVariant::Danger);
+}
+DropdownButton* DropdownButton::Warning() {
+    return WithVariant(ButtonVariant::Warning);
+}
+DropdownButton* DropdownButton::Success() {
+    return WithVariant(ButtonVariant::Success);
+}
+DropdownButton* DropdownButton::Info() {
+    return WithVariant(ButtonVariant::Info);
+}
+DropdownButton* DropdownButton::Ghost() {
+    return WithVariant(ButtonVariant::Ghost);
+}
+DropdownButton* DropdownButton::Link() {
+    return WithVariant(ButtonVariant::Link);
+}
+DropdownButton* DropdownButton::Text() {
+    return WithVariant(ButtonVariant::Text);
+}
+DropdownButton* DropdownButton::Custom(const ButtonCustomVariant& value) {
+    customVariant = value;
+    return WithVariant(ButtonVariant::Custom);
 }
 DropdownButton* DropdownButton::WithSize(UiSize s) {
     hasSize = true;
@@ -654,10 +1150,17 @@ static UiSize DropdownSize(const DropdownButton& d) {
     }
     return d.button ? d.button->size : UiSize(UiSize::Medium);
 }
+static ButtonCustomVariant DropdownCustom(const DropdownButton& d) {
+    if (d.hasVariant && d.variant == ButtonVariant::Custom) {
+        return d.customVariant;
+    }
+    if (d.button && d.button->hasCustom) return d.button->customVariant;
+    return {};
+}
 
 El* DropdownButton::IntoEl() {
-    const Theme& th = ThemeNow(cx->app);
     ButtonVariant v = DropdownVariant(*this);
+    ButtonCustomVariant customValue = DropdownCustom(*this);
     UiSize sz = DropdownSize(*this);
     // An inner selected state is the split's, rather than being cleared by the
     // DropdownButton's own default.
@@ -669,23 +1172,22 @@ El* DropdownButton::IntoEl() {
 
     IdScope scope(cx, id);
     El* row = Div(a)->Id(id)->FlexRow()->ItemsCenter();
-    if (attached) {
-        // Joined: the two ends are rounded by the wrapper and the seam is one
-        // border, the way the Corners/Edges pair asks for.
-        row->Radius(th.radius)->ClipX()->ClipY();
-    }
-
     if (button) {
         button->Selected(isSelected)
             ->Disabled(disabled || button->disabled)
             ->WithSize(sz);
-        button->variant = v;
+        if (v == ButtonVariant::Custom) button->Custom(customValue);
+        else button->WithVariant(v);
         if (outline) {
             button->Outline();
         }
         if (attached) {
             button->joined = true;
         }
+        button->cornerTL = true;
+        button->cornerTR = !attached;
+        button->cornerBL = true;
+        button->cornerBR = !attached;
         row->Child(button->IntoEl());
     }
 
@@ -698,7 +1200,8 @@ El* DropdownButton::IntoEl() {
                             ->Selected(isSelected)
                             ->Disabled(disabled)
                             ->WithSize(sz);
-        caret->variant = v;
+        if (v == ButtonVariant::Custom) caret->Custom(customValue);
+        else caret->WithVariant(v);
         if (outline) {
             caret->Outline();
         }
@@ -706,6 +1209,10 @@ El* DropdownButton::IntoEl() {
             caret->joined = true;
             caret->edgeL = false;
         }
+        caret->cornerTL = !attached;
+        caret->cornerTR = true;
+        caret->cornerBL = !attached;
+        caret->cornerBR = true;
         El* trigger = caret->IntoEl();
         if (disabled) {
             row->Child(trigger);
@@ -736,6 +1243,14 @@ ButtonGroup* ButtonGroup::Child(Button* b) {
     }
     return this;
 }
+ButtonGroup* ButtonGroup::Children(Button** values, int count) {
+    // Rust's children() extends the vector directly; unlike child(), it does
+    // not stamp the group's current disabled value onto each button.
+    for (int i = 0; values && i < count; i++) {
+        if (values[i]) children.Append(a, values[i]);
+    }
+    return this;
+}
 ButtonGroup* ButtonGroup::Multiple(bool v) {
     multiple = v;
     return this;
@@ -746,6 +1261,10 @@ ButtonGroup* ButtonGroup::Disabled(bool v) {
 }
 ButtonGroup* ButtonGroup::Vertical(bool v) {
     vertical = v;
+    return this;
+}
+ButtonGroup* ButtonGroup::Layout(Axis value) {
+    vertical = value == Axis::Vertical;
     return this;
 }
 ButtonGroup* ButtonGroup::Compact() {
@@ -759,7 +1278,39 @@ ButtonGroup* ButtonGroup::Outline() {
 ButtonGroup* ButtonGroup::WithVariant(ButtonVariant v) {
     hasVariant = true;
     variant = v;
+    if (v != ButtonVariant::Custom) customVariant = {};
     return this;
+}
+ButtonGroup* ButtonGroup::Primary() {
+    return WithVariant(ButtonVariant::Primary);
+}
+ButtonGroup* ButtonGroup::Secondary() {
+    return WithVariant(ButtonVariant::Secondary);
+}
+ButtonGroup* ButtonGroup::Danger() {
+    return WithVariant(ButtonVariant::Danger);
+}
+ButtonGroup* ButtonGroup::Warning() {
+    return WithVariant(ButtonVariant::Warning);
+}
+ButtonGroup* ButtonGroup::Success() {
+    return WithVariant(ButtonVariant::Success);
+}
+ButtonGroup* ButtonGroup::Info() {
+    return WithVariant(ButtonVariant::Info);
+}
+ButtonGroup* ButtonGroup::Ghost() {
+    return WithVariant(ButtonVariant::Ghost);
+}
+ButtonGroup* ButtonGroup::Link() {
+    return WithVariant(ButtonVariant::Link);
+}
+ButtonGroup* ButtonGroup::Text() {
+    return WithVariant(ButtonVariant::Text);
+}
+ButtonGroup* ButtonGroup::Custom(const ButtonCustomVariant& value) {
+    customVariant = value;
+    return WithVariant(ButtonVariant::Custom);
 }
 ButtonGroup* ButtonGroup::WithSize(UiSize s) {
     hasSize = true;
@@ -778,10 +1329,12 @@ ButtonGroup* ButtonGroup::OnClick(Listener l) {
 struct ButtonGroupState {
     Vec<int> selected;
     bool multiple = false;
+    bool disabled = false;
     Listener onClick;
 
     static void OnChildClick(ButtonGroupState* self, Ctx* cx,
                              const ClickEvent*, intptr_t childIndex) {
+        if (self->disabled) return;
         Vec<int> next = self->selected;
         int at = -1;
         for (int i = 0; i < next.len; i++) {
@@ -810,10 +1363,9 @@ struct ButtonGroupState {
 };
 
 El* ButtonGroup::IntoEl() {
-    const Theme& th = ThemeNow(cx->app);
     Entity<ButtonGroupState> state;
     ButtonGroupState* stateValue = nullptr;
-    if (onClick.IsValid() && !disabled) {
+    if (onClick.IsValid()) {
         state = ElementStateEntity<ButtonGroupState>(
             cx, id, StrL("gpui::component::ButtonGroupState"));
         stateValue = state.Get(cx->app);
@@ -825,11 +1377,11 @@ El* ButtonGroup::IntoEl() {
                 }
             }
             stateValue->multiple = multiple;
+            stateValue->disabled = disabled;
             stateValue->onClick = onClick;
         }
     }
-    El* box = gpui::ToggleGroup::New(
-        cx, id, vertical ? Axis::Vertical : Axis::Horizontal);
+    El* box = Div(a)->Id(id);
     if (vertical) {
         // Rust's column stretches its children to the widest of them, because
         // taffy's default align_items is Stretch. Layout here only stretches
@@ -839,8 +1391,6 @@ El* ButtonGroup::IntoEl() {
     } else {
         box->FlexRow()->ItemsCenter();
     }
-    // The ends are rounded by the group, so a child never has to be.
-    box->Radius(th.radius)->ClipX()->ClipY();
     for (int i = 0; i < children.len; i++) {
         Button* b = children[i];
         // A button's selected presentation alone is not a toggle state, but
@@ -850,7 +1400,8 @@ El* ButtonGroup::IntoEl() {
             b->WithSize(size);
         }
         if (hasVariant) {
-            b->variant = variant;
+            if (variant == ButtonVariant::Custom) b->Custom(customVariant);
+            else b->WithVariant(variant);
         }
         if (compact) {
             b->Compact();
@@ -866,6 +1417,22 @@ El* ButtonGroup::IntoEl() {
             b->edgeL = vertical ? true : (i == 0);
             b->edgeB = true;
             b->edgeR = true;
+            if (i == 0) {
+                b->cornerTL = true;
+                b->cornerTR = vertical;
+                b->cornerBL = !vertical;
+                b->cornerBR = false;
+            } else if (i == children.len - 1) {
+                b->cornerTL = false;
+                b->cornerTR = !vertical;
+                b->cornerBL = vertical;
+                b->cornerBR = true;
+            } else {
+                b->cornerTL = false;
+                b->cornerTR = false;
+                b->cornerBL = false;
+                b->cornerBR = false;
+            }
         }
         if (stateValue) {
             // Installing the group callback replaces a child's callback, as
