@@ -56,7 +56,6 @@ const partialBase = new Set([
   "theme_tokens",
   "toast",
   "tooltip",
-  "tree",
   "virtual_list",
 ]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);

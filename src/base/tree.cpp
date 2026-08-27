@@ -25,6 +25,10 @@ void TreeInitKeys() {
     KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
 }
 
+void tree::init() {
+    TreeInitKeys();
+}
+
 TreeAction TreeActionOf(uint32_t id) {
     if (id == action::SelectUp()) {
         return TreeAction::SelectPrev;
@@ -118,6 +122,35 @@ const TreeItem* TreeEntryItem(const TreeState* s, int entryIx) {
     return &s->items[s->entries[entryIx]];
 }
 
+TreeEntry TreeEntryAt(const TreeState* s, int entryIx) {
+    TreeEntry entry;
+    if (!s || entryIx < 0 || entryIx >= s->entries.len) {
+        return entry;
+    }
+    entry.itemIx = s->entries[entryIx];
+    entry.item = &s->items[entry.itemIx];
+    entry.depth = entry.item->depth;
+    return entry;
+}
+
+void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count) {
+    if (!s) {
+        return;
+    }
+    s->items.len = 0;
+    if (items && count > 0) {
+        for (int i = 0; i < count; i++) {
+            s->items.Append(items[i]);
+        }
+    }
+    s->selected = -1;
+    s->rightClicked = -1;
+    TreeRebuild(s);
+    if (cx) {
+        Notify(cx);
+    }
+}
+
 int TreeIndexOf(const TreeState* s, Str id) {
     for (int i = 0; i < s->entries.len; i++) {
         if (StrSame(s->items[s->entries[i]].id, id)) {
@@ -188,6 +221,51 @@ int TreeRevealItem(TreeState* s, Str id) {
     return TreeIndexOf(s, id);
 }
 
+static void TreeExpandAncestors(TreeState* s, Ctx* cx, int item) {
+    // ancestors() returns nearest parent to root and expand_ancestors walks
+    // it in reverse, so observers see the root before its descendant.
+    Vec<int> ancestors;
+    for (int p = s->items[item].parent; p >= 0; p = s->items[p].parent) {
+        ancestors.Append(p);
+    }
+    for (int i = ancestors.len - 1; i >= 0; i--) {
+        TreeItem& ancestor = s->items[ancestors[i]];
+        if (!ancestor.expanded) {
+            ancestor.expanded = true;
+            if (cx) {
+                TreeEmit(s, cx, TreeEventKind::Expanded, ancestor.id, -1);
+            }
+        }
+    }
+    ancestors.Reset();
+}
+
+int TreeRevealItem(TreeState* s, Ctx* cx, Str id,
+                   ScrollStrategy strategy) {
+    if (!s) {
+        return -1;
+    }
+    int item = -1;
+    for (int i = 0; i < s->items.len; i++) {
+        if (StrSame(s->items[i].id, id)) {
+            item = i;
+            break;
+        }
+    }
+    if (item < 0) {
+        return -1;
+    }
+
+    TreeExpandAncestors(s, cx, item);
+    TreeRebuild(s);
+    int ix = TreeIndexOf(s, id);
+    TreeScrollToItem(s, ix, strategy);
+    if (cx) {
+        Notify(cx);
+    }
+    return ix;
+}
+
 void TreeScrollToItem(TreeState* s, int entryIx, ScrollStrategy strategy) {
     if (s->viewportH <= 0) {
         return;
@@ -199,6 +277,35 @@ void TreeScrollToItem(TreeState* s, int entryIx, ScrollStrategy strategy) {
 void TreeSetSelected(TreeState* s, Ctx* cx, int entryIx) {
     s->selected = entryIx;
     Notify(cx);
+}
+
+void TreeSetSelectedItem(TreeState* s, Ctx* cx, Str id) {
+    if (!s) {
+        return;
+    }
+    if (!id.s) {
+        s->selected = -1;
+    } else {
+        int ix = TreeIndexOf(s, id);
+        if (ix < 0) {
+            int item = -1;
+            for (int i = 0; i < s->items.len; i++) {
+                if (StrSame(s->items[i].id, id)) {
+                    item = i;
+                    break;
+                }
+            }
+            if (item >= 0) {
+                TreeExpandAncestors(s, cx, item);
+                TreeRebuild(s);
+                ix = TreeIndexOf(s, id);
+            }
+        }
+        s->selected = ix;
+    }
+    if (cx) {
+        Notify(cx);
+    }
 }
 
 void TreeClickEntry(TreeState* s, Ctx* cx, int entryIx) {
@@ -298,7 +405,8 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
     Listener click = ListenTo(state, &TreeState::OnRowClick, 0);
     Listener down = ListenTo(state, &TreeState::OnRowMouseDown, 0);
     for (int i = range.first; i < range.end; i++) {
-        const TreeItem* it = TreeEntryItem(s, i);
+        TreeEntry entry = TreeEntryAt(s, i);
+        const TreeItem* it = entry.item;
         if (!it) {
             break;
         }
@@ -309,7 +417,9 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
         if (!it->disabled) {
             wrap->OnMouseDown(ListenerArg(down, i));
         }
-        if (El* built = row(user, cx, i)) {
+        TreeEntryState entryState = {i == s->selected,
+                                     i == s->rightClicked};
+        if (El* built = row(user, cx, i, entry, entryState)) {
             wrap->Child(built);
         }
         list->Child(wrap);

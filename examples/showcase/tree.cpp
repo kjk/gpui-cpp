@@ -49,10 +49,10 @@ static Entity<TreeState> ShowcaseTreeState(ShowcaseApp* app, Ctx* cx) {
 }
 
 // One row: the indent, a chevron for a folder, and the label.
-static El* ShowcaseTreeRow(void* user, Ctx* cx, int entryIx) {
-    auto* app = (ShowcaseApp*)user;
-    TreeState* s = app->tree.Get(cx);
-    const TreeItem* it = s ? TreeEntryItem(s, entryIx) : nullptr;
+static El* ShowcaseTreeRow(void*, Ctx* cx, int,
+                           const TreeEntry& entry,
+                           TreeEntryState entryState) {
+    const TreeItem* it = entry.item;
     if (!it) {
         return nullptr;
     }
@@ -67,7 +67,7 @@ static El* ShowcaseTreeRow(void* user, Ctx* cx, int entryIx) {
                   ->ItemsCenter()
                   ->Gap(4)
                   ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
-    if (entryIx == s->selected) {
+    if (entryState.IsSelected()) {
         row->Bg(Rgb(0xf0, 0xf0, 0xf0));
     }
     if (it->depth > 0) {

@@ -7833,3 +7833,33 @@ suite. Base motion is full: the audit moves to 94 full, 27 partial, 8 adapters
 and 2 exclusions with 284 unresolved partial-module spellings and no
 full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
 19,982 checks; wasm passes its 19,277 applicable checks.
+
+## Base tree restores entry views and source state operations
+
+The tree already flattened expanded branches, virtualized its rows, wrapped
+selection, handled directional expansion, scrolled keyboard movement and
+emitted click-driven expansion events. Its row callback still exposed only an
+integer, however, where Rust supplies a `TreeEntry` and `TreeEntryState`, and
+the state lacked atomic item replacement and source-semantic hidden-item
+selection. Programmatic reveal also opened ancestors silently instead of
+emitting their expansion events.
+
+`TreeEntry` is now a read-only view of the item, item index and depth, with the
+same root/folder/expanded/disabled queries; `TreeEntryState` carries selected
+and right-clicked state. The base callback, themed UI tree and showcase all use
+that contract. `TreeSetItems` replaces and rebuilds in one operation while
+clearing both interaction indices, `TreeSetSelectedItem` expands a hidden
+target's ancestors without an incidental scroll, and the contextual
+`TreeRevealItem` emits newly opened ancestors root-first before rebuilding and
+scrolling. `tree::init` exposes the source module initializer while preserving
+the conventional `TreeInitKeys` spelling. The owned flat item array remains
+the POD representation of Rust's nested Rc graph: parent indices express the
+same topology without reference-counted containers.
+
+Tests add entry/state queries, replacement reset and hidden-item selection to
+the existing flatten, reveal, toggle and key-action suite. Base tree is full:
+the audit moves to 95 full, 26 partial, 8 adapters and 2 exclusions with 281
+unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 19,996 checks; wasm passes
+its 19,291 applicable checks. The release story and showcase builds compile
+their two distinct tree renderers against the richer callback.

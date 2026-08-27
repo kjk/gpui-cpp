@@ -139,6 +139,48 @@ static void CollapsingPastTheSelectionPullsItBack() {
     utassert(s.selected == 1);
 }
 
+static void EntriesExposeItemDepthAndInteractionState() {
+    TreeState s;
+    Seed(&s);
+    TreeToggleExpandAt(&s, 0, nullptr);
+    TreeEntry root = TreeEntryAt(&s, 0);
+    TreeEntry child = TreeEntryAt(&s, 1);
+    utassert(root.item && root.IsRoot() && root.IsFolder());
+    utassert(root.IsExpanded() && !root.IsDisabled());
+    utassert(child.item && child.depth == 1 && !child.IsRoot());
+    utassert(!TreeEntryAt(&s, 99).item);
+
+    TreeEntryState state = {true, false};
+    utassert(state.IsSelected());
+    utassert(!state.IsRightClicked());
+}
+
+static void ReplacingItemsResetsBothInteractionIndices() {
+    TreeState s;
+    Seed(&s);
+    s.selected = 1;
+    s.rightClicked = 0;
+    TreeItem only;
+    only.id = StrL("Cargo.toml");
+    only.label = only.id;
+    TreeSetItems(&s, nullptr, &only, 1);
+    utassert(s.items.len == 1 && s.entries.len == 1);
+    utassert(s.selected == -1 && s.rightClicked == -1);
+    utassert(StrSame(TreeEntryAt(&s, 0).item->id, StrL("Cargo.toml")));
+}
+
+static void SelectingHiddenItemExpandsItsAncestors() {
+    TreeState s;
+    Seed(&s);
+    utassert(TreeIndexOf(&s, StrL("b1")) == -1);
+    TreeSetSelectedItem(&s, nullptr, StrL("b1"));
+    utassert(s.selected == 3);
+    utassert(StrSame(TreeEntryItem(&s, s.selected)->id, StrL("b1")));
+    utassert(s.items[0].expanded && s.items[2].expanded);
+    TreeSetSelectedItem(&s, nullptr, {});
+    utassert(s.selected == -1);
+}
+
 void TestTree() {
     TestSuite("tree");
     TheKeyTable();
@@ -150,4 +192,7 @@ void TestTree() {
     ALeafDoesNotToggle();
     RevealOpensEveryFolderAboveIt();
     CollapsingPastTheSelectionPullsItBack();
+    EntriesExposeItemDepthAndInteractionState();
+    ReplacingItemsResetsBothInteractionIndices();
+    SelectingHiddenItemExpandsItsAncestors();
 }

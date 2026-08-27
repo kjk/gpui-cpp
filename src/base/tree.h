@@ -23,6 +23,12 @@ void TreeInitKeys();
 Str TreeContext();
 TreeAction TreeActionOf(uint32_t id);
 
+namespace tree {
+// Source-named module initializer. The global-prefixed spelling remains for
+// callers that use this tree's conventional C++ surface.
+void init();
+}
+
 // Where Up and Down move the selection. Both wrap, and both treat an unset
 // selection as 0 before stepping — which is why Up from nothing lands on the
 // last entry while Down from nothing lands on the second. Rust's
@@ -49,6 +55,31 @@ struct TreeItem {
     bool folder = false;
     bool expanded = false;
     bool disabled = false;
+};
+
+// A read-only view of one visible flattened entry. Rust stores a cloned
+// TreeItem plus its depth; the state here owns items in one Vec, so the view
+// carries the corresponding stable index and pointer for the duration of the
+// call that produced it.
+struct TreeEntry {
+    const TreeItem* item = nullptr;
+    int itemIx = -1;
+    int depth = 0;
+
+    bool IsRoot() const { return depth == 0; }
+    bool IsFolder() const { return item && item->folder; }
+    bool IsExpanded() const { return item && item->expanded; }
+    bool IsDisabled() const { return item && item->disabled; }
+};
+
+// The interaction state supplied alongside a visible entry, exactly as the
+// source render-item callback receives it.
+struct TreeEntryState {
+    bool selected = false;
+    bool rightClicked = false;
+
+    bool IsSelected() const { return selected; }
+    bool IsRightClicked() const { return rightClicked; }
 };
 
 enum class TreeEventKind : uint8_t {
@@ -115,6 +146,12 @@ void TreeRebuild(TreeState* s);
 int TreeIndexOf(const TreeState* s, Str id);
 // The item behind a row, or null.
 const TreeItem* TreeEntryItem(const TreeState* s, int entryIx);
+TreeEntry TreeEntryAt(const TreeState* s, int entryIx);
+
+// set_items: replace the complete item array in one operation, rebuild the
+// visible entries, clear both interaction indices and notify. Strings remain
+// caller-owned, as with TreeAddItem.
+void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count);
 
 // toggle_expand, without a window to notify. Answers false for a leaf or a
 // row that is not there; `expandedOut` says which way it went.
@@ -123,9 +160,13 @@ void TreeToggleExpand(TreeState* s, Ctx* cx, int entryIx);
 // expand_ancestors: open everything above the item so it has a row, and
 // answer where that row is.
 int TreeRevealItem(TreeState* s, Str id);
+// reveal_item: the source-semantic form also emits Expanded for each ancestor
+// it opens (root first), rebuilds, scrolls and notifies.
+int TreeRevealItem(TreeState* s, Ctx* cx, Str id, ScrollStrategy strategy);
 // scroll_to_item, against the last height the list was laid out at.
 void TreeScrollToItem(TreeState* s, int entryIx, ScrollStrategy strategy);
 void TreeSetSelected(TreeState* s, Ctx* cx, int entryIx);
+void TreeSetSelectedItem(TreeState* s, Ctx* cx, Str id);
 // on_entry_click: select the row, then toggle it — so a press on a folder
 // opens it and a press on a leaf only selects.
 void TreeClickEntry(TreeState* s, Ctx* cx, int entryIx);
@@ -148,7 +189,8 @@ struct Tree {
 // The wrapper around each row carries the press handlers and nothing else —
 // the caller's element is what has the height, the padding and the
 // background, the way Rust's item closure builds its own div.
-using TreeRowFn = El* (*)(void* user, Ctx* cx, int entryIx);
+using TreeRowFn = El* (*)(void* user, Ctx* cx, int entryIx,
+                          const TreeEntry& entry, TreeEntryState state);
 
 struct TreeList {
     // `h` is the height the list is laid out at, which is also what

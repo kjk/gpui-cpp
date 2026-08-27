@@ -35,10 +35,9 @@ void TreeStory::OnRevealRandom(TreeStory* self, Ctx* cx, const ClickEvent*) {
         return;
     }
     int item = (int)((uint64_t)(TimeNow() * 1000.0) % (uint64_t)s->items.len);
-    int ix = TreeRevealItem(s, s->items[item].id);
+    int ix = TreeRevealItem(s, cx, s->items[item].id, ScrollStrategy::Center);
     if (ix >= 0) {
         s->selected = ix;
-        TreeScrollToItem(s, ix, ScrollStrategy::Center);
     }
     Notify(cx);
 }
