@@ -1414,6 +1414,10 @@ inline bool StrStartsWithI(Str s, Str prefix) {
 }
 bool StrStartsWithI(Str s, const char* prefix);
 bool StrContainsI(Str s, Str sub);
+// Replaces every non-overlapping occurrence of `from` with `to`. The result
+// is temporary-arena backed; when `from` is empty or absent, `value` is
+// returned unchanged.
+Str StrReplaceAll(Str value, Str from, Str to);
 
 // ─── sequential strings ───────────────────────────────────────────────────
 //

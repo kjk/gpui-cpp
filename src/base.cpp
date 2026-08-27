@@ -910,6 +910,44 @@ bool StrContainsI(Str s, Str sub) {
     return false;
 }
 
+Str StrReplaceAll(Str value, Str from, Str to) {
+    if (from.len == 0 || from.len > value.len) {
+        return value;
+    }
+    int count = 0;
+    for (int i = 0; i <= value.len - from.len;) {
+        if (StrEq(Str(value.s + i, from.len), from)) {
+            count++;
+            i += from.len;
+        } else {
+            i++;
+        }
+    }
+    if (count == 0) {
+        return value;
+    }
+    int resultLen = value.len + count * (to.len - from.len);
+    Str result = AllocStrTemp(resultLen + 1);
+    if (!result.s) {
+        return value;
+    }
+    int src = 0;
+    int dst = 0;
+    while (src < value.len) {
+        if (src <= value.len - from.len &&
+            StrEq(Str(value.s + src, from.len), from)) {
+            memcpy(result.s + dst, to.s, (size_t)to.len);
+            src += from.len;
+            dst += to.len;
+        } else {
+            result.s[dst++] = value.s[src++];
+        }
+    }
+    result.s[dst] = 0;
+    result.len = dst;
+    return result;
+}
+
 // ─── sequential strings ───────────────────────────────────────────────────
 //
 // See `SeqStrings` in base.h. Ported from SumatraPDF's `src/base/Str.cpp`;

@@ -31,9 +31,30 @@ static void CaseInsensitivePrefixUsesBothOverloads() {
     utassert(!base::StrStartsWithI(Str{}, "a"));
 }
 
+static void ReplaceAllReplacesNonOverlappingMatches() {
+    utassert(base::StrEq(base::StrReplaceAll(StrL("aaaa"), StrL("aa"),
+                                             StrL("b")),
+                         "bb"));
+    utassert(base::StrEq(base::StrReplaceAll(StrL("one two one"),
+                                             StrL("one"), StrL("three")),
+                         "three two three"));
+}
+
+static void ReplaceAllHandlesEmptyAndMissingMatches() {
+    Str value = StrL("hello");
+    Str unchanged = base::StrReplaceAll(value, StrL(""), StrL("x"));
+    utassert(unchanged.s == value.s && unchanged.len == value.len);
+    unchanged = base::StrReplaceAll(value, StrL("z"), StrL("x"));
+    utassert(unchanged.s == value.s && unchanged.len == value.len);
+    utassert(base::StrEq(base::StrReplaceAll(value, StrL("l"), StrL("")),
+                         "heo"));
+}
+
 void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
     CaseInsensitiveEqualityKeepsEmptySliceSemantics();
     CaseInsensitivePrefixUsesBothOverloads();
+    ReplaceAllReplacesNonOverlappingMatches();
+    ReplaceAllHandlesEmptyAndMissingMatches();
 }
