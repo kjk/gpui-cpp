@@ -119,10 +119,12 @@ callback after the view leaves its hierarchy.
 Rust method — because on macOS the only creation-time knob is the
 `transparent` attribute.
 
-**It is compile-verified, not run-verified.** `bun cmd/mac-build.ts -rel
-webview` builds it on a Mac over ssh, which is what has been done; a Cocoa
-window needs a login session, so the example has to be run on the Mac itself
-(`bun cmd/run.ts -rel webview`) for anyone to see a page.
+**The backend and headless suite are compile- and test-verified; the window is
+not visually run-verified.** `bun cmd/mac-build.ts -rel webview` and the full
+release test target build on a Mac over ssh, and that native test binary runs
+20,820 checks. A Cocoa window needs a login session, so the example still has
+to be run on the Mac itself (`bun cmd/run.ts -rel webview`) for anyone to see
+and interact with the page.
 
 ## What is ported
 

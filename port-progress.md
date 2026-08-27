@@ -8962,4 +8962,7 @@ navigation, UI, title and scheme delegates before deleting their C++ state,
 so a callback WebKit had already queued cannot re-enter freed storage. A
 missing protocol callback produces a 500 response instead of dereferencing a
 null function pointer. The release webview example still compiles and links
-on the remote Mac after this lifetime change.
+on the remote Mac after this lifetime change. The full native macOS release
+test target also compiles and runs 20,820 checks over ssh; Windows remains
+green at 20,815. Visual WKWebView interaction still requires launching the
+example from the Mac's logged-in desktop session.
