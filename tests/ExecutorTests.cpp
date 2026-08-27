@@ -55,8 +55,8 @@ static void Note3() {
     gOrder[gOrderN++] = 3;
 }
 
-static void SawArg(int* box, void* arg) {
-    *box = (int)(intptr_t)arg;
+static void SawCapturedArg(int* box) {
+    *box = 42;
 }
 
 static void PostBump() {
@@ -85,8 +85,8 @@ static void APostRunsOnTheMainThreadAndOnlyWhenDrained() {
 
 static void PostsRunInTheOrderTheyWereMade() {
     Reset();
-    // A Func0 where a Func1 is asked for: the argument is dropped, which is
-    // how a callback with nothing to receive is written.
+    // Each queued task is a Func0, and a no-argument callback needs no dummy
+    // argument word.
     ExecPost(MkFunc0Void(Note1));
     ExecPost(MkFunc0Void(Note2));
     ExecPost(MkFunc0Void(Note3));
@@ -95,9 +95,9 @@ static void PostsRunInTheOrderTheyWereMade() {
     utassert(gOrder[0] == 1 && gOrder[1] == 2 && gOrder[2] == 3);
 }
 
-static void APostCarriesOneWord() {
+static void APostCarriesCapturedState() {
     int box = 0;
-    ExecPost(MkFunc1(SawArg, &box), (void*)(intptr_t)42);
+    ExecPost(MkFunc0(SawCapturedArg, &box));
     utassert(box == 0);
     utassert(ExecDrain() == 1);
     utassert(box == 42);
@@ -208,7 +208,7 @@ void TestExecutor() {
 
     APostRunsOnTheMainThreadAndOnlyWhenDrained();
     PostsRunInTheOrderTheyWereMade();
-    APostCarriesOneWord();
+    APostCarriesCapturedState();
     APostMadeWhileDrainingWaitsForTheNextPass();
     ASpawnRunsElsewhereAndReportsBack();
     EveryJobRuns();

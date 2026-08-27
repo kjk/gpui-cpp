@@ -63,13 +63,12 @@ bool ExecOnMainThread();
 void ExecSetWake(Func0 wake);
 
 // uitask::Post. Queue `f` to run on the main thread and wake the loop. Safe
-// from any thread, including the main one. A Func0 is taken where a
-// Func1<void*> is asked for, so a callback with nothing to receive is written
-// `ExecPost(MkFunc0(Fn, self))`.
-void ExecPost(Func1<void*> f, void* arg = nullptr);
+// from any thread, including the main one. Captured state belongs in the
+// Func0, for example `ExecPost(MkFunc0(Fn, self))`.
+void ExecPost(Func0 f);
 // uitask::PostOptimized. The same, except that on the main thread it runs `f`
 // right here — faster, and a stack trace that says who asked.
-void ExecPostNow(Func1<void*> f, void* arg = nullptr);
+void ExecPostNow(Func0 f);
 
 // Runs everything queued and answers how many that was. The event loop calls
 // it once a pass; nothing else needs to. Anything posted by a task running

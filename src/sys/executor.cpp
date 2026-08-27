@@ -17,11 +17,10 @@ namespace gpui {
 
 // ─── the main thread's queue ──────────────────────────────────────────────
 
-// A callback plus the one word it is called with. Both fit in a Vec, which
-// wants POD, so neither of them can be anything else.
+// The callback already carries its one captured word, just like SumatraPDF's
+// uitask task record. It stays POD so the queue can remain a Vec.
 struct MainTask {
-    Func1<void*> f = {};
-    void* arg = nullptr;
+    Func0 f = {};
 };
 
 static Mutex gMainLock;
@@ -55,11 +54,11 @@ void ExecSetWake(Func0 wake) {
     gMainLock.Unlock();
 }
 
-void ExecPost(Func1<void*> f, void* arg) {
+void ExecPost(Func0 f) {
     if (!f.IsValid()) {
         return;
     }
-    MainTask t = {f, arg};
+    MainTask t = {f};
     gMainLock.Lock();
     if (gStopping) {
         // Past ExecShutdown there is nobody left to run it. Dropping it is
@@ -76,15 +75,15 @@ void ExecPost(Func1<void*> f, void* arg) {
     wake.Call();
 }
 
-void ExecPostNow(Func1<void*> f, void* arg) {
+void ExecPostNow(Func0 f) {
     if (!f.IsValid()) {
         return;
     }
     if (ExecOnMainThread()) {
-        f.Call(arg);
+        f.Call();
         return;
     }
-    ExecPost(f, arg);
+    ExecPost(f);
 }
 
 int ExecQueued() {
@@ -114,7 +113,7 @@ int ExecDrain() {
     gMainLock.Unlock();
 
     for (int i = 0; i < batch.len; i++) {
-        batch[i].f.Call(batch[i].arg);
+        batch[i].f.Call();
     }
     int n = batch.len;
     batch.Reset();
@@ -264,7 +263,7 @@ TaskId ExecSpawn(Func0 work, Func0 done) {
                 // to the one queue that is definitely drained. It stays in
                 // `gJobs` while it waits, which is what keeps ExecCancel
                 // working and what ExecPending counts.
-                ExecPost(MkFunc1Void(RunOnMainThread), (void*)(intptr_t)id);
+                ExecPost(MkFunc0(RunOnMainThread, (void*)(intptr_t)id));
                 return id;
             }
         }
