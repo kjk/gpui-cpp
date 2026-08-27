@@ -8996,3 +8996,14 @@ than retaining the C++ `WebView`, so an operation that outlasts teardown cannot
 call through a dead builder context. A requested handler on a WebView2 runtime
 too old for `ICoreWebView2_4` fails construction, matching Rust's interface
 cast rather than silently ignoring the option.
+
+The pinned crate's default `drag-drop` feature is now present on Windows.
+After WebView2 creates its composition children, the port recursively replaces
+each registered drop target with an `IDropTarget`, disables the controller's
+external-drop path when that interface exists, and preserves Wry's Enter,
+Over, Drop and Leave event shapes. File lists use `CF_HDROP` with dynamically
+sized wide buffers, so they are not capped at `MAX_PATH`, and coordinates are
+converted from screen to the target child. GPUI initializes COM but not OLE,
+so the controller explicitly balances the `OleInitialize` required by
+`RegisterDragDrop`; Wry normally receives that initialization from its window
+runtime.

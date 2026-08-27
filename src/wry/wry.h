@@ -216,6 +216,25 @@ using DownloadStartedHandler = bool (*)(void* ctx, Str url, Str* path);
     All strings are borrowed for the duration of the call. */
 using DownloadCompletedHandler = void (*)(void* ctx, Str url, const Str* path, bool success);
 
+/** `wry::DragDropEvent`. Paths are present for Enter and Drop and borrowed
+    only for the callback. Position is relative to the WebView2 child window. */
+enum class DragDropKind {
+    Enter,
+    Over,
+    Drop,
+    Leave,
+};
+
+struct DragDropEvent {
+    DragDropKind kind = DragDropKind::Leave;
+    const Str* paths = nullptr;
+    int pathCount = 0;
+    int32_t x = 0;
+    int32_t y = 0;
+};
+
+using DragDropHandler = bool (*)(void* ctx, const DragDropEvent* event);
+
 // ─── attributes ──────────────────────────────────────────────────────────
 
 /** `wry::WebViewAttributes` and, below the line, the Windows half of
@@ -260,6 +279,7 @@ struct WebViewAttributes {
     void (*onPageLoadHandler)(void* ctx, PageLoadEvent event, Str url) = nullptr;
     DownloadStartedHandler downloadStartedHandler = nullptr;
     DownloadCompletedHandler downloadCompletedHandler = nullptr;
+    DragDropHandler dragDropHandler = nullptr;
     /** `window.open`. Null denies every request, which is what wry's
         `NewWindowRequested` handler does when no closure is set. */
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,

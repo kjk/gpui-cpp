@@ -146,7 +146,10 @@ path performs the pinned source's second step too: the Windows backend walks
 that directory and loads each unpacked extension through
 `ICoreWebView2Profile7`. Windows download handlers can allow or cancel a
 download, replace its destination path and observe terminal completion with
-the original URL, optional result path and success bit.
+the original URL, optional result path and success bit. Its default-enabled
+drag/drop feature is also present: an `IDropTarget` replaces WebView2's on
+each composition child and reports Enter, Over, Drop and Leave with UTF-8
+paths and child-relative coordinates.
 
 The macOS backend has all of that except what the platform does not have: the
 custom protocol work-around is Windows' alone (WKWebView takes a scheme
@@ -162,9 +165,9 @@ Not ported, each for a reason:
   porting a cookie crate. Nothing here wants one yet.
 - **Downloads on macOS**. The Windows `DownloadStarting` and per-operation
   `StateChanged` paths are ported; WKWebView's download delegates are not yet.
-- **Drag and drop** (`DragDropEvent`, `webview2/drag_drop.rs`). Behind wry's
-  own `drag-drop` feature flag, and it is an `IDropTarget` on the container
-  plus the composition windows under it.
+- **Drag and drop on macOS**. The default-enabled Windows `IDropTarget`
+  implementation is ported; the `WryWebView` dragging-destination overrides
+  are not yet.
 - **`NewWindowResponse::Create`**, the arm that hands back a webview to open
   the request in. It needs the opener's `ICoreWebView2` and environment in the
   public API, which would put a COM type in the portable header.

@@ -35,6 +35,9 @@
 #include <eventtoken.h>
 #include <objbase.h>
 #include <objidl.h>
+#include <ole2.h>
+#include <oleidl.h>
+#include <shellapi.h>
 
 // SHCreateMemStream, declared rather than reached through <shlwapi.h>. That
 // header brings its string functions with it, and under UNICODE each is a
@@ -1326,6 +1329,162 @@ struct DownloadStateHandler : ComObj<ICoreWebView2StateChangedEventHandler> {
     }
 };
 
+static void FreeDropPaths(Vec<Str>* paths) {
+    for (int i = 0; i < paths->len; i++) {
+        StrFree(paths->els[i]);
+    }
+    paths->FreeEls();
+}
+
+// `DragDropTarget::iterate_filenames`. The HDROP is returned because the
+// pinned Drop arm calls DragFinish after delivering the event; DragEnter only
+// inspects it, exactly as the source does.
+static bool GetDropPaths(IDataObject* data, Vec<Str>* paths, HDROP* hdropOut) {
+    if (!data || !paths) {
+        return false;
+    }
+    FORMATETC format = {};
+    format.cfFormat = CF_HDROP;
+    format.dwAspect = DVASPECT_CONTENT;
+    format.lindex = -1;
+    format.tymed = TYMED_HGLOBAL;
+    STGMEDIUM medium = {};
+    if (FAILED(data->GetData(&format, &medium))) {
+        return false;
+    }
+
+    HDROP hdrop = (HDROP)medium.hGlobal;
+    UINT count = DragQueryFileW(hdrop, 0xffffffffu, nullptr, 0);
+    for (UINT i = 0; i < count; i++) {
+        UINT charCount = DragQueryFileW(hdrop, i, nullptr, 0);
+        WCHAR* path = new WCHAR[(size_t)charCount + 1];
+        if (DragQueryFileW(hdrop, i, path, charCount + 1) == charCount) {
+            paths->Append(StrDup(WstrToUtf8Temp(path, (int)charCount)));
+        }
+        delete[] path;
+    }
+    if (hdropOut) {
+        *hdropOut = hdrop;
+    }
+    return true;
+}
+
+struct DragDropTarget : ComObj<IDropTarget> {
+    HWND hwnd = nullptr;
+    void* ctx = nullptr;
+    DragDropHandler fn = nullptr;
+    DWORD cursorEffect = DROPEFFECT_NONE;
+    bool enterIsValid = false;
+
+    void Emit(DragDropKind kind, const Vec<Str>* paths, POINTL screenPoint) {
+        if (!fn) {
+            return;
+        }
+        POINT point = {screenPoint.x, screenPoint.y};
+        if (kind != DragDropKind::Leave) {
+            ScreenToClient(hwnd, &point);
+        }
+        DragDropEvent event;
+        event.kind = kind;
+        event.paths = paths ? paths->els : nullptr;
+        event.pathCount = paths ? paths->len : 0;
+        event.x = point.x;
+        event.y = point.y;
+        // The pinned Windows implementation ignores this result after
+        // replacing WebView2's target; preserve that behavior.
+        fn(ctx, &event);
+    }
+
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL point,
+                                        DWORD* effect) override {
+        Vec<Str> paths;
+        enterIsValid = GetDropPaths(data, &paths, nullptr);
+        if (!enterIsValid) {
+            return S_OK;
+        }
+        Emit(DragDropKind::Enter, &paths, point);
+        FreeDropPaths(&paths);
+        cursorEffect = DROPEFFECT_COPY;
+        if (effect) {
+            *effect = cursorEffect;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL point, DWORD* effect) override {
+        if (enterIsValid) {
+            Emit(DragDropKind::Over, nullptr, point);
+        }
+        if (effect) {
+            *effect = cursorEffect;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DragLeave() override {
+        if (enterIsValid) {
+            Emit(DragDropKind::Leave, nullptr, POINTL{});
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL point, DWORD*) override {
+        if (enterIsValid) {
+            Vec<Str> paths;
+            HDROP hdrop = nullptr;
+            GetDropPaths(data, &paths, &hdrop);
+            Emit(DragDropKind::Drop, &paths, point);
+            FreeDropPaths(&paths);
+            if (hdrop) {
+                DragFinish(hdrop);
+            }
+        }
+        return S_OK;
+    }
+};
+
+struct DragDropController {
+    Vec<DragDropTarget*> targets;
+
+    ~DragDropController() {
+        for (int i = 0; i < targets.len; i++) {
+            DragDropTarget* target = targets.els[i];
+            RevokeDragDrop(target->hwnd);
+            target->Release();
+        }
+        targets.FreeEls();
+    }
+};
+
+struct DragDropEnumCtx {
+    DragDropController* controller = nullptr;
+    void* handlerCtx = nullptr;
+    DragDropHandler handler = nullptr;
+};
+
+static BOOL CALLBACK InjectDragDropTarget(HWND hwnd, LPARAM param) {
+    DragDropEnumCtx* ctx = (DragDropEnumCtx*)param;
+    DragDropTarget* target = new DragDropTarget();
+    target->hwnd = hwnd;
+    target->ctx = ctx->handlerCtx;
+    target->fn = ctx->handler;
+    HRESULT revoked = RevokeDragDrop(hwnd);
+    if (revoked != DRAGDROP_E_INVALIDHWND && SUCCEEDED(RegisterDragDrop(hwnd, target))) {
+        ctx->controller->targets.Append(target);
+    } else {
+        target->Release();
+    }
+    return TRUE;
+}
+
+static DragDropController* NewDragDropController(HWND hwnd, void* handlerCtx,
+                                                 DragDropHandler handler) {
+    DragDropController* controller = new DragDropController();
+    DragDropEnumCtx ctx = {controller, handlerCtx, handler};
+    EnumChildWindows(hwnd, InjectDragDropTarget, (LPARAM)&ctx);
+    return controller;
+}
+
 template <typename T>
 static void Rel(T** p) {
     if (p && *p) {
@@ -1511,6 +1670,8 @@ struct WebView {
     DownloadStartedHandler downloadStartedHandler = nullptr;
     DownloadCompletedHandler downloadCompletedHandler = nullptr;
     DownloadCallbackState* downloadCallbacks = nullptr;
+    DragDropController* dragDropController = nullptr;
+    bool oleInitialized = false;
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,
                                              const NewWindowFeatures* features) = nullptr;
 
@@ -2728,6 +2889,20 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         controller->MoveFocus(kMoveFocusReasonProgrammatic);
     }
 
+    if (attrs->dragDropHandler) {
+        // wry's usual window runtimes initialize OLE before this point. GPUI
+        // initializes COM directly, so this backend owns the extra OLE
+        // initialization that RegisterDragDrop requires.
+        wv->oleInitialized = SUCCEEDED(OleInitialize(nullptr));
+        ICoreWebView2Controller4* controller4 = nullptr;
+        if (SUCCEEDED(controller->QueryInterface(__uuidof(ICoreWebView2Controller4),
+                                                 (void**)&controller4))) {
+            controller4->put_AllowExternalDrop(FALSE);
+            Rel(&controller4);
+        }
+        wv->dragDropController = NewDragDropController(hwnd, attrs->ctx, attrs->dragDropHandler);
+    }
+
     if (asChild) {
         WebViewSetBounds(wv, attrs->bounds);
     } else {
@@ -2747,6 +2922,10 @@ void WebViewFree(WebView* wv) {
     }
     if (wv->downloadCallbacks) {
         InterlockedExchange(&wv->downloadCallbacks->alive, 0);
+    }
+    delete wv->dragDropController;
+    if (wv->oleInitialized) {
+        OleUninitialize();
     }
     if (wv->controller) {
         wv->controller->Close();
