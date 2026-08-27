@@ -1026,6 +1026,68 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
     PolicyUpdateDefaultCapabilities(denied);
 }
 
+static void ShellCryptoAndCompressionMatchStandardRuntime() {
+    static const uint8_t expected[32] = {
+        0xce, 0x63, 0x5c, 0x4e, 0xab, 0xff, 0x5e, 0x4f,
+        0x56, 0xdb, 0xa8, 0xfb, 0x1e, 0x39, 0xca, 0x23,
+        0x55, 0x30, 0xaa, 0x2b, 0x6b, 0x18, 0x53, 0x3e,
+        0xef, 0x1a, 0xf3, 0x86, 0x20, 0x16, 0xc5, 0x77,
+    };
+    uint8_t digest[32];
+    Sha256(StrL("shell"), digest);
+    utassert(memcmp(digest, expected, sizeof(expected)) == 0);
+
+    for (int gzip = 0; gzip < 2; gzip++) {
+        Str compressed;
+        Str inflated;
+        Str compressionError;
+        utassert(ZlibDeflate(StrL("stored compression round trip"),
+                             gzip != 0, &compressed, &compressionError));
+        utassert(!compressionError && compressed.len > 0);
+        utassert(ZlibInflate(compressed, gzip != 0, &inflated,
+                             &compressionError));
+        utassert(!compressionError &&
+                 StrEq(inflated, "stored compression round trip"));
+        compressed.s[compressed.len - 1] ^= 1;
+        utassert(!ZlibInflate(compressed, gzip != 0, &inflated,
+                              &compressionError));
+        utassert(compressionError);
+        StrFree(compressionError);
+        StrFree(inflated);
+        StrFree(compressed);
+    }
+
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { Buffer } from 'buffer';\n"
+        "import { createHash, randomBytes, randomUUID, webcrypto } from 'crypto';\n"
+        "import { deflateSync, inflateSync, gzipSync, gunzipSync } from 'zlib';\n"
+        "const input = Buffer.from('shell', 'utf8');\n"
+        "if (inflateSync(deflateSync(input)).toString() !== 'shell') throw new Error('deflate');\n"
+        "if (gunzipSync(gzipSync(input)).toString() !== 'shell') throw new Error('gzip');\n"
+        "if (createHash('sha256').update(input).digest('hex') !== 'ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577') throw new Error('sha256');\n"
+        "if (Buffer.from(await webcrypto.subtle.digest('SHA-256', input)).toString('hex') !== 'ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577') throw new Error('subtle.digest');\n"
+        "if (inflateSync(Buffer.from('7801cb48cdc9c957c8402701680308b1', 'hex')).toString() !== 'hello hello hello hello') throw new Error('fixed Huffman');\n"
+        "const words = ['alpha','bravo','charlie','delta','echo','foxtrot','golf','hotel','india','juliet','kilo','lima','mike','november','oscar','papa','quebec','romeo','sierra','tango','uniform','victor','whiskey','xray','yankee','zulu'];\n"
+        "let seed = 1, text = ''; for (let i = 0; i < 1000; i++) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; text += words[seed % words.length] + ' '; } text = text.slice(0, 1000);\n"
+        "const dynamic = Buffer.from('789c6d526d76843008bc0a57635d5c53a3d818eddad3f795011b7dfd978f61981998d2283468954c6b9252983eb69ca4523770c949e85df820e906c5e9e07914a19c2626cecbc0f4bde58dbe86b48e72d09ebaaa2550bdbe6bd11ad75977991e52e8a5b90fe836a75ecb4495e797a211e404e5c20b539a9fc95bb9cce6d9c404fc5178d700798fcf4d1ed20137fd1a0e6161d27171f5080cfa945cbdaae824da1e43bb119b29a021ebb43ba61ca674edb8c087bd426d680f5940c5cd320110895bbbd0fa7fcd657a21131c1e8669009fbb3703a7687c612a4110ec4e716f76d1854ae36cb523a030ec41fb7ed848a357933bea83b89982b9b31ced84d82fcb7cddc76a9a5c3d70f7d5345e9785488dba19ae1dcdaad7de01defa9eced9c2ffadeccf8693c1dd75996d01cef208c806d8ca85fd7b5b9fe00f0fa876ce', 'hex');\n"
+        "if (inflateSync(dynamic).toString() !== text) throw new Error('dynamic Huffman');\n"
+        "const random = randomBytes(32); if (random.length !== 32) throw new Error('randomBytes');\n"
+        "const values = new Uint32Array(4); if (webcrypto.getRandomValues(values) !== values) throw new Error('getRandomValues');\n"
+        "if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(randomUUID())) throw new Error('randomUUID');\n"
+        "export default class Main extends View { render(cx) { return div().child('standard'); } }\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("standard-runtime.js"),
+                                               source, &error)
+                         : nullptr;
+    utassert(type != nullptr && !error.IsSet());
+    ViewTypeRelease(type);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -1049,4 +1111,5 @@ void TestShellCore() {
     ShellStorageAndAuthorityFreeModulesWork();
     ShellProcessRunIsBoundedAndPromiseBased();
     ShellFilesystemUsesGrantedHandleRelativePaths();
+    ShellCryptoAndCompressionMatchStandardRuntime();
 }

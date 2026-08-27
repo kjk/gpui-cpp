@@ -9544,3 +9544,29 @@ checkpoint still needs upstream's revisioned one-writer queue and true
 
 MSVC release tests pass 21,194 checks, including native and JavaScript process
 and filesystem round trips; `hello_world` builds with `/W4 /WX`.
+
+## Shell authority-free crypto and compression
+
+The two remaining pure Standard Runtime imports are live. `crypto` provides
+incremental `createHash("sha256")`, platform-secure `randomBytes`, RFC 4122
+version-4 `randomUUID`, `getRandomValues`, and SHA-256 through
+`webcrypto.subtle.digest`. Randomness comes from `SystemFunction036`,
+`getrandom` with `/dev/urandom` fallback, `arc4random_buf`, or the browser's
+`crypto.getRandomValues`; no process or filesystem authority leaks through the
+module.
+
+`zlib` provides the four methods in Shell's published typings:
+`deflateSync`, `inflateSync`, `gzipSync` and `gunzipSync`. The encoder emits
+portable stored DEFLATE blocks, and the bounded decoder accepts stored, fixed
+Huffman and dynamic Huffman streams while checking zlib Adler-32 and gzip
+CRC-32/trailer sizes. Both compressed and expanded data stop at 64 MiB. This
+is deliberately the Shell contract rather than all of LLRT's wider Node-like
+surface: Brotli, Zstandard, callback variants, HMAC and additional hash
+algorithms are not declared by `crates/shell/src/typings.rs`, and would either
+bring excluded dependencies or require substantially larger cryptographic
+implementations.
+
+Tests cover the upstream `"shell"` SHA-256 vector, both native wrapper round
+trips, fixed and dynamic streams produced independently by zlib, checksum
+failure, random values, UUID shape and Web Crypto digest behavior. MSVC
+release passes 21,208 checks.

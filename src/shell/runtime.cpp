@@ -6,6 +6,7 @@
 #include "shell/process.h"
 #include "shell/retained.h"
 #include "shell/scope.h"
+#include "shell/standard.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -759,9 +760,10 @@ static bool IsBuiltin(const char* name) {
     return strcmp(name, "gpui") == 0 || strcmp(name, "gpui-base") == 0 ||
            strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0 ||
            strcmp(name, "buffer") == 0 || strcmp(name, "console") == 0 ||
+           strcmp(name, "crypto") == 0 ||
            strcmp(name, "fs/promises") == 0 || strcmp(name, "os") == 0 ||
            strcmp(name, "path") == 0 || strcmp(name, "process") == 0 ||
-           strcmp(name, "url") == 0;
+           strcmp(name, "url") == 0 || strcmp(name, "zlib") == 0;
 }
 
 static const char* const kGpuiExports[] = {
@@ -781,6 +783,9 @@ static const char* const kBaseExports[] = {
 static const char* const kFpsExports[] = {"fps_monitor"};
 static const char* const kBufferExports[] = {"default", "Buffer"};
 static const char* const kConsoleExports[] = {"default"};
+static const char* const kCryptoExports[] = {
+    "default", "createHash", "randomBytes", "randomUUID",
+    "getRandomValues", "crypto", "webcrypto"};
 static const char* const kFsExports[] = {"default", "readFile", "writeFile",
                                          "readdir", "exists", "unlink",
                                          "rmdir", "mkdir"};
@@ -793,6 +798,8 @@ static const char* const kProcessExports[] = {"default", "run", "nextTick",
                                               "exit", "platform", "arch"};
 static const char* const kUrlExports[] = {"default", "URL", "URLSearchParams",
                                           "fileURLToPath", "pathToFileURL"};
+static const char* const kZlibExports[] = {
+    "default", "deflateSync", "inflateSync", "gzipSync", "gunzipSync"};
 
 static void ModuleExports(const char* name, const char* const** values,
                           int* count) {
@@ -813,6 +820,9 @@ static void ModuleExports(const char* name, const char* const** values,
     } else if (strcmp(name, "console") == 0) {
         *values = kConsoleExports;
         *count = (int)(sizeof(kConsoleExports) / sizeof(kConsoleExports[0]));
+    } else if (strcmp(name, "crypto") == 0) {
+        *values = kCryptoExports;
+        *count = (int)(sizeof(kCryptoExports) / sizeof(kCryptoExports[0]));
     } else if (strcmp(name, "fs/promises") == 0) {
         *values = kFsExports;
         *count = (int)(sizeof(kFsExports) / sizeof(kFsExports[0]));
@@ -828,6 +838,9 @@ static void ModuleExports(const char* name, const char* const** values,
     } else if (strcmp(name, "url") == 0) {
         *values = kUrlExports;
         *count = (int)(sizeof(kUrlExports) / sizeof(kUrlExports[0]));
+    } else if (strcmp(name, "zlib") == 0) {
+        *values = kZlibExports;
+        *count = (int)(sizeof(kZlibExports) / sizeof(kZlibExports[0]));
     }
 }
 
@@ -837,11 +850,13 @@ static const char* BuiltinObject(const char* name) {
         return "__gpui";
     if (strcmp(name, "buffer") == 0) return "__shell_buffer";
     if (strcmp(name, "console") == 0) return "console";
+    if (strcmp(name, "crypto") == 0) return "__shell_crypto";
     if (strcmp(name, "fs/promises") == 0) return "__shell_fs";
     if (strcmp(name, "os") == 0) return "__shell_os";
     if (strcmp(name, "path") == 0) return "__shell_path";
     if (strcmp(name, "process") == 0) return "process";
     if (strcmp(name, "url") == 0) return "__shell_url";
+    if (strcmp(name, "zlib") == 0) return "__shell_zlib";
     return "__gpui";
 }
 
@@ -2827,6 +2842,90 @@ static JSValue NativeProcessExit(JSContext* ctx, JSValueConst, int argc,
     return JS_UNDEFINED;
 }
 
+static bool StandardBytes(JSContext* ctx, JSValueConst value,
+                          const char* operation, Str* bytes) {
+    if (JS_GetTypedArrayType(value) != JS_TYPED_ARRAY_UINT8) {
+        JS_ThrowTypeError(ctx, "%s expects a Uint8Array", operation);
+        return false;
+    }
+    size_t count = 0;
+    uint8_t* data = JS_GetUint8Array(ctx, &count, value);
+    if ((!data && count != 0) || count > (size_t)shell::kStandardDataLimit) {
+        JS_ThrowRangeError(ctx, "%s input exceeds the 64 MiB limit",
+                           operation);
+        return false;
+    }
+    *bytes = Str((const char*)data, (int)count);
+    return true;
+}
+
+static JSValue NativeSha256(JSContext* ctx, JSValueConst, int argc,
+                            JSValueConst* argv) {
+    Str input;
+    if (argc < 1 ||
+        !StandardBytes(ctx, argv[0], "crypto.createHash", &input)) {
+        return JS_EXCEPTION;
+    }
+    uint8_t digest[32];
+    shell::Sha256(input, digest);
+    return JS_NewUint8ArrayCopy(ctx, digest, sizeof(digest));
+}
+
+static JSValue NativeRandom(JSContext* ctx, JSValueConst, int argc,
+                            JSValueConst* argv) {
+    double requested = 0;
+    if (argc < 1 || JS_ToFloat64(ctx, &requested, argv[0]) < 0) {
+        return JS_EXCEPTION;
+    }
+    if (!isfinite(requested) || requested < 0 ||
+        requested > shell::kStandardDataLimit ||
+        requested != (double)(int)requested) {
+        return JS_ThrowRangeError(
+            ctx, "crypto.randomBytes size must be a whole number from 0 to 67108864");
+    }
+    int count = (int)requested;
+    Vec<uint8_t> bytes;
+    if ((count > 0 && !bytes.AppendBlanks(count)) ||
+        !shell::SecureRandom(bytes.els, count)) {
+        return JS_ThrowInternalError(ctx, "the platform secure random generator failed");
+    }
+    return JS_NewUint8ArrayCopy(ctx, bytes.els, (size_t)bytes.len);
+}
+
+static JSValue NativeZlib(JSContext* ctx, JSValueConst, int argc,
+                          JSValueConst* argv, int magic) {
+    static const char* names[4] = {
+        "zlib.deflateSync", "zlib.inflateSync", "zlib.gzipSync",
+        "zlib.gunzipSync"};
+    if (magic < 0 || magic >= 4) {
+        return JS_ThrowInternalError(ctx, "invalid compression operation");
+    }
+    Str input;
+    if (argc < 1 || !StandardBytes(ctx, argv[0], names[magic], &input)) {
+        return JS_EXCEPTION;
+    }
+    Str output;
+    Str error;
+    bool inflate = (magic & 1) != 0;
+    bool gzip = magic >= 2;
+    bool ok = inflate ? shell::ZlibInflate(input, gzip, &output, &error)
+                      : shell::ZlibDeflate(input, gzip, &output, &error);
+    if (!ok) {
+        const char* message = error.s ? error.s : "compression operation failed";
+        int messageLen = error.s ? error.len : (int)strlen(message);
+        JSValue result = JS_ThrowTypeError(ctx, "%.*s", messageLen, message);
+        StrFree(error);
+        StrFree(output);
+        return result;
+    }
+    JSValue result = JS_NewUint8ArrayCopy(
+        ctx, (const uint8_t*)(output.s ? output.s : ""),
+        (size_t)output.len);
+    StrFree(error);
+    StrFree(output);
+    return result;
+}
+
 static void SetGlobalFunction(JSContext* ctx, JSValueConst global,
                               const char* name, JSCFunction* function,
                               int length) {
@@ -3048,6 +3147,91 @@ R"JS(
   }
   globalThis.Buffer = Buffer;
   globalThis.__shell_buffer = Object.freeze({ Buffer });
+
+  const standardBytes = (value, operation) => {
+    if (typeof value === "string") return Buffer.from(value);
+    if (value instanceof Uint8Array) return value;
+    throw new TypeError(operation + " expects a string or Uint8Array");
+  };
+  class Hash {
+    constructor(algorithm) {
+      const name = String(algorithm).toLowerCase().replaceAll("-", "");
+      if (name !== "sha256") throw new TypeError("'" + algorithm + "' not available");
+      this.chunks = [];
+      this.size = 0;
+      this.done = false;
+    }
+    update(value) {
+      if (this.done) throw new Error("Digest already called");
+      const bytes = standardBytes(value, "Hash.update");
+      if (bytes.length > 67108864 - this.size) throw new RangeError("hash input exceeds the 64 MiB limit");
+      const copy = Buffer.from(bytes);
+      this.chunks.push(copy);
+      this.size += copy.length;
+      return this;
+    }
+    digest(encoding) {
+      if (this.done) throw new Error("Digest already called");
+      this.done = true;
+      const result = Buffer.from(__crypto_sha256(Buffer.concat(this.chunks, this.size)));
+      this.chunks = [];
+      if (encoding === undefined) return result;
+      const name = String(encoding).toLowerCase();
+      if (name !== "hex" && name !== "base64" && name !== "utf8" && name !== "utf-8") {
+        throw new TypeError("unsupported digest encoding: " + encoding);
+      }
+      return result.toString(name);
+    }
+  }
+  const createHash = (algorithm) => new Hash(algorithm);
+  const randomBytes = (size) => Buffer.from(__crypto_random(size));
+  const getRandomValues = (value) => {
+    if (!ArrayBuffer.isView(value) || value instanceof DataView ||
+        value instanceof Float32Array || value instanceof Float64Array) {
+      throw new TypeError("crypto.getRandomValues expects an integer typed array");
+    }
+    if (value.byteLength > 65536) throw new RangeError("crypto.getRandomValues accepts at most 65536 bytes");
+    new Uint8Array(value.buffer, value.byteOffset, value.byteLength).set(__crypto_random(value.byteLength));
+    return value;
+  };
+  const randomUUID = () => {
+    const bytes = randomBytes(16);
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = bytes.toString("hex");
+    return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" +
+      hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+  };
+  const subtle = Object.freeze({
+    digest: (algorithm, value) => {
+      const name = String(typeof algorithm === "object" ? algorithm?.name : algorithm)
+        .toLowerCase().replaceAll("-", "");
+      if (name !== "sha256") return Promise.reject(new TypeError("unsupported digest algorithm"));
+      let bytes;
+      if (value instanceof ArrayBuffer) bytes = new Uint8Array(value);
+      else if (ArrayBuffer.isView(value)) {
+        bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      } else return Promise.reject(new TypeError("crypto.subtle.digest expects a BufferSource"));
+      const digest = __crypto_sha256(bytes);
+      return Promise.resolve(digest.buffer);
+    },
+  });
+  const webcrypto = Object.freeze({ getRandomValues, randomUUID, subtle });
+  globalThis.crypto = webcrypto;
+  globalThis.__shell_crypto = Object.freeze({
+    createHash, randomBytes, randomUUID, getRandomValues,
+    crypto: webcrypto, webcrypto,
+  });
+
+  const compression = (native, name) => (value) =>
+    Buffer.from(native(standardBytes(value, "zlib." + name)));
+  const deflateSync = compression(__zlib_deflate, "deflateSync");
+  const inflateSync = compression(__zlib_inflate, "inflateSync");
+  const gzipSync = compression(__zlib_gzip, "gzipSync");
+  const gunzipSync = compression(__zlib_gunzip, "gunzipSync");
+  globalThis.__shell_zlib = Object.freeze({
+    deflateSync, inflateSync, gzipSync, gunzipSync,
+  });
 )JS"
 R"JS(
   const pathSep = __shell_is_windows ? "\\" : "/";
@@ -3373,6 +3557,18 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeConsole, 1, 3);
     SetGlobalMagicFunction(impl->context, global, "__console_error",
                            NativeConsole, 1, 4);
+    SetGlobalFunction(impl->context, global, "__crypto_sha256",
+                      NativeSha256, 1);
+    SetGlobalFunction(impl->context, global, "__crypto_random",
+                      NativeRandom, 1);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_deflate",
+                           NativeZlib, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_inflate",
+                           NativeZlib, 1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_gzip",
+                           NativeZlib, 1, 2);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip",
+                           NativeZlib, 1, 3);
     SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
                            (int)shell::FsOperation::Read);
     SetGlobalMagicFunction(impl->context, global, "__fs_write", NativeFs, 2,

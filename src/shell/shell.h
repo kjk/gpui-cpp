@@ -14,6 +14,7 @@
 #include "shell/scope.h"
 #include "shell/snapshot.h"
 #include "shell/spec.h"
+#include "shell/standard.h"
 #include "shell/storage.h"
 #include "shell/theme_tokens.h"
 
