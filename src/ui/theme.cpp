@@ -1192,17 +1192,6 @@ static Str TrimStr(Str s) {
     return s;
 }
 
-static bool StartsWithIgnoreCase(Str s, const char* lit) {
-    int n = 0;
-    while (lit[n]) {
-        n++;
-    }
-    if (s.len < n) {
-        return false;
-    }
-    return base::StrEqI(Str(s.s, n), lit);
-}
-
 // split_top_level_commas: a comma inside parentheses belongs to whatever is
 // there — `rgb(1, 2, 3)` is one stop, not three.
 static int SplitTopLevelCommas(Str inner, Str* out, int cap) {
@@ -1300,7 +1289,7 @@ static bool ParseGradientAngle(Str angle, float* out) {
         *out = deg;
         return true;
     }
-    if (StartsWithIgnoreCase(angle, "to ")) {
+    if (base::StrStartsWithI(angle, "to ")) {
         return ParseGradientDirection(TrimStr(Str(angle.s + 3, angle.len - 3)),
                                       out);
     }
@@ -1342,7 +1331,8 @@ static bool ParseColorStop(Str stop, float defaultPct, ColorStop* out) {
 
 static bool ParseLinearGradient(Str s, Background* out) {
     s = TrimStr(s);
-    if (!StartsWithIgnoreCase(s, "linear-gradient(") || s.s[s.len - 1] != ')') {
+    if (!base::StrStartsWithI(s, "linear-gradient(") ||
+        s.s[s.len - 1] != ')') {
         return false;
     }
     const int kPrefix = 16; // "linear-gradient("

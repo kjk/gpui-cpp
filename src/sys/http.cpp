@@ -22,19 +22,12 @@ void HttpRspFree(HttpRsp* r) {
     r->status = 0;
 }
 
-static bool HasPrefixI(Str s, const char* prefix) {
-    int n = (int)strlen(prefix);
-    if (s.len < n) {
-        return false;
-    }
-    return base::StrEqI(Str(s.s, n), prefix);
-}
-
 bool HttpUrlIsRemote(Str url) {
     if (!url.s || url.len <= 0) {
         return false;
     }
-    return HasPrefixI(url, "http://") || HasPrefixI(url, "https://");
+    return base::StrStartsWithI(url, "http://") ||
+           base::StrStartsWithI(url, "https://");
 }
 
 // ─── the table ────────────────────────────────────────────────────────────

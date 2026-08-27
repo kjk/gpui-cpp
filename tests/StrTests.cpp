@@ -22,8 +22,18 @@ static void CaseInsensitiveEqualityKeepsEmptySliceSemantics() {
     utassert(!base::StrEqI(Str{}, "x"));
 }
 
+static void CaseInsensitivePrefixUsesBothOverloads() {
+    Str text = StrL("Alpha");
+    utassert(base::StrStartsWithI(text, "aL"));
+    utassert(base::StrStartsWithI(text, StrL("ALP")));
+    utassert(!base::StrStartsWithI(text, "Alphas"));
+    utassert(base::StrStartsWithI(Str{}, ""));
+    utassert(!base::StrStartsWithI(Str{}, "a"));
+}
+
 void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
     CaseInsensitiveEqualityKeepsEmptySliceSemantics();
+    CaseInsensitivePrefixUsesBothOverloads();
 }

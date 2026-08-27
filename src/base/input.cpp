@@ -2990,18 +2990,9 @@ void InputHoverDefinition(InputState* s, int offset) {
     }
 }
 
-// `external`: the two schemes a definition can name that are a page rather
-// than a document.
-static bool StartsWithI(Str s, const char* prefix) {
-    int n = (int)strlen(prefix);
-    if (s.len < n) {
-        return false;
-    }
-    return base::StrEqI(Str(s.s, n), prefix);
-}
-
 static bool DefinitionIsExternal(Str uri) {
-    return StartsWithI(uri, "http://") || StartsWithI(uri, "https://");
+    return base::StrStartsWithI(uri, "http://") ||
+           base::StrStartsWithI(uri, "https://");
 }
 
 void InputFollowDefinition(InputState* s, App* app, Window* win,

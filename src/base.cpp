@@ -894,6 +894,10 @@ bool StrEqI(Str s1, const char* s2) {
     return StrEqI(s1, Str(s2));
 }
 
+bool StrStartsWithI(Str s, const char* prefix) {
+    return StrStartsWithI(s, Str(prefix));
+}
+
 bool StrContainsI(Str s, Str sub) {
     if (!s || !sub || sub.len <= 0) {
         return false;

@@ -1404,6 +1404,13 @@ inline bool StrEqI(Str s1, Str s2) {
     return StrEqIRest(s1, s2);
 }
 bool StrEqI(Str s1, const char* s2);
+inline bool StrStartsWithI(Str s, Str prefix) {
+    if (prefix.len > s.len) {
+        return false;
+    }
+    return StrEqI(Str(s.s, prefix.len), prefix);
+}
+bool StrStartsWithI(Str s, const char* prefix);
 bool StrContainsI(Str s, Str sub);
 
 // ─── sequential strings ───────────────────────────────────────────────────

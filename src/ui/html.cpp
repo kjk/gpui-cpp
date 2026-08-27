@@ -67,12 +67,6 @@ Str Minifier::WriteCollapseWhitespace(Arena* a, Str source) {
     return Str(out, n);
 }
 
-static bool HtmlStartsI(Str source, int at, const char* value) {
-    int len = (int)strlen(value);
-    if (at < 0 || at + len > source.len) return false;
-    return base::StrEqI(Str(source.s + at, len), value);
-}
-
 Str Minifier::Minify(Arena* a, Str source) {
     if (!a || source.len <= 0) return {};
     char* out = (char*)Alloc(a, source.len + 1);
@@ -82,7 +76,8 @@ Str Minifier::Minify(Arena* a, Str source) {
     bool whitespace = precedingWhitespace;
     Str raw = {};
     while (at < source.len) {
-        if (HtmlStartsI(source, at, "<!--")) {
+        if (base::StrStartsWithI(Str(source.s + at, source.len - at),
+                                 "<!--")) {
             int end = at + 4;
             while (end + 2 < source.len &&
                    !(source.s[end] == '-' && source.s[end + 1] == '-' &&
@@ -98,7 +93,9 @@ Str Minifier::Minify(Arena* a, Str source) {
             at = end;
             continue;
         }
-        if (omitDoctype && HtmlStartsI(source, at, "<!doctype")) {
+        if (omitDoctype &&
+            base::StrStartsWithI(Str(source.s + at, source.len - at),
+                                 "<!doctype")) {
             while (at < source.len && source.s[at] != '>') at++;
             if (at < source.len) at++;
             continue;
@@ -433,7 +430,7 @@ static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
     *level = 0;
     if (base::StrEqI(n, "p")) {
         *kind = MdKind::Paragraph;
-    } else if (n.len == 2 && base::StrEqI(Str(n.s, 1), "h") &&
+    } else if (n.len == 2 && base::StrStartsWithI(n, "h") &&
                n.s[1] >= '1' && n.s[1] <= '6') {
         *kind = MdKind::Heading;
         *level = (uint8_t)(n.s[1] - '0');

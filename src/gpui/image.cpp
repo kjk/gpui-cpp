@@ -75,18 +75,10 @@ static void PercentDecode(Str s, Vec<uint8_t>* out) {
     }
 }
 
-static bool StartsWithNoCase(Str s, const char* prefix) {
-    int n = (int)strlen(prefix);
-    if (s.len < n) {
-        return false;
-    }
-    return base::StrEqI(Str(s.s, n), prefix);
-}
-
 // "data:image/png;base64,iVBOR..." — the payload after the comma, decoded by
 // whichever of the two encodings the header names.
 static bool DataUriBytes(Str src, Vec<uint8_t>* out) {
-    if (!StartsWithNoCase(src, "data:")) {
+    if (!base::StrStartsWithI(src, "data:")) {
         return false;
     }
     int comma = -1;
@@ -120,7 +112,7 @@ bool ImageSrcIsLocal(Str src) {
     if (!src.s || src.len <= 0) {
         return false;
     }
-    if (StartsWithNoCase(src, "data:")) {
+    if (base::StrStartsWithI(src, "data:")) {
         return true;
     }
     // Anything with a scheme is somewhere else: http, https, ftp, mailto.
@@ -168,7 +160,7 @@ static void AssetResolveClear() {
 static Str ImageAssetResolve(Arena* a, Str src);
 
 Str ImageAssetFor(Arena* a, Str src) {
-    if (!src.s || src.len <= 0 || StartsWithNoCase(src, "data:")) {
+    if (!src.s || src.len <= 0 || base::StrStartsWithI(src, "data:")) {
         return {};
     }
     for (int i = 0; i < gAssetResolveN; i++) {

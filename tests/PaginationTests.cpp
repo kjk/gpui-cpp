@@ -85,9 +85,7 @@ static El* FindPrefixed(El* root, const char* prefix) {
     if (!root) {
         return nullptr;
     }
-    int n = (int)Str(prefix).len;
-    if (root->id.s && root->id.len >= n &&
-        base::StrEqI(Str(root->id.s, n), prefix)) {
+    if (root->id.s && base::StrStartsWithI(root->id, prefix)) {
         return root;
     }
     for (El* c = root->first; c; c = c->next) {

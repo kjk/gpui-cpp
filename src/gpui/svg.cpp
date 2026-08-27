@@ -533,14 +533,6 @@ static void ParsePolyline(SvgIcon* ic, Str pts, bool close) {
 
 // ─── tiny SVG tag scanner ─────────────────────────────────────────────────
 
-static bool StartsWithI(const char* p, const char* end, const char* lit) {
-    int n = (int)strlen(lit);
-    if (p + n > end) {
-        return false;
-    }
-    return base::StrEqI(Str(p, n), lit);
-}
-
 static bool IsIdentChar(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
            (c >= '0' && c <= '9') || c == '-' || c == '_';
@@ -557,7 +549,8 @@ static bool GetAttrStr(Str tag, const char* name, Str* out) {
     const char* end = tag.s + tag.len;
     while (p + nlen + 2 < end) {
         bool bound = (p == tag.s) || !IsIdentChar(p[-1]);
-        if (bound && base::StrEqI(Str(p, nlen), name) && p[nlen] == '=') {
+        if (bound && base::StrStartsWithI(Str(p, (int)(end - p)), name) &&
+            p[nlen] == '=') {
             p += nlen + 1;
             char q = 0;
             if (*p == '"' || *p == '\'') {
@@ -639,7 +632,7 @@ static bool ParseSvgPaint(const SvgIcon* ic, Str v, Rgba* out) {
     if (ParseSvgColor(v, out)) {
         return true;
     }
-    if (!ic || v.len < 6 || !base::StrEqI(Str(v.s, 4), "url(")) {
+    if (!ic || v.len < 6 || !base::StrStartsWithI(v, "url(")) {
         return false;
     }
     const char* p = v.s + 4;
@@ -842,10 +835,7 @@ static bool IsHiddenContainer(const char* name, const char* end) {
         "symbol", "marker",   "linearGradient", "radialGradient"};
     for (const char* n : kNames) {
         int len = (int)strlen(n);
-        if (end - name < len) {
-            continue;
-        }
-        if (!base::StrEqI(Str(name, len), n)) {
+        if (!base::StrStartsWithI(Str(name, (int)(end - name)), n)) {
             continue;
         }
         // "clipPath" must not match "clipPathUnits": the name ends where
@@ -862,7 +852,7 @@ static bool IsHiddenContainer(const char* name, const char* end) {
 // The name of a tag, matched whole: "text" must not also match "textPath".
 static bool IsTagNamed(const char* name, const char* end, const char* lit) {
     int len = (int)strlen(lit);
-    if (end - name < len || !base::StrEqI(Str(name, len), lit)) {
+    if (!base::StrStartsWithI(Str(name, (int)(end - name)), lit)) {
         return false;
     }
     char after = name + len < end ? name[len] : ' ';
@@ -1173,7 +1163,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         // What the groups around this shape add up to.
         const SvgMatrix& gm = outer.m;
 
-        if (StartsWithI(tagStart, end, "svg")) {
+        if (base::StrStartsWithI(tag, "svg")) {
             char vb[64];
             if (GetAttr(tag, "viewBox", vb, 64)) {
                 PathScan s{vb, vb + strlen(vb)};
@@ -1212,7 +1202,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             }
             continue;
         }
-        if (StartsWithI(tagStart, end, "path")) {
+        if (base::StrStartsWithI(tag, "path")) {
             Str d;
             int start = ic->ops.len;
             if (GetAttrStr(tag, "d", &d)) {
@@ -1221,7 +1211,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             EndShape(ic, start, tag, gm);
             continue;
         }
-        if (StartsWithI(tagStart, end, "rect")) {
+        if (base::StrStartsWithI(tag, "rect")) {
             int start = ic->ops.len;
             float x = AttrF(tag, "x", 0);
             float y = AttrF(tag, "y", 0);
@@ -1232,7 +1222,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             EndShape(ic, start, tag, gm);
             continue;
         }
-        if (StartsWithI(tagStart, end, "polyline")) {
+        if (base::StrStartsWithI(tag, "polyline")) {
             Str pts;
             int start = ic->ops.len;
             if (GetAttrStr(tag, "points", &pts)) {
@@ -1241,7 +1231,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             EndShape(ic, start, tag, gm);
             continue;
         }
-        if (StartsWithI(tagStart, end, "polygon")) {
+        if (base::StrStartsWithI(tag, "polygon")) {
             Str pts;
             int start = ic->ops.len;
             if (GetAttrStr(tag, "points", &pts)) {
@@ -1250,7 +1240,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             EndShape(ic, start, tag, gm);
             continue;
         }
-        if (StartsWithI(tagStart, end, "line")) {
+        if (base::StrStartsWithI(tag, "line")) {
             int start = ic->ops.len;
             float x1 = AttrF(tag, "x1", 0);
             float y1 = AttrF(tag, "y1", 0);
@@ -1261,7 +1251,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             EndShape(ic, start, tag, gm);
             continue;
         }
-        if (StartsWithI(tagStart, end, "circle")) {
+        if (base::StrStartsWithI(tag, "circle")) {
             int start = ic->ops.len;
             float cx = AttrF(tag, "cx", 0);
             float cy = AttrF(tag, "cy", 0);
@@ -1272,7 +1262,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         }
         // No icon under assets/icons has one; a picture from anywhere else
         // may, and it used to be dropped without a word.
-        if (StartsWithI(tagStart, end, "ellipse")) {
+        if (base::StrStartsWithI(tag, "ellipse")) {
             int start = ic->ops.len;
             AddEllipse(ic, AttrF(tag, "cx", 0), AttrF(tag, "cy", 0),
                        AttrF(tag, "rx", 0), AttrF(tag, "ry", 0));
@@ -1401,7 +1391,7 @@ const uint8_t* AssetIconForPath(Str assetPath, int* lenOut) {
     if (assetPath.len <= kDirLen + kExtLen) {
         return nullptr;
     }
-    if (!base::StrEqI(Str(assetPath.s, kDirLen), kDir)) {
+    if (!base::StrStartsWithI(assetPath, kDir)) {
         return nullptr;
     }
     Str base(assetPath.s + kDirLen, assetPath.len - kDirLen - kExtLen);
