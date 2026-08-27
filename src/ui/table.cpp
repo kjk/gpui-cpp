@@ -7,6 +7,119 @@ namespace gpui {
 
 namespace component {
 
+TableColumn TableColumn::New(Str keyValue, Str nameValue) {
+    TableColumn out;
+    out.key = keyValue;
+    out.name = nameValue;
+    out.title = nameValue;
+    return out;
+}
+
+TableColumn TableColumn::Sort(ColumnSort value) const {
+    TableColumn out = *this;
+    out.hasSort = true;
+    out.sortable = true;
+    out.sort = value;
+    return out;
+}
+
+TableColumn TableColumn::Sortable() const {
+    return Sort(ColumnSort::Default);
+}
+
+TableColumn TableColumn::Ascending() const {
+    return Sort(ColumnSort::Ascending);
+}
+
+TableColumn TableColumn::Descending() const {
+    return Sort(ColumnSort::Descending);
+}
+
+TableColumn TableColumn::TextCenter() const {
+    TableColumn out = *this;
+    out.center = true;
+    out.right = false;
+    return out;
+}
+
+TableColumn TableColumn::TextRight() const {
+    TableColumn out = *this;
+    out.right = true;
+    out.center = false;
+    return out;
+}
+
+TableColumn TableColumn::Paddings(Edges value) const {
+    TableColumn out = *this;
+    out.hasPaddings = true;
+    out.paddings = value;
+    return out;
+}
+
+TableColumn TableColumn::P0() const {
+    return Paddings({});
+}
+
+TableColumn TableColumn::Width(float value) const {
+    TableColumn out = *this;
+    out.width = value;
+    return out;
+}
+
+TableColumn TableColumn::Fixed(ColumnFixed value) const {
+    TableColumn out = *this;
+    out.fixed = true;
+    out.fixedSide = value;
+    return out;
+}
+
+TableColumn TableColumn::FixedLeft() const {
+    return Fixed(ColumnFixed::Left);
+}
+
+TableColumn TableColumn::Resizable(bool value) const {
+    TableColumn out = *this;
+    out.resizable = value;
+    return out;
+}
+
+TableColumn TableColumn::Movable(bool value) const {
+    TableColumn out = *this;
+    out.movable = value;
+    return out;
+}
+
+TableColumn TableColumn::Selectable(bool value) const {
+    TableColumn out = *this;
+    out.selectable = value;
+    return out;
+}
+
+TableColumn TableColumn::MinWidth(float value) const {
+    TableColumn out = *this;
+    out.minWidth = value;
+    if (out.width < value) {
+        out.width = value;
+    }
+    return out;
+}
+
+TableColumn TableColumn::MaxWidth(float value) const {
+    TableColumn out = *this;
+    out.maxWidth = value;
+    if (out.width > value) {
+        out.width = value;
+    }
+    return out;
+}
+
+ColumnGroup ColumnGroup::New(Str value, size_t spanValue) {
+    ColumnGroup out;
+    out.label = value;
+    out.span = spanValue > 0 ? (int)spanValue : 1;
+    return out;
+}
+
 // ─── the simple table (crates/ui/src/table/table.rs) ──────────────────────
 
 // MIN_CELL_WIDTH: a cell never narrows past this, whatever the row does.
@@ -261,6 +374,17 @@ DataTable* DataTable::Columns(const TableColumn* cols, int n) {
     nColumns = n;
     return this;
 }
+DataTable* DataTable::Delegate(const TableDelegate& value) {
+    delegate = value;
+    hasDelegate = true;
+    data = value.data;
+    contextMenu = value.contextMenu;
+    lastEmptyCol = value.renderLastEmptyCol;
+    visibleRowsChanged = value.visibleRowsChanged;
+    visibleColsChanged = value.visibleColumnsChanged;
+    cellText = value.cellText;
+    return this;
+}
 DataTable* DataTable::Rows(int n, void* d,
                            El* (*fn)(Ctx* cx, void* data, int row, int col)) {
     nRows = n;
@@ -306,12 +430,26 @@ DataTable* DataTable::CellText(Str (*fn)(Ctx*, void*, int, int)) {
     return this;
 }
 
+static Str TableColumnLabel(const TableColumn& column) {
+    return column.name.s ? column.name : column.title;
+}
+
+static El* TableColumnPadding(El* element, const TableColumn& column) {
+    if (!column.hasPaddings) {
+        return element->PadX(8)->PadY(6);
+    }
+    return element->PadL(column.paddings.left)
+        ->PadR(column.paddings.right)
+        ->PadT(column.paddings.top)
+        ->PadB(column.paddings.bottom);
+}
+
 void DataTable::Headers(Vec<Str>* heads) {
     if (!heads) {
         return;
     }
     for (int c = 0; c < nColumns; c++) {
-        heads->Append(columns[c].title);
+        heads->Append(TableColumnLabel(columns[c]));
     }
 }
 
@@ -592,6 +730,32 @@ static El* RowHeaderCell(Ctx* cx, Entity<TableState> state, int row,
 
 El* DataTable::BuildEl() {
     const Theme& th = ThemeNow(cx->app);
+    if (hasDelegate) {
+        data = delegate.data;
+        nColumns = delegate.columnsCount ? delegate.columnsCount(cx, data) : 0;
+        nRows = delegate.rowsCount ? delegate.rowsCount(cx, data) : 0;
+        if (nColumns > 0) {
+            TableColumn* generated = (TableColumn*)Alloc(
+                a, nColumns * (int)sizeof(TableColumn));
+            for (int c = 0; c < nColumns; c++) {
+                generated[c] = delegate.column
+                                   ? delegate.column(cx, data, c)
+                                   : TableColumn{};
+            }
+            columns = generated;
+        } else {
+            columns = nullptr;
+        }
+        cell = delegate.renderTd;
+        contextMenu = delegate.contextMenu;
+        lastEmptyCol = delegate.renderLastEmptyCol;
+        visibleRowsChanged = delegate.visibleRowsChanged;
+        visibleColsChanged = delegate.visibleColumnsChanged;
+        cellText = delegate.cellText;
+        if (delegate.groupHeaders) {
+            delegate.groupHeaders(cx, data, this);
+        }
+    }
     TableState* s = state.Get(cx);
     if (s) {
         s->self = state.id;
@@ -600,9 +764,32 @@ El* DataTable::BuildEl() {
         s->rowCount = nRows;
         s->colCount = nColumns;
         s->rowH = rowHeight;
+        if (hasDelegate) {
+            s->delegateData = data;
+            s->delegateSort = delegate.performSort;
+            s->delegateMoveColumn = delegate.moveColumn;
+            s->delegateLoadMore = delegate.loadMore;
+            s->loading = delegate.loading && delegate.loading(cx, data);
+            s->hasMore = delegate.hasMore && delegate.hasMore(cx, data);
+            s->loadMoreThreshold = delegate.loadMoreThreshold
+                                       ? delegate.loadMoreThreshold(data)
+                                       : 20;
+        } else {
+            s->delegateData = nullptr;
+            s->delegateSort = nullptr;
+            s->delegateMoveColumn = nullptr;
+            s->delegateLoadMore = nullptr;
+        }
         TableSeedColOrder(s, nColumns);
         for (int c = 0; c < nColumns; c++) {
             TableSeedColWidth(s, c, columns[c].width);
+            TableSetColConstraints(s, c, columns[c].minWidth,
+                                   columns[c].maxWidth);
+            if (s->sortCol < 0 && columns[c].hasSort &&
+                columns[c].sort != ColumnSort::Default) {
+                s->sortCol = c;
+                s->sort = columns[c].sort;
+            }
         }
     }
     int nFixed = FixedColCount(this, s);
@@ -623,7 +810,10 @@ El* DataTable::BuildEl() {
     // row is the fake head, which is why that row is painted the head colour.
     // Rust puts it beside `inner_table` and builds only one of the two.
     if (s && s->loading) {
-        box->Child(LoadingView(cx, size));
+        El* loading = hasDelegate && delegate.renderLoading
+                          ? delegate.renderLoading(cx, data, size)
+                          : nullptr;
+        box->Child(loading ? loading : LoadingView(cx, size));
         return box;
     }
 
@@ -685,10 +875,19 @@ El* DataTable::BuildEl() {
             // A band that ends where the pinned columns do belongs to that
             // pane; one that straddles the seam rides with the scrolling
             // side, which is where most of it is.
-            if (col + span <= nFixed) {
-                gf->Child(GroupBand(cx, cells[i].label, w, false));
+            El* band = hasDelegate && delegate.renderGroupTh
+                           ? delegate.renderGroupTh(cx, data, cells[i].label,
+                                                    span, w)
+                           : nullptr;
+            if (!band) {
+                band = GroupBand(cx, cells[i].label, w, last);
             } else {
-                gs->Child(GroupBand(cx, cells[i].label, w, last));
+                band->W(w)->H(kFill)->Shrink0();
+            }
+            if (col + span <= nFixed) {
+                gf->Child(band);
+            } else {
+                gs->Child(band);
             }
             col += span;
         }
@@ -705,8 +904,16 @@ El* DataTable::BuildEl() {
                         ->BorderB(1, th.border);
     El* headWrap = follow(
         Div(a)->FlexRow()->W(kFill)->H(rowHeight)->BorderB(1, th.border));
-    El* headScroll =
-        gpui::TableHeader::New(cx, StrL("head"))->FlexRow()->Shrink0();
+    El* headScroll = hasDelegate && delegate.renderHeader
+                         ? delegate.renderHeader(cx, data)
+                         : nullptr;
+    if (!headScroll) {
+        headScroll = gpui::TableHeader::New(cx, StrL("head"));
+    }
+    headScroll->PathClick(StrL("head"))
+        ->Role(AccessibilityRole::Row)
+        ->FlexRow()
+        ->Shrink0();
     headWrap->Child(headScroll);
     // Every column's slot in one go: `BoundsOut` keeps a pointer into the
     // array, so it must not grow again while the heads are being built.
@@ -721,8 +928,9 @@ El* DataTable::BuildEl() {
         // head drag rewrites.
         int c = s ? TableColAt(s, d) : d;
         const TableColumn& col = columns[c];
+        Str colLabel = TableColumnLabel(col);
         El* th_ = gpui::TableHead::New(cx, StrDup(a, fmt("th-%d", c)), c + 1)
-                      ->AriaLabel(col.title)
+                      ->AriaLabel(colLabel)
                       ->FlexRow()
                       ->Shrink0()
                       ->W(ColWidth(s, c));
@@ -750,19 +958,31 @@ El* DataTable::BuildEl() {
         El* content = Div(a)
                           ->FlexRow()
                           ->Flex1()
-                          ->PadX(8)
-                          ->PadY(6)
                           ->ItemsCenter()
                           ->JustifyBetween();
-        content->Child(
-            TextEl(a, col.title)->Font(14)->Fg(th.foreground)->LineHeight(1.f));
+        TableColumnPadding(content, col);
+        if (!col.sortable) {
+            if (col.center) {
+                content->JustifyCenter();
+            } else if (col.right) {
+                content->JustifyEnd();
+            }
+        }
+        El* customHead = hasDelegate && delegate.renderTh
+                             ? delegate.renderTh(cx, data, c)
+                             : nullptr;
+        content->Child(customHead ? customHead
+                                  : TextEl(a, colLabel)
+                                        ->Font(14)
+                                        ->Fg(th.foreground)
+                                        ->LineHeight(1.f));
         if (col.selectable) {
             BindPathClick(content, StrDup(a, fmt("col-header-%d", c)),
                           ListenerArg(headClick, c));
         }
         // on_drag(DragColumn(..)): a press on the head picks the column up,
         // and the whole head is the drop target for another one.
-        if (s && s->colMovable) {
+        if (s && s->colMovable && col.movable) {
             content->OnDrag(kTableColDrag, d);
             content->OnDragMove(ListenTo(state, &TableState::OnColDragMove));
             content->OnMouseUpOut(ListenTo(state, &TableState::OnColDragEnd));
@@ -790,8 +1010,12 @@ El* DataTable::BuildEl() {
 
     // render_empty: a table with no rows shows this instead of a body.
     if (nRows == 0) {
+        El* delegateEmpty = hasDelegate && delegate.renderEmpty
+                                ? delegate.renderEmpty(cx, data)
+                                : nullptr;
         scrollPane->Child(
-            empty ? empty
+            delegateEmpty ? delegateEmpty
+            : empty ? empty
                   : Div(a)
                         ->FlexCol()
                         ->W(kFill)
@@ -862,11 +1086,19 @@ El* DataTable::BuildEl() {
                 ->FlexRow()
                 ->Shrink0()
                 ->BorderB(1, th.tableRowBorder);
-        El* rowScroll = gpui::TableRow::New(cx, StrDup(a, fmt("row-%d", r)),
-                                            r + 1)
-                            ->FlexRow()
-                            ->Shrink0()
-                            ->BorderB(1, th.tableRowBorder);
+        El* rowScroll = hasDelegate && delegate.renderTr
+                            ? delegate.renderTr(cx, data, r)
+                            : nullptr;
+        if (!rowScroll) {
+            rowScroll = gpui::TableRow::New(
+                cx, StrDup(a, fmt("row-%d", r)), r + 1);
+        }
+        rowScroll->PathClick(StrDup(a, fmt("row-%d", r)))
+            ->Role(AccessibilityRole::Row)
+            ->AriaRowIndex(r + 1)
+            ->FlexRow()
+            ->Shrink0()
+            ->BorderB(1, th.tableRowBorder);
         El* rows[2] = {rowFixed, rowScroll};
         for (El* row : rows) {
             if (s && h > 0) {
@@ -903,11 +1135,12 @@ El* DataTable::BuildEl() {
                          ->FlexRow()
                          ->Shrink0()
                          ->W(ColWidth(s, c))
-                         ->PadX(8)
-                         ->PadY(6)
                          ->ItemsCenter();
+            TableColumnPadding(td, columns[c]);
             if (columns[c].right) {
                 td->JustifyEnd();
+            } else if (columns[c].center) {
+                td->JustifyCenter();
             }
             if (d > 0) {
                 td->BorderL(1, th.tableRowBorder);
@@ -943,7 +1176,11 @@ El* DataTable::BuildEl() {
                 // render_td clips what it holds to the column. Dragging an
                 // edge in makes a column narrower than its text, and without
                 // this the text would spill over the next column.
-                float inner = ColWidth(s, c) - 16;
+                float padding = columns[c].hasPaddings
+                                    ? columns[c].paddings.left +
+                                          columns[c].paddings.right
+                                    : 16.f;
+                float inner = ColWidth(s, c) - padding;
                 cellEl->MaxW(inner > 1 ? inner : 1)->Truncate();
                 td->Child(cellEl);
             }
@@ -970,9 +1207,14 @@ El* DataTable::BuildEl() {
     scrollPane->Child(bodyScroll);
     // load_more_if_need: the last row built is near the end, and the delegate
     // says there is more to come.
-    if (s && TableShouldLoadMore(s, range.end) && s->onLoadMore.IsValid()) {
-        TableEvent ev = {TableEventKind::SelectRow, s->rowCount, -1};
-        ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
+    if (s && TableShouldLoadMore(s, range.end)) {
+        if (s->delegateLoadMore) {
+            s->delegateLoadMore(cx, s->delegateData);
+        }
+        if (s->onLoadMore.IsValid()) {
+            TableEvent ev = {TableEventKind::SelectRow, s->rowCount, -1};
+            ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
+        }
     }
     // data_table.rs declares its context on the element it tracks focus on,
     // and binds tab to the column walk there — which is why the window's

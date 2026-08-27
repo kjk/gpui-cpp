@@ -8,6 +8,10 @@ namespace gpui {
 
 namespace component {
 
+enum class ColumnFixed : uint8_t {
+    Left
+};
+
 // One column of a DataTable: what its head says, how wide it is, and whether
 // it answers to a sort or a selection.
 struct TableColumn {
@@ -21,19 +25,91 @@ struct TableColumn {
     // Column::fixed(ColumnFixed::Left): the column stays put while the rest
     // scroll under the head. TableState::colFixed is the master switch.
     bool fixed = false;
+    // Source fields that the first aggregate representation omitted.
+    Str key = {};
+    Str name = {};
+    bool center = false;
+    bool hasSort = false;
+    ColumnSort sort = ColumnSort::Default;
+    bool hasPaddings = false;
+    Edges paddings = {};
+    ColumnFixed fixedSide = ColumnFixed::Left;
+    bool movable = true;
+    float minWidth = 20;
+    float maxWidth = 0; // zero is source f32::MAX
+
+    static TableColumn New(Str key, Str name);
+    TableColumn Sort(ColumnSort value) const;
+    TableColumn Sortable() const;
+    TableColumn Ascending() const;
+    TableColumn Descending() const;
+    TableColumn TextCenter() const;
+    TableColumn TextRight() const;
+    TableColumn Paddings(Edges value) const;
+    TableColumn P0() const;
+    TableColumn Width(float value) const;
+    TableColumn Fixed(ColumnFixed value = ColumnFixed::Left) const;
+    TableColumn FixedLeft() const;
+    TableColumn Resizable(bool value) const;
+    TableColumn Movable(bool value) const;
+    TableColumn Selectable(bool value) const;
+    TableColumn MinWidth(float value) const;
+    TableColumn MaxWidth(float value) const;
 };
+
+using Column = TableColumn;
 
 // ColumnGroup: one band of an upper head row, spanning that many columns of
 // the row under it. Every level has to span every column, so the bands line
 // up with the columns they name.
-struct TableGroupCell {
+struct ColumnGroup {
     Str label = {};
     int span = 1;
+
+    static ColumnGroup New(Str label, size_t span);
 };
+
+using TableGroupCell = ColumnGroup;
 
 struct TableGroupHeader {
     const TableGroupCell* cells = nullptr;
     int n = 0;
+};
+
+struct DataTable;
+
+// Rust's generic TableDelegate becomes a POD function table. Every hook is
+// optional except the counts, column and cell renderers; absent hooks retain
+// the same defaults as the Rust trait.
+struct TableDelegate {
+    void* data = nullptr;
+    int (*columnsCount)(Ctx* cx, void* data) = nullptr;
+    int (*rowsCount)(Ctx* cx, void* data) = nullptr;
+    TableColumn (*column)(Ctx* cx, void* data, int col) = nullptr;
+    void (*performSort)(Ctx* cx, void* data, int col,
+                        ColumnSort sort) = nullptr;
+    El* (*renderHeader)(Ctx* cx, void* data) = nullptr;
+    El* (*renderGroupTh)(Ctx* cx, void* data, Str label, int span,
+                         float width) = nullptr;
+    El* (*renderTh)(Ctx* cx, void* data, int col) = nullptr;
+    El* (*renderTr)(Ctx* cx, void* data, int row) = nullptr;
+    El* (*renderTd)(Ctx* cx, void* data, int row, int col) = nullptr;
+    void (*groupHeaders)(Ctx* cx, void* data, DataTable* table) = nullptr;
+    PopupMenu* (*contextMenu)(Ctx* cx, void* data, int row,
+                              PopupMenu* menu) = nullptr;
+    void (*moveColumn)(Ctx* cx, void* data, int from, int to) = nullptr;
+    El* (*renderEmpty)(Ctx* cx, void* data) = nullptr;
+    bool (*loading)(Ctx* cx, void* data) = nullptr;
+    El* (*renderLoading)(Ctx* cx, void* data, UiSize size) = nullptr;
+    bool (*hasMore)(Ctx* cx, void* data) = nullptr;
+    int (*loadMoreThreshold)(void* data) = nullptr;
+    void (*loadMore)(Ctx* cx, void* data) = nullptr;
+    El* (*renderLastEmptyCol)(Ctx* cx, void* data) = nullptr;
+    void (*visibleRowsChanged)(Ctx* cx, void* data, int first,
+                               int end) = nullptr;
+    void (*visibleColumnsChanged)(Ctx* cx, void* data, int first,
+                                  int end) = nullptr;
+    Str (*cellText)(Ctx* cx, void* data, int row, int col) = nullptr;
 };
 
 // The themed data table. The rows are the caller's — a delegate renders a
@@ -88,9 +164,12 @@ struct DataTable {
     float rowHeight = 32;
     // options.size, kept because render_loading is handed it.
     UiSize size = UiSize::Medium;
+    TableDelegate delegate = {};
+    bool hasDelegate = false;
 
     static DataTable* New(Ctx* cx, Str id, Entity<TableState> state);
     DataTable* Columns(const TableColumn* cols, int n);
+    DataTable* Delegate(const TableDelegate& value);
     DataTable* Rows(int n, void* data,
                     El* (*cell)(Ctx* cx, void* data, int row, int col));
     DataTable* Stripe(bool v);

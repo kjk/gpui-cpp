@@ -91,12 +91,19 @@ static void TableEmit(TableState* s, Ctx* cx, TableEventKind kind, int row,
 }
 
 void TableEnsureCols(TableState* s, int n) {
-    if (n <= s->colWidth.len) {
-        return;
-    }
     while (s->colWidth.len < n) {
         s->colWidth.Append(0.f);
+    }
+    while (s->colMinWidths.len < n) {
+        s->colMinWidths.Append(s->colMinWidth);
+    }
+    while (s->colMaxWidths.len < n) {
+        s->colMaxWidths.Append(s->colMaxWidth);
+    }
+    while (s->colOrder.len < n) {
         s->colOrder.Append(s->colOrder.len);
+    }
+    while (s->colBounds.len < n) {
         s->colBounds.Append(Bounds{});
     }
 }
@@ -128,12 +135,40 @@ float TableClampColWidth(const TableState* s, float width) {
     return width;
 }
 
+float TableClampColWidth(const TableState* s, int col, float width) {
+    float minWidth = s->colMinWidth;
+    float maxWidth = s->colMaxWidth;
+    if (col >= 0 && col < s->colMinWidths.len) {
+        minWidth = s->colMinWidths[col];
+    }
+    if (col >= 0 && col < s->colMaxWidths.len) {
+        maxWidth = s->colMaxWidths[col];
+    }
+    if (width < minWidth) {
+        width = minWidth;
+    }
+    if (maxWidth > 0 && width > maxWidth) {
+        width = maxWidth;
+    }
+    return width;
+}
+
+void TableSetColConstraints(TableState* s, int col, float minWidth,
+                            float maxWidth) {
+    if (!s || col < 0) {
+        return;
+    }
+    TableEnsureCols(s, col + 1);
+    s->colMinWidths[col] = minWidth;
+    s->colMaxWidths[col] = maxWidth;
+}
+
 void TableResizeCol(TableState* s, Ctx* cx, int col, float width) {
     if (!s->colResizable || col < 0 || col >= s->colCount) {
         return;
     }
     TableEnsureCols(s, col + 1);
-    width = TableClampColWidth(s, width);
+    width = TableClampColWidth(s, col, width);
     // Rust only lays the header out again and notifies when the clamp let
     // something through.
     if (s->colWidth[col] == width) {
@@ -152,6 +187,9 @@ void TablePerformSort(TableState* s, Ctx* cx, int col) {
     // the column groups does.
     s->sortCol = col;
     s->sort = next;
+    if (s->delegateSort) {
+        s->delegateSort(cx, s->delegateData, col, next);
+    }
     Notify(cx);
     TableEmit(s, cx, TableEventKind::Sort, -1, col, next);
 }
@@ -717,6 +755,9 @@ void TableMoveColumnEvent(TableState* s, Ctx* cx, int from, int to) {
     ev.row = to;
     if (s->onEvent.IsValid()) {
         ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+    }
+    if (s->delegateMoveColumn) {
+        s->delegateMoveColumn(cx, s->delegateData, from, to);
     }
     Notify(cx);
 }

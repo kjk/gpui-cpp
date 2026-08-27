@@ -8042,3 +8042,38 @@ partial-module spellings and no full-module errors. MSVC debug/release,
 clang-cl release and MSVC ASan pass 20,132 checks; wasm passes its 19,427
 applicable checks. The release story build compiles its standalone lists,
 Selects and Comboboxes against the shared row implementation.
+
+## UI table restores its column and delegate contracts
+
+The themed data table already had selection, sorting, fixed columns, column
+dragging and resizing, grouped headers, virtual row/column ranges, context
+menus, export and accessibility behavior, but its public source structure was
+flattened into arrays plus individual callbacks. `Column` did not distinguish
+its data key from its display name and omitted alignment, custom padding,
+initial sort, per-column movement and width limits. `ColumnGroup`,
+`ColumnFixed` and the `TableDelegate` boundary were also absent.
+
+`Column` is now the source-shaped value builder (with `TableColumn` retained
+as the compatibility name), including the source defaults and all fluent
+sort, alignment, padding, fixed, resize, movement, selection and min/max
+width operations. `ColumnGroup` and `ColumnFixed` name the corresponding
+source values. The retained table state stores each column's independent
+minimum and maximum and uses those bounds during a resize, while an initial
+ascending or descending column seeds the table sort on its first prepare.
+
+`TableDelegate` is a POD function table for the generic Rust trait. It owns
+column/row counts, column lookup, every header/row/cell/group renderer,
+sorting and column movement, empty/loading/last-column rendering, context
+menus, load-more policy, visible-range notifications and export text. Its
+interaction callbacks are retained on `TableState`, so sorting, moving and
+loading dispatch through the delegate after the frame builder is gone.
+Existing array/callback builders remain as compatibility conveniences and
+render through the same implementation.
+
+Tests cover every column field and immediate width clamp, independent resize
+bounds, delegate-driven counts and custom rendering, group headers, initial
+sort, load-more, sort cycling and move dispatch. UI table is full: the audit
+moves to 101 full, 20 partial, 8 adapters and 2 exclusions with 260 unresolved
+partial-module spellings and no full-module errors. MSVC debug/release,
+clang-cl release and MSVC ASan pass 20,159 checks; wasm passes its 19,454
+applicable checks. The release story gallery compiles unchanged.

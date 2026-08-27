@@ -143,9 +143,10 @@ struct TableState {
     // the table's own from then on. A zero is a column that has not been
     // seeded yet.
     Vec<float> colWidth;
-    // Column::min_width / max_width. Rust hangs a pair off every column and
-    // every column in the tree takes the default pair, so one says as much.
-    // A zero ceiling is Rust's f32::MAX, which is no ceiling.
+    // Column::min_width / max_width, one pair per logical column. The scalar
+    // pair remains the fallback for unseeded/base-only tables.
+    Vec<float> colMinWidths;
+    Vec<float> colMaxWidths;
     float colMinWidth = 20;
     float colMaxWidth = 0;
     // resizing_col: which edge is being dragged right now, and the flag that
@@ -210,10 +211,20 @@ struct TableState {
 
     ~TableState() {
         colWidth.Reset();
+        colMinWidths.Reset();
+        colMaxWidths.Reset();
         colOrder.Reset();
         colBounds.Reset();
     }
     Listener onLoadMore = {};
+    // UI TableDelegate hooks stored in base-shaped signatures so retained
+    // interaction state can call them after the frame builder is gone.
+    void* delegateData = nullptr;
+    void (*delegateSort)(Ctx* cx, void* data, int col,
+                         ColumnSort sort) = nullptr;
+    void (*delegateMoveColumn)(Ctx* cx, void* data, int from,
+                               int to) = nullptr;
+    void (*delegateLoadMore)(Ctx* cx, void* data) = nullptr;
 
     static void OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t row);
@@ -324,6 +335,9 @@ void TableSeedColWidth(TableState* s, int col, float declared);
 // size.clamp(min_width, max_width), which is what decides how far a drag on a
 // column edge is allowed to get.
 float TableClampColWidth(const TableState* s, float width);
+float TableClampColWidth(const TableState* s, int col, float width);
+void TableSetColConstraints(TableState* s, int col, float minWidth,
+                            float maxWidth);
 
 // resize_cols: the column takes the new width, clamped, and the table is only
 // notified if that changed anything.

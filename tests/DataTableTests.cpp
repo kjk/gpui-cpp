@@ -83,6 +83,168 @@ static void AResizeIsClamped() {
     utassert(TableClampColWidth(&s, 100) == 100);
 }
 
+static void SourceColumnBuildersKeepEveryField() {
+    component::Column col =
+        component::Column::New(StrL("cpu"), StrL("CPU"))
+            .Ascending()
+            .TextCenter()
+            .Paddings(Edges::New(1, 2, 3, 4))
+            .Width(140)
+            .FixedLeft()
+            .Resizable(false)
+            .Movable(false)
+            .Selectable(false)
+            .MinWidth(150)
+            .MaxWidth(145);
+    utassert(StrEqI(col.key, StrL("cpu")));
+    utassert(StrEqI(col.name, StrL("CPU")));
+    utassert(StrEqI(col.title, StrL("CPU")));
+    utassert(col.center && !col.right);
+    utassert(col.hasSort && col.sortable);
+    utassert(col.sort == ColumnSort::Ascending);
+    utassert(col.hasPaddings);
+    utassert(col.paddings.left == 1 && col.paddings.right == 2);
+    utassert(col.paddings.top == 3 && col.paddings.bottom == 4);
+    utassert(col.fixed && col.fixedSide == component::ColumnFixed::Left);
+    utassert(!col.resizable && !col.movable && !col.selectable);
+    utassert(col.minWidth == 150 && col.maxWidth == 145);
+    // The two builders clamp immediately, in the order Rust applies them.
+    utassert(col.width == 145);
+
+    component::ColumnGroup group =
+        component::ColumnGroup::New(StrL("Machine"), 3);
+    utassert(StrEqI(group.label, StrL("Machine")) && group.span == 3);
+}
+
+static void EachColumnHasItsOwnResizeBounds() {
+    TableState s;
+    s.colCount = 2;
+    TableSetColConstraints(&s, 0, 40, 80);
+    TableSetColConstraints(&s, 1, 100, 200);
+    utassert(TableClampColWidth(&s, 0, 10) == 40);
+    utassert(TableClampColWidth(&s, 0, 500) == 80);
+    utassert(TableClampColWidth(&s, 1, 10) == 100);
+    utassert(TableClampColWidth(&s, 1, 500) == 200);
+}
+
+struct DelegateProbe {
+    int headers = 0;
+    int groupHeaders = 0;
+    int heads = 0;
+    int rows = 0;
+    int cells = 0;
+    int sorts = 0;
+    int moves = 0;
+    int loads = 0;
+    ColumnSort lastSort = ColumnSort::Default;
+};
+
+static int DelegateColumns(Ctx*, void*) {
+    return 2;
+}
+static int DelegateRows(Ctx*, void*) {
+    return 3;
+}
+static component::TableColumn DelegateColumn(Ctx*, void*, int col) {
+    return component::Column::New(col == 0 ? StrL("id") : StrL("name"),
+                                  col == 0 ? StrL("ID") : StrL("Name"))
+        .Width(col == 0 ? 60.f : 120.f)
+        .MinWidth(col == 0 ? 40.f : 80.f)
+        .MaxWidth(col == 0 ? 90.f : 180.f)
+        .Ascending();
+}
+static void DelegateSort(Ctx*, void* data, int, ColumnSort sort) {
+    DelegateProbe* p = (DelegateProbe*)data;
+    p->sorts++;
+    p->lastSort = sort;
+}
+static El* DelegateHeader(Ctx* cx, void* data) {
+    ((DelegateProbe*)data)->headers++;
+    return Div(cx->a);
+}
+static El* DelegateGroupTh(Ctx* cx, void* data, Str, int span, float width) {
+    DelegateProbe* p = (DelegateProbe*)data;
+    p->groupHeaders += span;
+    return Div(cx->a)->W(width);
+}
+static El* DelegateTh(Ctx* cx, void* data, int) {
+    ((DelegateProbe*)data)->heads++;
+    return Div(cx->a);
+}
+static El* DelegateTr(Ctx* cx, void* data, int) {
+    ((DelegateProbe*)data)->rows++;
+    return Div(cx->a);
+}
+static El* DelegateTd(Ctx* cx, void* data, int, int) {
+    ((DelegateProbe*)data)->cells++;
+    return Div(cx->a);
+}
+static void DelegateGroups(Ctx*, void*, component::DataTable* table) {
+    component::ColumnGroup* group =
+        (component::ColumnGroup*)Alloc(table->a, sizeof(component::ColumnGroup));
+    group[0] = component::ColumnGroup::New(StrL("All"), 2);
+    table->GroupHeader(group, 1);
+}
+static void DelegateMove(Ctx*, void* data, int, int) {
+    ((DelegateProbe*)data)->moves++;
+}
+static bool DelegateHasMore(Ctx*, void*) {
+    return true;
+}
+static int DelegateThreshold(void*) {
+    return 2;
+}
+static void DelegateLoad(Ctx*, void* data) {
+    ((DelegateProbe*)data)->loads++;
+}
+
+static void TheSourceDelegateDrivesTheTable() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Entity<TableState> state = EntityNewState<TableState>(&app);
+    Ctx cx = {&app, win, a, state.id};
+    DelegateProbe probe;
+    component::TableDelegate delegate = {};
+    delegate.data = &probe;
+    delegate.columnsCount = DelegateColumns;
+    delegate.rowsCount = DelegateRows;
+    delegate.column = DelegateColumn;
+    delegate.performSort = DelegateSort;
+    delegate.renderHeader = DelegateHeader;
+    delegate.renderGroupTh = DelegateGroupTh;
+    delegate.renderTh = DelegateTh;
+    delegate.renderTr = DelegateTr;
+    delegate.renderTd = DelegateTd;
+    delegate.groupHeaders = DelegateGroups;
+    delegate.moveColumn = DelegateMove;
+    delegate.hasMore = DelegateHasMore;
+    delegate.loadMoreThreshold = DelegateThreshold;
+    delegate.loadMore = DelegateLoad;
+
+    component::DataTable::New(&cx, StrL("delegate"), state)
+        ->Delegate(delegate)
+        ->BuildEl();
+    TableState* s = state.Get(&app);
+    utassert(s && s->colCount == 2 && s->rowCount == 3);
+    utassert(s->hasMore && s->loadMoreThreshold == 2);
+    utassert(s->sortCol == 0 && s->sort == ColumnSort::Ascending);
+    utassert(s->colMinWidths[0] == 40 && s->colMaxWidths[1] == 180);
+    utassert(probe.headers == 1 && probe.groupHeaders == 2);
+    utassert(probe.heads == 2 && probe.rows == 3 && probe.cells == 6);
+    utassert(probe.loads == 1);
+
+    TablePerformSort(s, &cx, 0);
+    utassert(probe.sorts == 1 && probe.lastSort == ColumnSort::Default);
+    TableMoveColumnEvent(s, &cx, 0, 2);
+    utassert(probe.moves == 1);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 // Four columns of a hundred, side by side.
 static void SeedCols(TableState* s, Bounds* b, int n) {
     s->colCount = n;
@@ -488,6 +650,9 @@ static void TwoTablesOnOnePageAreTwoTables() {
 }
 
 void TestDataTable() {
+    SourceColumnBuildersKeepEveryField();
+    EachColumnHasItsOwnResizeBounds();
+    TheSourceDelegateDrivesTheTable();
     ADumpRangeIsClampedToTheTable();
     TwoTablesOnOnePageAreTwoTables();
     TheDelegateHearsAboutTheRangeOnlyWhenItMoves();
