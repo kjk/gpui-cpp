@@ -135,6 +135,7 @@ struct DisplayMap {
     Str text = {}; // owned
     int wrapColumns = 0;
     WrappingIndent wrappingIndent = WrappingIndent::Same;
+    TabSize tab = {};
     FoldMap foldMap;
     Vec<DisplayMapRow> rows;
 
@@ -147,6 +148,7 @@ struct DisplayMap {
     void OnTextChanged(Str value);
     void SetWrapColumns(int columns);
     void SetWrappingIndent(WrappingIndent indent);
+    void SetTabSize(TabSize value);
     BufferPoint ClipBufferPoint(BufferPoint point) const;
     DisplayPoint BufferPosToDisplayPos(BufferPoint point) const;
     BufferPoint DisplayPosToBufferPos(DisplayPoint point) const;

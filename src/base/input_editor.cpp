@@ -459,6 +459,14 @@ void DisplayMap::SetWrappingIndent(WrappingIndent indent) {
     }
 }
 
+void DisplayMap::SetTabSize(TabSize value) {
+    value.tabSize = std::max(1, value.tabSize);
+    if (tab.tabSize != value.tabSize || tab.hardTabs != value.hardTabs) {
+        tab = value;
+        Rebuild();
+    }
+}
+
 BufferPoint DisplayMap::ClipBufferPoint(BufferPoint point) const {
     int lines = BufferLineCount();
     point.line = std::max(0, std::min(point.line, lines - 1));
@@ -507,14 +515,85 @@ BufferPoint DisplayMap::DisplayPosToBufferPos(DisplayPoint point) const {
             row.startCol + std::max(0, std::min(point.col, width))};
 }
 
+static int DisplayColumnAt(Str text, int end, int tabSize) {
+    int column = 0;
+    int tab = std::max(1, tabSize);
+    for (int at = 0; at < text.len && at < end;) {
+        uint32_t rune = 0;
+        int n = Utf8At(text, at, &rune);
+        if (n <= 0) {
+            break;
+        }
+        if (rune == '\t') {
+            column += tab - column % tab;
+        } else {
+            column++;
+        }
+        at += n;
+    }
+    return column;
+}
+
+static int DisplayAdvanceColumns(Str text, int start, int columns,
+                                 int tabSize) {
+    int at = start;
+    int used = 0;
+    int tab = std::max(1, tabSize);
+    while (at < text.len) {
+        uint32_t rune = 0;
+        int n = Utf8At(text, at, &rune);
+        if (n <= 0) {
+            break;
+        }
+        int width = rune == '\t' ? tab - used % tab : 1;
+        if (used > 0 && used + width > columns) {
+            break;
+        }
+        used += width;
+        at += n;
+        if (used >= columns) {
+            break;
+        }
+    }
+    // A wrap narrower than one glyph still has to make progress.
+    if (at == start && at < text.len) {
+        uint32_t rune = 0;
+        int n = Utf8At(text, at, &rune);
+        at += std::max(1, n);
+    }
+    return std::min(at, text.len);
+}
+
+static int DisplayWrappedLineCount(Str value, int wrapColumns,
+                                   WrappingIndent indent, int tabSize) {
+    if (wrapColumns <= 0 || value.len == 0) {
+        return 1;
+    }
+    int leadingEnd = 0;
+    while (leadingEnd < value.len &&
+           (value.s[leadingEnd] == ' ' || value.s[leadingEnd] == '\t')) {
+        leadingEnd++;
+    }
+    int leading = indent == WrappingIndent::Same
+                      ? DisplayColumnAt(value, leadingEnd, tabSize)
+                      : 0;
+    int continuation = std::max(1, wrapColumns - leading);
+    int count = 0;
+    int start = 0;
+    while (start < value.len) {
+        int columns = count == 0 ? wrapColumns : continuation;
+        start = DisplayAdvanceColumns(value, start, columns, tabSize);
+        count++;
+    }
+    return std::max(1, count);
+}
+
 int DisplayMap::WrapRowCount() const {
     int count = 0;
     int lines = BufferLineCount();
     for (int line = 0; line < lines; line++) {
-        int len = RopeSliceLine(text, line).len;
-        count += wrapColumns > 0 ? std::max(1, (len + wrapColumns - 1) /
-                                                 wrapColumns)
-                                 : 1;
+        count += DisplayWrappedLineCount(RopeSliceLine(text, line), wrapColumns,
+                                         wrappingIndent, tab.tabSize);
     }
     return count;
 }
@@ -606,15 +685,24 @@ void DisplayMap::Rebuild() {
             rows.Append({line, 0, value.len});
             continue;
         }
+        int leadingEnd = 0;
+        while (leadingEnd < value.len &&
+               (value.s[leadingEnd] == ' ' || value.s[leadingEnd] == '\t')) {
+            leadingEnd++;
+        }
+        int leading = wrappingIndent == WrappingIndent::Same
+                          ? DisplayColumnAt(value, leadingEnd, tab.tabSize)
+                          : 0;
+        int continuation = std::max(1, wrapColumns - leading);
         int start = 0;
+        int row = 0;
         while (start < value.len) {
-            int end = RopeClipOffset(
-                value, std::min(value.len, start + wrapColumns), Bias::Left);
-            if (end <= start) {
-                end = RopeClipOffset(value, start + 1, Bias::Right);
-            }
+            int columns = row == 0 ? wrapColumns : continuation;
+            int end =
+                DisplayAdvanceColumns(value, start, columns, tab.tabSize);
             rows.Append({line, start, end});
             start = end;
+            row++;
         }
     }
 }

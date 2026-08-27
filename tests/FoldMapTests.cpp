@@ -223,6 +223,30 @@ static void DisplayMapComposesWrappingAndFolding() {
     utassert(map.DisplayRowCount() == 5);
 }
 
+static void DisplayMapWrapsUtf8AndReservesContinuationIndent() {
+    DisplayMap utf8(2);
+    utf8.SetText(StrL("中a"));
+    // Two glyph columns, despite four UTF-8 bytes.
+    utassert(utf8.WrapRowCount() == 1);
+    utassert(utf8.DisplayRowCount() == 1);
+    BufferPoint end =
+        utf8.DisplayPosToBufferPos(DisplayPoint::New(0, 4));
+    utassert(end.col == 4);
+
+    DisplayMap indented(6);
+    indented.SetText(StrL("  abcdefghij"));
+    indented.SetWrappingIndent(WrappingIndent::None);
+    utassert(indented.WrapRowCount() == 2);
+    indented.SetWrappingIndent(WrappingIndent::Same);
+    utassert(indented.WrapRowCount() == 3);
+
+    TabSize tabs;
+    tabs.tabSize = 4;
+    indented.SetTabSize(tabs);
+    indented.SetText(StrL("\tabcdef"));
+    utassert(indented.WrapRowCount() == 3);
+}
+
 void TestFoldMap() {
     CandidatesAreSortedAndOnePerStartLine();
     OnlyACandidateFolds();
@@ -235,4 +259,5 @@ void TestFoldMap() {
     AnEditOnOneLineMovesNothing();
     RebuildIsSkippedWhenNothingMoved();
     DisplayMapComposesWrappingAndFolding();
+    DisplayMapWrapsUtf8AndReservesContinuationIndent();
 }
