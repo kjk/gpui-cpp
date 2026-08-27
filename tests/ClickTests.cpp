@@ -156,6 +156,26 @@ static void CheckboxActivationProducesTheControlledNextState() {
              CheckboxState::Unchecked);
 }
 
+// Switch::on_change receives the next controlled bool, and a disabled switch
+// owns the press so an enclosing settings row cannot activate instead.
+static void SwitchActivationProducesTheControlledNextValue() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    Listener change = {};
+    change.fn = (void*)1;
+    El* off = Switch::New(&cx, StrL("off"), false, false, change);
+    El* on = Switch::New(&cx, StrL("on"), true, false, change);
+    El* disabled = Switch::New(&cx, StrL("disabled"), false, true,
+                               change);
+    utassert(off->listener.IsValid() && off->listener.hasArg &&
+             off->listener.arg == 1);
+    utassert(on->listener.IsValid() && on->listener.hasArg &&
+             on->listener.arg == 0);
+    utassert(!disabled->listener.IsValid() && disabled->stopMouseDown);
+    ArenaDelete(a);
+}
+
 void TestClick() {
     TestSuite("click");
     AReleaseOnTheElementThatTookThePressIsAClick();
@@ -169,4 +189,5 @@ void TestClick() {
     FocusThatMovedBetweenTheHalvesTakesTheClick();
     AControlCanOwnThePressWithoutACallback();
     CheckboxActivationProducesTheControlledNextState();
+    SwitchActivationProducesTheControlledNextValue();
 }

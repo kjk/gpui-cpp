@@ -202,6 +202,12 @@ The important non-mechanical mappings are encoded in the audit:
   priority. Its source builder surface now projects role, accessibility
   label, tab behavior and caller-supplied focus while retaining the compact
   controlled constructor used by the themed component.
+- Base Switch restores `SwitchStyles`, `SwitchTrackStyles` and
+  `SwitchThumbStyles`; checked then disabled refinements resolve over the
+  instance style through the shared state-style engine. The root also owns
+  the source label, traversal/focus options and disabled press barrier, while
+  UI Switch supplies its checked/disabled colors through those semantic
+  layers rather than pre-resolving them.
 - Base Color Picker restores `HslaSliders` as the state's four named retained
   slider values and emits typed `ColorPickerEvent` payloads from an owned
   entity. The unstyled root owns Confirm/Cancel keyboard behavior and focus;
@@ -249,7 +255,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 300 declaration spellings still reported in partial modules,
+  2. Review the 297 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

@@ -122,6 +122,29 @@ static void SemanticControlStylesFollowTheSharedPriority() {
     utassertnear(indicator->refine.opacity, .9f);
     utassert(Same(indicator->refine.borderColor, kDisabled));
 
+    SwitchStyles switchStyles;
+    switchStyles.Checked(StateStyle().Opacity(.8f))
+        .Disabled(StateStyle().Opacity(.5f));
+    El* switchRoot = Switch::New(&cx, StrL("switch"), true, true, {},
+                                 &switchStyles, &instance);
+    utassertnear(switchRoot->refine.opacity, .5f);
+    utassert(switchRoot->stopMouseDown);
+
+    SwitchTrackStyles trackStyles;
+    trackStyles.Checked(StateStyle().Bg(kSelected))
+        .Disabled(StateStyle().Bg(kDisabled));
+    El* switchTrack = SwitchTrack::New(&cx, StrL("switch-track"), true,
+                                       true, &trackStyles, &instance);
+    utassert(Same(switchTrack->refine.bg.color, kDisabled));
+
+    SwitchThumbStyles thumbStyles;
+    thumbStyles.Checked(StateStyle().Border(1, kSelected))
+        .Disabled(StateStyle().Opacity(.5f));
+    El* switchThumb = SwitchThumb::New(&cx, true, true, &thumbStyles,
+                                       &instance);
+    utassertnear(switchThumb->refine.opacity, .5f);
+    utassert(Same(switchThumb->refine.borderColor, kSelected));
+
     FocusHandle supplied = {-77};
     checkbox = Checkbox::New(
         &cx, StrL("focused-checkbox"), CheckboxState::Unchecked, false, {},

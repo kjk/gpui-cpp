@@ -282,7 +282,10 @@ static void BaseControlsProjectTheirControlledState() {
                        &f.cx, StrL("check"), CheckboxState::Indeterminate,
                        false, {}, nullptr, nullptr, StrL("Remember choice")))
                    ->Child(Radio::New(&f.cx, StrL("radio"), true))
-                   ->Child(Switch::New(&f.cx, StrL("switch"), true))
+                   ->Child(Switch::New(&f.cx, StrL("switch"), true, false,
+                                      {}, nullptr, nullptr,
+                                      StrL("Airplane mode"), 3, false,
+                                      FocusHandle{-88}))
                    ->Child(Toggle::New(&f.cx, StrL("toggle"), true))
                    ->Child(Progress::New(&f.cx, StrL("done"), 120))
                    ->Child(Progress::New(&f.cx, StrL("busy"), 40, true))
@@ -308,6 +311,8 @@ static void BaseControlsProjectTheirControlledState() {
     utassert(check && SameText(check->info.label, StrL("Remember choice")));
     utassert(radio && radio->info.hasSelected && radio->info.selected);
     utassert(sw && sw->info.toggled == AccessibilityToggled::True);
+    utassert(sw && SameText(sw->info.label, StrL("Airplane mode")));
+    utassert(sw && sw->focusId == -88);
     utassert(toggle && toggle->info.toggled == AccessibilityToggled::True);
     utassert(done && done->info.hasNumericValue &&
              TestNear(done->info.numericValue, 100));

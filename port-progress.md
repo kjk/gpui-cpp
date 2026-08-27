@@ -7620,3 +7620,31 @@ exclusions with 300 unresolved partial-module spellings and no full-module
 errors. MSVC debug/release, clang-cl release and MSVC ASan pass 19,857 checks;
 wasm passes its 19,152 applicable checks. The release story build and pinned
 light-theme Dialog and AlertDialog comparisons pass.
+
+## Base Switch restores semantic state layers
+
+The Base switch root, track and thumb existed, but the source's three public
+semantic-style records did not. UI Switch therefore chose a final background
+before calling Base, which bypassed the shared instance -> checked -> disabled
+priority contract and made the unstyled parts impossible to theme on their own.
+The Base root also lacked the source accessibility label, supplied focus,
+tab-index/tab-stop controls and the disabled mouse-down barrier.
+
+`SwitchStyles`, `SwitchTrackStyles` and `SwitchThumbStyles` now refine checked
+and disabled `StateStyle` values and resolve them through the same engine as
+Checkbox, Radio, Toggle and Tab. Each primitive accepts an optional instance
+style, checked state is layered second and disabled always wins last. UI
+Switch now supplies its checked track, conditionally dimmed checked track and
+disabled thumb colors through those records; geometry remains under the
+existing critically damped spring, as upstream requires.
+
+The Base root projects a caller-owned accessible label and traversal/focus
+configuration, emits the next controlled bool, and a disabled root owns the
+left press so an enclosing row cannot activate. Tests cover all three style
+records and their priority, next-value emission, the disabled barrier and the
+expanded semantic/focus surface. Base Switch is full: the audit moves to 88
+full, 33 partial, 8 adapters and 2 exclusions with 297 unresolved
+partial-module spellings and no full-module errors. MSVC debug passes 19,867
+checks. MSVC release, clang-cl release and MSVC ASan pass the same 19,867;
+wasm passes its 19,162 applicable checks. The release story build and pinned
+light-theme Switch comparison pass.
