@@ -1,6 +1,252 @@
 #include "base/calendar.h"
+#include "base/date_picker.h"
 
 namespace gpui {
+
+static bool CalendarDateValid(LocalDate date) {
+    return date.year != 0 && date.month != 0 && date.day != 0;
+}
+
+static int CalendarDateCompare(LocalDate a, LocalDate b) {
+    intptr_t ka = DatePickerDateKey(a);
+    intptr_t kb = DatePickerDateKey(b);
+    return ka < kb ? -1 : (ka > kb ? 1 : 0);
+}
+
+Date Date::Single(LocalDate value) {
+    Date out;
+    out.kind = DateKind::Single;
+    out.start = value;
+    return out;
+}
+
+Date Date::Range(LocalDate start, LocalDate end) {
+    Date out;
+    out.kind = DateKind::Range;
+    out.start = start;
+    out.end = end;
+    return out;
+}
+
+bool Date::IsSome() const {
+    return CalendarDateValid(start);
+}
+
+bool Date::IsComplete() const {
+    return CalendarDateValid(start) &&
+           (kind == DateKind::Single || CalendarDateValid(end));
+}
+
+bool Date::IsActive(LocalDate value) const {
+    return (CalendarDateValid(start) && CalendarDateCompare(start, value) == 0) ||
+           (kind == DateKind::Range && CalendarDateValid(end) &&
+            CalendarDateCompare(end, value) == 0);
+}
+
+bool Date::IsInRange(LocalDate value) const {
+    return kind == DateKind::Range && CalendarDateValid(start) &&
+           CalendarDateValid(end) && CalendarDateCompare(start, value) <= 0 &&
+           CalendarDateCompare(value, end) <= 0;
+}
+
+Matcher DateMatcherWeekdays(uint8_t weekdayMask) {
+    Matcher matcher;
+    matcher.kind = MatcherKind::DayOfWeek;
+    matcher.weekdayMask = weekdayMask;
+    return matcher;
+}
+
+Matcher DateMatcherInterval(LocalDate before, LocalDate after) {
+    Matcher matcher;
+    matcher.kind = MatcherKind::Interval;
+    matcher.interval = {before, after};
+    matcher.from = before;
+    matcher.to = after;
+    return matcher;
+}
+
+Matcher DateMatcherRange(LocalDate from, LocalDate to) {
+    Matcher matcher;
+    matcher.kind = MatcherKind::Range;
+    matcher.range = {from, to};
+    matcher.from = from;
+    matcher.to = to;
+    return matcher;
+}
+
+Matcher DateMatcherCustom(bool (*fn)(LocalDate date)) {
+    Matcher matcher;
+    matcher.kind = MatcherKind::Custom;
+    matcher.custom = fn;
+    return matcher;
+}
+
+bool DateMatcherMatches(const Matcher& matcher, LocalDate date) {
+    switch (matcher.kind) {
+        case MatcherKind::DayOfWeek:
+            return (matcher.weekdayMask &
+                    (1u << CalendarWeekday(date.year, date.month, date.day))) !=
+                   0;
+        case MatcherKind::Interval:
+        {
+            LocalDate before = CalendarDateValid(matcher.interval.before)
+                                   ? matcher.interval.before
+                                   : matcher.from;
+            LocalDate after = CalendarDateValid(matcher.interval.after)
+                                  ? matcher.interval.after
+                                  : matcher.to;
+            return (CalendarDateValid(before) &&
+                    CalendarDateCompare(date, before) < 0) ||
+                   (CalendarDateValid(after) &&
+                    CalendarDateCompare(date, after) > 0);
+        }
+        case MatcherKind::Range: {
+            LocalDate from = CalendarDateValid(matcher.range.from)
+                                 ? matcher.range.from
+                                 : matcher.from;
+            LocalDate to = CalendarDateValid(matcher.range.to)
+                               ? matcher.range.to
+                               : matcher.to;
+            return (!CalendarDateValid(from) ||
+                    CalendarDateCompare(date, from) >= 0) &&
+                   (!CalendarDateValid(to) ||
+                    CalendarDateCompare(date, to) <= 0);
+        }
+        case MatcherKind::Custom:
+            return matcher.custom && matcher.custom(date);
+        case MatcherKind::None:
+            return false;
+    }
+    return false;
+}
+
+bool MatcherMatches(const Matcher& matcher, Date date) {
+    if (date.kind == DateKind::Single) {
+        return CalendarDateValid(date.start) &&
+               DateMatcherMatches(matcher, date.start);
+    }
+    // Matcher::is_match deliberately ignores an incomplete range upstream.
+    return CalendarDateValid(date.start) && CalendarDateValid(date.end) &&
+           (DateMatcherMatches(matcher, date.start) ||
+            DateMatcherMatches(matcher, date.end));
+}
+
+void CalendarStateSetYearRange(CalendarState* s, int minYear, int maxYear,
+                               Ctx* cx) {
+    if (!s) {
+        return;
+    }
+    s->yearMin = minYear;
+    s->yearMax = maxYear;
+    int count = maxYear > minYear ? maxYear - minYear : 0;
+    s->yearPageCount = (count + 19) / 20;
+    if (s->yearPageCount == 0) {
+        s->yearPage = 0;
+        if (cx) {
+            Notify(cx);
+        }
+        return;
+    }
+    int offset = s->currentYear - minYear;
+    s->yearPage = offset > 0 ? offset / 20 : 0;
+    if (s->yearPage >= s->yearPageCount) {
+        s->yearPage = s->yearPageCount - 1;
+    }
+    if (cx) {
+        Notify(cx);
+    }
+}
+
+void CalendarStateInit(CalendarState* s, Ctx* cx, Date date) {
+    if (!s) {
+        return;
+    }
+    s->focus = FocusHandleNew(cx);
+    s->today = DateToday();
+    s->currentYear = s->today.year;
+    s->currentMonth = s->today.month;
+    s->date = Date::Single();
+    CalendarStateSetYearRange(s, s->today.year - 50, s->today.year + 50);
+    CalendarStateApplyDate(s, date);
+}
+
+Entity<CalendarState> CalendarStateNew(Ctx* cx, Date date) {
+    if (!cx || !cx->app) {
+        return {};
+    }
+    Entity<CalendarState> out = EntityNewState<CalendarState>(cx->app);
+    if (CalendarState* s = out.Get(cx)) {
+        s->self = out.id;
+        CalendarStateInit(s, cx, date);
+    }
+    return out;
+}
+
+bool CalendarStateApplyDate(CalendarState* s, Date date) {
+    if (!s || MatcherMatches(s->disabledMatcher, date)) {
+        return false;
+    }
+    s->date = date;
+    if (CalendarDateValid(date.start)) {
+        s->currentYear = date.start.year;
+        s->currentMonth = date.start.month;
+    }
+    return true;
+}
+
+void CalendarStateSetDate(CalendarState* s, Date date, Ctx* cx, bool emit) {
+    if (!CalendarStateApplyDate(s, date)) {
+        return;
+    }
+    if (emit && cx && s->self.IsValid()) {
+        CalendarEvent event = {CalendarEventKind::Selected, s->date};
+        EntityEmit(cx->app, cx->win, s->self, &event);
+    }
+    if (cx) {
+        Notify(cx);
+    }
+}
+
+bool CalendarStateSelectDate(CalendarState* s, LocalDate value, Ctx* cx,
+                             bool emit) {
+    if (!s || DateMatcherMatches(s->disabledMatcher, value)) {
+        if (cx) {
+            Notify(cx);
+        }
+        return false;
+    }
+    Date next;
+    if (s->date.kind == DateKind::Single) {
+        next = Date::Single(value);
+    } else if (!CalendarDateValid(s->date.start) ||
+               CalendarDateValid(s->date.end) ||
+               CalendarDateCompare(value, s->date.start) < 0) {
+        next = Date::Range(value, {});
+    } else {
+        next = Date::Range(s->date.start, value);
+    }
+    CalendarStateApplyDate(s, next);
+    bool complete = s->date.IsComplete();
+    if (complete && emit && cx && s->self.IsValid()) {
+        CalendarEvent event = {CalendarEventKind::Selected, s->date};
+        EntityEmit(cx->app, cx->win, s->self, &event);
+    }
+    if (cx) {
+        Notify(cx);
+    }
+    return complete;
+}
+
+void CalendarStateSetDisabledMatcher(CalendarState* s, Matcher matcher,
+                                     Ctx* cx) {
+    if (!s) {
+        return;
+    }
+    s->disabledMatcher = matcher;
+    if (cx) {
+        Notify(cx);
+    }
+}
 
 void CalendarPrevMonth(CalendarState* s) {
     if (s->currentMonth == 1) {
@@ -44,6 +290,59 @@ bool CalendarNextYearPage(CalendarState* s) {
     return true;
 }
 
+void CalendarState::OnDate(CalendarState* self, Ctx* cx,
+                           const ClickEvent*, intptr_t dateKey) {
+    CalendarStateSelectDate(self, DatePickerDateFromKey(dateKey), cx, true);
+}
+
+void CalendarState::OnPrev(CalendarState* self, Ctx* cx,
+                           const ClickEvent*) {
+    if (self->view == CalendarView::Day) {
+        CalendarPrevMonth(self);
+    } else if (self->view == CalendarView::Year) {
+        CalendarPrevYearPage(self);
+    }
+    Notify(cx);
+}
+
+void CalendarState::OnNext(CalendarState* self, Ctx* cx,
+                           const ClickEvent*) {
+    if (self->view == CalendarView::Day) {
+        CalendarNextMonth(self);
+    } else if (self->view == CalendarView::Year) {
+        CalendarNextYearPage(self);
+    }
+    Notify(cx);
+}
+
+void CalendarState::OnMonthToggle(CalendarState* self, Ctx* cx,
+                                  const ClickEvent*) {
+    self->view = self->view == CalendarView::Month ? CalendarView::Day
+                                                   : CalendarView::Month;
+    Notify(cx);
+}
+
+void CalendarState::OnYearToggle(CalendarState* self, Ctx* cx,
+                                 const ClickEvent*) {
+    self->view = self->view == CalendarView::Year ? CalendarView::Day
+                                                  : CalendarView::Year;
+    Notify(cx);
+}
+
+void CalendarState::OnMonth(CalendarState* self, Ctx* cx,
+                            const ClickEvent*, intptr_t month) {
+    self->currentMonth = (int)month;
+    self->view = CalendarView::Day;
+    Notify(cx);
+}
+
+void CalendarState::OnYear(CalendarState* self, Ctx* cx, const ClickEvent*,
+                           intptr_t year) {
+    self->currentYear = (int)year;
+    self->view = CalendarView::Day;
+    Notify(cx);
+}
+
 int CalendarGridOffset(int firstWeekday) {
     // Rust: (weekday - first_day + 7) % 7, with Sunday as first_day.
     return ((firstWeekday % 7) + 7) % 7;
@@ -55,6 +354,89 @@ int CalendarGridCells(int offset, int daysInMonth) {
         return 0;
     }
     return ((span + 6) / 7) * 7;
+}
+
+static Str DefaultCalendarLabel(void*, Ctx* cx, CalendarItemKind kind,
+                                int value) {
+    if (kind == CalendarItemKind::Previous) {
+        return StrL("‹");
+    }
+    if (kind == CalendarItemKind::Next) {
+        return StrL("›");
+    }
+    return StrDup(cx->a, fmt("%d", value));
+}
+
+Calendar* Calendar::New(Ctx* cx, Str id, Entity<CalendarState> state) {
+    if (!cx || !cx->a) {
+        return nullptr;
+    }
+    Calendar* out = ArenaNew<Calendar>(cx->a);
+    out->a = cx->a;
+    out->cx = cx;
+    out->id = id;
+    out->state = state;
+    out->opts.label = &DefaultCalendarLabel;
+    return out;
+}
+
+Calendar* Calendar::NumberOfMonths(int count) {
+    opts.numberOfMonths = std::max(1, count);
+    return this;
+}
+
+Calendar* Calendar::FirstDayOfWeek(int weekday) {
+    opts.firstDayOfWeek = ((weekday % 7) + 7) % 7;
+    return this;
+}
+
+Calendar* Calendar::Item(CalendarItemFn fn, void* user) {
+    opts.item = fn;
+    opts.user = user;
+    return this;
+}
+
+Calendar* Calendar::Label(CalendarLabelFn fn, void* user) {
+    opts.label = fn;
+    opts.labelUser = user;
+    return this;
+}
+
+Calendar* Calendar::Refine(const Style& v, uint32_t fields) {
+    StyleApplyFields(&style, v, fields);
+    styleSet |= fields;
+    return this;
+}
+
+El* Calendar::IntoEl() {
+    CalendarState* s = state.Get(cx);
+    if (!s) {
+        return Div(a)->Id(id);
+    }
+    s->self = state.id;
+    s->numberOfMonths = std::max(1, opts.numberOfMonths);
+    CalendarOpts o = opts;
+    o.year = s->currentYear;
+    o.month = s->currentMonth;
+    o.numberOfMonths = s->numberOfMonths;
+    o.view = s->view;
+    o.selected = s->date.start;
+    o.rangeEnd = s->date.kind == DateKind::Range ? s->date.end : LocalDate{};
+    o.today = s->today;
+    o.disabledMatcher = s->disabledMatcher;
+    o.yearMin = s->yearMin;
+    o.yearMax = s->yearMax;
+    o.yearPageStart = s->yearMin + s->yearPage * 20;
+    o.onDate = ListenTo(state, &CalendarState::OnDate);
+    o.onPrev = ListenTo(state, &CalendarState::OnPrev);
+    o.onNext = ListenTo(state, &CalendarState::OnNext);
+    o.onMonthToggle = ListenTo(state, &CalendarState::OnMonthToggle);
+    o.onYearToggle = ListenTo(state, &CalendarState::OnYearToggle);
+    o.onMonth = ListenTo(state, &CalendarState::OnMonth);
+    o.onYear = ListenTo(state, &CalendarState::OnYear);
+    El* root = Calendar::New(cx, id, o)->TrackFocus(s->focus);
+    StyleApplyFields(&root->style, style, styleSet);
+    return root;
 }
 
 El* Calendar::New(Ctx* cx, Str id) {
@@ -100,6 +482,12 @@ static bool CalAtOrBefore(LocalDate a, LocalDate b) {
 static El* CalSlot(Ctx* cx, const CalendarOpts& o, Str id,
                    const CalendarItemState& st, Listener onClick) {
     El* item = CalendarItem::New(cx, id, onClick);
+    if (o.label) {
+        Str label = o.label(o.labelUser, cx, st.kind, st.value);
+        if (label.s) {
+            item->Child(TextEl(cx->a, label));
+        }
+    }
     if (!o.item) {
         return item;
     }
@@ -117,7 +505,7 @@ static El* CalMonthGrid(Ctx* cx, const CalendarOpts& o, int year, int month) {
     for (int i = 0; i < 7; i++) {
         CalendarItemState st;
         st.kind = CalendarItemKind::Weekday;
-        st.value = i;
+        st.value = (o.firstDayOfWeek + i) % 7;
         header->Child(CalSlot(cx, o, {}, st, {})
                           ->W(o.cellSize)
                           ->H(o.cellSize)
@@ -126,7 +514,8 @@ static El* CalMonthGrid(Ctx* cx, const CalendarOpts& o, int year, int month) {
     }
     panel->Child(header);
 
-    int offset = CalendarGridOffset(CalendarWeekday(year, month, 1));
+    int offset =
+        (CalendarWeekday(year, month, 1) - o.firstDayOfWeek + 7) % 7;
     int cells = CalendarGridCells(offset, CalendarDaysInMonth(year, month));
     LocalDate first = DateAddDays({year, month, 1}, -offset);
     El* week = nullptr;

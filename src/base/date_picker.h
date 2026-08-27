@@ -1,6 +1,6 @@
 /* Unstyled date picker — crates/base/src/date_picker.rs */
 
-#include "gpui/gpui.h"
+#include "base/calendar.h"
 
 namespace gpui {
 
@@ -47,30 +47,6 @@ struct DatePickerKeys {
 void DatePickerBindKeys(Ctx* cx, El* root, Str name, Listener onToggle,
                         Listener onClear, bool open, bool disabled);
 
-// Calendar::Matcher, kept POD-friendly so a picker can copy it into its frame
-// element. Range disables dates inside its bounds; Interval disables dates
-// outside its bounds, matching the two easily-confused Rust variants.
-enum class DateMatcherKind : uint8_t {
-    None,
-    Weekdays,
-    Interval,
-    Range,
-    Custom
-};
-
-struct DateMatcher {
-    DateMatcherKind kind = DateMatcherKind::None;
-    uint8_t weekdayMask = 0;
-    LocalDate from = {};
-    LocalDate to = {};
-    bool (*custom)(LocalDate date) = nullptr;
-};
-
-DateMatcher DateMatcherWeekdays(uint8_t weekdayMask);
-DateMatcher DateMatcherInterval(LocalDate before, LocalDate after);
-DateMatcher DateMatcherRange(LocalDate from, LocalDate to);
-DateMatcher DateMatcherCustom(bool (*fn)(LocalDate date));
-bool DateMatcherMatches(const DateMatcher& matcher, LocalDate date);
 intptr_t DatePickerDateKey(LocalDate date);
 LocalDate DatePickerDateFromKey(intptr_t key);
 

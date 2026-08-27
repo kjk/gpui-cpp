@@ -21,68 +21,6 @@ static int DateCompare(LocalDate a, LocalDate b) {
     return 0;
 }
 
-// Sakamoto, Sunday = 0, like chrono::Weekday::num_days_from_sunday.
-static int DateWeekday(LocalDate date) {
-    static const int offsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-    int year = date.year;
-    if (date.month < 3) {
-        year--;
-    }
-    return (year + year / 4 - year / 100 + year / 400 +
-            offsets[date.month - 1] + date.day) %
-           7;
-}
-
-DateMatcher DateMatcherWeekdays(uint8_t weekdayMask) {
-    DateMatcher matcher;
-    matcher.kind = DateMatcherKind::Weekdays;
-    matcher.weekdayMask = weekdayMask;
-    return matcher;
-}
-
-DateMatcher DateMatcherInterval(LocalDate before, LocalDate after) {
-    DateMatcher matcher;
-    matcher.kind = DateMatcherKind::Interval;
-    matcher.from = before;
-    matcher.to = after;
-    return matcher;
-}
-
-DateMatcher DateMatcherRange(LocalDate from, LocalDate to) {
-    DateMatcher matcher;
-    matcher.kind = DateMatcherKind::Range;
-    matcher.from = from;
-    matcher.to = to;
-    return matcher;
-}
-
-DateMatcher DateMatcherCustom(bool (*fn)(LocalDate date)) {
-    DateMatcher matcher;
-    matcher.kind = DateMatcherKind::Custom;
-    matcher.custom = fn;
-    return matcher;
-}
-
-bool DateMatcherMatches(const DateMatcher& matcher, LocalDate date) {
-    switch (matcher.kind) {
-        case DateMatcherKind::Weekdays:
-            return (matcher.weekdayMask & (1u << DateWeekday(date))) != 0;
-        case DateMatcherKind::Interval:
-            return (DateValid(matcher.from) &&
-                    DateCompare(date, matcher.from) < 0) ||
-                   (DateValid(matcher.to) && DateCompare(date, matcher.to) > 0);
-        case DateMatcherKind::Range:
-            return (!DateValid(matcher.from) ||
-                    DateCompare(date, matcher.from) >= 0) &&
-                   (!DateValid(matcher.to) ||
-                    DateCompare(date, matcher.to) <= 0);
-        case DateMatcherKind::Custom:
-            return matcher.custom && matcher.custom(date);
-        default:
-            return false;
-    }
-}
-
 intptr_t DatePickerDateKey(LocalDate date) {
     return (intptr_t)(date.year * 10000 + date.month * 100 + date.day);
 }

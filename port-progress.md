@@ -7408,3 +7408,38 @@ missing sidebar structure. UI Sidebar is full: the audit moves to 81 full, 40
 partial, 8 adapters and 2 exclusions, with 323 unresolved partial-module
 spellings. MSVC and clang-cl release plus MSVC ASan pass 19,734 checks, wasm
 passes its 19,029 applicable checks, and the release story build passes.
+
+## Base Calendar owns its retained state and values
+
+Base Calendar previously exposed the arithmetic and a controlled frame
+renderer, but omitted the five public values that make the Rust primitive a
+stateful component. UI callers consequently duplicated its selection,
+navigation and event behavior. `DateMatcher` also flattened every matcher
+payload into two generic dates, obscuring the opposite semantics of Interval
+and Range.
+
+`Date` is now a tagged POD value for single and optional-ended range dates.
+`Matcher` is the corresponding POD projection of Rust's payload enum, with
+explicit `IntervalMatcher` and `RangeMatcher` values, a weekday mask and the
+tree's dependency-free custom-function convention; `DateMatcher` remains an
+alias for source compatibility. The exact `is_some`, completeness, active,
+in-range and whole-date matching rules are restored, including the source's
+deliberate decision not to match an incomplete range.
+
+`CalendarState` is again an entity state with focus, selected date, current
+month/year, view, today, multi-month count, matcher and half-open year pages.
+It owns every navigation and selection handler and emits `CalendarEvent` only
+when an enabled value becomes complete. The retained-state `Calendar` builder
+stamps that entity into the prewired renderer, tracks its focus, supports
+first-day-of-week ordering, item/label function tables and style refinement.
+The earlier `CalendarOpts` controlled renderer remains as a compatibility
+surface, and the themed layer can now migrate without duplicating behavior.
+
+Tests cover every tagged-date shape, matcher behavior, disabled programmatic
+updates, partial/complete range emission, entity identity and focus,
+multi-month state, Monday-first headers and style refinement in addition to
+the existing navigation, year-page and six-week-grid cases. Base Calendar is
+full: the audit moves to 82 full, 39 partial, 8 adapters and 2 exclusions with
+318 unresolved partial-module spellings. MSVC and clang-cl release plus MSVC
+ASan pass 19,756 checks; wasm passes its 19,051 applicable checks; and the
+release story build passes.

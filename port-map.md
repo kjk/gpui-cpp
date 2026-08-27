@@ -57,6 +57,7 @@ The important non-mechanical mappings are encoded in the audit:
 
 | Rust module family | Canonical C++ surface | Implementation decision |
 | --- | --- | --- |
+| `base/calendar`, `base/date_picker` | `base/calendar*`, `base/date_picker*` | payload enums are tagged POD values; `CalendarState` is an emitting entity and rendering composes through label/item function tables |
 | `base/dock/*` | `base/dock*`, `base/tiles*` | one Base dock family |
 | `base/input/*` | `base/input*`, `base/input_keys*` | one Base input family |
 | `ui/table/data_table` | `ui/data_table.h`, `ui/table*` | canonical UI include; shared behavior currently delegates to `base/data_table*` |
@@ -121,6 +122,12 @@ The important non-mechanical mappings are encoded in the audit:
   because pointer, keyboard and accessibility dispatch all mutate the same
   object there. The audit records that placement explicitly; the Base
   Slider/Track/Indicator/Thumb elements are the public presentation layer.
+- Base Calendar owns the pinned retained state again: tagged POD `Date` and
+  `Matcher` values, selection events, focus, view/month/year navigation,
+  disabled matching, year pages and multi-month/first-weekday rendering all
+  flow through an entity-backed `Calendar` builder. Label and item closures
+  project to function tables; the earlier controlled `CalendarOpts` path is
+  retained as a compatibility layer.
 - Base Radio, Toggle and Tab expose their pinned semantic style structs and
   resolve checked/pressed/selected before disabled over each instance style.
   Tabs and disabled toggles also stop the left mouse-down bubble through a
