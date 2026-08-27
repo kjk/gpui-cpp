@@ -61,7 +61,6 @@ const partialUi = new Set([
   "button",
   "combobox",
   "dock",
-  "form",
   "global_state",
   "input",
   "menu",

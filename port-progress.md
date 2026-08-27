@@ -7922,3 +7922,36 @@ theme is full: the audit moves to 97 full, 24 partial, 8 adapters and 2
 exclusions with 274 unresolved partial-module spellings and no full-module
 errors. MSVC debug/release, clang-cl release and MSVC ASan pass 20,023 checks;
 wasm passes its 19,318 applicable checks.
+
+## UI form restores source field builders and layout constants
+
+The themed form already arranged controls, labels, descriptions, required
+marks and whole-row fields, but its public shape and several source constants
+had drifted. Every form used an 8 px gap, multi-column labels defaulted to 100
+px, vertical labels were assigned that fixed width, and a label-less horizontal
+field omitted the indentation that Rust enables by default.
+
+`FieldBuilder` now represents Rust's string-or-element field content, and the
+standalone `Field` carries label, description, visibility, indentation,
+alignment and column placement state before being added to a `Form`. The
+source-named `field`, `h_form` and `v_form` constructors coexist with the old
+chained conveniences. Form spacing now follows size exactly: 6/8/12 px row
+gaps and three times those values between columns. Horizontal labels default
+to 140 px and reserve that space even without label content; vertical labels
+remain auto-sized. Required marks are emitted only beside actual labels.
+Partial spans share a flex row proportionally, and span-all remains correct
+when columns are configured after the field is added.
+
+Rust lays form columns out with GPUI grid tracks, while this runtime currently
+has no grid placement fields in `Style`; the port therefore retains
+`colStart`/`colEnd` on `Field` and represents ordinary and spanning tracks as
+explicit flex rows. This is the only remaining representation seam in the
+module and is recorded here rather than silently inventing grid semantics.
+
+Tests cover builder state, source size gaps, horizontal and vertical label
+widths, default label indentation, its opt-out, visibility and column state.
+UI form is full within the flex-layout seam: the audit moves to 98 full, 23
+partial, 8 adapters and 2 exclusions with 271 unresolved partial-module
+spellings and no full-module errors. MSVC debug/release, clang-cl release and
+MSVC ASan pass 20,047 checks; wasm passes its 19,342 applicable checks. The
+release story build also compiles the gallery's form uses unchanged.

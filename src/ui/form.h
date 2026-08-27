@@ -14,18 +14,34 @@ enum class FieldAlign : uint8_t {
     End
 };
 
-struct FormField {
-    Str label = {};
-    // label_fn: a label the caller built, in place of the text one.
-    El* labelEl = nullptr;
+enum class FieldBuilderKind : uint8_t {
+    None,
+    String,
+    Element
+};
+
+// field.rs's string/element/view union. Views render to El in this runtime,
+// so Element is the shared no-refcount representation of the latter two.
+struct FieldBuilder {
+    FieldBuilderKind kind = FieldBuilderKind::None;
+    Str string = {};
+    El* element = nullptr;
+
+    static FieldBuilder String(Str value);
+    static FieldBuilder Element(El* value);
+    bool IsSet() const { return kind != FieldBuilderKind::None; }
+};
+
+struct Field {
+    FieldBuilder label = {};
     El* control = nullptr;
     // description sits under the control; required draws the danger asterisk
     // next to the label.
-    Str description = {};
-    El* descriptionEl = nullptr;
+    FieldBuilder description = {};
     bool required = false;
-    // col_span(2): the field takes a whole row of a multi-column form.
-    bool spanAll = false;
+    int colSpan = 1;
+    int colStart = -1;
+    int colEnd = -1;
     // visible(false): the field is built and then left out, which is what
     // lets a form keep its shape while a field comes and goes.
     bool visible = true;
@@ -33,7 +49,22 @@ struct FormField {
     // the form's edge.
     bool labelIndent = true;
     FieldAlign align = FieldAlign::Center;
+
+    static Field New(El* control = nullptr);
+    Field& Label(Str value);
+    Field& Label(El* value);
+    Field& Description(Str value);
+    Field& Description(El* value);
+    Field& Required(bool value = true);
+    Field& Visible(bool value);
+    Field& LabelIndent(bool value);
+    Field& Align(FieldAlign value);
+    Field& ColSpan(int value);
+    Field& ColStart(int value);
+    Field& ColEnd(int value);
 };
+
+using FormField = Field;
 
 struct Form {
     Arena* a = nullptr;
@@ -49,6 +80,7 @@ struct Form {
     float labelTextSize = 0;
 
     static Form* New(Ctx* cx);
+    Form* Child(const component::Field& field);
     // A label-less field spans the row on its own, the way Rust's
     // `field().label_indent(false)` does.
     Form* Field(Str label, El* control);
@@ -68,6 +100,10 @@ struct Form {
     Form* LabelTextSize(float px);
     El* IntoEl();
 };
+
+Form* v_form(Ctx* cx);
+Form* h_form(Ctx* cx);
+component::Field field(El* control = nullptr);
 
 } // namespace component
 } // namespace gpui
