@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "7885c41663c7a6cc68ad0c99b1ba33550f807ff0",
-  date: "2026-08-24",
-  subject: "fps: Enable gpui/profiler on the crate that uses it (#2823)",
+  sha: "f6a93f9da331048b689e35b33a52bab8c7c4034e",
+  date: "2026-08-25",
+  subject: "dialog: Reclaim focus when it escapes the topmost modal (#2828)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

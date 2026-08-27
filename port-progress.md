@@ -9294,3 +9294,11 @@ passes 20,839 checks. A mechanical comparison against
 `webview2-com-sys 0.38.0` reports 97 matching vtable layouts and 97 matching
 IIDs, and the native Windows release example remains live through a five-second
 hidden WebView2 startup smoke.
+
+## Upstream ingest after `7885c416` (2026-08-27)
+
+`f6a93f9d` makes the topmost Rust dialog reclaim focus during render when it
+escapes the modal. The C++ dialog already had that behavior structurally:
+every visible popup arms its trap during the frame build and
+`FocusTrapApplyPending` returns focus to it after focus collection. No C++
+logic changed for this checkin.
