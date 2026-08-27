@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "a9edc3e294a7209e37561ac92e418e910f86f11e",
+  sha: "0bfcb640235b7f76c4f764c2fa6454be4cf4711a",
   date: "2026-08-26",
-  subject: "text_view: Add `max_lines` to clamp rendered content to whole lines (#2829)",
+  subject: "base: Fix to default center button content (#2835)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

@@ -9331,3 +9331,9 @@ so a hidden link cannot remain clickable. Scrollable TextViews ignore the
 cap, selection still covers the full source, and the new `text_max_lines`
 example carries the upstream slider, long/short previews and Show more state.
 Release tests pass 20,901 checks and the release example target builds.
+
+`0bfcb640` makes the unstyled Base Button a flex container centered on both
+axes and keeps its inherited line box at relative 1.0. Fixed-height buttons
+now center arbitrary children by their geometry rather than relying on themed
+padding; the layout regression test ports the upstream 120 by 40 button with
+a 48 by 12 child.

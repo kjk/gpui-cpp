@@ -47,6 +47,37 @@ static const AccessibilityNode* ButtonAt(const Vec<AccessibilityNode>& nodes,
     return nullptr;
 }
 
+static void BaseButtonCentersOrdinaryChildGeometry() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx{&app, win, arena, {}};
+
+    El* child = Div(arena)->W(48)->H(12);
+    El* button = Button::New(&cx, StrL("alignment-button"))
+                     ->W(120)
+                     ->H(40)
+                     ->Child(child);
+    utassert(button->style.display == Display::Flex);
+    utassert(button->style.align == FlexAlign::Center);
+    utassert(button->style.justify == Justify::Center);
+    utassertnear(button->style.lineHeight, 1.f);
+
+    win->paint.app = &app;
+    win->paint.window = win;
+    const RuntimeStyle& th = RuntimeStyleNow(&app);
+    LayoutEl(&win->paint, button, 0, 0, 120, 40, th.fontSize,
+             th.foreground);
+    utassertnear(child->Bounds().CenterX(), button->Bounds().CenterX());
+    utassertnear(child->Bounds().CenterY(), button->Bounds().CenterY());
+
+    WindowKeyedFree(win);
+    delete win;
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 static void SelectionEventsAreOrderedAndNotWordSized() {
     App app;
     component::Init(&app);
@@ -296,6 +327,7 @@ static void ButtonGroupsAssignSourceCornersWithoutAWrapperClip() {
 
 void TestButtonGroup() {
     TestSuite("button_group");
+    BaseButtonCentersOrdinaryChildGeometry();
     SelectionEventsAreOrderedAndNotWordSized();
     SourceButtonVariantsRoundingAndIconsRemainConcrete();
     SourceToggleAndSegmentedGroupKeepStateAndGeometry();

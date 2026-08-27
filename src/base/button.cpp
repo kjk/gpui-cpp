@@ -21,6 +21,15 @@ El* Button::New(Ctx* cx, Str id, bool disabled, Listener onClick,
     // upstream writes `Button::new("prev")` inside a pagination rather than
     // `Button::new(format!("{base}-prev"))` — the fold does that part.
     El* e = Div(a)
+                // Centering is control geometry: an ordinary child of a
+                // fixed-height unstyled Button sits in the middle on both
+                // axes, independent of the caller's padding.
+                ->Flex()
+                ->ItemsCenter()
+                ->JustifyCenter()
+                // relative(1): the inherited text leading must not make the
+                // button taller than the geometry its caller requested.
+                ->LineHeight(1.f)
                 ->PathClick(id)
                 ->SuppressTextSelection()
                 ->Role(AccessibilityRole::Button)
