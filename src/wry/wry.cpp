@@ -41,23 +41,53 @@ bool IsWorkAroundUri(Str uri, Str httpOrHttps, Str protocol) {
     return StrStartsWith(uri, WorkAroundUriPrefix(httpOrHttps, protocol));
 }
 
-// `uri.replace(original_prefix, work_around_prefix)` and the reverse. Only
-// the leading occurrence can be either prefix, so this is a prefix swap.
-static Str SwapPrefix(Str uri, Str from, Str to) {
-    if (!StrStartsWith(uri, from)) {
-        return uri;
+// `str::replace` replaces every non-overlapping occurrence, including a URL
+// embedded in the query or fragment of another custom-protocol URL.
+static Str ReplaceAll(Str value, Str from, Str to) {
+    if (from.len == 0 || from.len > value.len) {
+        return value;
     }
-    Str rest = Str(uri.s + from.len, uri.len - from.len);
-    return base::FormatTemp("%s%s", to, rest);
+    int count = 0;
+    for (int i = 0; i <= value.len - from.len;) {
+        if (base::StrEq(Str(value.s + i, from.len), from)) {
+            count++;
+            i += from.len;
+        } else {
+            i++;
+        }
+    }
+    if (count == 0) {
+        return value;
+    }
+    int resultLen = value.len + count * (to.len - from.len);
+    Str result = base::AllocStrTemp(resultLen + 1);
+    if (!result.s) {
+        return value;
+    }
+    int src = 0;
+    int dst = 0;
+    while (src < value.len) {
+        if (src <= value.len - from.len &&
+            base::StrEq(Str(value.s + src, from.len), from)) {
+            memcpy(result.s + dst, to.s, (size_t)to.len);
+            src += from.len;
+            dst += to.len;
+        } else {
+            result.s[dst++] = value.s[src++];
+        }
+    }
+    result.s[dst] = 0;
+    result.len = dst;
+    return result;
 }
 
 Str ApplyUriWorkAround(Str uri, Str httpOrHttps, Str protocol) {
-    return SwapPrefix(uri, base::FormatTemp("%s://", protocol),
+    return ReplaceAll(uri, base::FormatTemp("%s://", protocol),
                       WorkAroundUriPrefix(httpOrHttps, protocol));
 }
 
 Str RevertUriWorkAround(Str uri, Str httpOrHttps, Str protocol) {
-    return SwapPrefix(uri, WorkAroundUriPrefix(httpOrHttps, protocol),
+    return ReplaceAll(uri, WorkAroundUriPrefix(httpOrHttps, protocol),
                       base::FormatTemp("%s://", protocol));
 }
 

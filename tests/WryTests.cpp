@@ -59,6 +59,16 @@ void TestWryUri() {
     utassert(base::StrEq(applied, "http://wry.localhost/path/to/page"));
     utassert(base::StrEq(wry::RevertUriWorkAround(applied, scheme, StrL("wry")), original.s));
 
+    // Rust uses `str::replace`, not `strip_prefix`: nested URLs are rewritten
+    // too, and revert makes the complete string round-trip.
+    Str nested = StrL("wry://host/?next=wry://other#back=wry://host/");
+    Str nestedApplied = wry::ApplyUriWorkAround(nested, scheme, StrL("wry"));
+    utassert(base::StrEq(
+        nestedApplied,
+        "http://wry.host/?next=http://wry.other#back=http://wry.host/"));
+    utassert(base::StrEq(wry::RevertUriWorkAround(nestedApplied, scheme, StrL("wry")),
+                         nested));
+
     // A URI in another protocol is left where it is, both ways round.
     Str other = StrL("https://example.com/x");
     utassert(base::StrEq(wry::ApplyUriWorkAround(other, scheme, StrL("wry")), other.s));

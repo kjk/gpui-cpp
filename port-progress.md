@@ -9116,3 +9116,9 @@ longer replaced or ignored; empty URL/HTML values are sent to WebView2; an
 explicit empty header map still takes Wry's request-navigation path; and an
 explicit empty browser-argument or extension-path setting is no longer
 silently treated as absent.
+
+The portable custom-protocol URI workaround now ports Rust's `str::replace`
+literally. It replaces every non-overlapping protocol occurrence, not only the
+leading one, so an encoded same-protocol URL in a query string or fragment is
+tunnelled and reverted along with the outer URL. The regression test covers
+three occurrences and the full round trip.
