@@ -65,9 +65,13 @@ $baseFlags = @(
     "/EHsc",
     "/utf-8",
     "/I", $amalgamDir,
-    "/DUNICODE",
-    "/D_UNICODE",
-    "/W4",
+    	"/DUNICODE",
+    	"/D_UNICODE",
+    	# Explicit MSVC architecture + version so the STL headers don't emit
+    	# STL1003 "Unexpected compiler" under clangd's clang-cl driver.
+    	"/D_M_X64",
+    	"/D_MSC_VER=1930",
+    	"/W4",
     "/WX",
     "/wd4996",
     "/Z7",
