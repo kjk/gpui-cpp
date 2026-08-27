@@ -1388,7 +1388,13 @@ void StrFree(const char*) = delete;
 Str StrDup(Arena*, Str str);
 Str StrDup(Str s);
 
-bool StrEq(Str s1, Str s2);
+GPUI_NOINLINE bool StrEqRest(Str s1, Str s2);
+inline bool StrEq(Str s1, Str s2) {
+    if (s1.len != s2.len) {
+        return false;
+    }
+    return StrEqRest(s1, s2);
+}
 bool StrEqI(Str s1, Str s2);
 bool StrContainsI(Str s, Str sub);
 

@@ -868,10 +868,7 @@ void StrLowerAscii(char* s) {
     }
 }
 
-bool StrEq(Str s1, Str s2) {
-    if (s1.len != s2.len) {
-        return false;
-    }
+GPUI_NOINLINE bool StrEqRest(Str s1, Str s2) {
     if (s1.s == s2.s || s1.len == 0) {
         return true;
     }
