@@ -9235,3 +9235,10 @@ boundary too. A synchronous failure returned directly by
 the completion wrapper still independently retries one asynchronous failure.
 The two paths had been conflated, leaving transient failures before callback
 registration observable in the C++ port but not in Wry.
+
+A relative fixed-runtime override is now resolved against the executable's
+directory, matching `WebView2LoaderStatic`, instead of depending on the
+process's current working directory. Drive-rooted and UNC folders remain
+absolute. Resolution and final client-path overflow fail discovery cleanly,
+so launching the same Wry port from another directory no longer changes which
+WebView2 runtime it loads.

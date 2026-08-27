@@ -1363,6 +1363,43 @@ static const WCHAR* ArchFolder() {
 #endif
 }
 
+static bool IsAbsoluteWindowsPath(const WCHAR* path) {
+    if (!path) {
+        return false;
+    }
+    // Match WebView2Loader's two absolute forms: `C:\\...` and `\\\\server`.
+    bool drive = path[0] != 0 && path[1] == L':' &&
+                 (path[2] == L'\\' || path[2] == L'/');
+    bool unc = (path[0] == L'\\' || path[0] == L'/') &&
+               (path[1] == L'\\' || path[1] == L'/');
+    return drive || unc;
+}
+
+static WCHAR* FixedRuntimeFolderDup(const WCHAR* folder) {
+    if (IsAbsoluteWindowsPath(folder)) {
+        return WStrDup(folder);
+    }
+    WCHAR module[MAX_PATH * 2];
+    DWORD len = GetModuleFileNameW(nullptr, module,
+                                   (DWORD)(sizeof(module) / sizeof(module[0])));
+    if (len == 0 || len >= sizeof(module) / sizeof(module[0])) {
+        return nullptr;
+    }
+    WCHAR* slash = wcsrchr(module, L'\\');
+    if (!slash) {
+        return nullptr;
+    }
+    size_t prefixLen = (size_t)(slash - module) + 1;
+    size_t folderLen = wcslen(folder);
+    WCHAR* result = (WCHAR*)malloc((prefixLen + folderLen + 1) * sizeof(WCHAR));
+    if (!result) {
+        return nullptr;
+    }
+    memcpy(result, module, prefixLen * sizeof(WCHAR));
+    memcpy(result + prefixLen, folder, (folderLen + 1) * sizeof(WCHAR));
+    return result;
+}
+
 // A fixed-version runtime is selected by directory rather than by the
 // EdgeUpdate key, so read the version from the client DLL the same runtime
 // loader will use. Resolve version.dll dynamically to keep the backend's
@@ -1549,19 +1586,24 @@ static bool FindRuntime(RuntimeInfo* out, IUnknown* options = nullptr) {
     out->runtimeType = 0;
 
     WCHAR* folder = LoaderOverrideDup(L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
-                                      L"BrowserExecutableFolder");
+                                       L"BrowserExecutableFolder");
     if (folder && folder[0] != 0) {
         // A fixed-version drop: the folder is already the versioned one.
+        WCHAR* resolvedFolder = FixedRuntimeFolderDup(folder);
+        free(folder);
+        if (!resolvedFolder) {
+            return false;
+        }
         out->runtimeType = 1;
-        swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
-                   ArchFolder());
-        if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
-            free(folder);
+        int written = swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll",
+                                 resolvedFolder, ArchFolder());
+        if (written < 0 || GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+            free(resolvedFolder);
             return false;
         }
         FileVersion(out->clientDll, out->version,
                     (int)(sizeof(out->version) / sizeof(out->version[0])));
-        free(folder);
+        free(resolvedFolder);
         return true;
     }
     free(folder);
