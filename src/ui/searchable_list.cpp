@@ -584,7 +584,7 @@ void SearchableListState::OnRowClick(SearchableListState* self, Ctx* cx,
     if (self->onChange.IsValid()) {
         ListenerCall(cx->app, cx->win, self->onChange, &ev);
     }
-    if (self->hasDelegate) {
+    if (self->hasDelegate && !self->suppressDelegateConfirm) {
         self->delegate.OnConfirm(self, SearchablePath(self, index), false);
     }
     Notify(cx);

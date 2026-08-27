@@ -8077,3 +8077,45 @@ moves to 101 full, 20 partial, 8 adapters and 2 exclusions with 260 unresolved
 partial-module spellings and no full-module errors. MSVC debug/release,
 clang-cl release and MSVC ASan pass 20,159 checks; wasm passes its 19,454
 applicable checks. The release story gallery compiles unchanged.
+
+## UI combobox restores its dedicated state and event boundary
+
+The first combobox port rendered through Select and SearchableList, but it
+used a bare `SearchableListState` entity and a caller-owned query. That erased
+the source `ComboboxState`, `ComboboxEvent`, `ComboboxTriggerContext` and
+`ComboboxChange` contracts, made query/focus lifetime a story-page concern,
+and left Change versus Confirm semantics to ad-hoc listeners.
+
+`ComboboxState` is now its own generational entity with the searchable list
+as its first member, matching the ownership shape already restored for
+Select. It owns its query input, single/multiple and searchable modes, icon
+and focus options, committed-selection snapshot and emitter identity. Its
+API covers value/index replacement, add/remove/clear, delegate replacement,
+selected values, query, dynamic focus handle and open state. Opening a
+searchable combobox focuses its owned query; closing or dismissing it blurs
+the query and restores the trigger.
+
+The state emits source-shaped Change and Confirm events with the selected
+values. Multi-select emits Change for each accepted toggle and Confirm only
+on close; single-select emits both after an accepted selection. A delegate
+veto or a click that leaves the same value selected neither emits nor closes.
+The searchable-list delegate confirmation is suppressed at the inner layer
+and dispatched once at this combobox boundary, avoiding the earlier
+per-toggle confirmation in multi mode.
+
+`ComboboxTriggerContext` exposes the live selected items, placeholder,
+open/disabled flags and size to custom trigger callbacks. The builder now
+also projects source menu width/height, size, appearance, refinement,
+delegate, custom empty/trigger/footer renderers and independent icon/focus
+options. The raw `Entity<SearchableListState>` plus external-query
+constructor remains as the explicit compatibility path. The story gallery
+now owns one source-shaped ComboboxState and query per section.
+
+Tests cover first-member entity rebinding, searchable query ownership,
+value replacement outside a filtered view, Change/Confirm payloads,
+multi-select close behavior, same-value single selection, outside dismissal,
+custom trigger context and builder-to-state projection. UI combobox is full:
+the audit moves to 102 full, 19 partial, 8 adapters and 2 exclusions with 256
+unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 20,182 checks; wasm passes
+its 19,477 applicable checks. The release story gallery compiles unchanged.

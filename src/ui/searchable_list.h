@@ -216,6 +216,9 @@ struct SearchableListState {
     FocusHandle previousFocus = {};
     SearchableListDelegate delegate = {};
     bool hasDelegate = false;
+    // Combobox adapts the list's confirmation into its own Change/Confirm
+    // boundary and calls the delegate only when a single selection closes.
+    bool suppressDelegateConfirm = false;
 
     const Vec<int>& Selection() const { return selected; }
     void SelectedValues(Vec<Str>* out) const;

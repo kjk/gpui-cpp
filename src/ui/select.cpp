@@ -243,6 +243,10 @@ Select* Select::Empty(Str s) {
     empty = s;
     return this;
 }
+Select* Select::Empty(El* element) {
+    emptyEl = element;
+    return this;
+}
 Select* Select::W(float v) {
     width = v;
     return this;
@@ -302,6 +306,19 @@ Select* Select::OnToggle(Listener fn) {
 }
 Select* Select::OnClear(Listener fn) {
     onClear = fn;
+    return this;
+}
+Select* Select::OnMouseDownOut(Listener fn) {
+    onMouseDownOut = fn;
+    return this;
+}
+Select* Select::TriggerBoundsOut(Bounds* bounds) {
+    triggerBoundsOut = bounds;
+    return this;
+}
+Select* Select::TriggerRefine(const Style& style, uint32_t fields) {
+    triggerStyle = style;
+    triggerStyleSet = fields;
     return this;
 }
 
@@ -391,6 +408,11 @@ Select* Select::Footer(El* e) {
     footer = e;
     return this;
 }
+Select* Select::Delegate(const SearchableListDelegate& value) {
+    delegate = value;
+    hasDelegate = true;
+    return this;
+}
 
 El* Select::IntoEl() {
     // The whole control is the select's, so its name goes on the stack of ids
@@ -443,6 +465,12 @@ El* Select::IntoEl() {
                   ->Gap(4)
                   ->ItemsCenter()
                   ->JustifyBetween();
+    if (triggerBoundsOut) {
+        box->BoundsOut(triggerBoundsOut);
+    }
+    if (triggerStyleSet) {
+        box->Refine(triggerStyle, triggerStyleSet);
+    }
     if (appearance) {
         box->Radius(th.radius)
             ->Bg(disabled ? th.muted : th.inputBg)
@@ -524,7 +552,12 @@ El* Select::IntoEl() {
         if (footer) {
             list->Footer(footer);
         }
-        if (empty.s) {
+        if (hasDelegate) {
+            list->Delegate(delegate);
+        }
+        if (emptyEl) {
+            list->Empty(emptyEl);
+        } else if (empty.s) {
             list->Empty(
                 Div(a)->H(96)->W(kFill)->ItemsCenter()->JustifyCenter()->Child(
                     TextEl(a, empty)->Font(font)->Fg(th.mutedFg)));
@@ -534,13 +567,19 @@ El* Select::IntoEl() {
         // the trigger's edge.
         menu = PopoverSurface(cx, list->IntoEl());
         menu = DropdownOpen(cx, menu, MotionName(cx, StrL("open")));
-        if (selectState.IsValid()) {
+        if (onMouseDownOut.IsValid()) {
+            menu->OnMouseDownOut(onMouseDownOut);
+        } else if (selectState.IsValid()) {
             menu->OnMouseDownOut(
                 ListenTo(selectState, &SelectState::OnMouseDownOut));
         }
     } else if (s) {
         // A closed list still has to know its items and what the query left,
         // so the trigger can name the selection and the keys can move it.
+        if (hasDelegate) {
+            s->delegate = delegate;
+            s->hasDelegate = true;
+        }
         SearchableListSearch(s, items, nItems,
                              query ? InputValue(query) : Str{});
     }

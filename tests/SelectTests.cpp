@@ -224,6 +224,135 @@ static void SourceSelectBuilderWritesItsOwnState() {
     EntityDropAll(&app);
 }
 
+struct ComboboxEventSink {
+    int changes = 0;
+    int confirms = 0;
+    int lastCount = 0;
+    Str first = {};
+
+    static void OnEvent(ComboboxEventSink* self, Ctx*,
+                        const component::ComboboxEvent* event) {
+        if (event->kind == component::ComboboxEventKind::Change) {
+            self->changes++;
+        } else {
+            self->confirms++;
+        }
+        self->lastCount = event->nValues;
+        self->first = event->nValues > 0 ? event->values[0] : Str{};
+    }
+};
+
+struct ComboboxRenderProbe {
+    int triggers = 0;
+    int footers = 0;
+    int selected = 0;
+    bool open = false;
+    bool disabled = false;
+    UiSize size = UiSize::Medium;
+};
+
+static El* RenderComboboxTrigger(
+    Ctx* cx, void* data,
+    const component::ComboboxTriggerContext* trigger) {
+    ComboboxRenderProbe* probe = (ComboboxRenderProbe*)data;
+    probe->triggers++;
+    probe->selected = trigger->SelectionCount();
+    probe->open = trigger->IsOpen();
+    probe->disabled = trigger->IsDisabled();
+    probe->size = trigger->Size();
+    const component::SearchableListItem* item = trigger->SelectionItem(0);
+    utassert(item && StrSame(item->value, StrL("vue")));
+    utassert(StrSame(trigger->Placeholder(), StrL("Choose")));
+    return Div(cx->a);
+}
+
+static El* RenderComboboxFooter(Ctx* cx, void* data) {
+    ((ComboboxRenderProbe*)data)->footers++;
+    return Div(cx->a);
+}
+
+static void ComboboxOwnsStateEventsAndTriggerContext() {
+    using namespace gpui::component;
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Entity<ComboboxState> state = ComboboxState::New(&app);
+    Ctx cx = {&app, win, a, state.id};
+    ComboboxState* s = state.Get(&app);
+    utassert(s && ComboboxListEntity(state).Get(&app) == s->List());
+
+    SearchableListItem items[] = {
+        {StrL("React"), StrL("react")},
+        {StrL("Vue"), StrL("vue")},
+        {StrL("Angular"), StrL("angular")},
+    };
+    s->SetItems(items, 3);
+    s->Searchable(true)->Multiple(true);
+    s->SetQuery(StrL("React"), &cx);
+    Str selected[] = {StrL("vue"), StrL("missing")};
+    s->SetSelectedValues(selected, 2, &cx);
+    utassert(s->Query().len == 0);
+    utassert(s->state.matches.len == 3);
+    utassert(s->Selection().len == 1 && s->Selection()[0] == 1);
+    utassert(StrSame(s->SelectedValue(), StrL("vue")));
+
+    Entity<ComboboxEventSink> sink =
+        EntityNewState<ComboboxEventSink>(&app);
+    SubscribeTo(&app, state, sink, &ComboboxEventSink::OnEvent);
+    s->SetOpen(true, &cx);
+    utassert(s->queryInput.focused && win->input == &s->queryInput);
+    SearchableListState::OnRowClick(s->List(), &cx, nullptr, 0);
+    ComboboxEventSink* heard = sink.Get(&app);
+    utassert(heard->changes == 1 && heard->confirms == 0);
+    utassert(heard->lastCount == 2);
+    utassert(StrSame(heard->first, StrL("vue")));
+    utassert(s->state.open);
+
+    MouseDownEvent outside = {};
+    outside.x = 400;
+    outside.y = 400;
+    ComboboxState::OnMouseDownOut(s, &cx, &outside);
+    utassert(heard->confirms == 1 && !s->state.open);
+    utassert(!s->queryInput.focused);
+
+    // Programmatic replacement updates the committed snapshot without
+    // emitting, and a same-value single selection neither emits nor closes.
+    IndexPath vue = IndexPathNew(1);
+    s->Multiple(false);
+    s->SetSelectedIndices(&vue, 1, &cx);
+    s->SetOpen(true, &cx);
+    int changesBefore = heard->changes;
+    int confirmsBefore = heard->confirms;
+    SearchableListState::OnRowClick(s->List(), &cx, nullptr, 1);
+    utassert(heard->changes == changesBefore);
+    utassert(heard->confirms == confirmsBefore);
+    utassert(s->state.open);
+
+    ComboboxRenderProbe probe;
+    component::Combobox::New(&cx, StrL("source-combobox"), state)
+        ->Items(items, 3)
+        ->Placeholder(StrL("Choose"))
+        ->WithSize(UiSize::Large)
+        ->Icon(IconName::Search)
+        ->CheckIcon(IconName::CircleCheck)
+        ->Appearance(false)
+        ->FocusRing(false)
+        ->RenderTrigger(&probe, RenderComboboxTrigger)
+        ->RenderFooter(&probe, RenderComboboxFooter)
+        ->IntoEl();
+    utassert(probe.triggers == 1 && probe.footers == 1);
+    utassert(probe.selected == 1 && probe.open);
+    utassert(!probe.disabled && probe.size == UiSize::Large);
+    utassert(s->triggerIcon == IconName::Search);
+    utassert(s->checkIcon == IconName::CircleCheck);
+    utassert(!s->focusRingEnabled);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestSelect() {
     TestSuite("select");
     ArrowsOpenAClosedSelect();
@@ -235,4 +364,5 @@ void TestSelect() {
     CaretKeepsTheSourceSizeScale();
     SelectStateOwnsCommittedSelectionAndEvents();
     SourceSelectBuilderWritesItsOwnState();
+    ComboboxOwnsStateEventsAndTriggerContext();
 }

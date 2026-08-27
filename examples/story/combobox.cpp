@@ -169,8 +169,7 @@ static const int kNSpecs = (int)(sizeof(kSpecs) / sizeof(kSpecs[0]));
 struct ComboboxStory {
     // One list per combobox: the items, the query, the selection and whether
     // it is open are all its own.
-    Entity<component::SearchableListState> combo[kNSpecs] = {};
-    InputState query;
+    Entity<component::ComboboxState> combo[kNSpecs] = {};
     bool seeded = false;
 
     static El* Render(ComboboxStory* self, Ctx* cx);
@@ -179,30 +178,32 @@ struct ComboboxStory {
 static void ToggleCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
                         intptr_t which) {
     for (int i = 0; i < kNSpecs; i++) {
-        component::SearchableListState* s = self->combo[i].Get(cx);
+        component::ComboboxState* owner = self->combo[i].Get(cx);
+        component::SearchableListState* s = owner ? owner->List() : nullptr;
         if (!s) {
             continue;
         }
         if (i == (int)which) {
-            component::SelectToggleOpen(s, cx);
+            owner->SetOpen(!s->open, cx);
         } else {
             s->open = false;
         }
     }
-    // The query is shared, so it starts empty every time one opens.
-    InputSetValue(&self->query, Str{});
-    self->query.focused = true;
     Notify(cx);
 }
 static void ClearCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
                        intptr_t which) {
-    component::SelectClear(self->combo[which].Get(cx), cx);
+    component::ComboboxState* s = self->combo[which].Get(cx);
+    if (s) {
+        s->ClearSelection(cx);
+    }
 }
 // The badge trigger's ✕: remove_selected_index on the one it sits on, which
 // is always the first of the selection here.
 static void RemoveComboBadge(ComboboxStory* self, Ctx* cx, const ClickEvent*,
                              intptr_t which) {
-    component::SearchableListState* s = self->combo[which].Get(cx);
+    component::ComboboxState* owner = self->combo[which].Get(cx);
+    component::SearchableListState* s = owner ? owner->List() : nullptr;
     if (!s || s->selected.len == 0) {
         return;
     }
@@ -210,10 +211,7 @@ static void RemoveComboBadge(ComboboxStory* self, Ctx* cx, const ClickEvent*,
         s->selected[i] = s->selected[i + 1];
     }
     s->selected.len--;
-    Notify(cx);
-}
-static void FocusQuery(ComboboxStory* self, Ctx* cx, const ClickEvent*) {
-    self->query.focused = true;
+    owner->SyncSnapshot();
     Notify(cx);
 }
 
@@ -248,7 +246,8 @@ static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
     if (spec.trigger == ComboTrigger::Default) {
         return nullptr;
     }
-    component::SearchableListState* st = self->combo[i].Get(cx);
+    component::ComboboxState* owner = self->combo[i].Get(cx);
+    component::SearchableListState* st = owner ? owner->List() : nullptr;
     int n = st ? st->selected.len : 0;
     El* row = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->Gap(8)->MinW(0);
     switch (spec.trigger) {
@@ -386,23 +385,22 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
-        InputSetPlaceholder(&self->query, StrL("Search…"));
         for (int i = 0; i < kNSpecs; i++) {
-            self->combo[i] =
-                EntityNewState<component::SearchableListState>(cx->app);
-            component::SearchableListState* s = self->combo[i].Get(cx);
+            self->combo[i] = component::ComboboxState::New(cx->app);
+            component::ComboboxState* owner = self->combo[i].Get(cx);
+            component::SearchableListState* s =
+                owner ? owner->List() : nullptr;
             if (!s) {
                 continue;
             }
+            owner->Searchable(true)->Multiple(kSpecs[i].multiple);
             for (int k = 0; k < kSpecs[i].count; k++) {
                 if (kSpecs[i].selected & (1u << k)) {
                     s->selected.Append(k);
                 }
             }
+            owner->SyncSnapshot();
         }
-    }
-    if (self->query.focused) {
-        cx->win->input = &self->query;
     }
     Listener toggle = Listen(cx, &ToggleCombo);
     Listener clear = Listen(cx, &ClearCombo);
@@ -413,14 +411,12 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
         El* sec = StorySection(cx, s.title, s.description);
         StorySectionBody(sec)->W(280);
         component::Combobox* cb =
-            component::Combobox::New(cx, Str(s.id), self->combo[i],
-                                     &self->query)
+            component::Combobox::New(cx, Str(s.id), self->combo[i])
                 ->Items(s.items, s.count)
                 ->Placeholder(Str(s.placeholder))
                 ->SearchPlaceholder(StrL("Search…"))
                 ->CheckIcon(s.checkIcon)
                 ->W(280)
-                ->OnQueryFocus(Listen(cx, &FocusQuery))
                 ->OnToggle(ListenerArg(toggle, (intptr_t)i))
                 ->OnClear(ListenerArg(clear, (intptr_t)i));
         if (s.groups) {
@@ -455,7 +451,8 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     static const int kShown[] = {0, 2, 8, 13};
     for (int k = 0; k < 4; k++) {
         int i = kShown[k];
-        component::SearchableListState* s = self->combo[i].Get(cx);
+        component::ComboboxState* owner = self->combo[i].Get(cx);
+        component::SearchableListState* s = owner ? owner->List() : nullptr;
         Str line = StoryFmt(cx, "%s: []", kSpecs[i].id);
         if (s && s->selected.len == 1) {
             line = StoryFmt(cx, "%s: [\"%s\"]", kSpecs[i].id,

@@ -94,6 +94,7 @@ struct Select {
     Str placeholder = {};
     Str titlePrefix = {};
     Str empty = {};
+    El* emptyEl = nullptr;
     float width = kFill;
     float menuWidth = 0; // menu_width(px(..)): wider than the trigger
     float menuMaxH = 0;
@@ -116,8 +117,14 @@ struct Select {
     El* trigger = nullptr;
     // Combobox::footer: an action under the option list.
     El* footer = nullptr;
+    SearchableListDelegate delegate = {};
+    bool hasDelegate = false;
     Listener onToggle;
     Listener onClear;
+    Listener onMouseDownOut;
+    Bounds* triggerBoundsOut = nullptr;
+    Style triggerStyle = {};
+    uint32_t triggerStyleSet = 0;
 
     static Select* New(Ctx* cx, Str id, Entity<SearchableListState> state);
     static Select* New(Ctx* cx, Str id, Entity<SelectState> state);
@@ -126,6 +133,7 @@ struct Select {
     Select* Placeholder(Str s);
     Select* TitlePrefix(Str s);
     Select* Empty(Str s);
+    Select* Empty(El* element);
     Select* W(float v);
     Select* MenuWidth(float v);
     Select* MenuMaxH(float v);
@@ -140,11 +148,15 @@ struct Select {
     Select* Searchable(InputState* query, Listener onFocus);
     Select* Trigger(El* e);
     Select* Footer(El* e);
+    Select* Delegate(const SearchableListDelegate& value);
     // Multiple: the list toggles rather than replaces, and the trigger says
     // how many are picked.
     Select* Multiple(bool v = true);
     Select* OnToggle(Listener fn);
     Select* OnClear(Listener fn);
+    Select* OnMouseDownOut(Listener fn);
+    Select* TriggerBoundsOut(Bounds* bounds);
+    Select* TriggerRefine(const Style& style, uint32_t fields);
     El* IntoEl();
 };
 
