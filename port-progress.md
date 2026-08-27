@@ -9249,3 +9249,12 @@ produce a runtime version, they retry the caller's original unoverridden
 selection. Environment creation still honours a bad administrator/user
 override as an error, as the loader does; only the informational
 `GetAvailableCoreWebView2BrowserVersionString` behavior falls back.
+
+Windows runtime discovery now includes the pinned loader's framework-package
+fallback. If neither EdgeUpdate registry shape supplies a channel, the backend
+dynamically calls `TryCreatePackageDependency` / `AddPackageDependency` for
+the matching `Microsoft.WebView2Runtime.Stable`, Beta, Dev or Canary package,
+resolves its installed path and applies the same compatibility floor. No new
+library or minimum OS is introduced: systems without the package-graph APIs
+continue through the registry paths, while MSIX/App Installer deployments can
+now find the runtime Wry's linked loader would activate.

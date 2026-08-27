@@ -1271,15 +1271,20 @@ static int ToPhysical(double logicalOrPhysical, bool logical, double scale) {
 struct RuntimeChannel {
     const WCHAR* id;
     const WCHAR* name;
+    const WCHAR* packageFamily;
     int mask;
 };
 
 // The exact public-channel ids embedded in the locked WebView2Loader.
 static const RuntimeChannel kRuntimeChannels[] = {
-    {L"{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", L"", 1},
-    {L"{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}", L"beta", 2},
-    {L"{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}", L"dev", 4},
-    {L"{65C35B14-6C1D-4122-AC46-7148CC9D6497}", L"canary", 8},
+    {L"{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", L"",
+     L"Microsoft.WebView2Runtime.Stable_8wekyb3d8bbwe", 1},
+    {L"{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}", L"beta",
+     L"Microsoft.WebView2Runtime.Beta_8wekyb3d8bbwe", 2},
+    {L"{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}", L"dev",
+     L"Microsoft.WebView2Runtime.Dev_8wekyb3d8bbwe", 4},
+    {L"{65C35B14-6C1D-4122-AC46-7148CC9D6497}", L"canary",
+     L"Microsoft.WebView2Runtime.Canary_8wekyb3d8bbwe", 8},
 };
 
 static bool RegReadStr(HKEY root, const WCHAR* subKey, const WCHAR* name, DWORD extraFlags,
@@ -1445,7 +1450,7 @@ static bool FileVersion(const WCHAR* path, WCHAR* out, int outChars) {
 // process reaches through the WOW6432 view, since EdgeUpdate is 32-bit) and
 // the per-user one.
 static bool RuntimeVersionAndLocation(const WCHAR* id, WCHAR* version, DWORD versionChars,
-                                      WCHAR* location, DWORD locationChars) {
+                                       WCHAR* location, DWORD locationChars) {
     struct Where {
         HKEY root;
         const WCHAR* path;
@@ -1472,6 +1477,82 @@ static bool RuntimeVersionAndLocation(const WCHAR* id, WCHAR* version, DWORD ver
         }
     }
     return false;
+}
+
+// Packaged WebView2 runtimes are framework packages. The pinned loader adds
+// the matching package to the process graph when neither EdgeUpdate registry
+// shape names the channel. Resolve every API dynamically: package dependency
+// support is absent on older Windows and registry discovery remains enough.
+static bool FindPackagedRuntime(const RuntimeChannel* channel, RuntimeInfo* out) {
+    typedef LONG(WINAPI * TryCreatePackageDependencyFn)(
+        PSID user, PCWSTR packageFamilyName, uint64_t minVersion, int architectures,
+        int lifetimeKind, PCWSTR lifetimeArtifact, int options, PWSTR* dependencyId);
+    typedef LONG(WINAPI * AddPackageDependencyFn)(PCWSTR dependencyId, int rank, int options,
+                                                   void** context, PWSTR* packageFullName);
+    typedef LONG(WINAPI * GetPackagePathByFullNameFn)(PCWSTR packageFullName,
+                                                       UINT32* pathLength, PWSTR path);
+
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+    HMODULE apiModule = kernelBase ? kernelBase : kernel32;
+    auto tryCreate = apiModule ? (TryCreatePackageDependencyFn)GetProcAddress(
+                                     apiModule, "TryCreatePackageDependency")
+                               : nullptr;
+    auto add = apiModule
+                   ? (AddPackageDependencyFn)GetProcAddress(apiModule, "AddPackageDependency")
+                   : nullptr;
+    auto getPath = kernel32 ? (GetPackagePathByFullNameFn)GetProcAddress(
+                                  kernel32, "GetPackagePathByFullName")
+                            : nullptr;
+    if (!tryCreate || !add || !getPath) {
+        return false;
+    }
+
+    PWSTR dependencyId = nullptr;
+    LONG status = tryCreate(nullptr, channel->packageFamily, 0, 0, 0, nullptr, 0,
+                            &dependencyId);
+    if (status != ERROR_SUCCESS || !dependencyId) {
+        return false;
+    }
+    void* dependencyContext = nullptr;
+    PWSTR packageFullName = nullptr;
+    status = add(dependencyId, 0, 0, &dependencyContext, &packageFullName);
+    HeapFree(GetProcessHeap(), 0, dependencyId);
+    if (status != ERROR_SUCCESS || !packageFullName) {
+        HeapFree(GetProcessHeap(), 0, packageFullName);
+        return false;
+    }
+
+    UINT32 pathChars = 0;
+    status = getPath(packageFullName, &pathChars, nullptr);
+    WCHAR* packagePath = nullptr;
+    if (status == ERROR_INSUFFICIENT_BUFFER && pathChars > 0) {
+        packagePath = (WCHAR*)malloc((size_t)pathChars * sizeof(WCHAR));
+        if (packagePath) {
+            status = getPath(packageFullName, &pathChars, packagePath);
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, packageFullName);
+    if (!packagePath || status != ERROR_SUCCESS) {
+        free(packagePath);
+        return false;
+    }
+
+    int written = swprintf_s(out->clientDll,
+                             L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll",
+                             packagePath, ArchFolder());
+    free(packagePath);
+    if (written < 0 || GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES ||
+        !FileVersion(out->clientDll, out->version,
+                     (int)(sizeof(out->version) / sizeof(out->version[0]))) ||
+        !IsCompatibleInstalledRuntime(out->version)) {
+        return false;
+    }
+    if (channel->name[0] != 0) {
+        wcscat_s(out->version, L" ");
+        wcscat_s(out->version, channel->name);
+    }
+    return true;
 }
 
 static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out) {
@@ -1517,7 +1598,7 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
     if (!RuntimeVersionAndLocation(channel->id, version,
                                     (DWORD)(sizeof(version) / sizeof(version[0])), location,
                                     (DWORD)(sizeof(location) / sizeof(location[0])))) {
-        return false;
+        return FindPackagedRuntime(channel, out);
     }
     if (!IsCompatibleInstalledRuntime(version)) {
         return false;
