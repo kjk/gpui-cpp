@@ -9169,3 +9169,11 @@ of Wry's locked `time` 0.3.37 dependency. Native floating-point expiries outside
 the crate's default years -9999 through 9999 are omitted without an undefined
 C++ cast, NaN follows Rust's zero conversion, and adding max-age saturates at
 the same endpoints instead of overflowing `int64_t`.
+
+The handwritten Windows environment-options COM object now matches the pinned
+`webview2-com` helper structurally through interface version 8, rather than
+advertising only the three interfaces Wry sets directly. Its previously absent
+defaults are preserved too: exclusive profile access and custom crash reporting
+off, tracking prevention on, most-stable channel search, and all four public
+release channels enabled. Custom-scheme registration storage and pointer checks
+complete the actual COM contracts even though this Wry backend does not set them.

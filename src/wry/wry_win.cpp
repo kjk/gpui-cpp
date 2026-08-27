@@ -89,6 +89,7 @@ typedef struct COREWEBVIEW2_COLOR {
 typedef int COREWEBVIEW2_BOUNDS_MODE;
 typedef int COREWEBVIEW2_BROWSING_DATA_KINDS;
 typedef int COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT;
+typedef int COREWEBVIEW2_CHANNEL_SEARCH_KIND;
 typedef int COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND;
 typedef int COREWEBVIEW2_COOKIE_SAME_SITE_KIND;
 typedef int COREWEBVIEW2_DEFAULT_DOWNLOAD_DIALOG_CORNER_ALIGNMENT;
@@ -103,6 +104,7 @@ typedef int COREWEBVIEW2_PERMISSION_KIND;
 typedef int COREWEBVIEW2_PERMISSION_STATE;
 typedef int COREWEBVIEW2_PREFERRED_COLOR_SCHEME;
 typedef int COREWEBVIEW2_PRINT_DIALOG_KIND;
+typedef int COREWEBVIEW2_RELEASE_CHANNELS;
 typedef int COREWEBVIEW2_SCROLLBAR_STYLE;
 typedef int COREWEBVIEW2_SHARED_BUFFER_ACCESS;
 typedef int COREWEBVIEW2_TRACKING_PREVENTION_LEVEL;
@@ -122,6 +124,7 @@ struct ICoreWebView2ContainsFullScreenElementChangedEventHandler;
 struct ICoreWebView2ContentLoadingEventArgs;
 struct ICoreWebView2ContextMenuItem;
 struct ICoreWebView2ContextMenuRequestedEventHandler;
+struct ICoreWebView2CustomSchemeRegistration;
 struct ICoreWebView2Cookie;
 struct ICoreWebView2CookieList;
 struct ICoreWebView2CookieManager;
@@ -264,7 +267,12 @@ struct DECLSPEC_UUID("f7f6f714-5d2a-43c6-9503-346ece02d186") ICoreWebView2Cookie
 struct DECLSPEC_UUID("177cd9e7-b6f5-451a-94a0-5d7a3a4c4141") ICoreWebView2CookieManager;
 struct DECLSPEC_UUID("5a4f5069-5c15-47c3-8646-f4de1c116670") ICoreWebView2GetCookiesCompletedHandler;
 struct DECLSPEC_UUID("2fde08a8-1e9a-4766-8c05-95a9ceb9d1c5") ICoreWebView2EnvironmentOptions;
+struct DECLSPEC_UUID("ff85c98a-1ba7-4a6b-90c8-2b752c89e9e2") ICoreWebView2EnvironmentOptions2;
+struct DECLSPEC_UUID("4a5c436e-a9e3-4a2e-89c3-910d3513f5cc") ICoreWebView2EnvironmentOptions3;
+struct DECLSPEC_UUID("ac52d13f-0d38-475a-9dca-876580d6793e") ICoreWebView2EnvironmentOptions4;
+struct DECLSPEC_UUID("0ae35d64-c47f-4464-814e-259c345d1501") ICoreWebView2EnvironmentOptions5;
 struct DECLSPEC_UUID("57d29cc3-c84f-42a0-b0e2-effbd5e179de") ICoreWebView2EnvironmentOptions6;
+struct DECLSPEC_UUID("c48d539f-e39f-441c-ae68-1f66e570bdc5") ICoreWebView2EnvironmentOptions7;
 struct DECLSPEC_UUID("7c7ecf51-e918-5caf-853c-e9a2bcc27775") ICoreWebView2EnvironmentOptions8;
 
 struct ICoreWebView2Environment : IUnknown {
@@ -919,9 +927,36 @@ virtual HRESULT STDMETHODCALLTYPE get_AllowSingleSignOnUsingOSPrimaryAccount( BO
 virtual HRESULT STDMETHODCALLTYPE put_AllowSingleSignOnUsingOSPrimaryAccount( BOOL allow) = 0;
 };
 
+struct ICoreWebView2EnvironmentOptions2 : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_ExclusiveUserDataFolderAccess( BOOL *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_ExclusiveUserDataFolderAccess( BOOL value) = 0;
+};
+
+struct ICoreWebView2EnvironmentOptions3 : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_IsCustomCrashReportingEnabled( BOOL *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_IsCustomCrashReportingEnabled( BOOL value) = 0;
+};
+
+struct ICoreWebView2EnvironmentOptions4 : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE GetCustomSchemeRegistrations( UINT32 *count, IUnknown ***values) = 0;
+virtual HRESULT STDMETHODCALLTYPE SetCustomSchemeRegistrations( UINT32 count, IUnknown **values) = 0;
+};
+
+struct ICoreWebView2EnvironmentOptions5 : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_EnableTrackingPrevention( BOOL *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_EnableTrackingPrevention( BOOL value) = 0;
+};
+
 struct ICoreWebView2EnvironmentOptions6 : IUnknown {
 virtual HRESULT STDMETHODCALLTYPE get_AreBrowserExtensionsEnabled( BOOL *value) = 0;
 virtual HRESULT STDMETHODCALLTYPE put_AreBrowserExtensionsEnabled( BOOL value) = 0;
+};
+
+struct ICoreWebView2EnvironmentOptions7 : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_ChannelSearchKind( COREWEBVIEW2_CHANNEL_SEARCH_KIND *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_ChannelSearchKind( COREWEBVIEW2_CHANNEL_SEARCH_KIND value) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_ReleaseChannels( COREWEBVIEW2_RELEASE_CHANNELS *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_ReleaseChannels( COREWEBVIEW2_RELEASE_CHANNELS value) = 0;
 };
 
 struct ICoreWebView2EnvironmentOptions8 : IUnknown {
@@ -1667,24 +1702,40 @@ static LRESULT CALLBACK MainThreadDispatcherProc(HWND hwnd, UINT msg, WPARAM wp,
 
 // ─── the environment options object ──────────────────────────────────────
 
-// `CoreWebView2EnvironmentOptions`, which is a helper class of the SDK
-// rather than part of the runtime, so it is written out. Only the three
-// interfaces wry sets anything on are implemented; a QueryInterface for one
-// of the others fails, which is exactly what an older SDK's options object
-// does and what the runtime expects to handle.
+// `CoreWebView2EnvironmentOptions`, which is a webview2-com helper rather
+// than part of the runtime, so it is written out. The exact pinned helper
+// advertises every options interface through 8 even though Wry directly sets
+// fields on only 1, 6 and 8; the loader/runtime query the others themselves.
 struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
+                            ICoreWebView2EnvironmentOptions2,
+                            ICoreWebView2EnvironmentOptions3,
+                            ICoreWebView2EnvironmentOptions4,
+                            ICoreWebView2EnvironmentOptions5,
                             ICoreWebView2EnvironmentOptions6,
+                            ICoreWebView2EnvironmentOptions7,
                             ICoreWebView2EnvironmentOptions8 {
     LONG refs = 1;
     WCHAR* additionalBrowserArguments = nullptr;
     WCHAR* language = nullptr;
+    WCHAR* targetCompatibleBrowserVersion = WStrDup(L"137.0.3296.44");
     BOOL allowSingleSignOn = FALSE;
+    BOOL exclusiveUserDataFolderAccess = FALSE;
+    BOOL customCrashReportingEnabled = FALSE;
+    Vec<IUnknown*> customSchemeRegistrations;
+    BOOL trackingPreventionEnabled = TRUE;
     BOOL browserExtensionsEnabled = FALSE;
+    int channelSearchKind = 0;
+    int releaseChannels = 1 | 2 | 4 | 8;
     int scrollBarStyle = kScrollBarStyleDefault;
 
     ~EnvironmentOptions() {
         free(additionalBrowserArguments);
         free(language);
+        free(targetCompatibleBrowserVersion);
+        for (int i = 0; i < customSchemeRegistrations.len; i++) {
+            customSchemeRegistrations[i]->Release();
+        }
+        customSchemeRegistrations.FreeEls();
     }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
@@ -1693,8 +1744,18 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         }
         if (riid == IID_IUnknown || riid == __uuidof(ICoreWebView2EnvironmentOptions)) {
             *ppv = (ICoreWebView2EnvironmentOptions*)this;
+        } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions2)) {
+            *ppv = (ICoreWebView2EnvironmentOptions2*)this;
+        } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions3)) {
+            *ppv = (ICoreWebView2EnvironmentOptions3*)this;
+        } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions4)) {
+            *ppv = (ICoreWebView2EnvironmentOptions4*)this;
+        } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions5)) {
+            *ppv = (ICoreWebView2EnvironmentOptions5*)this;
         } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions6)) {
             *ppv = (ICoreWebView2EnvironmentOptions6*)this;
+        } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions7)) {
+            *ppv = (ICoreWebView2EnvironmentOptions7*)this;
         } else if (riid == __uuidof(ICoreWebView2EnvironmentOptions8)) {
             *ppv = (ICoreWebView2EnvironmentOptions8*)this;
         } else {
@@ -1714,6 +1775,9 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
     }
 
     HRESULT STDMETHODCALLTYPE get_AdditionalBrowserArguments(LPWSTR* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
         *value = CoTaskMemDupW(additionalBrowserArguments);
         return *value ? S_OK : E_OUTOFMEMORY;
     }
@@ -1723,6 +1787,9 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE get_Language(LPWSTR* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
         *value = CoTaskMemDupW(language);
         return *value ? S_OK : E_OUTOFMEMORY;
     }
@@ -1732,15 +1799,25 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE get_TargetCompatibleBrowserVersion(LPWSTR* value) override {
-        // What the SDK's own options object answers: the browser version its
-        // headers were generated against, which the runtime reads as "at
-        // least this" (`CORE_WEBVIEW_TARGET_PRODUCT_VERSION` in pinned
-        // webview2-com-sys 0.38.0). It is a browser version, not the crate's.
-        *value = CoTaskMemDupW(L"137.0.3296.44");
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = CoTaskMemDupW(targetCompatibleBrowserVersion);
         return *value ? S_OK : E_OUTOFMEMORY;
     }
-    HRESULT STDMETHODCALLTYPE put_TargetCompatibleBrowserVersion(LPCWSTR) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE put_TargetCompatibleBrowserVersion(LPCWSTR value) override {
+        WCHAR* copy = WStrDup(value ? value : L"");
+        if (!copy) {
+            return E_OUTOFMEMORY;
+        }
+        free(targetCompatibleBrowserVersion);
+        targetCompatibleBrowserVersion = copy;
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE get_AllowSingleSignOnUsingOSPrimaryAccount(BOOL* allow) override {
+        if (!allow) {
+            return E_POINTER;
+        }
         *allow = allowSingleSignOn;
         return S_OK;
     }
@@ -1749,7 +1826,91 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         return S_OK;
     }
 
+    HRESULT STDMETHODCALLTYPE get_ExclusiveUserDataFolderAccess(BOOL* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = exclusiveUserDataFolderAccess;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE put_ExclusiveUserDataFolderAccess(BOOL value) override {
+        exclusiveUserDataFolderAccess = value;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE get_IsCustomCrashReportingEnabled(BOOL* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = customCrashReportingEnabled;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE put_IsCustomCrashReportingEnabled(BOOL value) override {
+        customCrashReportingEnabled = value;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetCustomSchemeRegistrations(UINT32* count,
+                                                            IUnknown*** values) override {
+        if (!count || !values) {
+            return E_POINTER;
+        }
+        *count = (UINT32)customSchemeRegistrations.len;
+        *values = nullptr;
+        if (customSchemeRegistrations.len == 0) {
+            return S_OK;
+        }
+        IUnknown** copy = (IUnknown**)CoTaskMemAlloc(sizeof(IUnknown*) * (size_t)*count);
+        if (!copy) {
+            return E_OUTOFMEMORY;
+        }
+        for (UINT32 i = 0; i < *count; i++) {
+            copy[i] = customSchemeRegistrations[(int)i];
+            copy[i]->AddRef();
+        }
+        *values = copy;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE SetCustomSchemeRegistrations(UINT32 count,
+                                                            IUnknown** values) override {
+        if (count > 0 && !values) {
+            return E_POINTER;
+        }
+        Vec<IUnknown*> copy;
+        for (UINT32 i = 0; i < count; i++) {
+            if (!values[i] || !copy.Append(values[i])) {
+                for (int j = 0; j < copy.len; j++) {
+                    copy[j]->Release();
+                }
+                copy.FreeEls();
+                return values[i] ? E_OUTOFMEMORY : E_POINTER;
+            }
+            values[i]->AddRef();
+        }
+        for (int i = 0; i < customSchemeRegistrations.len; i++) {
+            customSchemeRegistrations[i]->Release();
+        }
+        customSchemeRegistrations.FreeEls();
+        customSchemeRegistrations = copy;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE get_EnableTrackingPrevention(BOOL* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = trackingPreventionEnabled;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE put_EnableTrackingPrevention(BOOL value) override {
+        trackingPreventionEnabled = value;
+        return S_OK;
+    }
+
     HRESULT STDMETHODCALLTYPE get_AreBrowserExtensionsEnabled(BOOL* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
         *value = browserExtensionsEnabled;
         return S_OK;
     }
@@ -1758,7 +1919,33 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         return S_OK;
     }
 
+    HRESULT STDMETHODCALLTYPE get_ChannelSearchKind(COREWEBVIEW2_CHANNEL_SEARCH_KIND* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = channelSearchKind;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE put_ChannelSearchKind(COREWEBVIEW2_CHANNEL_SEARCH_KIND value) override {
+        channelSearchKind = value;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_ReleaseChannels(COREWEBVIEW2_RELEASE_CHANNELS* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
+        *value = releaseChannels;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE put_ReleaseChannels(COREWEBVIEW2_RELEASE_CHANNELS value) override {
+        releaseChannels = value;
+        return S_OK;
+    }
+
     HRESULT STDMETHODCALLTYPE get_ScrollBarStyle(COREWEBVIEW2_SCROLLBAR_STYLE* value) override {
+        if (!value) {
+            return E_POINTER;
+        }
         *value = scrollBarStyle;
         return S_OK;
     }
