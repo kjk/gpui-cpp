@@ -29,6 +29,8 @@
 #include "base/hover_card.h"
 #include "base/index_path.h"
 #include "base/input.h"
+#include "base/input_core.h"
+#include "base/input_rope.h"
 #include "base/input_keys.h"
 #include "base/link.h"
 #include "base/list_settings.h"

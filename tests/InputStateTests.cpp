@@ -2220,6 +2220,66 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     AppGlobalClear(&app);
 }
 
+static int DummyDefinitions(void*, Arena*, Str, int, DefinitionLink*, int) {
+    return 0;
+}
+
+static void BaseInputCoreKeepsTheSourceModeAndPresentationSeams() {
+    utassert(MultiLineMode::Includes(InputKind::Textarea));
+    utassert(MultiLineMode::Includes(InputKind::Editor));
+    utassert(!MultiLineMode::Includes(InputKind::Input));
+
+    InputState state;
+    state.kind = InputKind::Editor;
+    state.readonly = true;
+    state.masked = true;
+    state.selectedRange = {0, 2};
+    state.definitionProvider = DummyDefinitions;
+    InputSetPlaceholder(&state, StrL("value"));
+    InputModeKind mode = InputModeKind::Of(&state);
+    utassert(mode.IsMultiLine() && mode.IsCodeEditor());
+    EditorExtras extras = EditorExtras::Of(&state);
+    utassert(extras.state == &state && extras.HasDefinition());
+
+    InputContextMenuCapabilities capabilities =
+        InputContextMenuCapabilities::Of(&state);
+    utassert(capabilities.IsReadonly());
+    utassert(!capabilities.IsEditable());
+    utassert(capabilities.HasSelection());
+    utassert(capabilities.IsMasked());
+    utassert(!capabilities.IsCopyable());
+    utassert(capabilities.HasDefinition());
+
+    Arena* arena = ArenaNew();
+    InputPresentation presentation = InputPresentation::Of(arena, &state);
+    utassert(presentation.readonly && presentation.multiLine);
+    utassert(presentation.codeEditor && presentation.masked);
+    utassert(Is(presentation.placeholder, "value"));
+
+    Style normal;
+    normal.color = Rgb(1, 2, 3);
+    Style focus;
+    focus.color = Rgb(4, 5, 6);
+    Style disabled;
+    disabled.opacity = 0.5f;
+    InputStyles styles;
+    styles.Focused(focus, StyleFieldColor)
+        .Disabled(disabled, StyleFieldOpacity);
+    styles.Apply(&normal, true, true);
+    utassert(normal.color.r == focus.color.r &&
+             normal.color.g == focus.color.g &&
+             normal.color.b == focus.color.b &&
+             normal.color.a == focus.color.a);
+    utassertnear(normal.opacity, 0.5f);
+
+    NativeMenu menu;
+    InputDefaultNativeMenu(&state, &menu);
+    utassert(menu.items.len >= 6);
+    utassert(menu.items[0].disabled);
+    utassert(menu.items[menu.items.len - 1].goToDefinition);
+    ArenaDelete(arena);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2298,4 +2358,5 @@ void TestInputState() {
     DocumentColorResponsesUseTheRustLimit();
     TwoFindBarsHaveTwoPrevButtons();
     TheUiInputFacadeKeepsTheSourceShapes();
+    BaseInputCoreKeepsTheSourceModeAndPresentationSeams();
 }

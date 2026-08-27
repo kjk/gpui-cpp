@@ -19,6 +19,17 @@ El* InputBase::New(Ctx* cx, Str id, bool interactive,
         ->AriaDisabled(!interactive);
 }
 
+El* InputBase::New(Ctx* cx, Str id,
+                   const InputPresentation& presentation,
+                   const InputStyles& styles) {
+    El* element = New(cx, id, presentation.IsEditable());
+    element->TrackFocus(presentation.focus);
+    styles.Apply(&element->style,
+                 FocusHandleIsFocused(cx->win, presentation.focus),
+                 presentation.disabled);
+    return element;
+}
+
 // The washes one row carries: the search matches that fall inside it, and the
 // colours a document colour provider found there — element.rs paints both as
 // a quad behind the glyphs, the match from `layout_search_matches` and the

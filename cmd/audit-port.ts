@@ -85,7 +85,17 @@ const baseOverrides: Record<string, string[]> = {
     "src/base/tiles.h",
     "src/base/tiles.cpp",
   ],
-  input: ["src/base/input.h", "src/base/input.cpp", "src/base/input_keys.h", "src/base/input_keys.cpp"],
+  input: [
+    "src/base/input.h",
+    "src/base/input_core.h",
+    "src/base/input_rope.h",
+    "src/gpui/gpui.h",
+    "src/base/input.cpp",
+    "src/base/input_core.cpp",
+    "src/base/input_rope.cpp",
+    "src/base/input_keys.h",
+    "src/base/input_keys.cpp",
+  ],
   macos_accessibility: ["src/gpui/window_mac.cpp"],
 };
 

@@ -154,6 +154,32 @@ static void CharIndexToOffset() {
     utassert(RopeOffsetToCharIndex(r, 10) == 5);
 }
 
+static void SourceRopeFacadesIterateAndDescribeEdits() {
+    RopeExt rope = RopeExt::Of(Str(kLines));
+    utassert(rope.LinesLen() == 4);
+    utassert(StrIs(rope.SliceLines(1, 3),
+                   "World\r\nThis is a test 中文"));
+    Selection word;
+    utassert(rope.WordRange(7, &word));
+    utassert(StrIs(rope.WordAt(7), "World"));
+
+    RopeLines lines = rope.IterLines();
+    Str line;
+    int count = 0;
+    while (lines.Next(&line)) {
+        count++;
+    }
+    utassert(count == 4 && lines.Len() == 0);
+
+    InputEdit edit = InputEdit::New(StrL("one\ntwo"), {4, 7},
+                                    StrL("three\nfour"));
+    utassert(edit.startByte == 4 && edit.oldEndByte == 7);
+    utassert(edit.newEndByte == 14);
+    utassert(edit.startPosition.row == 1 && edit.startPosition.column == 0);
+    utassert(edit.oldEndPosition.row == 1 && edit.oldEndPosition.column == 3);
+    utassert(edit.newEndPosition.row == 2 && edit.newEndPosition.column == 4);
+}
+
 void TestRope() {
     TestSuite("rope_ext");
     SliceLine();
@@ -165,4 +191,5 @@ void TestRope() {
     Utf16Conversion();
     ClipOffset();
     CharIndexToOffset();
+    SourceRopeFacadesIterateAndDescribeEdits();
 }

@@ -14,13 +14,13 @@ using namespace gpui::component;
 // with, icon included.
 static void ARowCarriesWhatItWasBuiltWith() {
     Arena* ta = ArenaNew();
-    NativeMenu m;
+    component::NativeMenu m;
     m.a = ta;
     utassert(m.IsEmpty());
     m.MenuWithIcon(StrL("Github"), IconName::Github, 7);
     utassert(!m.IsEmpty());
     utassert(m.items.len == 1);
-    utassert(m.items[0].kind == NativeMenuItemKind::Item);
+    utassert(m.items[0].kind == component::NativeMenuItemKind::Item);
     utassert(StrEqI(m.items[0].label, StrL("Github")));
     utassert(!m.items[0].disabled);
     utassert(!m.items[0].checked);
@@ -34,13 +34,13 @@ static void ARowCarriesWhatItWasBuiltWith() {
     utassert(m.items[2].checked && !m.items[2].disabled);
 
     m.Separator();
-    utassert(m.items[3].kind == NativeMenuItemKind::Separator);
+    utassert(m.items[3].kind == component::NativeMenuItemKind::Separator);
 
-    NativeMenu sub;
+    component::NativeMenu sub;
     sub.a = ta;
     sub.Menu(StrL("Copy"), 10);
     m.Submenu(StrL("Edit"), &sub);
-    utassert(m.items[4].kind == NativeMenuItemKind::Submenu);
+    utassert(m.items[4].kind == component::NativeMenuItemKind::Submenu);
     utassert(m.items[4].submenu == &sub);
     utassert(m.items.len == 5);
     ArenaDelete(ta);
@@ -50,7 +50,7 @@ static void ARowCarriesWhatItWasBuiltWith() {
 // not one. A hundred rows go in and a hundred come back out.
 static void EveryRowAddedIsKept() {
     Arena* ta = ArenaNew();
-    NativeMenu m;
+    component::NativeMenu m;
     m.a = ta;
     for (int i = 0; i < 100; i++) {
         m.Menu(StrL("Item"), i);
@@ -64,11 +64,11 @@ static void EveryRowAddedIsKept() {
 // order the rows are built, with a submenu's rows taken where it sits.
 static void OnlyTheRowsThatCanBeChosenAreNumbered() {
     Arena* ta = ArenaNew();
-    NativeMenu sub;
+    component::NativeMenu sub;
     sub.a = ta;
     sub.Menu(StrL("Copy"), 20);
     sub.Menu(StrL("Cut"), 21);
-    NativeMenu m;
+    component::NativeMenu m;
     m.a = ta;
     m.Menu(StrL("New"), 1);
     m.Separator();
@@ -76,7 +76,7 @@ static void OnlyTheRowsThatCanBeChosenAreNumbered() {
     m.Submenu(StrL("Edit"), &sub);
     m.Menu(StrL("Quit"), 3);
 
-    const NativeMenuItem* table[8] = {};
+    const component::NativeMenuItem* table[8] = {};
     int n = NativeMenuSelectable(&m, table, 8);
     utassert(n == 4);
     utassert(table[0]->id == 1);
@@ -95,14 +95,14 @@ static void OnlyTheRowsThatCanBeChosenAreNumbered() {
 // opens the submenu, not what is inside it.
 static void AGreyedSubmenuStillNumbersItsRows() {
     Arena* ta = ArenaNew();
-    NativeMenu sub;
+    component::NativeMenu sub;
     sub.a = ta;
     sub.Menu(StrL("Copy"), 30);
-    NativeMenu m;
+    component::NativeMenu m;
     m.a = ta;
     m.Submenu(StrL("Edit"), &sub);
     m.items[0].disabled = true;
-    const NativeMenuItem* table[4] = {};
+    const component::NativeMenuItem* table[4] = {};
     utassert(NativeMenuSelectable(&m, table, 4) == 1);
     utassert(table[0]->id == 30);
     ArenaDelete(ta);
@@ -112,11 +112,11 @@ static void AGreyedSubmenuStillNumbersItsRows() {
 // a popup with no rows in it.
 static void AnEmptyMenuShowsNothing() {
     Arena* ta = ArenaNew();
-    NativeMenu m;
+    component::NativeMenu m;
     m.a = ta;
     utassert(m.IsEmpty());
     utassert(!m.Show(0, 0));
-    const NativeMenuItem* table[4] = {};
+    const component::NativeMenuItem* table[4] = {};
     utassert(NativeMenuSelectable(&m, table, 4) == 0);
     ArenaDelete(ta);
 }

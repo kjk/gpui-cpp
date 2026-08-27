@@ -3,7 +3,8 @@
    The state engine is InputState in Gpui.h; this is element.rs, the half that
    draws it. */
 
-#include "gpui/gpui.h"
+#include "base/input_core.h"
+#include "base/input_rope.h"
 
 namespace gpui {
 
@@ -14,6 +15,8 @@ namespace gpui {
 struct InputBase {
     static El* New(Ctx* cx, Str id, bool interactive = false,
                    AccessibilityRole role = AccessibilityRole::TextInput);
+    static El* New(Ctx* cx, Str id, const InputPresentation& presentation,
+                   const InputStyles& styles = {});
 };
 
 // gpui_base::input::InputEditorStyle. The base draws the text, the selection
