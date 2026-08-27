@@ -590,4 +590,122 @@ void TilesState::OnScroll(TilesState* self, Ctx* cx, const ScrollEvent* ev) {
     Notify(cx);
 }
 
+void TileContext::BeginMove(Point pointer) const {
+    if (state) {
+        TilesBeginMove(state, ix, pointer.x, pointer.y);
+    }
+}
+
+void TileContext::MoveTo(Point pointer) const {
+    if (state && state->dragging == ix) {
+        TilesUpdatePosition(state, pointer.x, pointer.y);
+    }
+}
+
+void TileContext::EndMove() const {
+    if (state && state->dragging == ix) {
+        TilesMouseUp(state);
+    }
+}
+
+void TileContext::BeginResize(ResizeSide side, Point pointer) const {
+    if (state) {
+        TilesBeginResize(state, ix, side, pointer.x, pointer.y);
+    }
+}
+
+void TileContext::ResizeTo(Point pointer) const {
+    if (state && state->resizing == ix) {
+        TilesUpdateResize(state, pointer.x, pointer.y);
+    }
+}
+
+void TileContext::EndResize() const {
+    if (state && state->resizing == ix) {
+        TilesMouseUp(state);
+    }
+}
+
+void TileContext::BringToFront() const {
+    if (state) {
+        TilesBringToFront(state, ix);
+    }
+}
+
+void TileContext::ToggleZoom() const {
+    const TileItem* item = Item();
+    if (state && item) {
+        state->zoomedPanel = state->zoomedPanel == item->panel ? -1
+                                                               : item->panel;
+    }
+}
+
+void TileContext::Close() const {
+    const TileItem* item = Item();
+    if (!state || !item) {
+        return;
+    }
+    if (state->zoomedPanel == item->panel) {
+        state->zoomedPanel = -1;
+    }
+    TilesRemove(state, ix);
+}
+
+bool snap_edge(float edge, const float* candidates, int count,
+               float threshold, float* out) {
+    return TileSnapEdge(edge, candidates, count, threshold, out);
+}
+
+Bounds compute_resized_bounds(Bounds previous, const float* newX,
+                              const float* newY, const float* newW,
+                              const float* newH, const Bounds* others,
+                              int count, float gridSize) {
+    return TileComputeResizedBounds(previous, newX, newY, newW, newH, others,
+                                    count, gridSize);
+}
+
+float round_to_grid(float value, float gridSize) {
+    return TileRoundToGrid(value, gridSize);
+}
+
+Point magnetic_snap(Bounds moving, const Bounds* others, int count,
+                    float threshold) {
+    TilesState state;
+    TilesAdd(&state, 0, moving);
+    for (int i = 0; others && i < count; i++) {
+        TilesAdd(&state, i + 1, others[i]);
+    }
+    bool hasX = false;
+    bool hasY = false;
+    float x = moving.x;
+    float y = moving.y;
+    TilesMagneticSnap(&state, moving, 0, threshold, &hasX, &x, &hasY, &y);
+    return {hasX ? x : moving.x, hasY ? y : moving.y};
+}
+
+Point apply_boundary_constraints(Point origin, float draggingWidth) {
+    if (origin.y < 0) {
+        origin.y = 0;
+    }
+    float minLeft = -draggingWidth + kTileKeepVisible;
+    if (origin.x < minLeft) {
+        origin.x = minLeft;
+    }
+    return origin;
+}
+
+Size content_size(const Bounds* tiles, int count) {
+    float left = 0;
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+    for (int i = 0; tiles && i < count; i++) {
+        left = std::min(left, tiles[i].x);
+        top = std::min(top, tiles[i].y);
+        right = std::max(right, tiles[i].Right());
+        bottom = std::max(bottom, tiles[i].Bottom());
+    }
+    return {right - left, bottom - top};
+}
+
 } // namespace gpui

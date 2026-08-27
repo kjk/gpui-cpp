@@ -20,6 +20,8 @@ enum class PanelInfoKind : uint8_t {
     Tiles
 };
 
+using PanelInfo = PanelInfoKind;
+
 // TileMeta: where a tile sits and how high it stacks. Rust's Default is a
 // 200x200 box ten pixels in, which is what a tile with no saved place gets.
 struct TileMeta {
@@ -47,6 +49,24 @@ struct PanelStateNode {
     // Panel: whatever the panel itself wrote, kept as it was so a round trip
     // does not lose it. Rust holds a serde_json::Value here.
     Str info = {};
+};
+
+using PanelState = PanelStateNode;
+
+// state_convert.rs object-safe seams. Serialization stays dependency-free:
+// callers provide function tables instead of Rust trait objects.
+struct PanelSource {
+    void* data = nullptr;
+    Str (*panelName)(void* data, PanelId id) = nullptr;
+    bool (*isVisible)(void* data, PanelId id) = nullptr;
+    void (*dump)(void* data, PanelId id, PanelState* out) = nullptr;
+};
+
+struct PanelBuilder {
+    void* data = nullptr;
+    DockPanelDef (*build)(void* data, const PanelState* state,
+                          const PanelInfo* info, Window* win,
+                          App* app) = nullptr;
 };
 
 // DockState: one of the three docks around the centre.
@@ -117,7 +137,9 @@ struct DockInvalidPanel {
 // it is the arena the state was parsed into. False when the state has no
 // centre to build from, which leaves the dock as it was.
 bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
-              El* (*invalidRender)(Ctx* cx, void* data) = nullptr);
+              El* (*invalidRender)(Ctx* cx, void* data) = nullptr,
+              App* app = nullptr, Window* win = nullptr,
+              Entity<DockState> dockArea = {});
 
 // The tiles' own half of it: the metas a TilesState is saved as, and a
 // TilesState built back from them. `panels` is the caller's panel for each

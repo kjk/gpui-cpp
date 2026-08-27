@@ -45,7 +45,7 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
   .trim()
   .split(/\s+/);
 
-const partialBase = new Set(["dock", "input"]);
+const partialBase = new Set(["input"]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
 const partialUi = new Set<string>();
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
@@ -75,6 +75,10 @@ const baseOverrides: Record<string, string[]> = {
   dock: [
     "src/base/dock.h",
     "src/base/dock.cpp",
+    "src/base/dock_layout.h",
+    "src/base/dock_layout.cpp",
+    "src/base/dock_registry.h",
+    "src/base/dock_registry.cpp",
     "src/base/dock_area.cpp",
     "src/base/dock_state.h",
     "src/base/dock_state.cpp",

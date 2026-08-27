@@ -7,7 +7,7 @@
    a title and a function that renders it, and the tree is an array of nodes
    naming each other by index. */
 
-#include "gpui/gpui.h"
+#include "base/geometry.h"
 
 namespace gpui {
 
@@ -28,6 +28,32 @@ const float kDockDragPreviewH = 30.f;
 // `ix` is the panel for the first and the handle for the second.
 extern const Str kDockPanelDrag;
 extern const Str kDockResizeDrag;
+
+// layout::NodeId / PanelId. These are stable values rather than pool
+// positions: the source keeps container identity across normalization, and a
+// panel id is the packed generational entity identity when it came from one.
+struct NodeId {
+    uint64_t value = 0;
+
+    static NodeId FromU64(uint64_t raw) { return NodeId{raw}; }
+    uint64_t AsU64() const { return value; }
+};
+
+inline bool operator==(NodeId a, NodeId b) { return a.value == b.value; }
+inline bool operator!=(NodeId a, NodeId b) { return !(a == b); }
+
+struct PanelId {
+    uint64_t value = 0;
+
+    static PanelId FromU64(uint64_t raw) { return PanelId{raw}; }
+    static PanelId FromEntity(EntityId id) {
+        return PanelId{((uint64_t)id.gen << 32) | (uint32_t)id.index};
+    }
+    uint64_t AsU64() const { return value; }
+};
+
+inline bool operator==(PanelId a, PanelId b) { return a.value == b.value; }
+inline bool operator!=(PanelId a, PanelId b) { return !(a == b); }
 
 // The four places a Dock can be. Center is the DockArea's own item, which is
 // not a Dock and never closes.
@@ -54,6 +80,59 @@ DockDrop DockDropAt(Bounds b, float x, float y);
 // DropPlaceholderBounds::for_placement: the half of `b` a drop would land in,
 // or all of it for a merge.
 Bounds DockDropPlaceholder(Bounds b, DockDrop d);
+
+// drag.rs: source-shaped drag geometry over the same hit-testing functions.
+// `split_placement_at` answers false for the center/merge zone.
+bool split_placement_at(Bounds bounds, Point position, Placement* out);
+
+struct DropPlaceholderBounds {
+    Point origin = {};
+    Size size = {};
+
+    static DropPlaceholderBounds ForPlacement(Bounds bounds,
+                                               const Placement* placement);
+    Bounds In(Bounds parent) const {
+        return {parent.x + origin.x, parent.y + origin.y, size.w, size.h};
+    }
+};
+
+struct DragPanel {
+    PanelId panel = {};
+    NodeId source = {};
+    Point dragOffset = {};
+    Size previewSize = {};
+    uint64_t dragSessionId = 0;
+
+    static DragPanel New(PanelId panel, NodeId source);
+};
+
+struct AnyDrag {
+    void* value = nullptr;
+    // The host's stable tag. No RTTI is required to discriminate values.
+    uint64_t type = 0;
+};
+
+enum class DropTarget : uint8_t {
+    Canvas,
+    Group
+};
+
+struct DropTargetValue {
+    DropTarget kind = DropTarget::Canvas;
+    NodeId node = {};
+    bool hasPlacement = false;
+    Placement placement = Placement::Top;
+};
+
+struct DropIndicator {
+    Bounds bounds = {};
+    bool hasPlacement = false;
+    Placement placement = Placement::Top;
+    DropPlaceholderBounds from = {};
+    DropPlaceholderBounds to = {};
+    uint64_t dragSessionId = 0;
+    uint64_t epoch = 0;
+};
 
 // A node index past the pool, which is what a listener bound to one of the
 // three docks rather than to a node carries. The pool grows, so this is a
@@ -124,10 +203,26 @@ struct DockPanelDef {
     // Panel::visible(). A hidden panel has no tab, is not the active panel,
     // and does not count towards the one that may not be closed or dragged.
     bool visible = true;
+    // Base Panel behavior callbacks. The source dispatches these through its
+    // object-safe PanelView; function pointers retain the same seam here.
+    void (*setActive)(Ctx* cx, void* data, bool active) = nullptr;
+    void (*setZoomed)(Ctx* cx, void* data, bool zoomed) = nullptr;
+    void (*onAddedTo)(Ctx* cx, void* data, int node) = nullptr;
+    void (*onRemoved)(Ctx* cx, void* data) = nullptr;
+    bool canZoom = true;
     DockPanelControl zoomable = DockPanelControl::Menu;
     // ui::Panel::inner_padding: only relevant when a full tab bar surrounds
     // the active panel. Rust's default is true.
     bool innerPadding = true;
+};
+
+using Panel = DockPanelDef;
+using PanelView = DockPanelDef;
+
+enum class PanelEvent : uint8_t {
+    ZoomIn,
+    ZoomOut,
+    LayoutChanged
 };
 
 // DockItem. A node is either Tabs — a list of panels with one active — or
@@ -168,6 +263,42 @@ struct DockSide {
     bool open = true;
     bool collapsible = true;
     float size = 200;
+
+    static DockSide New(float value) {
+        DockSide dock;
+        dock.size = std::max(value, kDockPanelMinSize);
+        return dock;
+    }
+    bool IsOpen() const { return open; }
+    void SetOpen(bool value) { open = value; }
+    bool IsCollapsible() const { return collapsible; }
+    void SetCollapsible(bool value) { collapsible = value; }
+    float GetSize() const { return size; }
+    void SetSize(float value) { size = std::max(value, kDockPanelMinSize); }
+    bool IsResizing() const { return resizing; }
+    void SetResizing(bool value) { resizing = value; }
+
+    // Source Dock retains this on each side. DockState also keeps the active
+    // placement because its compatibility renderer has one shared listener.
+    bool resizing = false;
+};
+
+using Dock = DockSide;
+
+// dock_placement.rs: pure pointer-to-size arithmetic, independent of an
+// entity or renderer.
+struct DockSizing {
+    DockPlacement placement = DockPlacement::Center;
+    Bounds area = {};
+    float oppositeDockSize = 0;
+
+    static DockSizing New(DockPlacement placement);
+    DockSizing WithAreaBounds(Bounds value) const;
+    DockSizing WithAreaWidth(float value) const;
+    DockSizing WithAreaHeight(float value) const;
+    DockSizing WithOppositeDockSize(float value) const;
+    float SizeFromPointer(Point pointer) const;
+    float Clamp(float value) const;
 };
 
 enum class DockEventKind : uint8_t {
@@ -403,7 +534,10 @@ struct DockCtx {
     DockPlacement placement = DockPlacement::Left;
     float size = 0;
     bool open = true;
+    bool collapsible = true;
 };
+
+using DockContext = DockCtx;
 
 // ResizeHandleContext: one boundary between two panels, and how it is being
 // touched. `is_active()` is the drag, and it is the whole of what Rust hands
@@ -423,6 +557,56 @@ struct DockTabGroup {
     // TabPanel::collapsed — the group is in a Dock that is shut, so it keeps
     // its bar and nothing else.
     bool collapsed = false;
+};
+
+using TabGroupContext = DockTabGroup;
+
+enum class TabGroupEvent : uint8_t {
+    Drop,
+    DragDrop,
+    ClosePanel,
+    ActiveChanged,
+    ZoomIn,
+    ZoomOut
+};
+
+struct TabGroupConstraints {
+    bool alone = true;
+    bool dockLocked = true;
+    bool collapsed = false;
+    bool closable = false;
+
+    static TabGroupConstraints Sealed() { return {}; }
+    static TabGroupConstraints InSplit(bool isAlone) {
+        TabGroupConstraints value;
+        value.alone = isAlone;
+        value.dockLocked = false;
+        value.closable = true;
+        return value;
+    }
+    TabGroupConstraints DockLocked(bool value) const {
+        TabGroupConstraints copy = *this;
+        copy.dockLocked = value;
+        return copy;
+    }
+    TabGroupConstraints Collapsed(bool value) const {
+        TabGroupConstraints copy = *this;
+        copy.collapsed = value;
+        return copy;
+    }
+    TabGroupConstraints Closable(bool value) const {
+        TabGroupConstraints copy = *this;
+        copy.closable = value;
+        return copy;
+    }
+};
+
+// The compatibility engine retains groups as nodes of DockState. This handle
+// is the source TabGroup entity's stable identity over that same state.
+struct TabGroup {
+    Entity<DockState> state = {};
+    int node = -1;
+    TabGroupConstraints constraints = {};
 };
 
 // group.panels() and group.active_ix().
@@ -497,6 +681,12 @@ struct DockRenderer {
     // defers it, and this draws it.
     El* (*dragPreview)(Ctx* cx, void* data, const DockPanelDef* def) = nullptr;
 };
+
+// Rust uses three object-safe renderer traits; one C++ table carries their
+// disjoint hooks without virtual dispatch or reference counting.
+using DockAreaRenderer = DockRenderer;
+using TabGroupRenderer = DockRenderer;
+using TilesRenderer = DockRenderer;
 
 // DockArea, as an element. The tree, the three Docks around the centre, the
 // splits and their handles, each group's body and the drop placeholder are

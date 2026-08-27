@@ -8811,3 +8811,53 @@ the audit moves to 119 full, 2 partial, 8 adapters and 2 exclusions with 100
 unresolved spellings, now confined to Base dock and Base input. MSVC release
 passes 20,646 checks, strict Linux g++ passes its 20,632 applicable checks,
 and the release story gallery compiles.
+
+## Base dock restores the pure layout and registry seams
+
+The live unstyled dock already supported arbitrary tab/split trees, the three
+side docks, freeform tiles, drag/drop, resize, zoom, persistence and canonical
+normalization. Its retained representation, however, still reflected the
+pre-rewrite Rust implementation: panels and nodes were pool indices, edits
+mutated the render tree directly, saved panels could only be rebuilt from
+definitions the host had already added, and the source's new pure
+`PaneTree`/`DockLayout` algebra had no C++ counterpart.
+
+`NodeId`, `PanelId`, `TilePanel`, `PaneNode`, `PaneRef`, `PaneTree`,
+`InsertTarget`, `EditResult`, `RootKind` and `DockLayout` now form the same
+renderer-independent data layer. Containers retain stable identities through
+insert, remove, move, split, active-index, split-size and tile edits. Every
+edit normalizes to a fixpoint: empty descendants disappear, one-child splits
+collapse while their child keeps its identity and outer slot, same-axis
+splits splice with the source's optional-size scaling, active indices clamp,
+and a center tree retains its mandatory split root. The builder describes
+horizontal/vertical splits, tabs and tiles without an `App`, and lowers them
+with the panel definitions kept alongside their stable ids.
+
+The persisted-panel path now has the source-named `PanelBuildContext`,
+`PanelRegistry` and `register_panel` global. `BaseInit` installs it, duplicate
+names replace their builder, and `DockLoad` consults it before falling back to
+the existing state-preserving invalid panel. `PanelSource` and `PanelBuilder`
+are dependency-free function tables over the existing JSON state records.
+The runtime dock invokes the panel behavior callbacks on activation, add,
+remove, move and zoom, and `DockSizing`, `Dock`, `DockContext`, `TabGroup`,
+the renderer aliases and drag/drop records restore the rest of the public
+behavior vocabulary.
+
+Tiles now expose the exact source constants and geometry entry points plus
+`ResizeDrag`, `TilesEvent` and `TileContext`; move, resize, front, zoom and
+close all forward to the established undoable tile state. The existing pool
+tree remains the compatibility execution layer used by `DockArea` rendering,
+because this runtime has POD panel definitions rather than Rust's refcounted
+trait-object entities; the pure tree is the source-shaped construction/edit
+seam and both paths implement the same normalization and geometry rules. Dock
+`NodeId` necessarily shares the public `gpui` namespace with Taffy's type in
+the amalgam, so the Taffy suite names its own type explicitly at that mixed
+boundary.
+
+Tests cover stable identities, every edit family, active-panel preservation,
+same-axis size distribution, cross-axis wrapping, tiles z-order, declarative
+layout lowering, registered persistence and the exact drag/resize geometry.
+Base dock is full: the audit moves to 120 full, 1 partial, 8 adapters and 2
+exclusions with 52 unresolved spellings, all confined to Base input. MSVC
+release passes 20,698 checks, strict Linux g++ passes its 20,684 applicable
+checks, and the release story gallery compiles.

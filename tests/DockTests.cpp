@@ -611,6 +611,176 @@ static void TheUiPanelHandleCrossesTheBaseSeam() {
     EntityDropAll(&app);
 }
 
+static PanelId PurePanel(uint64_t value) {
+    return PanelId::FromU64(value);
+}
+
+// layout::{node,tree,builder,edit,normalize}: the renderer-independent tree
+// keeps identity through edits and returns in canonical shape every time.
+static void ThePurePaneTreeMatchesTheSourceAlgebra() {
+    PaneTree tree(RootKind::Split);
+    NodeId root = tree.Root()->Id();
+    PanelId one = PurePanel(1);
+    PanelId two = PurePanel(2);
+    NodeId tabs = tree.AddTabs(root, &one, 1);
+    tree.Normalize();
+    utassert(tree.FindNode(tabs) != nullptr);
+    utassert(tree.FindPanelNode(one, nullptr));
+    utassert(tree.IsNormalized());
+
+    float requested = 240;
+    EditResult split = tree.Split(tabs, two, Placement::Right, &requested);
+    utassert(split.Changed());
+    utassert(tree.FindNode(tabs) != nullptr);
+    PaneRef top = tree.Root()->Kind();
+    utassert(top.kind == PaneKind::Split);
+    utassert(top.children && top.children->len == 2);
+    utassert(top.sizeKnown && (*top.sizeKnown)[1]);
+    utassertnear((*top.sizes)[1], 240);
+
+    NodeId other;
+    utassert(tree.FindPanelNode(two, &other));
+    utassert(tree.MovePanel(one, InsertTarget::Tabs(other)).Changed());
+    utassert(tree.FindNode(tabs) == nullptr);
+    utassert(tree.ContainsPanel(one) && tree.ContainsPanel(two));
+    utassert(tree.IsNormalized());
+
+    // A background insertion before the active tab keeps that displayed
+    // panel displayed by advancing its index.
+    PanelId three = PurePanel(3);
+    utassert(tree.InsertPanel(three, InsertTarget::Tabs(other, 0, false))
+                 .Changed());
+    const PaneNode* group = tree.FindNode(other);
+    utassert(group && group->activeIx == 2);
+    utassert(group->panels[group->activeIx] == one);
+    utassert(!tree.SetActive(other, -1).Changed());
+    utassert(group->activeIx == 2);
+
+    // A stale or wrong-kind target is a no-op.
+    utassert(!tree.SetSizes(other, &requested, nullptr, 1).Changed());
+}
+
+static void PurePaneTreeNormalizesSizesAndTiles() {
+    PaneTree tree(RootKind::Split);
+    NodeId root = tree.Root()->Id();
+    float outer = 400;
+    NodeId inner = tree.AddSplit(root, Axis::Horizontal, &outer);
+    float first = 100;
+    float second = 300;
+    PanelId one = PurePanel(11);
+    PanelId two = PurePanel(12);
+    tree.AddTabs(inner, &one, 1, &first);
+    tree.AddTabs(inner, &two, 1, &second);
+    tree.Normalize();
+    utassert(tree.FindNode(inner) == nullptr);
+    utassert(tree.Root()->children.len == 2);
+    utassertnear(tree.Root()->sizes[0], 100);
+    utassertnear(tree.Root()->sizes[1], 300);
+
+    // Across the parent axis the target is wrapped, and keeps its id.
+    NodeId oneNode;
+    utassert(tree.FindPanelNode(one, &oneNode));
+    PanelId three = PurePanel(13);
+    utassert(tree.Split(oneNode, three, Placement::Bottom).Changed());
+    utassert(tree.FindNode(oneNode) != nullptr);
+    utassert(tree.IsNormalized());
+
+    PaneTree tiles(RootKind::Any);
+    Bounds a = {0, 0, 100, 100};
+    TilePanel initial = TilePanel::New(one, a).WithZIndex(4);
+    NodeId canvas = tiles.SetRootTiles(&initial, 1);
+    Bounds b = {70, 0, 100, 100};
+    utassert(tiles.InsertPanel(two, InsertTarget::Tile(canvas, b)).Changed());
+    const PaneNode* tileNode = tiles.FindNode(canvas);
+    utassert(tileNode && tileNode->tiles.len == 2);
+    utassert(tileNode->tiles[1].zIndex == 5);
+    Bounds moved = {90, 20, 120, 110};
+    utassert(tiles.SetTileBounds(one, moved).Changed());
+    utassert(tiles.BringToFront(one).Changed());
+    utassert(tileNode->tiles[0].zIndex > tileNode->tiles[1].zIndex);
+}
+
+static void DockLayoutDescribesWithoutBuildingUi() {
+    float slot = 300;
+    DockLayout* layout =
+        DockLayout::HSplit()
+            ->Child(DockLayout::Tabs()->Panel(PurePanel(21)), &slot)
+            ->Child(DockLayout::Tabs()
+                        ->Panel(PurePanel(22))
+                        ->Panel(PurePanel(23))
+                        ->ActiveIndex(1));
+    PaneTree* tree = PaneTree::FromLayout(layout, RootKind::Split);
+    utassert(tree && tree->Root()->paneKind == PaneKind::Split);
+    utassert(tree->Root()->children.len == 2);
+    utassert(tree->Root()->sizeKnown[0]);
+    utassertnear(tree->Root()->sizes[0], 300);
+    utassert(tree->Root()->children[1]->activeIx == 1);
+    Vec<PanelId> panels;
+    tree->Panels(&panels);
+    utassert(panels.len == 3);
+    panels.Reset();
+    delete tree;
+    delete layout;
+}
+
+static DockPanelDef BuildRegisteredPanel(const PanelBuildContext* context,
+                                         Window*, App*, void* data) {
+    int* calls = (int*)data;
+    (*calls)++;
+    DockPanelDef panel;
+    panel.title = StrL("restored");
+    if (context && context->state) {
+        panel.name = context->state->panelName;
+    }
+    return panel;
+}
+
+static void ThePanelRegistryRebuildsPersistedPanels() {
+    App app;
+    int calls = 0;
+    register_panel(&app, StrL("Probe"), BuildRegisteredPanel, &calls);
+    Arena* arena = ArenaNew();
+    DockAreaState saved;
+    int tabs = saved.NewNode(StrL("TabPanel"));
+    saved.nodes[tabs].kind = PanelInfoKind::Tabs;
+    int leaf = saved.NewNode(StrL("Probe"));
+    saved.nodes[leaf].kind = PanelInfoKind::Panel;
+    saved.nodes[tabs].children.Append(leaf);
+    saved.center = tabs;
+
+    Entity<DockState> state = EntityNewState<DockState>(&app);
+    utassert(DockLoad(state.Get(&app), &saved, arena, nullptr, &app, nullptr,
+                      state));
+    utassert(calls == 1);
+    utassert(state.Get(&app)->panels.len == 1);
+    utassert(StrEqI(state.Get(&app)->panels[0].title, StrL("restored")));
+
+    EntityDropAll(&app);
+    ArenaDelete(arena);
+}
+
+static void SourceDockGeometryFacadesAreExact() {
+    DockSizing left = DockSizing::New(DockPlacement::Left)
+                          .WithAreaWidth(1000)
+                          .WithOppositeDockSize(300);
+    utassertnear(left.Clamp(900), 600);
+    DockSizing bottom = DockSizing::New(DockPlacement::Bottom)
+                            .WithAreaBounds({0, 0, 800, 600});
+    utassertnear(bottom.SizeFromPointer({400, 400}), 200);
+
+    Placement placement = Placement::Top;
+    utassert(split_placement_at({0, 0, 200, 100}, {10, 50}, &placement));
+    utassert(placement == Placement::Left);
+    utassert(!split_placement_at({0, 0, 200, 100}, {100, 50}, &placement));
+    DropPlaceholderBounds half =
+        DropPlaceholderBounds::ForPlacement({120, 80, 400, 300}, &placement);
+    // `placement` remains Left after the center query above.
+    utassertnear(half.origin.x, 0);
+    utassertnear(half.size.w, 200);
+    DragPanel drag = DragPanel::New(PurePanel(1), NodeId::FromU64(7));
+    utassert(drag.dragSessionId != 0);
+}
+
 static El* FindNamedDk(El* root, const char* name) {
     if (!root) {
         return nullptr;
@@ -710,5 +880,10 @@ void TestDock() {
     NormalizeKeepsARoot();
     AHiddenGroupIsNotASlot();
     TheUiPanelHandleCrossesTheBaseSeam();
+    ThePurePaneTreeMatchesTheSourceAlgebra();
+    PurePaneTreeNormalizesSizesAndTiles();
+    DockLayoutDescribesWithoutBuildingUi();
+    ThePanelRegistryRebuildsPersistedPanels();
+    SourceDockGeometryFacadesAreExact();
     TwoAreasHaveTwoSplitHandles();
 }

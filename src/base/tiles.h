@@ -7,7 +7,7 @@
    caller's; what is here is where each one sits, which one is being moved or
    resized, and the history that undoes it. */
 
-#include "gpui/gpui.h"
+#include "base/dock.h"
 
 namespace gpui {
 
@@ -25,6 +25,11 @@ const float kTileGridSize = 8.f;
 // dragged off the left.
 const float kTileKeepVisible = 64.f;
 
+// Exact source constants, beside the compatibility spellings above.
+const Size MINIMUM_SIZE = {kTileMinW, kTileMinH};
+const float DRAG_BAR_HEIGHT = kTileDragBarH;
+const float HANDLE_SIZE = kTileHandleSize;
+
 // What a press on a tile picks up: the bar that moves it, or the edge that
 // resizes it. `ix` is the tile for both.
 extern const Str kTileMoveDrag;
@@ -38,6 +43,37 @@ enum class TileSide : uint8_t {
     Top,
     Bottom,
     BottomRight
+};
+
+using ResizeSide = TileSide;
+
+struct ResizeDrag {
+    ResizeSide side = ResizeSide::None;
+    Point lastPosition = {};
+    Bounds lastBounds = {};
+
+    static ResizeDrag New(ResizeSide side, Point position, Bounds bounds) {
+        return ResizeDrag{side, position, bounds};
+    }
+    ResizeDrag WithLastPosition(Point value) const {
+        ResizeDrag copy = *this;
+        copy.lastPosition = value;
+        return copy;
+    }
+    ResizeDrag WithLastBounds(Bounds value) const {
+        ResizeDrag copy = *this;
+        copy.lastBounds = value;
+        return copy;
+    }
+};
+
+enum class TilesEvent : uint8_t {
+    BoundsChanged,
+    BringToFront,
+    ClosePanel,
+    DragDrop,
+    ZoomIn,
+    ZoomOut
 };
 
 // How many changes the undo history holds. Rust's is unbounded; a window this
@@ -66,6 +102,7 @@ struct TileChange {
 };
 
 struct TilesState {
+    NodeId node = {};
     // As many tiles as the caller adds, which is Rust's Vec<TileItem>.
     Vec<TileItem> items;
 
@@ -104,6 +141,8 @@ struct TilesState {
     int nChange = 0;
     int cursor = 0;
     bool ignoring = false;
+    // The panel filling the whole canvas, or -1.
+    int zoomedPanel = -1;
 
     // The press that picks a tile up, by its bar or by one of its edges, and
     // the moves and the release that follow. `ix` on a resize is the tile and
@@ -127,6 +166,28 @@ struct TilesState {
                          intptr_t ix);
 
     ~TilesState() { items.Reset(); }
+};
+
+// One source-shaped view of a tile. It forwards gestures to the pure state
+// functions below; the component renderer supplies presentation separately.
+struct TileContext {
+    TilesState* state = nullptr;
+    NodeId node = {};
+    int ix = -1;
+
+    const TileItem* Item() const {
+        return state && ix >= 0 && ix < state->items.len ? &state->items[ix]
+                                                         : nullptr;
+    }
+    void BeginMove(Point pointer) const;
+    void MoveTo(Point pointer) const;
+    void EndMove() const;
+    void BeginResize(ResizeSide side, Point pointer) const;
+    void ResizeTo(Point pointer) const;
+    void EndResize() const;
+    void BringToFront() const;
+    void ToggleZoom() const;
+    void Close() const;
 };
 
 // The tile and the side, as one number: what a resize handle's drag carries.
@@ -206,5 +267,18 @@ bool TilesCanUndo(const TilesState* s);
 bool TilesCanRedo(const TilesState* s);
 void TilesUndo(TilesState* s);
 void TilesRedo(TilesState* s);
+
+// tiles_geometry.rs exact entry points over the established implementation.
+bool snap_edge(float edge, const float* candidates, int count,
+               float threshold, float* out);
+Bounds compute_resized_bounds(Bounds previous, const float* newX,
+                              const float* newY, const float* newW,
+                              const float* newH, const Bounds* others,
+                              int count, float gridSize);
+float round_to_grid(float value, float gridSize);
+Point magnetic_snap(Bounds moving, const Bounds* others, int count,
+                    float threshold);
+Point apply_boundary_constraints(Point origin, float draggingWidth);
+Size content_size(const Bounds* tiles, int count);
 
 } // namespace gpui

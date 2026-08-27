@@ -7,6 +7,8 @@ namespace gpui {
 const Str kDockPanelDrag = StrL("dock-panel");
 const Str kDockResizeDrag = StrL("dock-resize");
 
+static uint64_t gNextDockDragSession = 1;
+
 DockDrop DockDropAt(Bounds b, float x, float y) {
     if (x < b.x + b.w * 0.35f) {
         return DockDrop::Left;
@@ -38,6 +40,132 @@ Bounds DockDropPlaceholder(Bounds b, DockDrop d) {
         default:
             return b;
     }
+}
+
+bool split_placement_at(Bounds bounds, Point position, Placement* out) {
+    DockDrop drop = DockDropAt(bounds, position.x, position.y);
+    Placement placement = Placement::Top;
+    switch (drop) {
+        case DockDrop::Left:
+            placement = Placement::Left;
+            break;
+        case DockDrop::Right:
+            placement = Placement::Right;
+            break;
+        case DockDrop::Top:
+            placement = Placement::Top;
+            break;
+        case DockDrop::Bottom:
+            placement = Placement::Bottom;
+            break;
+        case DockDrop::Center:
+            return false;
+    }
+    if (out) {
+        *out = placement;
+    }
+    return true;
+}
+
+DropPlaceholderBounds DropPlaceholderBounds::ForPlacement(
+    Bounds bounds, const Placement* placement) {
+    DockDrop drop = DockDrop::Center;
+    if (placement) {
+        switch (*placement) {
+            case Placement::Left:
+                drop = DockDrop::Left;
+                break;
+            case Placement::Right:
+                drop = DockDrop::Right;
+                break;
+            case Placement::Top:
+                drop = DockDrop::Top;
+                break;
+            case Placement::Bottom:
+                drop = DockDrop::Bottom;
+                break;
+        }
+    }
+    Bounds absolute = DockDropPlaceholder(bounds, drop);
+    DropPlaceholderBounds value;
+    value.origin = {absolute.x - bounds.x, absolute.y - bounds.y};
+    value.size = {absolute.w, absolute.h};
+    return value;
+}
+
+DragPanel DragPanel::New(PanelId panel, NodeId source) {
+    DragPanel drag;
+    drag.panel = panel;
+    drag.source = source;
+    drag.dragSessionId = gNextDockDragSession++;
+    // UI work happens on the foreground thread, so the monotonic counter does
+    // not need atomics. Zero stays reserved for host-owned AnyDrag sessions.
+    if (drag.dragSessionId == 0) {
+        drag.dragSessionId = gNextDockDragSession++;
+    }
+    return drag;
+}
+
+DockSizing DockSizing::New(DockPlacement placement) {
+    DockSizing sizing;
+    sizing.placement = placement;
+    return sizing;
+}
+
+DockSizing DockSizing::WithAreaBounds(Bounds value) const {
+    DockSizing sizing = *this;
+    sizing.area = value;
+    return sizing;
+}
+
+DockSizing DockSizing::WithAreaWidth(float value) const {
+    DockSizing sizing = *this;
+    sizing.area.w = value;
+    return sizing;
+}
+
+DockSizing DockSizing::WithAreaHeight(float value) const {
+    DockSizing sizing = *this;
+    sizing.area.h = value;
+    return sizing;
+}
+
+DockSizing DockSizing::WithOppositeDockSize(float value) const {
+    DockSizing sizing = *this;
+    sizing.oppositeDockSize = value;
+    return sizing;
+}
+
+float DockSizing::SizeFromPointer(Point pointer) const {
+    switch (placement) {
+        case DockPlacement::Left:
+            return pointer.x - area.x;
+        case DockPlacement::Right:
+            return area.x + area.w - pointer.x;
+        case DockPlacement::Bottom:
+            return area.y + area.h - pointer.y;
+        case DockPlacement::Center:
+            return 0;
+    }
+    return 0;
+}
+
+float DockSizing::Clamp(float value) const {
+    float maxSize = value;
+    switch (placement) {
+        case DockPlacement::Left:
+        case DockPlacement::Right:
+            maxSize = std::max(kDockPanelMinSize,
+                               area.w - kDockPanelMinSize - oppositeDockSize);
+            break;
+        case DockPlacement::Bottom:
+            maxSize = std::max(kDockPanelMinSize,
+                               area.h - kDockPanelMinSize);
+            break;
+        case DockPlacement::Center:
+            return value;
+    }
+    return std::min(std::max(value, kDockPanelMinSize), maxSize);
 }
 
 static void DockEmit(DockState* s, Ctx* cx) {
@@ -393,10 +521,27 @@ void DockSetActive(DockState* s, Ctx* cx, int node, int ix) {
     if (ix < 0 || ix >= n.panel.len) {
         return;
     }
+    if (n.activeIx == ix) {
+        return;
+    }
+    int oldPanel = n.activeIx >= 0 && n.activeIx < n.panel.len
+                       ? n.panel[n.activeIx]
+                       : -1;
+    int newPanel = n.panel[ix];
     n.activeIx = ix;
     // pending_scroll_to_ix: the tab that was just made active is brought into
     // view on the next frame, where its box is known.
     n.pendingScrollIx = ix;
+    if (oldPanel >= 0 && oldPanel < s->panels.len &&
+        s->panels[oldPanel].setActive) {
+        DockPanelDef& panel = s->panels[oldPanel];
+        panel.setActive(cx, panel.data, false);
+    }
+    if (newPanel >= 0 && newPanel < s->panels.len &&
+        s->panels[newPanel].setActive) {
+        DockPanelDef& panel = s->panels[newPanel];
+        panel.setActive(cx, panel.data, true);
+    }
     Notify(cx);
 }
 
@@ -431,7 +576,16 @@ bool DockClosePanelAt(DockState* s, int node, int ix) {
 }
 
 void DockClosePanel(DockState* s, Ctx* cx, int node, int ix) {
+    int panelIx = node >= 0 && node < s->nodes.len && ix >= 0 &&
+                          ix < s->nodes[node].panel.len
+                      ? s->nodes[node].panel[ix]
+                      : -1;
     if (DockClosePanelAt(s, node, ix)) {
+        if (panelIx >= 0 && panelIx < s->panels.len &&
+            s->panels[panelIx].onRemoved) {
+            DockPanelDef& panel = s->panels[panelIx];
+            panel.onRemoved(cx, panel.data);
+        }
         DockEmit(s, cx);
     }
 }
@@ -550,6 +704,12 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
 void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop,
                    int atIx) {
     if (DockMovePanelTo(s, panelIx, to, drop, atIx)) {
+        int group = DockNodeOfPanel(s, panelIx);
+        if (panelIx >= 0 && panelIx < s->panels.len &&
+            s->panels[panelIx].onAddedTo) {
+            DockPanelDef& panel = s->panels[panelIx];
+            panel.onAddedTo(cx, panel.data, group);
+        }
         DockEmit(s, cx);
     }
 }
@@ -755,39 +915,27 @@ void DockResizeSide(DockState* s, Ctx* cx, DockPlacement p, float x, float y) {
         (p != DockPlacement::Right && s->right.node >= 0 && s->right.open)
             ? s->right.size
             : 0;
-    float size = 0;
-    float maxSize = 0;
-    switch (p) {
-        case DockPlacement::Left:
-            size = x - b.x;
-            maxSize = b.w - kDockPanelMinSize - rightSize;
-            break;
-        case DockPlacement::Right:
-            size = b.Right() - x;
-            maxSize = b.w - kDockPanelMinSize - leftSize;
-            break;
-        case DockPlacement::Bottom:
-            size = b.Bottom() - y;
-            maxSize = b.h - kDockPanelMinSize;
-            break;
-        default:
-            return;
-    }
-    if (maxSize < kDockPanelMinSize) {
-        maxSize = kDockPanelMinSize;
-    }
-    if (size < kDockPanelMinSize) {
-        size = kDockPanelMinSize;
-    }
-    if (size > maxSize) {
-        size = maxSize;
-    }
-    side->size = size;
+    float opposite = p == DockPlacement::Left ? rightSize : leftSize;
+    DockSizing sizing = DockSizing::New(p)
+                            .WithAreaBounds(b)
+                            .WithOppositeDockSize(opposite);
+    side->SetSize(sizing.Clamp(sizing.SizeFromPointer({x, y})));
     Notify(cx);
 }
 
 void DockToggleZoom(DockState* s, Ctx* cx, int panelIx) {
-    s->zoomPanel = s->zoomPanel == panelIx ? -1 : panelIx;
+    bool zoomed = s->zoomPanel == panelIx;
+    if (!zoomed && (panelIx < 0 || panelIx >= s->panels.len ||
+                    !s->panels[panelIx].canZoom ||
+                    s->panels[panelIx].zoomable == DockPanelControl::No)) {
+        return;
+    }
+    s->zoomPanel = zoomed ? -1 : panelIx;
+    if (panelIx >= 0 && panelIx < s->panels.len &&
+        s->panels[panelIx].setZoomed) {
+        DockPanelDef& panel = s->panels[panelIx];
+        panel.setZoomed(cx, panel.data, !zoomed);
+    }
     Notify(cx);
 }
 
@@ -950,6 +1098,9 @@ void DockState::OnResizeDrag(DockState* self, Ctx* cx,
     if (node >= kDockSideBase) {
         DockPlacement p = (DockPlacement)(node - kDockSideBase);
         self->resizingSide = p;
+        if (DockSide* side = DockSideOf(self, p)) {
+            side->SetResizing(true);
+        }
         DockResizeSide(self, cx, p, ev->event.x, ev->event.y);
         return;
     }
@@ -976,6 +1127,9 @@ void DockState::OnResizeEnd(DockState* self, Ctx* cx, const MouseUpEvent*) {
         return;
     }
     self->resizing = false;
+    self->left.SetResizing(false);
+    self->right.SetResizing(false);
+    self->bottom.SetResizing(false);
     self->resizingSide = DockPlacement::Center;
     DockEmit(self, cx);
 }

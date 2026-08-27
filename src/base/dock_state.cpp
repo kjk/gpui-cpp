@@ -1,4 +1,5 @@
 #include "base/dock_state.h"
+#include "base/dock_registry.h"
 
 namespace gpui {
 
@@ -357,11 +358,25 @@ void DockDump(const DockState* s, DockAreaState* out) {
 // PanelRegistry::build_panel: the panel this name means, or an InvalidPanel
 // registered on the spot so the layout keeps its shape and says what is
 // missing from it.
-static int PanelForName(DockState* s, Str name, Arena* a,
-                        El* (*invalidRender)(Ctx* cx, void* data)) {
+static int PanelForName(DockState* s, const PanelStateNode* saved, Arena* a,
+                        El* (*invalidRender)(Ctx* cx, void* data), App* app,
+                        Window* win, Entity<DockState> dockArea) {
+    Str name = saved ? saved->panelName : StrL("");
     int found = DockPanelByName(s, name);
     if (found >= 0) {
         return found;
+    }
+    if (app && saved) {
+        PanelBuildContext context;
+        context.dockArea = dockArea;
+        context.state = saved;
+        context.info = &saved->kind;
+        DockPanelDef built;
+        PanelRegistry* registry = PanelRegistryGlobal(app);
+        if (registry &&
+            registry->BuildPanel(name, &context, win, app, &built)) {
+            return DockAddPanelDef(s, built);
+        }
     }
     DockPanelDef def;
     def.name = StrDup(a, name);
@@ -377,7 +392,8 @@ static int PanelForName(DockState* s, Str name, Arena* a,
 
 // One saved node, built into the live tree. Answers the live node, or -1.
 static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
-                    El* (*invalidRender)(Ctx* cx, void* data)) {
+                    El* (*invalidRender)(Ctx* cx, void* data), App* app,
+                    Window* win, Entity<DockState> dockArea) {
     if (ix < 0 || ix >= st->nodes.len) {
         return -1;
     }
@@ -388,7 +404,8 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
             return -1;
         }
         for (int i = 0; i < sn.children.len; i++) {
-            int child = LoadNode(s, st, sn.children[i], a, invalidRender);
+            int child = LoadNode(s, st, sn.children[i], a, invalidRender, app,
+                                 win, dockArea);
             if (child >= 0) {
                 DockSplitAdd(
                     s, node, child,
@@ -411,7 +428,8 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
             if (leaf.kind != PanelInfoKind::Panel) {
                 continue;
             }
-            int panelIx = PanelForName(s, leaf.panelName, a, invalidRender);
+            int panelIx = PanelForName(s, &leaf, a, invalidRender, app, win,
+                                       dockArea);
             if (panelIx >= 0) {
                 DockTabsAdd(s, node, panelIx);
             }
@@ -420,7 +438,7 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
             sn.activeIndex < s->nodes[node].panel.len ? sn.activeIndex : 0;
         return node;
     }
-    int panelIx = PanelForName(s, sn.panelName, a, invalidRender);
+    int panelIx = PanelForName(s, &sn, a, invalidRender, app, win, dockArea);
     if (panelIx >= 0) {
         DockTabsAdd(s, node, panelIx);
     }
@@ -429,19 +447,22 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
 
 static void LoadSide(DockState* s, const DockAreaState* st,
                      const DockSideState& from, Arena* a,
-                     El* (*invalidRender)(Ctx* cx, void* data), DockSide* to) {
+                     El* (*invalidRender)(Ctx* cx, void* data), DockSide* to,
+                     App* app, Window* win, Entity<DockState> dockArea) {
     *to = DockSide{};
     if (!from.present) {
         to->node = -1;
         return;
     }
-    to->node = LoadNode(s, st, from.node, a, invalidRender);
+    to->node = LoadNode(s, st, from.node, a, invalidRender, app, win,
+                        dockArea);
     to->size = from.size > 0 ? from.size : to->size;
     to->open = from.open;
 }
 
 bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
-              El* (*invalidRender)(Ctx* cx, void* data)) {
+              El* (*invalidRender)(Ctx* cx, void* data), App* app,
+              Window* win, Entity<DockState> dockArea) {
     if (!s || !st || st->center < 0) {
         return false;
     }
@@ -461,10 +482,14 @@ bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
     s->left.node = -1;
     s->right.node = -1;
     s->bottom.node = -1;
-    s->center = LoadNode(s, st, st->center, a, invalidRender);
-    LoadSide(s, st, st->left, a, invalidRender, &s->left);
-    LoadSide(s, st, st->right, a, invalidRender, &s->right);
-    LoadSide(s, st, st->bottom, a, invalidRender, &s->bottom);
+    s->center = LoadNode(s, st, st->center, a, invalidRender, app, win,
+                         dockArea);
+    LoadSide(s, st, st->left, a, invalidRender, &s->left, app, win,
+             dockArea);
+    LoadSide(s, st, st->right, a, invalidRender, &s->right, app, win,
+             dockArea);
+    LoadSide(s, st, st->bottom, a, invalidRender, &s->bottom, app, win,
+             dockArea);
     // A file may hold any tree at all — an empty group, a split of one, a
     // split inside a split of the same axis — and the edits from here on
     // assume the canonical shape.

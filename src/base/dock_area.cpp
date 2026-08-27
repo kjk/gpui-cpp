@@ -518,6 +518,7 @@ El* RenderDock(const AreaCtx& ac, DockPlacement p, const DockSide& side) {
     d.placement = p;
     d.size = side.size;
     d.open = side.open;
+    d.collapsible = side.collapsible;
     return ac.r->dock(ac.cx, ac.r->data, &d, RenderNode(ac, side.node));
 }
 

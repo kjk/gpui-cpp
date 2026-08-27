@@ -17,6 +17,11 @@
 
 using namespace taffy;
 
+// Dock's source API also exports a NodeId. This file tests Taffy throughout,
+// so keep the intended type explicit at the one boundary that imports both
+// gpui and taffy wholesale.
+using TaffyNodeId = taffy::NodeId;
+
 // `Style`, `taffy::Overflow`, `taffy::Position` and `taffy::Display` exist in
 // both `gpui` and `taffy`, and Test.h pulls all of gpui into scope, so taffy's
 // are spelled out at every use below.
@@ -407,7 +412,7 @@ static void TestCompactLength() {
 // Rust's `size_measure_function` from the same test module: the known
 // dimensions if given, else the size stashed in the node context.
 static SizeF SizeMeasureFunction(SizeFOpt knownDimensions,
-                                 SizeAvail availableSpace, NodeId node,
+                                 SizeAvail availableSpace, TaffyNodeId node,
                                  void* nodeContext, const taffy::Style* style,
                                  void* userData) {
     (void)availableSpace;
@@ -425,19 +430,19 @@ static void TestTaffyTreeBasics() {
     tree.Init();
 
     // test_new_leaf
-    NodeId leaf = tree.NewLeaf(taffy::Style{});
+    TaffyNodeId leaf = tree.NewLeaf(taffy::Style{});
     utassert(tree.ChildCount(leaf) == 0);
 
     // new_leaf_with_context
     SizeF ctxSize = SizeF::Zero();
-    NodeId ctxLeaf = tree.NewLeafWithContext(taffy::Style{}, &ctxSize);
+    TaffyNodeId ctxLeaf = tree.NewLeafWithContext(taffy::Style{}, &ctxSize);
     utassert(tree.ChildCount(ctxLeaf) == 0);
 
     // test_new_with_children
-    NodeId child0 = tree.NewLeaf(taffy::Style{});
-    NodeId child1 = tree.NewLeaf(taffy::Style{});
-    NodeId children[] = {child0, child1};
-    NodeId node = tree.NewWithChildren(taffy::Style{}, children, 2);
+    TaffyNodeId child0 = tree.NewLeaf(taffy::Style{});
+    TaffyNodeId child1 = tree.NewLeaf(taffy::Style{});
+    TaffyNodeId children[] = {child0, child1};
+    TaffyNodeId node = tree.NewWithChildren(taffy::Style{}, children, 2);
     utassert(tree.ChildCount(node) == 2);
     utassert(tree.GetChildId(node, 0) == child0);
     utassert(tree.GetChildId(node, 1) == child1);
@@ -447,9 +452,9 @@ static void TestTaffyTreeBasics() {
     utassert(tree.ChildCount(child1) == 0);
 
     // test_child_at_index
-    NodeId child2 = tree.NewLeaf(taffy::Style{});
-    NodeId three[] = {child0, child1, child2};
-    NodeId node3 = tree.NewWithChildren(taffy::Style{}, three, 3);
+    TaffyNodeId child2 = tree.NewLeaf(taffy::Style{});
+    TaffyNodeId three[] = {child0, child1, child2};
+    TaffyNodeId node3 = tree.NewWithChildren(taffy::Style{}, three, 3);
     utassert(tree.ChildAtIndex(node3, 0) == child0);
     utassert(tree.ChildAtIndex(node3, 1) == child1);
     utassert(tree.ChildAtIndex(node3, 2) == child2);
@@ -464,11 +469,11 @@ static void TestTaffyTreeHierarchy() {
         // remove_node_should_detach_hierarchy
         TaffyTree tree;
         tree.Init();
-        NodeId node2 = tree.NewLeaf(taffy::Style{});
-        NodeId c2[] = {node2};
-        NodeId node1 = tree.NewWithChildren(taffy::Style{}, c2, 1);
-        NodeId c1[] = {node1};
-        NodeId node0 = tree.NewWithChildren(taffy::Style{}, c1, 1);
+        TaffyNodeId node2 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId c2[] = {node2};
+        TaffyNodeId node1 = tree.NewWithChildren(taffy::Style{}, c2, 1);
+        TaffyNodeId c1[] = {node1};
+        TaffyNodeId node0 = tree.NewWithChildren(taffy::Style{}, c1, 1);
 
         utassert(tree.ChildCount(node0) == 1);
         utassert(tree.GetChildId(node0, 0) == node1);
@@ -485,7 +490,7 @@ static void TestTaffyTreeHierarchy() {
         // add_child
         TaffyTree tree;
         tree.Init();
-        NodeId node = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId node = tree.NewLeaf(taffy::Style{});
         utassert(tree.ChildCount(node) == 0);
         tree.AddChild(node, tree.NewLeaf(taffy::Style{}));
         utassert(tree.ChildCount(node) == 1);
@@ -498,10 +503,10 @@ static void TestTaffyTreeHierarchy() {
         // insert_child_at_index
         TaffyTree tree;
         tree.Init();
-        NodeId child0 = tree.NewLeaf(taffy::Style{});
-        NodeId child1 = tree.NewLeaf(taffy::Style{});
-        NodeId child2 = tree.NewLeaf(taffy::Style{});
-        NodeId node = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child0 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child1 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child2 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId node = tree.NewLeaf(taffy::Style{});
         utassert(tree.ChildCount(node) == 0);
 
         utassert(tree.InsertChildAtIndex(node, 0, child0));
@@ -529,22 +534,22 @@ static void TestTaffyTreeHierarchy() {
         // set_children, and set_children_reparents
         TaffyTree tree;
         tree.Init();
-        NodeId child0 = tree.NewLeaf(taffy::Style{});
-        NodeId child1 = tree.NewLeaf(taffy::Style{});
-        NodeId two[] = {child0, child1};
-        NodeId node = tree.NewWithChildren(taffy::Style{}, two, 2);
+        TaffyNodeId child0 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child1 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId two[] = {child0, child1};
+        TaffyNodeId node = tree.NewWithChildren(taffy::Style{}, two, 2);
         utassert(tree.ChildCount(node) == 2);
 
-        NodeId child2 = tree.NewLeaf(taffy::Style{});
-        NodeId child3 = tree.NewLeaf(taffy::Style{});
-        NodeId next[] = {child2, child3};
+        TaffyNodeId child2 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child3 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId next[] = {child2, child3};
         tree.SetChildren(node, next, 2);
         utassert(tree.ChildCount(node) == 2);
         utassert(tree.GetChildId(node, 0) == child2);
         utassert(tree.GetChildId(node, 1) == child3);
 
-        NodeId newParent = tree.NewLeaf(taffy::Style{});
-        NodeId one[] = {child2};
+        TaffyNodeId newParent = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId one[] = {child2};
         tree.SetChildren(newParent, one, 1);
         utassert(tree.ChildCount(node) == 1);
         utassert(tree.GetChildId(node, 0) == child3);
@@ -555,10 +560,10 @@ static void TestTaffyTreeHierarchy() {
         // remove_child and remove_child_at_index
         TaffyTree tree;
         tree.Init();
-        NodeId child0 = tree.NewLeaf(taffy::Style{});
-        NodeId child1 = tree.NewLeaf(taffy::Style{});
-        NodeId two[] = {child0, child1};
-        NodeId node = tree.NewWithChildren(taffy::Style{}, two, 2);
+        TaffyNodeId child0 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child1 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId two[] = {child0, child1};
+        TaffyNodeId node = tree.NewWithChildren(taffy::Style{}, two, 2);
         utassert(tree.ChildCount(node) == 2);
         tree.RemoveChild(node, child0);
         utassert(tree.ChildCount(node) == 1);
@@ -566,7 +571,7 @@ static void TestTaffyTreeHierarchy() {
         tree.RemoveChild(node, child1);
         utassert(tree.ChildCount(node) == 0);
 
-        NodeId again[] = {child0, child1};
+        TaffyNodeId again[] = {child0, child1};
         tree.SetChildren(node, again, 2);
         tree.RemoveChildAtIndex(node, 0);
         utassert(tree.ChildCount(node) == 1);
@@ -580,11 +585,11 @@ static void TestTaffyTreeHierarchy() {
         // remove_children_range
         TaffyTree tree;
         tree.Init();
-        NodeId c[4];
+        TaffyNodeId c[4];
         for (int i = 0; i < 4; i++) {
             c[i] = tree.NewLeaf(taffy::Style{});
         }
-        NodeId node = tree.NewWithChildren(taffy::Style{}, c, 4);
+        TaffyNodeId node = tree.NewWithChildren(taffy::Style{}, c, 4);
         utassert(tree.ChildCount(node) == 4);
 
         // Rust's range is 1..=2, which is [1, 3) here.
@@ -608,10 +613,10 @@ static void TestTaffyTreeHierarchy() {
         // replace_child_at_index
         TaffyTree tree;
         tree.Init();
-        NodeId child0 = tree.NewLeaf(taffy::Style{});
-        NodeId child1 = tree.NewLeaf(taffy::Style{});
-        NodeId one[] = {child0};
-        NodeId node = tree.NewWithChildren(taffy::Style{}, one, 1);
+        TaffyNodeId child0 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child1 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId one[] = {child0};
+        TaffyNodeId node = tree.NewWithChildren(taffy::Style{}, one, 1);
         utassert(tree.ChildCount(node) == 1);
         utassert(tree.GetChildId(node, 0) == child0);
         tree.ReplaceChildAtIndex(node, 0, child1);
@@ -625,8 +630,8 @@ static void TestTaffyTreeHierarchy() {
         // child usable. https://github.com/DioxusLabs/taffy/issues/510
         TaffyTree tree;
         tree.Init();
-        NodeId parent = tree.NewLeaf(taffy::Style{});
-        NodeId child = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId parent = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child = tree.NewLeaf(taffy::Style{});
         tree.AddChild(parent, child);
         tree.Remove(parent);
         tree.SetChildren(child, nullptr, 0);
@@ -642,7 +647,7 @@ static void TestTaffyTreeStyleAndDirty() {
         // test_set_style / test_style
         TaffyTree tree;
         tree.Init();
-        NodeId node = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId node = tree.NewLeaf(taffy::Style{});
         utassert(tree.GetStyle(node).display == taffy::Display::Flex);
 
         taffy::Style hidden;
@@ -653,7 +658,7 @@ static void TestTaffyTreeStyleAndDirty() {
         taffy::Style reversed;
         reversed.display = taffy::Display::None;
         reversed.flexDirection = FlexDirection::RowReverse;
-        NodeId other = tree.NewLeaf(reversed);
+        TaffyNodeId other = tree.NewLeaf(reversed);
         utassert(tree.GetStyle(other).display == taffy::Display::None);
         utassert(tree.GetStyle(other)
                      .flexDirection == FlexDirection::RowReverse);
@@ -664,10 +669,10 @@ static void TestTaffyTreeStyleAndDirty() {
         // test_mark_dirty
         TaffyTree tree;
         tree.Init();
-        NodeId child0 = tree.NewLeaf(taffy::Style{});
-        NodeId child1 = tree.NewLeaf(taffy::Style{});
-        NodeId two[] = {child0, child1};
-        NodeId node = tree.NewWithChildren(taffy::Style{}, two, 2);
+        TaffyNodeId child0 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId child1 = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId two[] = {child0, child1};
+        TaffyNodeId node = tree.NewWithChildren(taffy::Style{}, two, 2);
 
         tree.ComputeLayout(node, SizeAvail::MaxContent());
         utassert(!tree.Dirty(child0));
@@ -696,7 +701,7 @@ static void TestTaffyTreeMeasure() {
         TaffyTree tree;
         tree.Init();
         SizeF bigger = {200.0f, 200.0f};
-        NodeId node = tree.NewLeafWithContext(taffy::Style{}, &bigger);
+        TaffyNodeId node = tree.NewLeafWithContext(taffy::Style{}, &bigger);
         tree.ComputeLayoutWithMeasure(node, SizeAvail::MaxContent(),
                                       SizeMeasureFunction, nullptr);
         utassertnear(tree.GetLayout(node).size.w, 200.0f);
@@ -713,7 +718,7 @@ static void TestTaffyTreeMeasure() {
         // set_measure_of_previously_unmeasured_node
         TaffyTree tree;
         tree.Init();
-        NodeId node = tree.NewLeaf(taffy::Style{});
+        TaffyNodeId node = tree.NewLeaf(taffy::Style{});
         tree.ComputeLayoutWithMeasure(node, SizeAvail::MaxContent(),
                                       SizeMeasureFunction, nullptr);
         utassertnear(tree.GetLayout(node).size.w, 0.0f);
@@ -736,7 +741,7 @@ static void TestTaffyTreeLayout() {
         tree.Init();
         taffy::Style s;
         s.size = SizeDim::FromLengths(10.0f, 10.0f);
-        NodeId node = tree.NewLeaf(s);
+        TaffyNodeId node = tree.NewLeaf(s);
         tree.ComputeLayout(node, SizeAvail::Definite({100.0f, 100.0f}));
         utassertnear(tree.GetLayout(node).size.w, 10.0f);
         utassertnear(tree.GetLayout(node).size.h, 10.0f);
@@ -751,15 +756,15 @@ static void TestTaffyTreeLayout() {
         tree.Init();
         taffy::Style childStyle;
         childStyle.size = SizeDim::FromPercent(1.0f, 1.0f);
-        NodeId node = tree.NewLeaf(childStyle);
+        TaffyNodeId node = tree.NewLeaf(childStyle);
 
         taffy::Style rootStyle;
         rootStyle.size = SizeDim::FromLengths(100.0f, 100.0f);
         rootStyle.padding = {
             LengthPercentage::Length(10.0f), LengthPercentage::Length(20.0f),
             LengthPercentage::Length(30.0f), LengthPercentage::Length(40.0f)};
-        NodeId one[] = {node};
-        NodeId root = tree.NewWithChildren(rootStyle, one, 1);
+        TaffyNodeId one[] = {node};
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, one, 1);
 
         tree.ComputeLayout(root, SizeAvail::MaxContent());
         utassertnear(tree.GetLayout(node).location.x, 10.0f);
@@ -780,28 +785,28 @@ static void TestHiddenLayout() {
     style.display = taffy::Display::Flex;
     style.size = SizeDim::FromLengths(50.0f, 50.0f);
 
-    NodeId grandchild00 = tree.NewLeaf(style);
-    NodeId grandchild01 = tree.NewLeaf(style);
-    NodeId gc0[] = {grandchild00, grandchild01};
-    NodeId child00 = tree.NewWithChildren(style, gc0, 2);
+    TaffyNodeId grandchild00 = tree.NewLeaf(style);
+    TaffyNodeId grandchild01 = tree.NewLeaf(style);
+    TaffyNodeId gc0[] = {grandchild00, grandchild01};
+    TaffyNodeId child00 = tree.NewWithChildren(style, gc0, 2);
 
-    NodeId grandchild02 = tree.NewLeaf(style);
-    NodeId gc1[] = {grandchild02};
-    NodeId child01 = tree.NewWithChildren(style, gc1, 1);
+    TaffyNodeId grandchild02 = tree.NewLeaf(style);
+    TaffyNodeId gc1[] = {grandchild02};
+    TaffyNodeId child01 = tree.NewWithChildren(style, gc1, 1);
 
     taffy::Style rootStyle;
     rootStyle.display = taffy::Display::None;
     rootStyle.size = SizeDim::FromLengths(50.0f, 50.0f);
-    NodeId kids[] = {child00, child01};
-    NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+    TaffyNodeId kids[] = {child00, child01};
+    TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
 
     tree.ComputeLayout(root, SizeAvail::MaxContent());
 
     // Whatever size and display mode the nodes had, every layout resolves to
     // zero because the root is display:none.
-    NodeId all[] = {root,         child00,      child01,
+    TaffyNodeId all[] = {root,         child00,      child01,
                     grandchild00, grandchild01, grandchild02};
-    for (NodeId n : all) {
+    for (TaffyNodeId n : all) {
         const Layout& l = tree.GetLayout(n);
         utassert(l.size == SizeF::Zero());
         utassert(l.location == PointF::Zero());
@@ -824,14 +829,14 @@ static void TestFlexboxLayout() {
         tree.Init();
         taffy::Style childStyle;
         childStyle.flexGrow = 1.0f;
-        NodeId c0 = tree.NewLeaf(childStyle);
-        NodeId c1 = tree.NewLeaf(childStyle);
-        NodeId c2 = tree.NewLeaf(childStyle);
-        NodeId kids[] = {c0, c1, c2};
+        TaffyNodeId c0 = tree.NewLeaf(childStyle);
+        TaffyNodeId c1 = tree.NewLeaf(childStyle);
+        TaffyNodeId c2 = tree.NewLeaf(childStyle);
+        TaffyNodeId kids[] = {c0, c1, c2};
 
         taffy::Style rootStyle;
         rootStyle.size = SizeDim::FromLengths(300.0f, 60.0f);
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 3);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 3);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(root).size.w, 300.0f);
@@ -852,9 +857,9 @@ static void TestFlexboxLayout() {
         tree.Init();
         taffy::Style childStyle;
         childStyle.size = SizeDim::FromLengths(40.0f, 20.0f);
-        NodeId c0 = tree.NewLeaf(childStyle);
-        NodeId c1 = tree.NewLeaf(childStyle);
-        NodeId kids[] = {c0, c1};
+        TaffyNodeId c0 = tree.NewLeaf(childStyle);
+        TaffyNodeId c1 = tree.NewLeaf(childStyle);
+        TaffyNodeId kids[] = {c0, c1};
 
         taffy::Style rootStyle;
         rootStyle.flexDirection = FlexDirection::Column;
@@ -863,7 +868,7 @@ static void TestFlexboxLayout() {
         rootStyle.padding = {
             LengthPercentage::Length(5.0f), LengthPercentage::Length(5.0f),
             LengthPercentage::Length(5.0f), LengthPercentage::Length(5.0f)};
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         // 5 + 20 + 8 + 20 + 5
@@ -882,8 +887,8 @@ static void TestFlexboxLayout() {
         tree.Init();
         taffy::Style childStyle;
         childStyle.size = SizeDim::FromLengths(50.0f, 50.0f);
-        NodeId child = tree.NewLeaf(childStyle);
-        NodeId kids[] = {child};
+        TaffyNodeId child = tree.NewLeaf(childStyle);
+        TaffyNodeId kids[] = {child};
 
         taffy::Style rootStyle;
         rootStyle.size = SizeDim::FromLengths(200.0f, 100.0f);
@@ -891,7 +896,7 @@ static void TestFlexboxLayout() {
             OptJustifyContent(AlignContent{AlignContentKeyword::Center});
         rootStyle
             .alignItems = OptAlignItems(AlignItems{AlignItemsKeyword::Center});
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 1);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 1);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(child).location.x, 75.0f);
@@ -906,13 +911,13 @@ static void TestFlexboxLayout() {
         tree.Init();
         taffy::Style childStyle;
         childStyle.size = SizeDim::FromLengths(200.0f, 20.0f);
-        NodeId c0 = tree.NewLeaf(childStyle);
-        NodeId c1 = tree.NewLeaf(childStyle);
-        NodeId kids[] = {c0, c1};
+        TaffyNodeId c0 = tree.NewLeaf(childStyle);
+        TaffyNodeId c1 = tree.NewLeaf(childStyle);
+        TaffyNodeId kids[] = {c0, c1};
 
         taffy::Style rootStyle;
         rootStyle.size = SizeDim::FromLengths(300.0f, 20.0f);
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(c0).size.w, 150.0f);
@@ -932,16 +937,16 @@ static void TestFlexboxLayout() {
         absStyle.inset = {
             LengthPercentageAuto::Length(10.0f), LengthPercentageAuto::Auto(),
             LengthPercentageAuto::Length(20.0f), LengthPercentageAuto::Auto()};
-        NodeId absChild = tree.NewLeaf(absStyle);
+        TaffyNodeId absChild = tree.NewLeaf(absStyle);
 
         taffy::Style flowStyle;
         flowStyle.size = SizeDim::FromLengths(40.0f, 40.0f);
-        NodeId flowChild = tree.NewLeaf(flowStyle);
+        TaffyNodeId flowChild = tree.NewLeaf(flowStyle);
 
-        NodeId kids[] = {absChild, flowChild};
+        TaffyNodeId kids[] = {absChild, flowChild};
         taffy::Style rootStyle;
         rootStyle.size = SizeDim::FromLengths(200.0f, 100.0f);
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(absChild).location.x, 10.0f);
@@ -964,14 +969,14 @@ static void TestBlockLayout() {
         taffy::Style childStyle;
         childStyle.display = taffy::Display::Block;
         childStyle.size.height = Dimension::Length(20.0f);
-        NodeId c0 = tree.NewLeaf(childStyle);
-        NodeId c1 = tree.NewLeaf(childStyle);
-        NodeId kids[] = {c0, c1};
+        TaffyNodeId c0 = tree.NewLeaf(childStyle);
+        TaffyNodeId c1 = tree.NewLeaf(childStyle);
+        TaffyNodeId kids[] = {c0, c1};
 
         taffy::Style rootStyle;
         rootStyle.display = taffy::Display::Block;
         rootStyle.size = SizeDim::FromLengths(120.0f, 100.0f);
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(c0).location.y, 0.0f);
@@ -989,15 +994,15 @@ static void TestBlockLayout() {
         childStyle.display = taffy::Display::Block;
         childStyle.size.height = Dimension::Length(10.0f);
         childStyle.margin.bottom = LengthPercentageAuto::Length(10.0f);
-        NodeId c0 = tree.NewLeaf(childStyle);
+        TaffyNodeId c0 = tree.NewLeaf(childStyle);
 
         taffy::Style child1Style;
         child1Style.display = taffy::Display::Block;
         child1Style.size.height = Dimension::Length(10.0f);
         child1Style.margin.top = LengthPercentageAuto::Length(20.0f);
-        NodeId c1 = tree.NewLeaf(child1Style);
+        TaffyNodeId c1 = tree.NewLeaf(child1Style);
 
-        NodeId kids[] = {c0, c1};
+        TaffyNodeId kids[] = {c0, c1};
         taffy::Style rootStyle;
         rootStyle.display = taffy::Display::Block;
         rootStyle.size.width = Dimension::Length(100.0f);
@@ -1006,7 +1011,7 @@ static void TestBlockLayout() {
         rootStyle.border = {
             LengthPercentage::Length(1.0f), LengthPercentage::Length(1.0f),
             LengthPercentage::Length(1.0f), LengthPercentage::Length(1.0f)};
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(c0).location.y, 1.0f);
@@ -1467,11 +1472,11 @@ static void RunPlacement(uint16_t explicitCols, uint16_t explicitRows,
                          const int* outputToCase = nullptr) {
     TaffyTree tree;
     tree.Init();
-    NodeId kids[16];
+    TaffyNodeId kids[16];
     for (int i = 0; i < n; i++) {
         kids[i] = tree.NewLeaf(cases[i].style);
     }
-    NodeId parent = tree.NewWithChildren(taffy::Style{}, kids, n);
+    TaffyNodeId parent = tree.NewWithChildren(taffy::Style{}, kids, n);
 
     GridPlacementForTest out[16];
     uint16_t colCounts[3];
@@ -1637,12 +1642,12 @@ static void TestGridLayout() {
         // A 2x2 grid of 1fr tracks splits a 200x100 container evenly.
         TaffyTree tree;
         tree.Init();
-        NodeId kids[4];
+        TaffyNodeId kids[4];
         for (int i = 0; i < 4; i++) {
             kids[i] = tree.NewLeaf(taffy::Style{});
         }
         taffy::Style rootStyle = GridParent(200.0f, 100.0f, 2, 2);
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 4);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 4);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(kids[0]).location.x, 0.0f);
@@ -1664,9 +1669,9 @@ static void TestGridLayout() {
         tree.Init();
         taffy::Style childStyle;
         childStyle.size = SizeDim::FromLengths(30.0f, 24.0f);
-        NodeId c0 = tree.NewLeaf(childStyle);
-        NodeId c1 = tree.NewLeaf(childStyle);
-        NodeId kids[] = {c0, c1};
+        TaffyNodeId c0 = tree.NewLeaf(childStyle);
+        TaffyNodeId c1 = tree.NewLeaf(childStyle);
+        TaffyNodeId kids[] = {c0, c1};
 
         taffy::Style rootStyle;
         rootStyle.display = taffy::Display::Grid;
@@ -1676,7 +1681,7 @@ static void TestGridLayout() {
         rootStyle.gridTemplateColumns = GridTemplateOf(cols, 2);
         rootStyle.gap = {LengthPercentage::Length(10.0f),
                          LengthPercentage::Length(0.0f)};
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         // 60 + 10 + 40
@@ -1694,10 +1699,10 @@ static void TestGridLayout() {
         taffy::Style spanning = GridChild(GLine(1), GSpan(2), GAuto(), GAuto());
         spanning.display = taffy::Display::Flex;
         spanning.size.height = Dimension::Length(20.0f);
-        NodeId wide = tree.NewLeaf(spanning);
-        NodeId kids[] = {wide};
+        TaffyNodeId wide = tree.NewLeaf(spanning);
+        TaffyNodeId kids[] = {wide};
         taffy::Style rootStyle = GridParent(200.0f, 40.0f, 2, 1);
-        NodeId root = tree.NewWithChildren(rootStyle, kids, 1);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 1);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(wide).location.x, 0.0f);
@@ -1725,14 +1730,14 @@ static void TestScrollColumnDoesNotShrink() {
     leaf.size = {taffy::Dimension::Percent(1.0f), taffy::Dimension::Length(400.0f)};
     leaf.alignItems = taffy::OptAlignItems(taffy::AlignItems{taffy::AlignItemsKeyword::Center});
     leaf.justifyContent = taffy::OptJustifyContent(taffy::AlignContent{taffy::AlignContentKeyword::Center});
-    NodeId ta = tree.NewLeaf(textStyle);
-    NodeId a = tree.NewWithChildren(leaf, &ta, 1);
+    TaffyNodeId ta = tree.NewLeaf(textStyle);
+    TaffyNodeId a = tree.NewWithChildren(leaf, &ta, 1);
     leaf.size.height = taffy::Dimension::Length(300.0f);
-    NodeId tb = tree.NewLeaf(textStyle);
-    NodeId b = tree.NewWithChildren(leaf, &tb, 1);
+    TaffyNodeId tb = tree.NewLeaf(textStyle);
+    TaffyNodeId b = tree.NewWithChildren(leaf, &tb, 1);
     leaf.size.height = taffy::Dimension::Length(800.0f);
-    NodeId tc = tree.NewLeaf(textStyle);
-    NodeId c = tree.NewWithChildren(leaf, &tc, 1);
+    TaffyNodeId tc = tree.NewLeaf(textStyle);
+    TaffyNodeId c = tree.NewWithChildren(leaf, &tc, 1);
 
     taffy::Style colStyle;
     colStyle.flexDirection = FlexDirection::Column;
@@ -1742,15 +1747,15 @@ static void TestScrollColumnDoesNotShrink() {
                         taffy::LengthPercentage::Length(16.0f)};
     colStyle.gap = {taffy::LengthPercentage::Length(16.0f),
                     taffy::LengthPercentage::Length(16.0f)};
-    NodeId kids[3] = {a, b, c};
-    NodeId col = tree.NewWithChildren(colStyle, kids, 3);
+    TaffyNodeId kids[3] = {a, b, c};
+    TaffyNodeId col = tree.NewWithChildren(colStyle, kids, 3);
 
     taffy::Style pageStyle;
     pageStyle.flexDirection = FlexDirection::Column;
     pageStyle.size = {taffy::Dimension::Percent(1.0f),
                       taffy::Dimension::Percent(1.0f)};
     pageStyle.overflow = {taffy::Overflow::Visible, taffy::Overflow::Scroll};
-    NodeId page = tree.NewWithChildren(pageStyle, &col, 1);
+    TaffyNodeId page = tree.NewWithChildren(pageStyle, &col, 1);
 
     // The scroll container is itself the node layout runs on, which is what
     // `LayoutEl` does with the element tree's root.
@@ -1760,7 +1765,7 @@ static void TestScrollColumnDoesNotShrink() {
     thumbStyle.size = SizeDim::FromLengths(6.0f, 80.0f);
     tree.AddChild(page, tree.NewLeaf(thumbStyle));
 
-    NodeId root = page;
+    TaffyNodeId root = page;
 
     tree.ComputeLayout(root, SizeAvail::Definite(SizeF{700.0f, 700.0f}));
 
