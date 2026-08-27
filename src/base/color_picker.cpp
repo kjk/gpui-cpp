@@ -1,20 +1,61 @@
 #include "base/color_picker.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
-// hue / saturation / lightness / alpha, in the order HslaSliders keeps them.
-enum {
-    kHue = 0,
-    kSaturation,
-    kLightness,
-    kAlpha
-};
+HslaSliders::HslaSliders() {
+    hue = SliderStateNew(0.f, 1.f, SliderSingle(0.f), 0.01f);
+    saturation = SliderStateNew(0.f, 1.f, SliderSingle(0.f), 0.01f);
+    lightness = SliderStateNew(0.f, 1.f, SliderSingle(0.f), 0.01f);
+    alpha = SliderStateNew(0.f, 1.f, SliderSingle(0.f), 0.01f);
+}
 
-ColorPickerState::ColorPickerState() {
-    // HslaSliders::new: four sliders over 0..1 in hundredths.
-    for (int i = 0; i < 4; i++) {
-        sliders[i] = SliderStateNew(0.f, 1.f, SliderSingle(0.f), 0.01f);
+SliderState* HslaSliders::At(int index) {
+    switch (index) {
+        case 0:
+            return &hue;
+        case 1:
+            return &saturation;
+        case 2:
+            return &lightness;
+        case 3:
+            return &alpha;
     }
+    return nullptr;
+}
+
+const SliderState* HslaSliders::At(int index) const {
+    return const_cast<HslaSliders*>(this)->At(index);
+}
+
+Hsla HslaSliders::Read() const {
+    return HslaNew(hue.value.End(), saturation.value.End(),
+                   lightness.value.End(), alpha.value.End());
+}
+
+void HslaSliders::Write(Hsla color) {
+    SliderSetValue(&hue, SliderSingle(color.h));
+    SliderSetValue(&saturation, SliderSingle(color.s));
+    SliderSetValue(&lightness, SliderSingle(color.l));
+    SliderSetValue(&alpha, SliderSingle(color.a));
+}
+
+ColorPickerState::ColorPickerState() = default;
+
+void ColorPickerStateInit(ColorPickerState* s, Ctx* cx) {
+    if (s && cx && !s->focus.IsValid()) {
+        s->focus = FocusHandleNew(cx);
+    }
+}
+
+Entity<ColorPickerState> ColorPickerStateNew(Ctx* cx) {
+    Entity<ColorPickerState> state = EntityNewState<ColorPickerState>(cx->app);
+    if (ColorPickerState* s = state.Get(cx)) {
+        s->self = state.id;
+        ColorPickerStateInit(s, cx);
+    }
+    return state;
 }
 
 bool ColorPickerShown(const ColorPickerState* s, uint32_t* out) {
@@ -54,11 +95,7 @@ static void WriteHexInput(ColorPickerState* s, uint32_t color, bool has) {
 // HslaSliders::write: the four take the color's components straight, rather
 // than letting a hex round-trip round them.
 static void WriteSliders(ColorPickerState* s, uint32_t color) {
-    Hsla c = HslaFromRgba(RgbaHex(color));
-    const float v[4] = {c.h, c.s, c.l, c.a};
-    for (int i = 0; i < 4; i++) {
-        SliderSetValue(&s->sliders[i], SliderSingle(v[i]));
-    }
+    s->sliders.Write(HslaFromRgba(RgbaHex(color)));
 }
 
 void ColorPickerPreview(ColorPickerState* s, uint32_t color) {
@@ -128,9 +165,7 @@ void ColorPickerSyncPending(ColorPickerState* s) {
 }
 
 uint32_t ColorPickerSliderColor(const ColorPickerState* s) {
-    Rgba c = RgbaHsla(
-        s->sliders[kHue].value.End(), s->sliders[kSaturation].value.End(),
-        s->sliders[kLightness].value.End(), s->sliders[kAlpha].value.End());
+    Rgba c = HslaToRgba(s->sliders.Read());
     uint32_t rgb = ((uint32_t)c.r << 16) | ((uint32_t)c.g << 8) | (uint32_t)c.b;
     // An opaque colour packs as 0xRRGGBB, so it reads the same as every hex
     // in the palette; a translucent one carries its alpha in the top byte,
@@ -203,19 +238,40 @@ bool ColorPickerParseHex(Str text, uint32_t* out) {
 // ─── the handlers the themed picker binds ─────────────────────────────────
 
 // cx.emit(ColorPickerEvent::Change(value)), as a listener the view supplied.
-static void EmitChange(ColorPickerState* s, Ctx* cx) {
-    if (!s->onChange.IsValid()) {
-        return;
+static void EmitChange(ColorPickerState* s, Ctx* cx, Hsla color,
+                       bool hasColor = true) {
+    ColorPickerEvent event;
+    event.hasColor = hasColor;
+    event.color = color;
+    if (s->self.IsValid()) {
+        EntityEmit(cx->app, cx->win, s->self, &event);
     }
-    ClickEvent ev = {};
-    ListenerCall(cx->app, cx->win,
-                 ListenerFill(s->onChange, (intptr_t)s->value), &ev);
+    // Compatibility for the first themed surface. New retained callers
+    // subscribe to the state and receive the typed event above.
+    if (s->onChange.IsValid()) {
+        ClickEvent ev = {};
+        ListenerCall(cx->app, cx->win,
+                     ListenerFill(s->onChange, (intptr_t)s->value), &ev);
+    }
 }
 
 void ColorPickerState::OnToggleOpen(ColorPickerState* s, Ctx* cx,
                                     const ClickEvent*) {
     s->open = !s->open;
     if (!s->open) {
+        s->hexInput.focused = false;
+    }
+    Notify(cx);
+}
+
+void ColorPickerState::OnOpenChange(ColorPickerState* s, Ctx* cx,
+                                    const ClickEvent*, intptr_t open) {
+    bool next = open != 0;
+    if (s->open == next) {
+        return;
+    }
+    s->open = next;
+    if (!next) {
         s->hexInput.focused = false;
     }
     Notify(cx);
@@ -233,7 +289,7 @@ void ColorPickerState::OnTab(ColorPickerState* s, Ctx* cx, const ClickEvent*,
 void ColorPickerState::OnSwatchClick(ColorPickerState* s, Ctx* cx,
                                      const ClickEvent*, intptr_t hex) {
     ColorPickerSelect(s, (uint32_t)hex);
-    EmitChange(s, cx);
+    EmitChange(s, cx, HslaFromRgba(RgbaHex((uint32_t)hex)));
     Notify(cx);
 }
 
@@ -251,6 +307,7 @@ void ColorPickerState::OnSlider(ColorPickerState* s, Ctx* cx,
                                 const SliderEvent*) {
     // update_value_from_slider: the sliders are the source, so the value they
     // describe is committed without re-seeding them from it.
+    Hsla hsla = s->sliders.Read();
     uint32_t color = ColorPickerSliderColor(s);
     s->needsSliderSync = false;
     s->value = color;
@@ -258,7 +315,7 @@ void ColorPickerState::OnSlider(ColorPickerState* s, Ctx* cx,
     s->preview = color;
     s->hasPreview = true;
     WriteHexInput(s, color, true);
-    EmitChange(s, cx);
+    EmitChange(s, cx, hsla);
     Notify(cx);
 }
 
@@ -271,7 +328,7 @@ void ColorPickerState::OnHexChange(ColorPickerState* s, Ctx* cx,
         // commit_hex: a colour closes the picker, anything else stands.
         if (ok) {
             ColorPickerSelect(s, color);
-            EmitChange(s, cx);
+            EmitChange(s, cx, HslaFromRgba(RgbaHex(color)));
         }
         Notify(cx);
         return;
@@ -292,9 +349,69 @@ void ColorPickerState::OnHexFocus(ColorPickerState* s, Ctx* cx,
     Notify(cx);
 }
 
+struct ColorPickerKeys {
+    bool open = false;
+    bool disabled = false;
+    Listener onOpenChange = {};
+
+    static void OnAction(ColorPickerKeys* self, Ctx* cx,
+                         const ActionEvent* ev) {
+        bool handled = false;
+        bool next = self->open;
+        if (ev->action == action::Confirm()) {
+            if (!self->disabled) {
+                next = !self->open;
+                handled = true;
+            }
+        } else if (ev->action == action::Cancel() && self->open) {
+            next = false;
+            handled = true;
+        }
+        if (!handled) {
+            const_cast<ActionEvent*>(ev)->propagate = true;
+            return;
+        }
+        if (self->onOpenChange.IsValid()) {
+            ClickEvent click = {};
+            ListenerCall(cx->app, cx->win,
+                         ListenerFill(self->onOpenChange, next), &click);
+        }
+    }
+};
+
+struct ColorPickerBoundKeys {
+    uint32_t context = 0;
+    uint32_t generation = 0;
+};
+
+static Vec<ColorPickerBoundKeys> gColorPickerBoundKeys;
+
+static void ColorPickerInitKeys(const char* context) {
+    uint32_t id = KeyContextOf(Str(context));
+    uint32_t generation = KeymapGeneration();
+    for (int i = 0; i < gColorPickerBoundKeys.len; i++) {
+        if (gColorPickerBoundKeys[i].context != id) {
+            continue;
+        }
+        if (gColorPickerBoundKeys[i].generation == generation) {
+            return;
+        }
+        gColorPickerBoundKeys[i].generation = generation;
+        KeyBinding bindings[] = {{"enter", action::Confirm(), context},
+                                 {"escape", action::Cancel(), context}};
+        KeymapBind(bindings, 2);
+        return;
+    }
+    gColorPickerBoundKeys.Append({id, generation});
+    KeyBinding bindings[] = {{"enter", action::Confirm(), context},
+                             {"escape", action::Cancel(), context}};
+    KeymapBind(bindings, 2);
+}
+
 El* ColorPicker::New(Ctx* cx, Str id, bool open, bool disabled,
                      Str accessibilityLabel, AccessibilityRole role,
-                     Listener onOpenChange) {
+                     Listener onOpenChange, FocusHandle focus, int tabIndex,
+                     bool tabStop, const char* keyContext) {
     Arena* a = cx->a;
     El* e = Div(a)
                 ->Id(id)
@@ -304,28 +421,47 @@ El* ColorPicker::New(Ctx* cx, Str id, bool open, bool disabled,
     if (accessibilityLabel.s) {
         e->AriaLabel(accessibilityLabel);
     }
+    if (!disabled && focus.IsValid()) {
+        e->TrackFocus(focus)->TabIndex(tabIndex)->TabStop(tabStop);
+    }
     if (!disabled && onOpenChange.IsValid()) {
         e->OnAccessibilityDefault(ListenerFill(onOpenChange, !open));
+    }
+    if (keyContext && *keyContext) {
+        ColorPickerInitKeys(keyContext);
+        Entity<ColorPickerKeys> keys = ElementStateEntity<ColorPickerKeys>(
+            cx, id, StrL("gpui::ColorPickerKeys"));
+        if (ColorPickerKeys* state = keys.Get(cx)) {
+            state->open = open;
+            state->disabled = disabled;
+            state->onOpenChange = onOpenChange;
+        }
+        e->KeyContext(Str(keyContext))
+            ->OnAction(action::Confirm(),
+                       ListenTo(keys, &ColorPickerKeys::OnAction))
+            ->OnAction(action::Cancel(),
+                       ListenTo(keys, &ColorPickerKeys::OnAction));
     }
     return e;
 }
 
 El* ColorSwatch::New(Ctx* cx, Str id, Listener onClick, Listener onHover,
                      uint32_t color, bool selected, bool disabled,
-                     Str accessibilityLabel) {
+                     Str accessibilityLabel, int tabIndex, bool tabStop,
+                     AccessibilityRole role) {
     Arena* a = cx->a;
     El* e = Div(a)
                 ->PathClick(id)
-                ->Role(AccessibilityRole::RadioButton)
+                ->Role(role)
                 ->AriaLabel(accessibilityLabel.s
                                 ? accessibilityLabel
-                                : StrDup(a, fmt("#%06x", color & 0xffffffu)))
+                                : ColorPickerHexString(a, color))
                 ->AriaToggled(selected ? AccessibilityToggled::True
                                        : AccessibilityToggled::False)
                 ->AriaSelected(selected)
                 ->AriaDisabled(disabled);
     if (!disabled) {
-        e->PathId(id);
+        e->PathId(id)->TabIndex(tabIndex)->TabStop(tabStop);
     }
     if (!disabled && onClick.IsValid()) {
         e->OnClick(onClick);

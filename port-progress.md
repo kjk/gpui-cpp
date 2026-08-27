@@ -7513,3 +7513,40 @@ partial-module spellings. MSVC debug/release, clang-cl release and MSVC ASan
 pass 19,793 checks; wasm passes its 19,088 applicable checks. The release story
 build and pinned light-theme Checkbox comparison pass; the themed rendering is
 unchanged apart from the existing backend text and one-pixel layout variance.
+
+## Base Color Picker regains retained sliders and typed events
+
+The color picker's palette and HSLA panel were already present, but two public
+source declarations had been flattened away: `HslaSliders` was an anonymous
+four-element array and `ColorPickerEvent` was projected as a click callback
+installed by the themed builder each frame. The state consequently had no
+entity identity or focus handle, and the gallery owned neither the state nor a
+subscription even though the Rust story owns both.
+
+`HslaSliders` now names hue, saturation, lightness and alpha explicitly, keeps
+the source 0..1 range and 0.01 step, and supplies the one indexed adapter the
+compatibility UI renderer needs. Slider changes are read as HSLA before the
+tree's byte-color compatibility view is updated, so `ColorPickerEvent::Change`
+subscribers receive the full retained slider values through `EntityEmit`.
+Palette and hex commits emit the same typed optional-color payload. A compact
+legacy listener remains for id-based callers.
+
+`ColorPickerStateNew` restores the state entity's identity and focus. The Base
+root now owns its ColorPicker key context: Enter requests the opposite
+controlled open state, Escape dismisses an open picker, and disabled or
+irrelevant actions propagate. Focus/tab and role configuration follow the
+source root, while ColorSwatch restores configurable traversal/role and uses
+the source uppercase, alpha-aware hex formatter for its default accessible
+name.
+
+UI ColorPicker accepts an application-owned state entity directly; the keyed
+id overload remains as compatibility. The story now owns, seeds and subscribes
+to its state exactly as upstream does. Tests cover named slider identity,
+full-precision typed emission, retained identity/focus, controlled keyboard
+requests and the swatch label. Base Color Picker is full: the audit moves to
+85 full, 36 partial, 8 adapters and 2 exclusions with 311 unresolved
+partial-module spellings. MSVC debug/release, clang-cl release and MSVC ASan
+pass 19,814 checks; wasm passes its 19,109 applicable checks. The release story
+build and pinned light-theme comparison pass. An interaction capture grows the
+live page from 57 to 292 primitives and lays out the full 9x11 palette and hex
+row after the trigger click.

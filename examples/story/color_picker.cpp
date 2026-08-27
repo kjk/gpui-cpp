@@ -1,34 +1,47 @@
 #include "Story.h"
 
 struct ColorPickerStory {
-    // The committed colour, mirrored out of the picker's own
-    // ColorPickerState so the preview card beside it can show what is picked.
-    // Rust's story owns the Entity<ColorPickerState> and reads it the same
-    // way; here the widget keeps it keyed by its id.
+    // Rust owns this state entity and subscribes to ColorPickerEvent::Change.
+    Entity<ColorPickerState> color = {};
+    Subscription subscription = {};
     uint32_t shown = 0x6366f1;
     bool seeded = false;
     StoryToolbarState toolbar;
+    static void OnChange(ColorPickerStory* self, Ctx* cx,
+                         const ColorPickerEvent* ev);
     static El* Render(ColorPickerStory* self, Ctx* cx);
 };
 
-// ColorPickerEvent::Change: the picker hands over what it committed.
-static void SetColor(ColorPickerStory* self, Ctx* cx, const ClickEvent*,
-                     intptr_t hex) {
-    self->shown = (uint32_t)hex;
+void ColorPickerStory::OnChange(ColorPickerStory* self, Ctx* cx,
+                                const ColorPickerEvent* ev) {
+    if (!ev || ev->kind != ColorPickerEventKind::Change || !ev->hasColor) {
+        return;
+    }
+    Rgba color = HslaToRgba(ev->color);
+    uint32_t rgb = ((uint32_t)color.r << 16) | ((uint32_t)color.g << 8) |
+                   (uint32_t)color.b;
+    self->shown = color.a == 255 ? rgb : ((uint32_t)color.a << 24) | rgb;
     Notify(cx);
 }
 
+static void InitializeStory(ColorPickerStory* self, Ctx* cx) {
+    if (self->seeded) {
+        return;
+    }
+    self->seeded = true;
+    self->color = ColorPickerStateNew(cx);
+    if (ColorPickerState* state = self->color.Get(cx)) {
+        ColorPickerSetValue(state, 0x6366f1);
+    }
+    self->subscription =
+        Subscribe(cx, self->color, &ColorPickerStory::OnChange);
+}
+
 El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
+    InitializeStory(self, cx);
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
-    // Seeded with indigo_500, the way the Rust story seeds its state.
-    Entity<ColorPickerState> st =
-        component::ColorPickerStateFor(cx, StrL("accent-color"));
-    if (ColorPickerState* s = st.Get(cx)) {
-        if (!self->seeded) {
-            self->seeded = true;
-            ColorPickerSetValue(s, 0x6366f1);
-        }
+    if (ColorPickerState* s = self->color.Get(cx)) {
         // What the card shows follows the picker, preview and all.
         uint32_t hex = 0;
         if (ColorPickerShown(s, &hex)) {
@@ -60,9 +73,7 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     text->Child(StoryTxt(cx, StrL("Used for primary actions and highlights."),
                          14, th.mutedFg));
     head->Child(text);
-    head->Child(component::ColorPicker::New(cx, StrL("accent-color"))
-                    ->OnChange(Listen(cx, &SetColor))
-                    ->IntoEl());
+    head->Child(component::ColorPicker::New(cx, self->color)->IntoEl());
     card->Child(head);
 
     // The preview: the color over a muted footer naming its hex.

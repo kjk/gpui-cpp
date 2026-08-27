@@ -73,7 +73,7 @@ static void SyncPendingSeedsTheFieldAndSliders() {
     ColorPickerSyncPending(&s);
     utassert(StrEqI(InputValue(&s.hexInput), StrL("#FF0000")));
     // hsla(0, 1, 0.5): the lightness slider lands at a half.
-    utassertnear(s.sliders[2].value.End(), 0.5f);
+    utassertnear(s.sliders.lightness.value.End(), 0.5f);
     // And it is a no-op the second time.
     utassert(!s.needsSliderSync);
 }
@@ -100,6 +100,111 @@ static void NoValueAndNoPreviewShowsNothing() {
     utassert(ColorPickerShown(&s, &shown) && shown == 0x16a34a);
 }
 
+namespace {
+struct ColorSink {
+    int count = 0;
+    int openChanges = 0;
+    bool open = false;
+    bool hasColor = false;
+    Hsla color = {};
+
+    static void OnChange(ColorSink* self, Ctx*, const ColorPickerEvent* ev) {
+        self->count++;
+        self->hasColor = ev->hasColor;
+        self->color = ev->color;
+    }
+
+    static void OnOpen(ColorSink* self, Ctx*, const ClickEvent*,
+                       intptr_t open) {
+        self->openChanges++;
+        self->open = open != 0;
+    }
+};
+} // namespace
+
+// ColorPickerState owns the four named slider states and emits the source's
+// typed event through its entity, rather than relying on a frame callback.
+static void RetainedSlidersEmitTypedChanges() {
+    App app = {};
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+
+    Entity<ColorPickerState> picker = ColorPickerStateNew(&cx);
+    Entity<ColorSink> sink = EntityNewState<ColorSink>(&app);
+    SubscribeTo(&app, picker, sink, &ColorSink::OnChange);
+    ColorPickerState* state = picker.Get(&app);
+    cx.self = picker.id;
+    utassert(state && state->self == picker.id);
+    utassert(state && state->focus.IsValid());
+    utassert(state && state->sliders.At(0) == &state->sliders.hue);
+    utassert(state && state->sliders.At(1) == &state->sliders.saturation);
+    utassert(state && state->sliders.At(2) == &state->sliders.lightness);
+    utassert(state && state->sliders.At(3) == &state->sliders.alpha);
+    utassert(state && state->sliders.At(4) == nullptr);
+
+    state->open = true;
+    state->sliders.Write(Hsla{0.2f, 0.3f, 0.4f, 0.5f});
+    SliderEvent slider = {};
+    ColorPickerState::OnSlider(state, &cx, &slider);
+    ColorSink* received = sink.Get(&app);
+    utassert(received && received->count == 1 && received->hasColor);
+    utassertnear(received->color.h, 0.2f);
+    utassertnear(received->color.s, 0.3f);
+    utassertnear(received->color.l, 0.4f);
+    utassertnear(received->color.a, 0.5f);
+    utassert(state->open);
+
+    ClickEvent click = {};
+    ColorPickerState::OnSwatchClick(state, &cx, &click, 0x6366f1);
+    utassert(received->count == 2 && !state->open);
+    utassertnear(received->color.a, 1.f);
+
+    EntityDropAll(&app);
+    ArenaDelete(arena);
+    delete win;
+}
+
+// The unstyled root owns the source ColorPicker key context: Confirm requests
+// the opposite controlled state and Cancel dismisses only while open.
+static void ConfirmTogglesAndCancelDismisses() {
+    KeymapClear();
+    App app = {};
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+    Entity<ColorSink> sink = EntityNewState<ColorSink>(&app);
+    FocusHandle focus = FocusHandleNew(&cx);
+    Listener open = ListenTo(sink, &ColorSink::OnOpen);
+
+    El* root = ColorPicker::New(&cx, StrL("picker"), false, false,
+                                StrL("Theme color"),
+                                AccessibilityRole::Button, open, focus, 3,
+                                false);
+    utassert(root->style.focusId == focus.id);
+    utassert(root->style.tabIndex == 3 && !root->style.tabStop);
+    FocusCollect(win, root);
+    win->focusId = focus.id;
+    utassert(WindowDispatchKeyAction(win, KeyReturn, false, false, false));
+    ColorSink* received = sink.Get(&app);
+    utassert(received && received->openChanges == 1 && received->open);
+
+    root = ColorPicker::New(&cx, StrL("picker"), true, false,
+                            StrL("Theme color"),
+                            AccessibilityRole::Button, open, focus);
+    FocusCollect(win, root);
+    win->focusId = focus.id;
+    utassert(WindowDispatchKeyAction(win, KeyEscape, false, false, false));
+    utassert(received->openChanges == 2 && !received->open);
+
+    EntityDropAll(&app);
+    ArenaDelete(arena);
+    delete win;
+    KeymapClear();
+}
+
 void TestColorPicker() {
     TestSuite("color_picker");
     APreviewHidesTheValueWithoutReplacingIt();
@@ -109,4 +214,6 @@ void TestColorPicker() {
     SyncPendingSeedsTheFieldAndSliders();
     HexStringWidth();
     NoValueAndNoPreviewShowsNothing();
+    RetainedSlidersEmitTypedChanges();
+    ConfirmTogglesAndCancelDismisses();
 }

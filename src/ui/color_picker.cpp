@@ -1,6 +1,5 @@
 #include "ui/i18n.h"
 #include "ui/color_picker.h"
-#include "base/actions.h"
 #include "ui/theme.h"
 
 namespace gpui {
@@ -8,7 +7,15 @@ namespace gpui {
 namespace component {
 
 Entity<ColorPickerState> ColorPickerStateFor(Ctx* cx, Str id) {
-    return KeyedEntity<ColorPickerState>(cx, KeyedName(cx, id));
+    Entity<ColorPickerState> state =
+        KeyedEntity<ColorPickerState>(cx, KeyedName(cx, id));
+    if (ColorPickerState* s = state.Get(cx)) {
+        if (!s->self.IsValid()) {
+            s->self = state.id;
+        }
+        ColorPickerStateInit(s, cx);
+    }
+    return state;
 }
 
 ColorPicker* ColorPicker::New(Ctx* cx, Str id) {
@@ -17,6 +24,13 @@ ColorPicker* ColorPicker::New(Ctx* cx, Str id) {
     c->a = a;
     c->cx = cx;
     c->id = id;
+    return c;
+}
+ColorPicker* ColorPicker::New(Ctx* cx, Entity<ColorPickerState> state) {
+    ColorPicker* c = New(
+        cx, StrDup(cx->a, fmt("color-picker-%d-%u", state.id.index,
+                             state.id.gen)));
+    c->state = state;
     return c;
 }
 ColorPicker* ColorPicker::Label(Str s) {
@@ -174,7 +188,7 @@ static El* SliderRow(Ctx* cx, Entity<ColorPickerState> st, Str label, El* track,
     El* mid = Div(a)->FlexRow()->ItemsCenter()->Flex1()->H(32);
     mid->Child(track);
     mid->Child(Slider::New(cx, StrDup(a, fmt("cp-sl%d", slot)),
-                           s ? &s->sliders[slot] : nullptr)
+                           s ? s->sliders.At(slot) : nullptr)
                    ->WFill()
                    ->Bg(Rgba8(0, 0, 0, 0))
                    ->OnChange(ListenTo(st, &ColorPickerState::OnSlider))
@@ -193,10 +207,10 @@ static El* SliderPanel(Ctx* cx, Entity<ColorPickerState> st) {
     if (!s) {
         return Div(a);
     }
-    float h = s->sliders[0].value.End();
-    float sat = s->sliders[1].value.End();
-    float l = s->sliders[2].value.End();
-    float alpha = s->sliders[3].value.End();
+    float h = s->sliders.hue.value.End();
+    float sat = s->sliders.saturation.value.End();
+    float l = s->sliders.lightness.value.End();
+    float alpha = s->sliders.alpha.value.End();
 
     El* panel = Div(a)->FlexCol()->Gap(8);
     panel->Child(SliderRow(cx, st, Tr("ColorPicker.Hue"),
@@ -221,7 +235,8 @@ static El* SliderPanel(Ctx* cx, Entity<ColorPickerState> st) {
 
 El* ColorPicker::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
-    Entity<ColorPickerState> st = ColorPickerStateFor(cx, id);
+    Entity<ColorPickerState> st =
+        state.IsValid() ? state : ColorPickerStateFor(cx, id);
     ColorPickerState* s = st.Get(cx);
     if (!s) {
         return Div(a);
@@ -324,15 +339,9 @@ El* ColorPicker::IntoEl() {
     El* root = gpui::ColorPicker::New(
                    cx, id, s->open, false, label,
                    AccessibilityRole::Button,
-                   ListenTo(st, &ColorPickerState::OnToggleOpen))
+                   ListenTo(st, &ColorPickerState::OnOpenChange), s->focus)
                    ->Child(
         Popup::New(cx, StrL("popover"), trigger)->Content(pop)->IntoEl());
-    // color_picker.rs binds escape to Cancel in the "ColorPicker" context;
-    // the toggle the trigger carries is what closes an open one.
-    if (s->open) {
-        CancelBindKeys(cx, root, "ColorPicker", id,
-                       ListenTo(st, &ColorPickerState::OnToggleOpen));
-    }
     return root;
 }
 

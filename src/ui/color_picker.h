@@ -6,11 +6,9 @@ namespace gpui {
 
 namespace component {
 
-// The state behind a picker. Rust's
-// `ColorPicker::new(&Entity<ColorPickerState>)` takes one the application made;
-// here the widget keeps it keyed by its id, the way Rating and PopupMenu keep
-// theirs, and this is how a view reaches it to seed a value or read the one
-// that is committed.
+// Compatibility state lookup for the id-based constructor. The source-shaped
+// overload below takes the application-owned Entity<ColorPickerState>
+// directly.
 Entity<ColorPickerState> ColorPickerStateFor(Ctx* cx, Str id);
 
 struct ColorPicker {
@@ -25,10 +23,13 @@ struct ColorPicker {
     // theme's own twelve — the six base hues and their light halves.
     const uint32_t* featured = nullptr;
     int nFeatured = 0;
-    // ColorPickerEvent::Change, with the committed colour as the argument.
+    // Compatibility callback for the id-based surface. Retained callers
+    // subscribe to ColorPickerEvent on `state`.
     Listener onChange;
+    Entity<ColorPickerState> state = {};
 
     static ColorPicker* New(Ctx* cx, Str id);
+    static ColorPicker* New(Ctx* cx, Entity<ColorPickerState> state);
     ColorPicker* Label(Str s);
     ColorPicker* Icon(IconName v);
     ColorPicker* WithSize(UiSize s);

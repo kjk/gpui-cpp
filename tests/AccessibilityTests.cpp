@@ -233,7 +233,8 @@ static void ConditionalAndCompositeRolesMatchUpstream() {
     const AccessibilityNode* swatch =
         RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
     utassert(swatch && swatch->info.hasSelected && swatch->info.selected &&
-             SameText(swatch->info.label, StrL("#12ab34")));
+             SameText(swatch->info.label,
+                      ColorPickerHexString(f.arena, 0x12ab34)));
     const AccessibilityNode* date =
         RoleNode(f.win->accessibility, AccessibilityRole::ComboBox);
     utassert(date && date->info.hasExpanded && date->info.expanded);

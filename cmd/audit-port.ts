@@ -46,7 +46,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
   .split(/\s+/);
 
 const partialBase = new Set([
-  "color_picker",
   "dialog",
   "dock",
   "global_state",

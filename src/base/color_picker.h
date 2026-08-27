@@ -4,6 +4,34 @@
 
 namespace gpui {
 
+// ColorPickerEvent::Change(Option<Hsla>). An optional payload remains a POD
+// pair so it can pass through EntityEmit without allocation.
+enum class ColorPickerEventKind : uint8_t {
+    Change
+};
+
+struct ColorPickerEvent {
+    ColorPickerEventKind kind = ColorPickerEventKind::Change;
+    bool hasColor = false;
+    Hsla color = {};
+};
+
+// The four retained SliderState values Rust owns through entities. A C++
+// Slider takes its stable state by pointer, so direct ownership gives it the
+// same lifetime without four extra handles.
+struct HslaSliders {
+    SliderState hue = {};
+    SliderState saturation = {};
+    SliderState lightness = {};
+    SliderState alpha = {};
+
+    HslaSliders();
+    SliderState* At(int index);
+    const SliderState* At(int index) const;
+    Hsla Read() const;
+    void Write(Hsla color);
+};
+
 // Rust's ColorPickerState holds the committed color *and* a transient preview
 // beside it, and that pair is the module's whole interaction model: hovering a
 // swatch previews the color, leaving restores what was committed, and only a
@@ -19,15 +47,15 @@ namespace gpui {
 // widget can bind its own handlers to it — `component::ColorPickerStateFor`
 // is what hands one out.
 struct ColorPickerState {
+    EntityId self = {};
+    FocusHandle focus = {};
     uint32_t value = 0;
     bool hasValue = false;
     uint32_t preview = 0;
     bool hasPreview = false;
     bool open = false;
     int activeTab = 0;
-    // HslaSliders: hue, saturation, lightness and alpha, each 0..1 in steps
-    // of 0.01, which is what `HslaSliders::new` builds.
-    SliderState sliders[4] = {};
+    HslaSliders sliders;
     InputState hexInput;
     // needs_slider_sync: a value handed in before the first render has not
     // reached the sliders or the field yet. `ColorPickerSyncPending` is the
@@ -42,6 +70,8 @@ struct ColorPickerState {
     // Handlers the themed picker binds to. They are here because the state is
     // the entity — a widget rebuilt every frame has nothing to bind to.
     static void OnToggleOpen(ColorPickerState* s, Ctx* cx, const ClickEvent*);
+    static void OnOpenChange(ColorPickerState* s, Ctx* cx,
+                             const ClickEvent*, intptr_t open);
     static void OnTab(ColorPickerState* s, Ctx* cx, const ClickEvent*,
                       intptr_t ix);
     static void OnSwatchClick(ColorPickerState* s, Ctx* cx, const ClickEvent*,
@@ -52,6 +82,9 @@ struct ColorPickerState {
     static void OnHexChange(ColorPickerState* s, Ctx* cx, const InputEvent* ev);
     static void OnHexFocus(ColorPickerState* s, Ctx* cx, const ClickEvent*);
 };
+
+void ColorPickerStateInit(ColorPickerState* s, Ctx* cx);
+Entity<ColorPickerState> ColorPickerStateNew(Ctx* cx);
 
 // What the picker shows: preview_color while one is up, the committed value
 // otherwise. Answers false when there is neither, which is Rust's `None` and
@@ -95,13 +128,17 @@ struct ColorPicker {
     static El* New(Ctx* cx, Str id, bool open = false,
                    bool disabled = false, Str accessibilityLabel = {},
                    AccessibilityRole role = AccessibilityRole::Button,
-                   Listener onOpenChange = {});
+                   Listener onOpenChange = {}, FocusHandle focus = {},
+                   int tabIndex = 0, bool tabStop = true,
+                   const char* keyContext = "ColorPicker");
 };
 // A swatch previews on hover and commits on click, so it takes both.
 struct ColorSwatch {
     static El* New(Ctx* cx, Str id, Listener onClick = {},
                    Listener onHover = {}, uint32_t color = 0,
                    bool selected = false, bool disabled = false,
-                   Str accessibilityLabel = {});
+                   Str accessibilityLabel = {}, int tabIndex = 0,
+                   bool tabStop = true,
+                   AccessibilityRole role = AccessibilityRole::RadioButton);
 };
 } // namespace gpui
