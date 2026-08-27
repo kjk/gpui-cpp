@@ -12,13 +12,13 @@
  *     — vtable order and IIDs exactly as MIDL emits them, only the methods'
  *     comments dropped. It declares an ABI, the way `<d2d1.h>` does; nothing
  *     of the SDK is compiled in.
- *   - `CreateEnvironmentWithOptions` is what the SDK's loader does, in about
- *     a hundred lines: find the Evergreen runtime through the EdgeUpdate
- *     registry keys (or `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` for a
- *     fixed-version drop), `LoadLibrary` its `EmbeddedBrowserWebView.dll`,
- *     and call the `CreateWebViewEnvironmentWithOptionsInternal` export it
- *     has always had. The argument list is the one
- *     `WebView2LoaderStatic.lib` itself passes — read off its
+ *   - `CreateEnvironmentWithOptions` writes out the pinned loader too: apply
+ *     its environment and policy overrides; resolve a fixed runtime or find
+ *     Stable, Beta, Dev or Canary through EdgeUpdate and the package graph;
+ *     enforce its compatibility floor; load `EmbeddedBrowserWebView.dll`;
+ *     and preserve its retry and module-lifetime boundaries around
+ *     `CreateWebViewEnvironmentWithOptionsInternal`. The argument list is
+ *     the one `WebView2LoaderStatic.lib` itself passes — read off its
  *     `CreateWebViewEnvironmentWithClientDll`, whose own mangled signature
  *     names the types.
  *

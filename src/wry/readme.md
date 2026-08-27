@@ -45,16 +45,25 @@ halves are written out instead, and both are in `wry_win.cpp`:
   compiled in, and the runtime it talks to ships with Windows' Edge. An
   interface that only appears in a signature we never call is
   forward-declared; the ones we implement (`ICoreWebView2EnvironmentOptions`
-  and its 6 and 8, plus every event and completion handler) are there in
-  full, because an implementation has to answer for every slot.
-- **The loader.** `CreateEnvironmentWithOptions` is about a hundred lines
-  doing what `WebView2Loader` does: read `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER`
-  or the EdgeUpdate registry keys
-  (`SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-…}`, `pv` and `location`,
-  per-machine through the WOW64 view and then per-user), `LoadLibrary` the
-  runtime's `EBWebView\<arch>\EmbeddedBrowserWebView.dll`, and call its
-  `CreateWebViewEnvironmentWithOptionsInternal` export. The argument list is
-  the one the SDK's own static loader passes, read off its
+  through 8, plus every event and completion handler) are there in full,
+  because an implementation has to answer for every slot. A mechanical audit
+  compares all 97 definitions and IIDs with Wry's generated pinned bindings.
+- **The loader.** `CreateEnvironmentWithOptions` writes out the behavior of
+  Wry's pinned `WebView2LoaderStatic.lib`. It applies the browser-folder,
+  user-data-folder, browser-argument and release-channel environment and
+  policy overrides; resolves relative fixed runtimes against the executable;
+  and searches Stable, Beta, Dev and Canary in the same order and registry
+  views. Both `ClientState\EBWebView` and legacy `Clients` registrations are
+  understood, followed by the framework-package graph where that API exists.
+  Installed candidates must meet the loader's `86.0.616.0` compatibility
+  floor; a stale candidate falls through to the next source or channel.
+
+  The selected runtime's `EBWebView\<arch>\EmbeddedBrowserWebView.dll` is
+  loaded and its `CreateWebViewEnvironmentWithOptionsInternal` export called.
+  The synchronous and completion-handler retry boundaries and the loader's
+  conditional module-reference release are preserved. Version-only queries
+  also retain the loader's unoverridden fallback. The internal argument list
+  is the one the SDK's own static loader passes, read off its
   `CreateWebViewEnvironmentWithClientDll` — whose mangled name spells out the
   types: `(clientDllPath, bool, WebView2RunTimeType, userDataFolder,
   IUnknown* options, handler)`, of which everything but the path is
@@ -122,7 +131,7 @@ Rust method — because on macOS the only creation-time knob is the
 **The backend and headless suite are compile- and test-verified; the window is
 not visually run-verified.** `bun cmd/mac-build.ts -rel webview` and the full
 release test target build on a Mac over ssh, and that native test binary runs
-20,820 checks. A Cocoa window needs a login session, so the example still has
+20,839 checks. A Cocoa window needs a login session, so the example still has
 to be run on the Mac itself (`bun cmd/run.ts -rel webview`) for anyone to see
 and interact with the page.
 

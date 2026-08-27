@@ -9277,3 +9277,20 @@ logical 200 by 200 rect, so existing callers are unchanged; false takes Wry's
 Windows `CW_USEDEFAULT` creation branch followed by its default zero rect, and
 a macOS child begins at its parent bounds. The default-value regression test
 covers the presence bit and all four coordinates.
+
+The final Windows Wry audit found no remaining gap in the pinned public backend
+surface. The written-out loader now matches its pinned static library across
+environment and policy overrides, fixed and installed runtime discovery, all
+public channels, framework packages, compatibility filtering, retries, version
+fallback and module lifetime. The backend also covers Wry's construction
+options, events, protocols, scripts, navigation, downloads, drag/drop, browser
+extensions, created windows, cookies and raw Windows handles; the deliberate
+runtime/platform differences remain called out in `src/wry/readme.md`.
+
+Verification after the audit: the MSVC release suite passes 20,834 checks; the
+MSVC `/W4 /WX` and clang-cl release webview targets build; the remote macOS
+webview and test targets build under clang with `-Werror`, and its native suite
+passes 20,839 checks. A mechanical comparison against
+`webview2-com-sys 0.38.0` reports 97 matching vtable layouts and 97 matching
+IIDs, and the native Windows release example remains live through a five-second
+hidden WebView2 startup smoke.
