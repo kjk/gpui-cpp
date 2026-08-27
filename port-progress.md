@@ -8496,3 +8496,54 @@ full, 9 partial, 8 adapters and 2 exclusions with 187 unresolved
 partial-module spellings and no full-module errors. MSVC debug/release,
 clang-cl release and MSVC ASan pass 20,464 checks; wasm passes its 19,759
 applicable checks. The release story gallery compiles unchanged.
+
+## UI theme restores typed schema, registry and settings contracts
+
+The theme port already resolved the complete legacy color fallback chain,
+gradients, alpha caps, application isolation and semantic-token projection,
+but it kept the schema as untyped JSON and flattened several source settings
+into a separate runtime record. The public `ColorName`, `ThemeToken`,
+`ThemeColor`, `ThemeRegistry` and nine semantic/config schema types were
+absent, and applying a legacy config silently discarded font families,
+monospace size and the shadow flag.
+
+The missing source vocabulary now has no-STL value forms. `ColorName` exposes
+the exact public nineteen-color sequence, strict case-insensitive parsing and
+the source 500-scale fallback. HSL, black, white and color/background parsers
+are explicit mappings onto the existing color engine; Rust's `Colorize` trait
+continues to be the complete `Rgba` value-operation family in the runtime.
+`ThemeToken` retains both representative color and renderable background, and
+`ThemeColor` is an independent palette value alias over the port's deliberately
+flattened theme storage.
+
+Semantic color, radius, spacing, typography, text-style and shadow configs are
+typed POD views with explicit optional values. Parsing preserves strings and
+shadow JSON in the caller's arena, while applying produces owned semantic
+vectors. Source shadow arrays replace a complete elevation and retain every
+entry, including inset/radius fields; the earlier one-object shorthand remains
+a partial overlay on the existing first shadow. `ThemeConfigColors` and
+`ThemeSetConfig` similarly keep arena-backed parsed views rather than
+duplicating the roughly hundred-key legacy color object. The `ThemeSetConfig`
+spelling is necessary because the established C++ mode-changing function is
+already named `ThemeSet`.
+
+`ThemeRegistry` is now the actual application global rather than an anonymous
+implementation type. Legacy configs retain font and monospace families and
+sizes, shadow choice and highlight JSON; resolution carries mode, font,
+radius and shadow settings into each installed palette. Theme-to-semantic
+projection and application now round-trip both font families, both base sizes,
+the shadow enablement and full-radius behavior. Tile and list behavior settings
+also live on the theme. The palette remains flattened, so the source's
+`Theme::colors.list` and behavioral `Theme::list` become `Theme::list` and
+`Theme::listSettings` instead of colliding in C++.
+
+Two standing repository rules bound the remaining source implementation, not
+the public contract: the tree-sitter highlight object stays the dependency-free
+highlighter adapter, and the async filesystem watcher is replaced by explicit
+`ThemeRegistryLoadDir` reloads. Tests cover the typed color/token vocabulary,
+semantic option parsing, multi-shadow arrays, theme-set views, public registry
+identity and legacy settings retention. UI theme is full: the audit moves to
+113 full, 8 partial, 8 adapters and 2 exclusions with 167 unresolved
+partial-module spellings and no full-module errors. MSVC debug/release,
+clang-cl release and MSVC ASan pass 20,490 checks; wasm passes its 19,785
+applicable checks. The release story gallery compiles unchanged.

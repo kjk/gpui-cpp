@@ -56,7 +56,6 @@ const partialUi = new Set([
   "input",
   "plot",
   "text",
-  "theme",
   "window_border",
 ]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
@@ -68,7 +67,6 @@ const partialReasons: Record<string, string> = {
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
-  "ui/theme": "filesystem watch/reload and the richer highlight/list/sheet settings remain smaller than Rust",
   "ui/window_border":
     "fixed-overlay insets and platform resize delegation are complete; blurred Linux shadows and native per-side tiling detection remain smaller",
 };
@@ -346,6 +344,22 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   },
   "ui/group_box.rs::trait GroupBoxVariants": {
     spellings: ["WithVariant", "Normal", "Fill", "Outline"],
+  },
+  "ui/theme/color.rs::fn black": { spellings: ["ThemeBlack"] },
+  "ui/theme/color.rs::fn hsl": { spellings: ["ThemeHsl"] },
+  "ui/theme/color.rs::fn try_parse_background": {
+    spellings: ["ThemeParseBackground"],
+  },
+  "ui/theme/color.rs::fn try_parse_color": {
+    spellings: ["ThemeParseColor"],
+  },
+  "ui/theme/color.rs::fn white": { spellings: ["ThemeWhite"] },
+  "ui/theme/color.rs::trait Colorize": {
+    collapse:
+      "C++ exposes the complete Colorize operation set as Rgba-prefixed value functions in the GPUI runtime color vocabulary",
+  },
+  "ui/theme/schema.rs::struct ThemeSet": {
+    spellings: ["ThemeSetConfig"],
   },
   "ui/sizing.rs::enum Size": {
     spellings: ["UiSize"],

@@ -19,6 +19,7 @@
    watches a folder. */
 
 #include "base/json.h"
+#include "base/list_settings.h"
 #include "base/theme.h"
 #include "ui/notification_settings.h"
 #include "ui/sheet_settings.h"
@@ -27,6 +28,22 @@ namespace gpui {
 // ─── theme (Default Dark) ─────────────────────────────────────────────────
 
 struct App;
+
+enum class ThemeMode : uint8_t {
+    Light,
+    Dark
+};
+
+// ThemeToken — one flat representative color plus the renderable fill a
+// theme file supplied. Rust has From conversions; C++ keeps them as explicit
+// value builders so a solid and a gradient cannot be confused accidentally.
+struct ThemeToken {
+    Rgba color = {};
+    Background background = {};
+
+    static ThemeToken New(Rgba color, Background background);
+    static ThemeToken Solid(Rgba color);
+};
 
 // ThemeTokens — crates/ui/src/theme/theme_color.rs.
 //
@@ -351,6 +368,28 @@ struct Theme {
     // Every avatar, badge dot, radio, slider thumb and progress bar takes it
     // rather than half its own height, so one setting governs the lot.
     float radiusFull;
+    ThemeMode mode = ThemeMode::Light;
+    Str fontFamily = Str(".SystemUIFont");
+    float fontSize = 16.f;
+#if GPUI_OS_MAC
+    Str monoFontFamily = Str("Menlo");
+#elif GPUI_OS_WINDOWS
+    Str monoFontFamily = Str("Consolas");
+#else
+    Str monoFontFamily = Str("DejaVu Sans Mono");
+#endif
+    float monoFontSize = kMonoFontSize;
+    bool shadow = true;
+    bool focusRing = true;
+    ScrollbarMode scrollbarMode = ScrollbarMode::Scrolling;
+    Rgba transparent = {};
+    float tileGridSize = 8.f;
+    bool tileShadow = true;
+    float tileRadius = 0.f;
+    // Rust can name both Theme::colors.list and Theme::list because the
+    // palette is nested under `colors`; this port flattens palette reads, so
+    // the behavioral setting keeps the unambiguous storage name.
+    ListSettings listSettings = {};
     // Component behavior settings live beside the palette in Rust's Theme.
     component::NotificationSettings notification = {};
     component::SheetSettings sheet = {};
@@ -359,6 +398,11 @@ struct Theme {
     // same name, so reading a token instead of a field is never wrong.
     ThemeTokens tokens = {};
 };
+
+// The C++ palette keeps ThemeColor's flat fields directly on Theme so all
+// existing component reads stay one field access. The alias is the source
+// value type; copying it still produces an independent palette snapshot.
+using ThemeColor = Theme;
 
 // Every token set to the flat colour of the same name — for a palette built
 // in code, and for the tokens a resolved theme file left alone. A token that
@@ -373,11 +417,6 @@ void ThemeTokensReset(Theme* t);
 // button's surface).
 void ThemeFillDerived(Theme* t, bool dark);
 
-
-enum class ThemeMode : uint8_t {
-    Light,
-    Dark
-};
 
 // The immutable defaults, used to resolve a theme file and by pure logic
 // tests. Active palettes are application-owned and take an App.
@@ -430,7 +469,7 @@ void ScrollbarModeSet(App* app, ScrollbarMode mode);
 // the component palette and gpui-base's role-based vocabulary. These belong
 // here because Base knows nothing about the component Theme.
 SemanticThemeTokens ThemeSemanticTokens(const Theme& theme,
-                                        float fontSize = 16.f);
+                                        float fontSize = 0.f);
 void ThemeApplySemanticTokens(Theme* theme,
                               const SemanticThemeTokens& tokens);
 
@@ -474,7 +513,170 @@ bool ThemeParseColor(Str s, Rgba* out);
 // keeps for the flat palette field beside the renderable token.
 bool ThemeParseBackground(Str s, Background* out);
 
+// Public color.rs vocabulary over the generated shadcn table.
+enum class ColorName : uint8_t {
+    White,
+    Black,
+    Neutral,
+    Gray,
+    Red,
+    Orange,
+    Amber,
+    Yellow,
+    Lime,
+    Green,
+    Emerald,
+    Teal,
+    Cyan,
+    Sky,
+    Blue,
+    Indigo,
+    Violet,
+    Purple,
+    Fuchsia,
+    Pink,
+    Rose
+};
+
+const ColorName* ColorNameAll(int* count);
+bool ColorNameParse(Str value, ColorName* out);
+Rgba ColorNameScale(ColorName name, int scale = 500);
+Rgba ThemeHsl(float hueDegrees, float saturationPercent,
+              float lightnessPercent);
+Rgba ThemeBlack();
+Rgba ThemeWhite();
+
+// Rust extension traits are free color operations and an application lookup
+// in this tree. Keep their exact mapping explicit for callers and the audit.
+inline const Theme& ActiveTheme(const App* app) { return ThemeNow(app); }
+
+template <typename T>
+struct ThemeConfigValue {
+    T value = {};
+    bool has = false;
+
+    static ThemeConfigValue Some(const T& value) {
+        ThemeConfigValue out;
+        out.value = value;
+        out.has = true;
+        return out;
+    }
+};
+
+// schema.rs. Strings point into the JSON arena passed to Parse; numeric and
+// enum options are copied. This is the no-STL equivalent of Option<T>.
+struct SemanticColorConfig {
+    ThemeConfigValue<Str> background;
+    ThemeConfigValue<Str> foreground;
+    ThemeConfigValue<Str> surface;
+    ThemeConfigValue<Str> surfaceForeground;
+    ThemeConfigValue<Str> primary;
+    ThemeConfigValue<Str> primaryForeground;
+    ThemeConfigValue<Str> secondary;
+    ThemeConfigValue<Str> secondaryForeground;
+    ThemeConfigValue<Str> muted;
+    ThemeConfigValue<Str> mutedForeground;
+    ThemeConfigValue<Str> accent;
+    ThemeConfigValue<Str> accentForeground;
+    ThemeConfigValue<Str> destructive;
+    ThemeConfigValue<Str> destructiveForeground;
+    ThemeConfigValue<Str> border;
+    ThemeConfigValue<Str> input;
+    ThemeConfigValue<Str> ring;
+};
+
+struct SemanticRadiusConfig {
+    ThemeConfigValue<float> none;
+    ThemeConfigValue<float> sm;
+    ThemeConfigValue<float> md;
+    ThemeConfigValue<float> lg;
+    ThemeConfigValue<float> xl;
+    ThemeConfigValue<float> full;
+};
+
+struct SemanticSpacingConfig {
+    ThemeConfigValue<float> xxs;
+    ThemeConfigValue<float> xs;
+    ThemeConfigValue<float> sm;
+    ThemeConfigValue<float> md;
+    ThemeConfigValue<float> lg;
+    ThemeConfigValue<float> xl;
+    ThemeConfigValue<float> xxl;
+};
+
+struct SemanticTextStyleConfig {
+    ThemeConfigValue<float> size;
+    ThemeConfigValue<float> lineHeight;
+    ThemeConfigValue<FontWeight> weight;
+};
+
+struct SemanticTypographyConfig {
+    ThemeConfigValue<Str> sans;
+    ThemeConfigValue<Str> mono;
+    SemanticTextStyleConfig xs;
+    SemanticTextStyleConfig sm;
+    SemanticTextStyleConfig md;
+    SemanticTextStyleConfig lg;
+    SemanticTextStyleConfig xl;
+    SemanticTextStyleConfig monoMd;
+};
+
+struct SemanticShadowConfig {
+    // Each value is the source array (or the accepted one-object shorthand)
+    // in the caller's JSON arena. ApplyTo owns the resolved Vec instead.
+    const JsonValue* sm = nullptr;
+    const JsonValue* md = nullptr;
+    const JsonValue* lg = nullptr;
+};
+
+struct SemanticThemeConfig {
+    SemanticColorConfig colors;
+    SemanticRadiusConfig radius;
+    SemanticSpacingConfig spacing;
+    SemanticTypographyConfig typography;
+    SemanticShadowConfig shadow;
+
+    bool ApplyTo(SemanticThemeTokens* tokens) const;
+};
+
+struct SemanticThemeConfigFile {
+    SemanticThemeConfig tokens;
+};
+
+bool SemanticThemeConfigParse(const JsonValue* value,
+                              SemanticThemeConfig* out);
+bool SemanticThemeConfigFileParse(const JsonValue* value,
+                                  SemanticThemeConfigFile* out);
+
 // ─── one theme out of a theme file ───────────────────────────────────────
+
+// ThemeConfigColors remains a parsed view because duplicating the hundred
+// optional legacy keys would retain the same JSON twice. It preserves the
+// source boundary instead of exposing a raw pointer from ThemeConfig.
+struct ThemeConfigColors {
+    const JsonValue* value = nullptr;
+
+    ThemeConfigColors& operator=(const JsonValue* json) {
+        value = json;
+        return *this;
+    }
+    operator const JsonValue*() const { return value; }
+    explicit operator bool() const { return value != nullptr; }
+};
+
+// `ThemeSet` cannot be used as a C++ type spelling beside the long-standing
+// `ThemeSet(app, mode)` operation. ThemeSetConfig is its parsed, arena-backed
+// value equivalent; Themes points at the source array without duplicating it.
+struct ThemeSetConfig {
+    Str name = {};
+    Str author = {};
+    Str url = {};
+    const JsonValue* themes = nullptr;
+
+    int Count() const;
+};
+
+bool ThemeSetConfigParse(const JsonValue* value, ThemeSetConfig* out);
 
 // ThemeConfig. The colours stay as the parsed `colors` object rather than as
 // fields: a token's fallback is usually another token, so they can only be
@@ -487,11 +689,19 @@ struct ThemeConfig {
     ThemeMode mode = ThemeMode::Light;
     bool isDefault = false;
     // The `colors` object, or null for a theme that only sets metrics.
-    const JsonValue* colors = nullptr;
+    ThemeConfigColors colors;
     // The metrics, or a non-positive number for one the file leaves out.
     float fontSize = 0;
+    Str fontFamily = {};
+    Str monoFontFamily = {};
+    float monoFontSize = 0;
     float radius = -1;
     float radiusLg = -1;
+    bool shadow = true;
+    bool hasShadow = false;
+    // Retained for the dependency-free highlighter adapter to inspect. The
+    // tree-sitter HighlightTheme object itself is a standing exclusion.
+    const JsonValue* highlight = nullptr;
 };
 
 // `is_explicit` in the theme viewer: whether the file names this token itself
@@ -508,6 +718,19 @@ bool ThemeConfigNames(const ThemeConfig* cfg, const char* key);
 void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base);
 
 // ─── the registry ────────────────────────────────────────────────────────
+
+struct ThemeRegistry {
+    Arena* arena = nullptr;
+    Vec<ThemeConfig> themes;
+    Vec<Str> loadedDirs;
+    Str active[2] = {};
+    bool initialized = false;
+
+    ~ThemeRegistry();
+    static ThemeRegistry* Global(App* app);
+    static const ThemeRegistry* Global(const App* app);
+    int Count() const { return themes.len; }
+};
 
 // The default themes, from the embedded `default-theme.json`. Idempotent, and
 // every other entry point calls it, so an application never has to.

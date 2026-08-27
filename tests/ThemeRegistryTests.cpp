@@ -342,6 +342,46 @@ static void RegistriesAreIsolatedPerApplication() {
     AppGlobalClear(&second);
 }
 
+static void SourceRegistryAndConfigSettingsAreRetained() {
+    App app;
+    const char* doc =
+        "{\"themes\":[{\"name\":\"Metrics\",\"mode\":\"light\","
+        "\"font.size\":18,\"font.family\":\"Inter\","
+        "\"mono_font.family\":\"Cascadia Mono\","
+        "\"mono_font.size\":14,\"radius\":9,\"shadow\":false,"
+        "\"colors\":{\"primary.background\":\"#123456\"}}]}";
+    Arena* arena = ArenaNew();
+    JsonValue* parsed = JsonParse(arena, Str(doc));
+    ThemeSetConfig set;
+    utassert(ThemeSetConfigParse(parsed, &set) && set.Count() == 1);
+    utassert(ThemeRegistryLoadStr(&app, Str(doc)) == 1);
+    ThemeRegistry* registry = ThemeRegistry::Global(&app);
+    const ThemeRegistry* read = ThemeRegistry::Global((const App*)&app);
+    utassert(registry && read == registry &&
+             registry->Count() == ThemeRegistryCount(&app));
+    const ThemeConfig* config = ThemeRegistryFind(&app, StrL("Metrics"));
+    utassert(config && config->colors && config->fontSize == 18.f &&
+             StrEqI(config->fontFamily, StrL("Inter")) &&
+             StrEqI(config->monoFontFamily, StrL("Cascadia Mono")) &&
+             config->monoFontSize == 14.f && config->hasShadow &&
+             !config->shadow);
+    utassert(ThemeRegistryApply(&app, config));
+    const Theme& theme = ThemeLight(&app);
+    utassert(theme.mode == ThemeMode::Light && theme.fontSize == 18.f &&
+             StrEqI(theme.fontFamily, StrL("Inter")) &&
+             StrEqI(theme.monoFontFamily, StrL("Cascadia Mono")) &&
+             theme.monoFontSize == 14.f && theme.radius == 9.f &&
+             theme.radiusLg == 11.f && !theme.shadow);
+    SemanticThemeTokens tokens = ThemeSemanticTokens(theme);
+    utassert(tokens.shadow.sm.len == 0 && tokens.shadow.md.len == 0 &&
+             tokens.shadow.lg.len == 0);
+    utassert(StrEqI(tokens.typography.sans, StrL("Inter")) &&
+             tokens.typography.md.size == 18.f &&
+             tokens.typography.monoMd.size == 14.f);
+    ArenaDelete(arena);
+    AppGlobalClear(&app);
+}
+
 void TestThemeRegistry() {
     TestSuite("theme_registry");
     AColourIsAHexOrAName();
@@ -351,4 +391,5 @@ void TestThemeRegistry() {
     AGradientReachesTheTokenAndItsFallbacks();
     AConfigKnowsWhichKeysItsFileNamed();
     RegistriesAreIsolatedPerApplication();
+    SourceRegistryAndConfigSettingsAreRetained();
 }

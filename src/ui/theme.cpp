@@ -7,6 +7,17 @@
 
 namespace gpui {
 
+ThemeToken ThemeToken::New(Rgba color, Background background) {
+    ThemeToken out;
+    out.color = color;
+    out.background = background;
+    return out;
+}
+
+ThemeToken ThemeToken::Solid(Rgba color) {
+    return New(color, Background(color));
+}
+
 void ThemeTokensReset(Theme* t) {
     if (!t) {
         return;
@@ -365,6 +376,7 @@ const Theme& ThemeDefaultDark() {
     static Theme t;
     static bool init = false;
     if (!init) {
+        t.mode = ThemeMode::Dark;
         t.background = Rgb(0x0a, 0x0a, 0x0a);
         t.foreground = Rgb(0xfa, 0xfa, 0xfa);
         t.border = Rgb(0x26, 0x26, 0x26);
@@ -481,6 +493,7 @@ const Theme& ThemeDefaultLight() {
     static Theme t;
     static bool init = false;
     if (!init) {
+        t.mode = ThemeMode::Light;
         t.background = Rgb(0xff, 0xff, 0xff);
         t.foreground = Rgb(0x0a, 0x0a, 0x0a);
         t.border = Rgb(0xe5, 0xe5, 0xe5);
@@ -597,9 +610,6 @@ static const float kDefaultFontSize = 16.f;
 struct AppThemeState {
     Theme active[2] = {};
     ThemeMode mode = ThemeMode::Light;
-    float fontSize = kDefaultFontSize;
-    ScrollbarMode scrollbarMode = ScrollbarMode::Scrolling;
-    bool focusRing = true;
     bool initialized = false;
 };
 
@@ -630,9 +640,9 @@ static void ThemeSyncRuntime(App* app, const AppThemeState* state) {
     style.legacySecondaryHover = ui.secondaryHover;
     style.legacySecondaryActive = ui.secondaryActive;
     style.radius = ui.radius;
-    style.fontSize = state->fontSize;
-    style.scrollbarMode = state->scrollbarMode;
-    style.focusRing = state->focusRing;
+    style.fontSize = ui.fontSize;
+    style.scrollbarMode = ui.scrollbarMode;
+    style.focusRing = ui.focusRing;
     RuntimeStyleInstall(app, style);
 }
 
@@ -668,6 +678,7 @@ void ThemeInstall(App* app, ThemeMode mode, const Theme& t) {
     AppThemeState* state = ThemeStateOf(app);
     if (state) {
         state->active[(int)mode] = t;
+        state->active[(int)mode].mode = mode;
         ThemeDidChange(app, state);
     }
 }
@@ -690,40 +701,41 @@ void ThemeSetRadius(App* app, float radius) {
 }
 
 float ThemeFontSize(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->fontSize : kDefaultFontSize;
+    return app ? ThemeNow(app).fontSize : kDefaultFontSize;
 }
 
 void ThemeSetFontSize(App* app, float px) {
     AppThemeState* state = ThemeStateOf(app);
     if (state) {
-        state->fontSize = px > 0 ? px : kDefaultFontSize;
+        float value = px > 0 ? px : kDefaultFontSize;
+        state->active[0].fontSize = value;
+        state->active[1].fontSize = value;
         ThemeDidChange(app, state);
     }
 }
 
 bool ThemeFocusRing(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->focusRing : true;
+    return app ? ThemeNow(app).focusRing : true;
 }
 
 void ThemeSetFocusRing(App* app, bool on) {
     AppThemeState* state = ThemeStateOf(app);
     if (state) {
-        state->focusRing = on;
+        state->active[0].focusRing = on;
+        state->active[1].focusRing = on;
         ThemeDidChange(app, state);
     }
 }
 
 ScrollbarMode ScrollbarModeNow(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->scrollbarMode : ScrollbarMode::Always;
+    return app ? ThemeNow(app).scrollbarMode : ScrollbarMode::Scrolling;
 }
 
 void ScrollbarModeSet(App* app, ScrollbarMode m) {
     AppThemeState* state = ThemeStateOf(app);
     if (state) {
-        state->scrollbarMode = m;
+        state->active[0].scrollbarMode = m;
+        state->active[1].scrollbarMode = m;
         ThemeDidChange(app, state);
     }
 }
@@ -778,13 +790,17 @@ SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
 
     // `typography_tokens` overwrites the application base sizes and leaves
     // the source platform-default families and the rest of the scale intact.
-    out.typography.md.size = fontSize > 0 ? fontSize : 16.f;
-    out.typography.monoMd.size = kMonoFontSize;
+    out.typography.sans = t.fontFamily;
+    out.typography.mono = t.monoFontFamily;
+    out.typography.md.size = fontSize > 0 ? fontSize : t.fontSize;
+    out.typography.monoMd.size = t.monoFontSize;
 
     // `shadow_tokens`: the three elevations at 18% black. Rust gates them on
     // `Theme::shadow`, a flag a theme file can clear; nothing here reads such
     // a flag, so the elevations are always the ones a shadow would use.
-    out.shadow = SemanticShadowElevations(Rgba8(0, 0, 0, 46));
+    if (t.shadow) {
+        out.shadow = SemanticShadowElevations(Rgba8(0, 0, 0, 46));
+    }
     return out;
 }
 
@@ -822,8 +838,15 @@ void ThemeApplySemanticTokens(Theme* t, const SemanticThemeTokens& tokens) {
     t->tokens.danger = Background(c.destructive);
     t->radius = tokens.radius.md;
     t->radiusLg = tokens.radius.lg;
-    // What has nowhere to go, and is the reason this is a subset: the spacing
-    // scale, the text roles, and the two font families.
+    t->radiusFull = t->radius > 0 ? kRadiusFull : 0;
+    t->fontFamily = tokens.typography.sans;
+    t->monoFontFamily = tokens.typography.mono;
+    t->fontSize = tokens.typography.md.size;
+    t->monoFontSize = tokens.typography.monoMd.size;
+    t->shadow = tokens.shadow.sm.len > 0 || tokens.shadow.md.len > 0 ||
+                tokens.shadow.lg.len > 0;
+    // Spacing and individual text roles have no legacy storage; callers that
+    // need the complete resolved snapshot retain SemanticThemeTokens.
 }
 
 
@@ -1067,6 +1090,99 @@ bool ThemeParseColor(Str s, Rgba* out) {
 }
 
 // ─── the gradient grammar — color.rs parse_linear_gradient ───────────────
+
+static const ColorName kPublicColorNames[] = {
+    ColorName::Neutral, ColorName::Gray,    ColorName::Red,
+    ColorName::Orange,  ColorName::Amber,   ColorName::Yellow,
+    ColorName::Lime,    ColorName::Green,   ColorName::Emerald,
+    ColorName::Teal,    ColorName::Cyan,    ColorName::Sky,
+    ColorName::Blue,    ColorName::Indigo,  ColorName::Violet,
+    ColorName::Purple,  ColorName::Fuchsia, ColorName::Pink,
+    ColorName::Rose,
+};
+
+static const char* ColorNameText(ColorName name) {
+    switch (name) {
+        case ColorName::White: return "white";
+        case ColorName::Black: return "black";
+        case ColorName::Neutral: return "neutral";
+        case ColorName::Gray: return "gray";
+        case ColorName::Red: return "red";
+        case ColorName::Orange: return "orange";
+        case ColorName::Amber: return "amber";
+        case ColorName::Yellow: return "yellow";
+        case ColorName::Lime: return "lime";
+        case ColorName::Green: return "green";
+        case ColorName::Emerald: return "emerald";
+        case ColorName::Teal: return "teal";
+        case ColorName::Cyan: return "cyan";
+        case ColorName::Sky: return "sky";
+        case ColorName::Blue: return "blue";
+        case ColorName::Indigo: return "indigo";
+        case ColorName::Violet: return "violet";
+        case ColorName::Purple: return "purple";
+        case ColorName::Fuchsia: return "fuchsia";
+        case ColorName::Pink: return "pink";
+        case ColorName::Rose: return "rose";
+    }
+    return "black";
+}
+
+const ColorName* ColorNameAll(int* count) {
+    if (count) {
+        *count = (int)(sizeof(kPublicColorNames) /
+                       sizeof(kPublicColorNames[0]));
+    }
+    return kPublicColorNames;
+}
+
+bool ColorNameParse(Str value, ColorName* out) {
+    if (!out) return false;
+    if (NameEq("white", value)) {
+        *out = ColorName::White;
+        return true;
+    }
+    if (NameEq("black", value)) {
+        *out = ColorName::Black;
+        return true;
+    }
+    for (int i = 0; i < (int)(sizeof(kPublicColorNames) /
+                              sizeof(kPublicColorNames[0])); i++) {
+        ColorName candidate = kPublicColorNames[i];
+        if (NameEq(ColorNameText(candidate), value)) {
+            *out = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+Rgba ColorNameScale(ColorName name, int scale) {
+    if (name == ColorName::White) return ThemeWhite();
+    if (name == ColorName::Black) return ThemeBlack();
+    const char* value = ColorNameText(name);
+    for (int i = 0; i < kNumShadcnScales; i++) {
+        if (StrCmpI(kShadcnScales[i].name, value) != 0) continue;
+        Rgba out;
+        if (ScaleOf(&kShadcnScales[i], scale, &out)) return out;
+        break;
+    }
+    return ThemeBlack();
+}
+
+Rgba ThemeHsl(float hueDegrees, float saturationPercent,
+              float lightnessPercent) {
+    return RgbaHsla(hueDegrees / 360.f, saturationPercent / 100.f,
+                    lightnessPercent / 100.f, 1.f);
+}
+
+Rgba ThemeBlack() {
+    return RgbaHex(kShadcnBlack);
+}
+
+Rgba ThemeWhite() {
+    return RgbaHex(kShadcnWhite);
+}
 
 static Str TrimStr(Str s) {
     while (s.len > 0 && (s.s[0] == ' ' || s.s[0] == '\t' || s.s[0] == '\n' ||
@@ -1435,6 +1551,7 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
         return;
     }
     *out = base;
+    out->mode = cfg->mode;
     const JsonValue* c = cfg->colors;
     bool dark = cfg->mode == ThemeMode::Dark;
     // The two constants every button and hover fallback is written against.
@@ -1782,6 +1899,12 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     if (cfg->radiusLg >= 0) {
         out->radiusLg = cfg->radiusLg;
     }
+    out->radiusFull = out->radius > 0 ? kRadiusFull : 0;
+    if (cfg->fontSize > 0) out->fontSize = cfg->fontSize;
+    if (cfg->fontFamily.s) out->fontFamily = cfg->fontFamily;
+    if (cfg->monoFontFamily.s) out->monoFontFamily = cfg->monoFontFamily;
+    if (cfg->monoFontSize > 0) out->monoFontSize = cfg->monoFontSize;
+    if (cfg->hasShadow) out->shadow = cfg->shadow;
 }
 
 // ─── the registry — crates/ui/src/theme/registry.rs ──────────────────────
@@ -1789,24 +1912,24 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
 // The documents and strings configs point into. Rust's ThemeRegistry is an
 // App Global; this has the same lifetime and isolates loaded/active themes
 // between applications.
-struct ThemeRegistryState {
-    Arena* arena = nullptr;
-    Vec<ThemeConfig> themes;
-    Vec<Str> loadedDirs;
-    Str active[2] = {};
-    bool initialized = false;
-
-    ~ThemeRegistryState() {
-        themes.Reset();
-        loadedDirs.Reset();
-        if (arena) {
-            ArenaDelete(arena);
-            arena = nullptr;
-        }
+ThemeRegistry::~ThemeRegistry() {
+    themes.Reset();
+    loadedDirs.Reset();
+    if (arena) {
+        ArenaDelete(arena);
+        arena = nullptr;
     }
-};
+}
 
-static ThemeRegistryState* RegistryOf(const App* app);
+static ThemeRegistry* RegistryOf(const App* app);
+
+ThemeRegistry* ThemeRegistry::Global(App* app) {
+    return RegistryOf(app);
+}
+
+const ThemeRegistry* ThemeRegistry::Global(const App* app) {
+    return RegistryOf(app);
+}
 
 static ThemeMode ParseMode(Str s) {
     return StrEqI(s, StrL("dark")) ? ThemeMode::Dark : ThemeMode::Light;
@@ -1824,7 +1947,7 @@ static bool SortsBefore(const ThemeConfig& a, const ThemeConfig& b) {
     return StrCmpI(a.name.s ? a.name.s : "", b.name.s ? b.name.s : "") < 0;
 }
 
-static void InsertSorted(ThemeRegistryState* state, const ThemeConfig& cfg) {
+static void InsertSorted(ThemeRegistry* state, const ThemeConfig& cfg) {
     int at = state->themes.len;
     for (int i = 0; i < state->themes.len; i++) {
         if (SortsBefore(cfg, state->themes[i])) {
@@ -1850,8 +1973,23 @@ static float JsonFloatOr(const JsonValue* v, const char* key, float fallback) {
     return (float)m->num;
 }
 
+int ThemeSetConfig::Count() const {
+    return themes && themes->kind == JsonKind::Array ? JsonLen(themes) : 0;
+}
+
+bool ThemeSetConfigParse(const JsonValue* value, ThemeSetConfig* out) {
+    if (!value || value->kind != JsonKind::Object || !out) return false;
+    const JsonValue* themes = JsonGet(value, "themes");
+    if (!themes || themes->kind != JsonKind::Array) return false;
+    out->name = JsonString(JsonGet(value, "name"));
+    out->author = JsonString(JsonGet(value, "author"));
+    out->url = JsonString(JsonGet(value, "url"));
+    out->themes = themes;
+    return true;
+}
+
 int ThemeRegistryLoadStr(App* app, Str json) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     if (!state || !state->arena || !json.s || json.len <= 0) {
         return 0;
     }
@@ -1887,8 +2025,18 @@ int ThemeRegistryLoadStr(App* app, Str json) {
         cfg.isDefault = JsonBool(JsonGet(t, "is_default"));
         cfg.colors = JsonGet(t, "colors");
         cfg.fontSize = JsonFloatOr(t, "font.size", 0);
+        cfg.fontFamily = JsonString(JsonGet(t, "font.family"));
+        cfg.monoFontFamily =
+            JsonString(JsonGet(t, "mono_font.family"));
+        cfg.monoFontSize = JsonFloatOr(t, "mono_font.size", 0);
         cfg.radius = JsonFloatOr(t, "radius", -1);
         cfg.radiusLg = JsonFloatOr(t, "radius.lg", -1);
+        const JsonValue* shadow = JsonGet(t, "shadow");
+        if (shadow && shadow->kind == JsonKind::Bool) {
+            cfg.shadow = shadow->b;
+            cfg.hasShadow = true;
+        }
+        cfg.highlight = JsonGet(t, "highlight");
         InsertSorted(state, cfg);
         added++;
     }
@@ -1898,8 +2046,8 @@ int ThemeRegistryLoadStr(App* app, Str json) {
     return added;
 }
 
-static ThemeRegistryState* RegistryOf(const App* app) {
-    ThemeRegistryState* state = AppGlobalEnsure<ThemeRegistryState>((App*)app);
+static ThemeRegistry* RegistryOf(const App* app) {
+    ThemeRegistry* state = AppGlobalEnsure<ThemeRegistry>((App*)app);
     if (!state || state->initialized) {
         return state;
     }
@@ -1959,22 +2107,219 @@ static void ApplyTextStyle(const JsonValue* obj, const char* key,
 static void ApplyShadowLevel(const JsonValue* obj, const char* key,
                              Vec<BoxShadow>* level, bool* any) {
     const JsonValue* v = JsonGet(obj, key);
-    if (!v || v->kind != JsonKind::Object) {
+    if (!v || (v->kind != JsonKind::Object && v->kind != JsonKind::Array)) {
         return;
     }
     *any = true;
-    if (level->len == 0) {
+    if (v->kind == JsonKind::Array) {
+        // Source Vec<BoxShadow> replaces the elevation when an array is
+        // supplied. Retain the port's one-object shorthand as a partial
+        // overlay on the existing first shadow.
+        level->Clear();
+    } else if (level->len == 0) {
         level->Append(BoxShadow{});
     }
-    BoxShadow* out = ShadowFirst(*level);
-    if (!out) {
-        return;
+    const JsonValue* item = v->kind == JsonKind::Array ? v->first : v;
+    for (; item; item = v->kind == JsonKind::Array ? item->next : nullptr) {
+        if (item->kind != JsonKind::Object) continue;
+        if (v->kind == JsonKind::Array) level->Append(BoxShadow{});
+        BoxShadow* out = v->kind == JsonKind::Array
+                             ? &(*level)[level->len - 1]
+                             : &(*level)[0];
+        ApplyFloatField(item, "x", &out->x);
+        ApplyFloatField(item, "y", &out->y);
+        ApplyFloatField(item, "blur", &out->blur);
+        ApplyFloatField(item, "blur_radius", &out->blur);
+        ApplyFloatField(item, "spread", &out->spread);
+        ApplyFloatField(item, "spread_radius", &out->spread);
+        ApplyColorField(item, "color", &out->color);
+        const JsonValue* inset = JsonGet(item, "inset");
+        if (inset && inset->kind == JsonKind::Bool) out->inset = inset->b;
     }
-    ApplyFloatField(v, "x", &out->x);
-    ApplyFloatField(v, "y", &out->y);
-    ApplyFloatField(v, "blur", &out->blur);
-    ApplyFloatField(v, "spread", &out->spread);
-    ApplyColorField(v, "color", &out->color);
+}
+
+static void ParseStringOption(const JsonValue* obj, const char* key,
+                              ThemeConfigValue<Str>* out) {
+    const JsonValue* value = JsonGet(obj, key);
+    if (!value || value->kind != JsonKind::String) return;
+    out->value = value->str;
+    out->has = true;
+}
+
+static void ParseFloatOption(const JsonValue* obj, const char* key,
+                             ThemeConfigValue<float>* out) {
+    const JsonValue* value = JsonGet(obj, key);
+    if (!value || value->kind != JsonKind::Number) return;
+    out->value = (float)value->num;
+    out->has = true;
+}
+
+static void ParseTextStyleConfig(const JsonValue* obj, const char* key,
+                                 SemanticTextStyleConfig* out) {
+    const JsonValue* value = JsonGet(obj, key);
+    if (!value || value->kind != JsonKind::Object) return;
+    ParseFloatOption(value, "size", &out->size);
+    ParseFloatOption(value, "line_height", &out->lineHeight);
+    const JsonValue* weight = JsonGet(value, "weight");
+    if (weight && weight->kind == JsonKind::Number) {
+        out->weight.value = (FontWeight)(uint16_t)weight->num;
+        out->weight.has = true;
+    }
+}
+
+bool SemanticThemeConfigParse(const JsonValue* value,
+                              SemanticThemeConfig* out) {
+    if (!value || value->kind != JsonKind::Object || !out) return false;
+    *out = {};
+    if (const JsonValue* colors = JsonGet(value, "colors")) {
+        ParseStringOption(colors, "background", &out->colors.background);
+        ParseStringOption(colors, "foreground", &out->colors.foreground);
+        ParseStringOption(colors, "surface", &out->colors.surface);
+        ParseStringOption(colors, "surface_foreground",
+                          &out->colors.surfaceForeground);
+        ParseStringOption(colors, "primary", &out->colors.primary);
+        ParseStringOption(colors, "primary_foreground",
+                          &out->colors.primaryForeground);
+        ParseStringOption(colors, "secondary", &out->colors.secondary);
+        ParseStringOption(colors, "secondary_foreground",
+                          &out->colors.secondaryForeground);
+        ParseStringOption(colors, "muted", &out->colors.muted);
+        ParseStringOption(colors, "muted_foreground",
+                          &out->colors.mutedForeground);
+        ParseStringOption(colors, "accent", &out->colors.accent);
+        ParseStringOption(colors, "accent_foreground",
+                          &out->colors.accentForeground);
+        ParseStringOption(colors, "destructive",
+                          &out->colors.destructive);
+        ParseStringOption(colors, "destructive_foreground",
+                          &out->colors.destructiveForeground);
+        ParseStringOption(colors, "border", &out->colors.border);
+        ParseStringOption(colors, "input", &out->colors.input);
+        ParseStringOption(colors, "ring", &out->colors.ring);
+    }
+    if (const JsonValue* radius = JsonGet(value, "radius")) {
+        ParseFloatOption(radius, "none", &out->radius.none);
+        ParseFloatOption(radius, "sm", &out->radius.sm);
+        ParseFloatOption(radius, "md", &out->radius.md);
+        ParseFloatOption(radius, "lg", &out->radius.lg);
+        ParseFloatOption(radius, "xl", &out->radius.xl);
+        ParseFloatOption(radius, "full", &out->radius.full);
+    }
+    if (const JsonValue* spacing = JsonGet(value, "spacing")) {
+        ParseFloatOption(spacing, "xxs", &out->spacing.xxs);
+        ParseFloatOption(spacing, "xs", &out->spacing.xs);
+        ParseFloatOption(spacing, "sm", &out->spacing.sm);
+        ParseFloatOption(spacing, "md", &out->spacing.md);
+        ParseFloatOption(spacing, "lg", &out->spacing.lg);
+        ParseFloatOption(spacing, "xl", &out->spacing.xl);
+        ParseFloatOption(spacing, "xxl", &out->spacing.xxl);
+    }
+    if (const JsonValue* typography = JsonGet(value, "typography")) {
+        ParseStringOption(typography, "sans", &out->typography.sans);
+        ParseStringOption(typography, "mono", &out->typography.mono);
+        ParseTextStyleConfig(typography, "xs", &out->typography.xs);
+        ParseTextStyleConfig(typography, "sm", &out->typography.sm);
+        ParseTextStyleConfig(typography, "md", &out->typography.md);
+        ParseTextStyleConfig(typography, "lg", &out->typography.lg);
+        ParseTextStyleConfig(typography, "xl", &out->typography.xl);
+        ParseTextStyleConfig(typography, "mono_md",
+                             &out->typography.monoMd);
+    }
+    if (const JsonValue* shadow = JsonGet(value, "shadow")) {
+        out->shadow.sm = JsonGet(shadow, "sm");
+        out->shadow.md = JsonGet(shadow, "md");
+        out->shadow.lg = JsonGet(shadow, "lg");
+    }
+    return true;
+}
+
+bool SemanticThemeConfigFileParse(const JsonValue* value,
+                                  SemanticThemeConfigFile* out) {
+    if (!value || !out) return false;
+    const JsonValue* tokens = JsonGet(value, "tokens");
+    if (!tokens) return false;
+    return SemanticThemeConfigParse(tokens, &out->tokens);
+}
+
+static void ApplyConfiguredColor(const ThemeConfigValue<Str>& value,
+                                 Rgba* out) {
+    Rgba parsed;
+    if (value.has && ThemeParseColor(value.value, &parsed)) *out = parsed;
+}
+
+static void ApplyConfiguredTextStyle(const SemanticTextStyleConfig& value,
+                                     TextStyleToken* out) {
+    if (value.size.has) out->size = value.size.value;
+    if (value.lineHeight.has) out->lineHeight = value.lineHeight.value;
+    if (value.weight.has) out->weight = value.weight.value;
+}
+
+static void ApplyConfiguredShadow(const JsonValue* value,
+                                  Vec<BoxShadow>* out) {
+    if (!value) return;
+    JsonValue wrapper;
+    wrapper.kind = JsonKind::Object;
+    JsonValue member = *value;
+    member.key = StrL("value");
+    member.next = nullptr;
+    wrapper.first = &member;
+    bool any = false;
+    ApplyShadowLevel(&wrapper, "value", out, &any);
+}
+
+bool SemanticThemeConfig::ApplyTo(SemanticThemeTokens* out) const {
+    if (!out) return false;
+    ApplyConfiguredColor(colors.background, &out->colors.background);
+    ApplyConfiguredColor(colors.foreground, &out->colors.foreground);
+    ApplyConfiguredColor(colors.surface, &out->colors.surface);
+    ApplyConfiguredColor(colors.surfaceForeground,
+                         &out->colors.surfaceForeground);
+    ApplyConfiguredColor(colors.primary, &out->colors.primary);
+    ApplyConfiguredColor(colors.primaryForeground,
+                         &out->colors.primaryForeground);
+    ApplyConfiguredColor(colors.secondary, &out->colors.secondary);
+    ApplyConfiguredColor(colors.secondaryForeground,
+                         &out->colors.secondaryForeground);
+    ApplyConfiguredColor(colors.muted, &out->colors.muted);
+    ApplyConfiguredColor(colors.mutedForeground,
+                         &out->colors.mutedForeground);
+    ApplyConfiguredColor(colors.accent, &out->colors.accent);
+    ApplyConfiguredColor(colors.accentForeground,
+                         &out->colors.accentForeground);
+    ApplyConfiguredColor(colors.destructive, &out->colors.destructive);
+    ApplyConfiguredColor(colors.destructiveForeground,
+                         &out->colors.destructiveForeground);
+    ApplyConfiguredColor(colors.border, &out->colors.border);
+    ApplyConfiguredColor(colors.input, &out->colors.input);
+    ApplyConfiguredColor(colors.ring, &out->colors.ring);
+#define GPUI_APPLY_THEME_FLOAT(config, target, field) \
+    if ((config).field.has) (target).field = (config).field.value
+    GPUI_APPLY_THEME_FLOAT(radius, out->radius, none);
+    GPUI_APPLY_THEME_FLOAT(radius, out->radius, sm);
+    GPUI_APPLY_THEME_FLOAT(radius, out->radius, md);
+    GPUI_APPLY_THEME_FLOAT(radius, out->radius, lg);
+    GPUI_APPLY_THEME_FLOAT(radius, out->radius, xl);
+    GPUI_APPLY_THEME_FLOAT(radius, out->radius, full);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, xxs);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, xs);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, sm);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, md);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, lg);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, xl);
+    GPUI_APPLY_THEME_FLOAT(spacing, out->spacing, xxl);
+#undef GPUI_APPLY_THEME_FLOAT
+    if (typography.sans.has) out->typography.sans = typography.sans.value;
+    if (typography.mono.has) out->typography.mono = typography.mono.value;
+    ApplyConfiguredTextStyle(typography.xs, &out->typography.xs);
+    ApplyConfiguredTextStyle(typography.sm, &out->typography.sm);
+    ApplyConfiguredTextStyle(typography.md, &out->typography.md);
+    ApplyConfiguredTextStyle(typography.lg, &out->typography.lg);
+    ApplyConfiguredTextStyle(typography.xl, &out->typography.xl);
+    ApplyConfiguredTextStyle(typography.monoMd, &out->typography.monoMd);
+    ApplyConfiguredShadow(shadow.sm, &out->shadow.sm);
+    ApplyConfiguredShadow(shadow.md, &out->shadow.md);
+    ApplyConfiguredShadow(shadow.lg, &out->shadow.lg);
+    return true;
 }
 
 bool ThemeSemanticConfigApply(const JsonValue* doc, SemanticThemeTokens* io) {
@@ -2050,13 +2395,13 @@ bool ThemeApplySemanticConfigStr(App* app, ThemeMode mode, Str json,
     if (!json.s || json.len <= 0) {
         return false;
     }
-    ThemeRegistryState* registry = RegistryOf(app);
+    ThemeRegistry* registry = RegistryOf(app);
     // The document is read and thrown away: nothing a semantic config holds
     // outlives the colours it is turned into.
     Arena* a = ArenaNew();
     JsonValue* doc = JsonParse(a, json);
     Theme t = mode == ThemeMode::Dark ? ThemeDark(app) : ThemeLight(app);
-    SemanticThemeTokens tokens = ThemeSemanticTokens(t, ThemeFontSize(app));
+    SemanticThemeTokens tokens = ThemeSemanticTokens(t);
     bool ok = doc && ThemeSemanticConfigApply(doc, &tokens);
     // The two font families are the only strings a token set keeps, and they
     // point into the document. They move to the registry's own arena — where
@@ -2080,7 +2425,7 @@ bool ThemeApplySemanticConfigStr(App* app, ThemeMode mode, Str json,
 }
 
 int ThemeRegistryLoadDir(App* app, Str dir) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     if (!state || !state->arena) {
         return 0;
     }
@@ -2142,12 +2487,12 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
 }
 
 int ThemeRegistryCount(const App* app) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     return state ? state->themes.len : 0;
 }
 
 const ThemeConfig* ThemeRegistryAt(const App* app, int ix) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     if (!state || ix < 0 || ix >= state->themes.len) {
         return nullptr;
     }
@@ -2155,7 +2500,7 @@ const ThemeConfig* ThemeRegistryAt(const App* app, int ix) {
 }
 
 const ThemeConfig* ThemeRegistryFind(const App* app, Str name) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     if (!state) {
         return nullptr;
     }
@@ -2168,12 +2513,12 @@ const ThemeConfig* ThemeRegistryFind(const App* app, Str name) {
 }
 
 Str ThemeRegistryActive(const App* app, ThemeMode mode) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     return state ? state->active[(int)mode] : Str{};
 }
 
 bool ThemeRegistryApply(App* app, const ThemeConfig* cfg) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     if (!state || !cfg) {
         return false;
     }
@@ -2183,9 +2528,6 @@ bool ThemeRegistryApply(App* app, const ThemeConfig* cfg) {
                        dark ? ThemeDefaultDark() : ThemeDefaultLight());
     ThemeInstall(app, cfg->mode, t);
     state->active[(int)cfg->mode] = cfg->name;
-    if (cfg->fontSize > 0) {
-        ThemeSetFontSize(app, cfg->fontSize);
-    }
     if (app) {
         AppRefreshWindows(app);
     }
@@ -2197,7 +2539,7 @@ bool ThemeRegistryApply(App* app, Str name) {
 }
 
 void ThemeRegistryReset(App* app) {
-    ThemeRegistryState* state = RegistryOf(app);
+    ThemeRegistry* state = RegistryOf(app);
     if (!state) {
         return;
     }
@@ -2214,7 +2556,7 @@ void ThemeRegistryReset(App* app) {
 }
 
 void ThemeRegistryFree(App* app) {
-    AppGlobalRemove<ThemeRegistryState>(app);
+    AppGlobalRemove<ThemeRegistry>(app);
 }
 
 } // namespace gpui

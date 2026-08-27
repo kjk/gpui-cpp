@@ -19,6 +19,10 @@ static bool Is(Rgba c, uint32_t hex) {
     return IsA(c, hex, 255);
 }
 
+static bool SameColor(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
 static void TheLightPaletteIsDefaultLight() {
     const Theme& t = ThemeLight();
     utassert(Is(t.background, 0xffffff));
@@ -172,6 +176,70 @@ static void ASemanticConfigOnlyChangesWhatItNames() {
     ArenaDelete(a);
 }
 
+static void SourceColorAndTokenVocabularyIsTyped() {
+    int count = 0;
+    const ColorName* colors = ColorNameAll(&count);
+    utassert(colors && count == 19 && colors[0] == ColorName::Neutral &&
+             colors[18] == ColorName::Rose);
+    ColorName parsed = ColorName::Black;
+    utassert(ColorNameParse(StrL("BLUE"), &parsed) &&
+             parsed == ColorName::Blue);
+    utassert(!ColorNameParse(StrL("stone"), &parsed));
+    utassert(Is(ColorNameScale(ColorName::Blue, 500), 0x3b82f6));
+    utassert(SameColor(ColorNameScale(ColorName::Blue, 123),
+                       ColorNameScale(ColorName::Blue, 500)));
+    utassert(Is(ThemeBlack(), 0x000000) && Is(ThemeWhite(), 0xffffff));
+    utassert(Is(ThemeHsl(0, 100, 50), 0xff0000));
+
+    Background gradient;
+    gradient.color = Rgb(0x11, 0x22, 0x33);
+    gradient.from = {gradient.color, 0};
+    gradient.to = {Rgb(0x44, 0x55, 0x66), 1};
+    gradient.angle = 90;
+    gradient.gradient = true;
+    ThemeToken token = ThemeToken::New(gradient.color, gradient);
+    ThemeToken solid = ThemeToken::Solid(Rgb(0xaa, 0xbb, 0xcc));
+    utassert(token.background.gradient &&
+             SameColor(token.color, gradient.color));
+    utassert(!solid.background.gradient &&
+             SameColor(solid.color, solid.background.color));
+    ThemeColor palette = ThemeDefaultDark();
+    utassert(Is(palette.background, 0x0a0a0a));
+}
+
+static void TypedSemanticSchemaParsesAndAppliesArrays() {
+    Arena* arena = ArenaNew();
+    JsonValue* json = JsonParse(
+        arena,
+        StrL("{\"tokens\":{\"colors\":{\"surface\":\"#111827\"},"
+             "\"radius\":{\"lg\":10},\"typography\":{\"sans\":\"Inter\","
+             "\"md\":{\"line_height\":22}},\"shadow\":{\"sm\":[{"
+             "\"x\":1,\"y\":2,\"blur_radius\":3,"
+             "\"spread_radius\":4,\"color\":\"#00000080\","
+             "\"inset\":true}]}}}"));
+    SemanticThemeConfigFile file;
+    utassert(SemanticThemeConfigFileParse(json, &file));
+    utassert(file.tokens.colors.surface.has &&
+             StrEqI(file.tokens.colors.surface.value, StrL("#111827")));
+    utassert(file.tokens.radius.lg.has &&
+             file.tokens.radius.lg.value == 10.f);
+    SemanticThemeTokens tokens = ThemeSemanticTokens(ThemeLight());
+    utassert(file.tokens.ApplyTo(&tokens));
+    utassert(Is(tokens.colors.surface, 0x111827));
+    utassert(tokens.radius.lg == 10.f);
+    utassert(StrEqI(tokens.typography.sans, StrL("Inter")) &&
+             tokens.typography.md.lineHeight == 22.f);
+    utassert(tokens.shadow.sm.len == 1 && tokens.shadow.sm[0].x == 1.f &&
+             tokens.shadow.sm[0].y == 2.f &&
+             tokens.shadow.sm[0].blur == 3.f &&
+             tokens.shadow.sm[0].spread == 4.f &&
+             tokens.shadow.sm[0].inset);
+    tokens.shadow.sm.Reset();
+    tokens.shadow.md.Reset();
+    tokens.shadow.lg.Reset();
+    ArenaDelete(arena);
+}
+
 void TestThemeColor() {
     TestSuite("theme_color");
     TheLightPaletteIsDefaultLight();
@@ -180,4 +248,6 @@ void TestThemeColor() {
     SourceTokenDefaultsKeepTypographyAndShadowStructure();
     ASemanticSetAppliesBackToAPalette();
     ASemanticConfigOnlyChangesWhatItNames();
+    SourceColorAndTokenVocabularyIsTyped();
+    TypedSemanticSchemaParsesAndAppliesArrays();
 }
