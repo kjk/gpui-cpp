@@ -2,6 +2,21 @@
 
 namespace gpui {
 
+ToastMotion ToastMotion::Sonner() {
+    return {};
+}
+
+ToastOptions ToastOptions::Timeout(int milliseconds) {
+    ToastOptions out;
+    out.hasTimeout = true;
+    out.timeoutMs = milliseconds > 0 ? milliseconds : 0;
+    return out;
+}
+
+ToastOptions ToastOptions::Persistent() {
+    return {};
+}
+
 bool ToastPush(ToastStackState* s, int id, int timeoutMs) {
     ToastEntry e;
     e.id = id;
@@ -29,7 +44,7 @@ bool ToastRemove(ToastStackState* s, int id) {
     return false;
 }
 
-bool ToastAdvance(ToastStackState* s, int deltaMs, bool paused) {
+bool ToastStackAdvance(ToastStackState* s, int deltaMs, bool paused) {
     bool changed = false;
     for (int i = 0; i < s->entries.len; i++) {
         ToastEntry* e = &s->entries[i];
@@ -124,8 +139,213 @@ float ToastStackGeometry(const float* heights, int n, float peek, float gap,
     return collapsed;
 }
 
-El* Toast::New(Ctx* cx, Str id) {
-    Arena* a = cx->a;
-    return Div(a)->Id(id)->Role(AccessibilityRole::Alert);
+static bool ToastStackBottom(Anchor anchor) {
+    return anchor == Anchor::BottomLeft || anchor == Anchor::BottomCenter ||
+           anchor == Anchor::BottomRight;
+}
+
+static ToastMeasurement* ToastStackMeasurement(ToastStackState* state,
+                                               uint32_t id, bool create) {
+    for (int i = 0; i < state->heights.len; i++) {
+        if (state->heights[i].id == id) {
+            return &state->heights[i];
+        }
+    }
+    if (!create) {
+        return nullptr;
+    }
+    ToastMeasurement measurement;
+    measurement.id = id;
+    if (!state->heights.Append(measurement)) {
+        return nullptr;
+    }
+    return &state->heights[state->heights.len - 1];
+}
+
+ToastStack* ToastStack::New(Ctx* context, Str value,
+                            ToastStackState* stackState) {
+    ToastStack* out = ArenaNew<ToastStack>(context->a);
+    out->arena = context->a;
+    out->cx = context;
+    out->id = value;
+    out->state = stackState;
+    out->motion = ToastMotion::Sonner();
+    return out;
+}
+
+ToastStack* ToastStack::Item(Str value, El* child) {
+    if (!child) {
+        return this;
+    }
+    ToastStackItem item;
+    item.id = value;
+    item.key = (uint32_t)HashClickId(value);
+    item.child = child;
+    children.Append(arena, item);
+    return this;
+}
+
+ToastStack* ToastStack::Child(El* child) {
+    Str childId = StrDup(arena, fmt("toast-stack-child-%d", children.len));
+    return Item(childId, child);
+}
+
+ToastStack* ToastStack::Motion(ToastMotion value) {
+    motion = value;
+    return this;
+}
+
+ToastStack* ToastStack::Placement(Anchor value) {
+    placement = value;
+    return this;
+}
+
+ToastStack* ToastStack::Focus(FocusHandle value) {
+    focus = value;
+    hasFocus = value.IsValid();
+    return this;
+}
+
+ToastStack* ToastStack::Refine(const Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleFields |= fields;
+    return this;
+}
+
+static bool ToastStackHasItem(const ToastStack* stack, uint32_t id) {
+    for (int i = 0; i < stack->children.len; i++) {
+        if (stack->children[i].key == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+El* ToastStack::IntoEl() {
+    if (!state) {
+        return Div(arena);
+    }
+    // Measurements are retained by stable item id, and disappear with their
+    // item. Bounds are one frame old, like Rust's prepaint callback state.
+    for (int i = state->heights.len - 1; i >= 0; i--) {
+        if (ToastStackHasItem(this, state->heights[i].id)) {
+            continue;
+        }
+        for (int j = i; j < state->heights.len - 1; j++) {
+            state->heights[j] = state->heights[j + 1];
+        }
+        state->heights.len--;
+    }
+    if (state->bounds.w > 0 && cx->win) {
+        state->hovered = state->bounds.Contains({cx->win->mouseX,
+                                                cx->win->mouseY});
+    }
+    state->focused = hasFocus && FocusHandleContainsFocused(cx->win, focus);
+    bool expanded = state->IsExpanded();
+    bool bottom = ToastStackBottom(placement);
+    int count = children.len;
+    float* heights =
+        count ? (float*)Alloc(arena, (int)sizeof(float) * count) : nullptr;
+    float* collapsed =
+        count ? (float*)Alloc(arena, (int)sizeof(float) * count) : nullptr;
+    float* expandedOffsets =
+        count ? (float*)Alloc(arena, (int)sizeof(float) * count) : nullptr;
+    for (int i = 0; i < count; i++) {
+        ToastMeasurement* measured =
+            ToastStackMeasurement(state, children[i].key, true);
+        heights[i] = measured && measured->bounds.h > 0
+                         ? measured->bounds.h
+                         : children[i].child->style.height > 0
+                               ? children[i].child->style.height
+                               : 0;
+    }
+    float expandedHeight = 0;
+    float collapsedHeight = ToastStackGeometry(
+        heights, count, motion.collapsedPeek, motion.expandedGap, bottom,
+        collapsed, expandedOffsets, &expandedHeight);
+    Spring geometry = SpringNew((float)motion.durationMs);
+    geometry.epsilon = 0.1f;
+    Spring fade = SpringNew((float)motion.durationMs);
+    float stackHeight = SpringValue(
+        cx, MotionId(id, StrL("height")),
+        expanded ? expandedHeight : collapsedHeight, geometry);
+
+    El* root = Div(arena)
+                   ->Id(id)
+                   ->H(stackHeight)
+                   ->BoundsOut(&state->bounds)
+                   ->Refine(style, styleFields);
+    if (hasFocus) {
+        root->TrackFocus(focus);
+    }
+    float stackWidth = state->bounds.w;
+    int visibleLayers = motion.collapsedVisible > 0
+                            ? motion.collapsedVisible
+                            : 1;
+    for (int i = 0; i < count; i++) {
+        const ToastStackItem& item = children[i];
+        int rank = count - 1 - i;
+        Str key = StrDup(arena, fmt("%u", item.key));
+        float offset = SpringValue(
+            cx, MotionId(key, StrL("offset")),
+            expanded ? expandedOffsets[i] : collapsed[i], geometry);
+        int visibleRank = rank < visibleLayers ? rank : visibleLayers - 1;
+        float targetInset = expanded
+                                ? 0.f
+                                : stackWidth * motion.collapsedScaleStep *
+                                      (float)visibleRank / 2.f;
+        float inset = SpringValue(cx, MotionId(key, StrL("inset")),
+                                  targetInset, geometry);
+        float opacity = SpringValue(
+            cx, MotionId(key, StrL("visibility")),
+            (expanded || rank < visibleLayers) ? 1.f : 0.f, fade);
+        if (opacity <= 0.001f) {
+            continue;
+        }
+        ToastMeasurement* measured =
+            ToastStackMeasurement(state, item.key, true);
+        El* layer = Div(arena)
+                        ->Id(item.id)
+                        ->Absolute()
+                        ->Top(offset)
+                        ->Left(inset)
+                        ->Right(inset)
+                        ->Opacity(opacity)
+                        ->Child(item.child);
+        if (measured) {
+            layer->BoundsOut(&measured->bounds);
+        }
+        root->Child(layer);
+    }
+    return root;
+}
+
+Toast* Toast::New(Ctx* cx, Str id) {
+    Toast* out = ArenaNew<Toast>(cx->a);
+    out->root = Div(cx->a)->Id(id)->Role(AccessibilityRole::Alert);
+    return out;
+}
+
+Toast* Toast::TransitionStatus(ToastTransitionStatus value) {
+    transitionStatus = value;
+    return this;
+}
+
+ToastTransitionStatus Toast::Status() const {
+    return transitionStatus;
+}
+
+Toast* Toast::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+
+Toast* Toast::Refine(const Style& value, uint32_t fields) {
+    root->Refine(value, fields);
+    return this;
+}
+
+El* Toast::IntoEl() {
+    return root;
 }
 } // namespace gpui

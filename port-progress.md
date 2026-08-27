@@ -8188,3 +8188,40 @@ Base tooltip is full: the audit moves to 104 full, 17 partial, 8 adapters and
 errors. MSVC debug/release, clang-cl release and MSVC ASan pass 20,232 checks;
 wasm passes its 19,527 applicable checks. The release story gallery compiles
 unchanged.
+
+## Base toast restores manager, motion and stack contracts
+
+The first toast port had the correct Starting/Present/Ending clock and stack
+geometry, but collapsed the source manager into free functions over the
+notification list's state. `ToastMotion`, `ToastOptions`, `ToastManager`, the
+advance result and the reusable measured `ToastStack` element were absent;
+the semantic `Toast` also exposed no transition status.
+
+Base now has the exact `ToastTransitionStatus` vocabulary and source motion
+tokens, including Sonner's 400/200 ms phases, 14-pixel peek/gap, five-percent
+width step and three visible collapsed layers. `ToastManager<I, T>` is the
+no-STL generic manager: it retains per-entry clocks, replaces duplicate ids as
+the newest item, reports presented/ending/removed boundaries, pauses only
+present-time timeouts, keeps ending entries in limited visible projections,
+dismisses one or all, and transfers removed values to the caller. Its ids and
+values follow the repository's persistent-`Vec` rule and must be POD; integer
+milliseconds replace `Instant`/`Duration` without changing clock semantics.
+
+`ToastStack` is now a frame builder over persistent `ToastStackState`. Stable
+item ids retain measured heights, stale measurements are swept, the stack
+samples its retained bounds for hover and its focus handle for focus, and all
+height/offset/inset/visibility changes use the restored critically damped
+spring implementation. Top and bottom anchors share the source geometry,
+collapsed layers shrink symmetrically, and caller style refinement remains on
+the stack root. The notification renderer retains its grouped multi-anchor
+specialization but now passes each manager phase into the semantic Toast root;
+its earlier free-function lifecycle remains as an explicit compatibility path.
+
+Tests cover manager boundaries and payloads, paused timeouts, duplicate
+replacement/order, visible limits with ending entries, dismiss-all, stable
+measurements, collapsed and expanded stack layout, spring targets and the
+alert/status root. Base toast is full: the audit moves to 105 full, 16 partial,
+8 adapters and 2 exclusions with 243 unresolved partial-module spellings and
+no full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
+20,265 checks; wasm passes its 19,560 applicable checks. The release story
+gallery compiles unchanged.

@@ -636,7 +636,7 @@ void NotificationClear(NotificationListState* s, Ctx* cx) {
 static bool NotificationAdvanceImpl(NotificationListState* s, Ctx* cx,
                                     int deltaMs) {
     bool paused = s->IsExpanded() || (cx && !WindowIsActive(cx));
-    bool changed = ToastAdvance(&s->stack, deltaMs, paused);
+    bool changed = ToastStackAdvance(&s->stack, deltaMs, paused);
     // ToastAdvance reports phase boundaries and removals. Notification also
     // paints progress within Starting/Ending, so those ticks repaint too.
     bool animating = false;
@@ -926,6 +926,8 @@ El* NotificationList::IntoEl() {
                 state, &NotificationListState::OnItemClick,
                 (intptr_t)item.id);
             El* card = gpui::Toast::New(cx, StrL("notification"))
+                           ->TransitionStatus(entry.status)
+                           ->IntoEl()
                            ->FlexRow()
                            ->Group()
                            ->W(kFill)
