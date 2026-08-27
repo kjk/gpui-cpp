@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_STEPPER_H_
+#define GPUI_SRC_UI_STEPPER_H_
 /* Themed stepper — crates/ui/src/stepper */
 
 #include "ui/sizing.h"
@@ -67,3 +69,4 @@ struct Stepper {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_STEPPER_H_

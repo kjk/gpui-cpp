@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_HISTORY_H_
+#define GPUI_BASE_HISTORY_H_
 /* Generic undo/redo history — crates/base/src/history.rs.
    (`crates/ui/src/history.rs` is a re-export of this one, not a second copy.)
 
@@ -158,3 +160,4 @@ struct History {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_HISTORY_H_

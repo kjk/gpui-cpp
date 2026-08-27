@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INPUT_KEYS_H_
+#define GPUI_BASE_INPUT_KEYS_H_
 /* The input's key bindings and the actions they name — the declarations for
    `input_keys.cpp`, which is `state.rs::init`. */
 
@@ -71,3 +73,4 @@ constexpr bool InputEnterShift(intptr_t arg) {
 }
 
 } // namespace gpui
+#endif // GPUI_BASE_INPUT_KEYS_H_

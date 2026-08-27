@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TAG_H_
+#define GPUI_SRC_UI_TAG_H_
 /* Themed tag — crates/ui/src/tag.rs */
 
 #include "ui/sizing.h"
@@ -46,3 +48,4 @@ struct Tag {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TAG_H_

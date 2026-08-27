@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_RADIO_H_
+#define GPUI_SRC_UI_RADIO_H_
 /* Themed radio — crates/ui/src/radio.rs */
 
 #include "ui/sizing.h"
@@ -62,3 +64,4 @@ struct RadioGroup {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_RADIO_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_HTML_H_
+#define GPUI_UI_HTML_H_
 /* HTML into the same block tree markdown produces —
    crates/ui/src/text/format/html.rs
 
@@ -74,3 +76,4 @@ Str HtmlAttrValue(Arena* a, Str attrs, const char* name);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_HTML_H_

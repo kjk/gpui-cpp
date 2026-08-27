@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_GPUI_H_
+#define GPUI_GPUI_GPUI_H_
 /* C++ GPUI subset used by system_monitor. Frame-rebuilt element tree. */
 
 #include "base.h"
@@ -5387,3 +5389,4 @@ bool AppIsMaximized(Window* win);
 // Global scope, so an example that says `using namespace gpui;` can define it
 // without qualifying the name.
 int GpuiMain(int argc, char** argv);
+#endif // GPUI_GPUI_GPUI_H_

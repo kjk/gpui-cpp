@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_ACTIONS_H_
+#define GPUI_BASE_ACTIONS_H_
 /* The actions every keyboard-driven control shares —
    crates/base/src/actions.rs.
 
@@ -57,3 +59,4 @@ void CancelBindKeys(Ctx* cx, El* root, const char* context, Str name,
                     Listener onCancel);
 
 } // namespace gpui
+#endif // GPUI_BASE_ACTIONS_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DATE_PICKER_H_
+#define GPUI_BASE_DATE_PICKER_H_
 /* Unstyled date picker — crates/base/src/date_picker.rs */
 
 #include "base/calendar.h"
@@ -70,3 +72,4 @@ struct DatePicker {
                    bool open = false, Listener onOpenChange = {});
 };
 } // namespace gpui
+#endif // GPUI_BASE_DATE_PICKER_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_NOTIFICATION_H_
+#define GPUI_UI_NOTIFICATION_H_
 /* Themed notification — crates/ui/src/notification.rs */
 
 #include "ui/sizing.h"
@@ -259,3 +261,4 @@ struct NotificationList {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_NOTIFICATION_H_

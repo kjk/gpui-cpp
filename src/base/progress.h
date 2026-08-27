@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_PROGRESS_H_
+#define GPUI_BASE_PROGRESS_H_
 /* Unstyled progress — crates/base/src/progress.rs */
 
 #include "gpui/gpui.h"
@@ -25,3 +27,4 @@ struct ProgressIndicator {
     static El* New(Ctx* cx);
 };
 } // namespace gpui
+#endif // GPUI_BASE_PROGRESS_H_

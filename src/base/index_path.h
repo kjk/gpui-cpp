@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INDEX_PATH_H_
+#define GPUI_BASE_INDEX_PATH_H_
 /* IndexPath — crates/base/src/index_path.rs
 
    How Rust addresses a row of a sectioned list: the section, the row inside
@@ -51,3 +53,4 @@ Str IndexPathIdStr(Arena* a, IndexPath p);
 uint32_t IndexPathClickId(IndexPath p);
 
 } // namespace gpui
+#endif // GPUI_BASE_INDEX_PATH_H_

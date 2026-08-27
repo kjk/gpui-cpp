@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_GROUP_BOX_H_
+#define GPUI_UI_GROUP_BOX_H_
 /* Themed group box — crates/ui/src/group_box.rs */
 
 #include "ui/sizing.h"
@@ -72,3 +74,4 @@ struct GroupBox {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_GROUP_BOX_H_

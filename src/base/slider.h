@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_SLIDER_H_
+#define GPUI_BASE_SLIDER_H_
 /* Unstyled slider — crates/base/src/slider.rs */
 
 #include "gpui/gpui.h"
@@ -24,3 +26,4 @@ struct SliderThumb {
     static El* New(Ctx* cx);
 };
 } // namespace gpui
+#endif // GPUI_BASE_SLIDER_H_

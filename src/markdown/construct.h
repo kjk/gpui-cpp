@@ -1,3 +1,5 @@
+#ifndef GPUI_MARKDOWN_CONSTRUCT_H_
+#define GPUI_MARKDOWN_CONSTRUCT_H_
 /* src/construct/ — every state function, and the resolvers that run after.
 
    Part of the C++ port of markdown-rs 1.0.0 (see src/markdown/readme.md).
@@ -392,4 +394,5 @@ bool TextResolve(Tokenizer* t, Subresult* out);
 
 } // namespace markdown
 
+#endif // GPUI_MARKDOWN_CONSTRUCT_H_
 #endif // GPUI_MARKDOWN_CONSTRUCT_H_

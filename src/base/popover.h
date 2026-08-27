@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_POPOVER_H_
+#define GPUI_BASE_POPOVER_H_
 /* Unstyled popover — crates/base/src/popover.rs */
 
 #include "gpui/gpui.h"
@@ -95,3 +97,4 @@ struct Popover {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_POPOVER_H_

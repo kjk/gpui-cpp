@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SPINNER_H_
+#define GPUI_SRC_UI_SPINNER_H_
 /* Themed spinner — crates/ui/src/spinner.rs */
 
 #include "ui/sizing.h"
@@ -36,3 +38,4 @@ struct Spinner {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SPINNER_H_

@@ -133,6 +133,11 @@ function guardFor(plats: Platform[]): string {
 const quotedIncRe = /^\s*#\s*include\s+"([^"]+)"/;
 const angleIncRe = /^\s*#\s*include\s+<([^>]+)>/;
 const pragmaOnceRe = /^\s*#\s*pragma\s+once\b/;
+// Source headers use conventional `*_H_` include guards so they can also be
+// compiled as separate translation units. The amalgam has one outer guard;
+// leave these wrapper directives out of each lifted header while preserving
+// the source line count for .work diagnostics.
+const headerGuardRe = /^\s*#\s*(?:ifndef\s+\w+_H_|define\s+\w+_H_|endif\s*\/\/\s*\w+_H_)\s*$/;
 const staticDeclRe = /^static\b[^=\n{]*?\b([A-Za-z_]\w*)\s*(?=\(|\[|=|;)/gm;
 
 function walkFiles(dir: string, ext: string, out: string[]): void {
@@ -246,7 +251,7 @@ function stripInternalIncludes(fromRel: string, text: string): string {
   const lines = text.split("\n");
   const keep: string[] = [];
   for (const line of lines) {
-    if (pragmaOnceRe.test(line)) {
+    if (pragmaOnceRe.test(line) || headerGuardRe.test(line)) {
       keep.push("");
       continue;
     }

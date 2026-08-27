@@ -1,3 +1,5 @@
+#ifndef GPUI_SYS_HTTP_H_
+#define GPUI_SYS_HTTP_H_
 /* A GET, and the OS's own library to make it with.
 
    This is the whole of the network in this tree: fetch the bytes at an
@@ -89,3 +91,4 @@ void HttpSetEnabled(bool on);
 bool HttpEnabled();
 
 } // namespace gpui
+#endif // GPUI_SYS_HTTP_H_

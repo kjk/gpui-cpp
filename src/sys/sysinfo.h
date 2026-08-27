@@ -1,3 +1,5 @@
+#ifndef GPUI_SYS_SYSINFO_H_
+#define GPUI_SYS_SYSINFO_H_
 
 #include "base.h"
 
@@ -69,3 +71,4 @@ void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
 TempStr FormatBytes(uint64_t bytes);
 TempStr FormatPct(float v, int decimals);
 } // namespace gpui
+#endif // GPUI_SYS_SYSINFO_H_

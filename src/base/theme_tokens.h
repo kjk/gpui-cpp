@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_THEME_TOKENS_H_
+#define GPUI_BASE_THEME_TOKENS_H_
 /* Semantic design tokens — crates/base/src/theme_tokens.rs
  *
  * Visual roles and scales, named without component vocabulary. The themed
@@ -110,3 +112,4 @@ const BoxShadow* ShadowFirst(const Vec<BoxShadow>& level);
 BoxShadow* ShadowFirst(Vec<BoxShadow>& level);
 
 } // namespace gpui
+#endif // GPUI_BASE_THEME_TOKENS_H_

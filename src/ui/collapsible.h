@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_COLLAPSIBLE_H_
+#define GPUI_UI_COLLAPSIBLE_H_
 /* Themed collapsible — crates/ui/src/collapsible.rs */
 
 #include "ui/sizing.h"
@@ -28,3 +30,4 @@ struct Collapsible {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_COLLAPSIBLE_H_

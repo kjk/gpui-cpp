@@ -1,3 +1,5 @@
+#ifndef GPUI_FPS_FPS_H_
+#define GPUI_FPS_FPS_H_
 /* Realtime performance HUD — crates/fps (the `gpui-fps` crate).
  *
  * Frames per second, a rolling frame time chart, and this process' CPU and
@@ -159,3 +161,4 @@ El* FpsOverlayEl(Ctx* cx, Entity<FpsMonitor> monitor, FpsAnchor anchor);
 El* FpsMonitorEl(Ctx* cx);
 
 } // namespace gpui
+#endif // GPUI_FPS_FPS_H_

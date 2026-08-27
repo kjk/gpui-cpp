@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TREE_H_
+#define GPUI_BASE_TREE_H_
 /* Unstyled tree — crates/base/src/tree.rs */
 
 #include "gpui/gpui.h"
@@ -204,3 +206,4 @@ struct TreeItemEl {
     static El* New(Ctx* cx, Str id = {}, Listener onClick = {});
 };
 } // namespace gpui
+#endif // GPUI_BASE_TREE_H_

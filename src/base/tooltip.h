@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TOOLTIP_H_
+#define GPUI_BASE_TOOLTIP_H_
 /* Unstyled tooltip popup — crates/base/src/tooltip.rs
  *
  * Tooltip is the popup surface. TooltipOverlay is the per-window lifecycle:
@@ -106,3 +108,4 @@ void TooltipHide(Window* win);
 const TooltipOverlay* TooltipShowing(Window* win);
 
 } // namespace gpui
+#endif // GPUI_BASE_TOOLTIP_H_

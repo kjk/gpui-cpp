@@ -1,3 +1,5 @@
+#ifndef GPUI_SYS_NOTIFY_H_
+#define GPUI_SYS_NOTIFY_H_
 /* The OS notification center — the platform half of gpui's SystemNotification.
 
    crates/ui/src/notification.rs bridges a notification to the system's own
@@ -61,3 +63,4 @@ void SysNotifyOnResponse(SysNotifyResponseFn fn);
 void SysNotifyShutdown();
 
 } // namespace gpui
+#endif // GPUI_SYS_NOTIFY_H_

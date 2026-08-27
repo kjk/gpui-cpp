@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_HIGHLIGHTER_H_
+#define GPUI_UI_HIGHLIGHTER_H_
 /* Themed highlighter façade — crates/ui/src/highlighter
    Syntax highlighting uses the simple keyword path from the showcase editor. */
 
@@ -63,3 +65,4 @@ struct Highlighter {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_HIGHLIGHTER_H_

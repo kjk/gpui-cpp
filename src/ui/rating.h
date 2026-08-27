@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_RATING_H_
+#define GPUI_SRC_UI_RATING_H_
 /* Themed rating — crates/ui/src/rating.rs */
 
 #include "ui/sizing.h"
@@ -49,3 +51,4 @@ struct Rating {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_RATING_H_

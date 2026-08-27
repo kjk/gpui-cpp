@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_CHECKBOX_H_
+#define GPUI_UI_CHECKBOX_H_
 /* Themed checkbox — crates/ui/src/checkbox.rs */
 
 #include "ui/sizing.h"
@@ -46,3 +48,4 @@ struct Checkbox {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_CHECKBOX_H_

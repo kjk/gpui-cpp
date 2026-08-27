@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INPUT_ROPE_H_
+#define GPUI_BASE_INPUT_ROPE_H_
 /* Flat-text counterpart of crates/base/src/input/base/rope_ext.rs. */
 
 #include "gpui/gpui.h"
@@ -51,3 +53,4 @@ struct RopeExt {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_INPUT_ROPE_H_

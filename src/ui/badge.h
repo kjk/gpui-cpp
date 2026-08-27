@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_BADGE_H_
+#define GPUI_UI_BADGE_H_
 /* Themed badge — crates/ui/src/badge.rs */
 
 #include "ui/sizing.h"
@@ -37,3 +39,4 @@ struct Badge {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_BADGE_H_

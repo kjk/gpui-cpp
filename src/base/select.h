@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_SELECT_H_
+#define GPUI_BASE_SELECT_H_
 /* Unstyled select — crates/base/src/select.rs */
 
 #include "gpui/gpui.h"
@@ -41,3 +43,4 @@ struct Select {
                    Listener onOpenChange = {});
 };
 } // namespace gpui
+#endif // GPUI_BASE_SELECT_H_

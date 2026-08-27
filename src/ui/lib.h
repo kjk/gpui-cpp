@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_LIB_H_
+#define GPUI_UI_LIB_H_
 /* Themed gpui-component façade — crates/ui/src */
 
 #include "ui/accordion.h"
@@ -81,3 +83,4 @@ void Init(App* app);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_LIB_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_THEME_H_
+#define GPUI_SRC_UI_THEME_H_
 /* The theme registry — crates/ui/src/theme/{registry.rs, schema.rs, color.rs}
 
    Upstream's palette is data, not code: `default-theme.json` names sixty-odd
@@ -784,3 +786,4 @@ void ThemeRegistryReset(App* app);
 void ThemeRegistryFree(App* app);
 
 } // namespace gpui
+#endif // GPUI_SRC_UI_THEME_H_

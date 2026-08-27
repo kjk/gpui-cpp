@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TILES_H_
+#define GPUI_SRC_UI_TILES_H_
 /* Themed tiles — crates/ui/src/dock/tiles.rs
 
    Tiles renders a TilesState: every tile is a floating panel with a drag bar
@@ -54,3 +56,4 @@ struct Tiles {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TILES_H_

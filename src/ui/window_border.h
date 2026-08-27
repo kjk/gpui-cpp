@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_WINDOW_BORDER_H_
+#define GPUI_SRC_UI_WINDOW_BORDER_H_
 /* Window border — crates/ui/src/window_border.rs
 
    A client-decorated window draws its own frame: a band of shadow padding
@@ -80,3 +82,4 @@ struct WindowBorder {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_WINDOW_BORDER_H_

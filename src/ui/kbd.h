@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_KBD_H_
+#define GPUI_UI_KBD_H_
 /* Themed kbd — crates/ui/src/kbd.rs */
 
 #include "ui/sizing.h"
@@ -59,3 +61,4 @@ struct Kbd {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_KBD_H_

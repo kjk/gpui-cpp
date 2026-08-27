@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INPUT_LSP_H_
+#define GPUI_BASE_INPUT_LSP_H_
 /* Source-shaped LSP contracts from crates/base/src/input/editor/lsp.
 
    Rust's providers return Task<Result<T>>. Async tasks are outside this
@@ -158,3 +160,4 @@ struct Lsp {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_INPUT_LSP_H_

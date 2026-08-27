@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TOGGLE_GROUP_H_
+#define GPUI_BASE_TOGGLE_GROUP_H_
 /* Unstyled toggle group — crates/base/src/toggle_group.rs */
 
 #include "gpui/gpui.h"
@@ -12,3 +14,4 @@ struct ToggleGroup {
     static El* New(Ctx* cx, Str id, Axis axis = Axis::Horizontal);
 };
 } // namespace gpui
+#endif // GPUI_BASE_TOGGLE_GROUP_H_

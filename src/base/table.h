@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TABLE_H_
+#define GPUI_BASE_TABLE_H_
 /* Unstyled table — crates/base/src/table.rs */
 
 #include "gpui/gpui.h"
@@ -36,3 +38,4 @@ struct TableCaption {
     static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui
+#endif // GPUI_BASE_TABLE_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_ICON_H_
+#define GPUI_UI_ICON_H_
 /* Themed icon wrapper — crates/ui/src/icon.rs */
 
 #include "ui/sizing.h"
@@ -41,3 +43,4 @@ struct Icon {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_ICON_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_LIB_H_
+#define GPUI_BASE_LIB_H_
 /* gpui-base unstyled primitives. Visuals belong to the caller (showcase /
  * theme). */
 
@@ -75,3 +77,4 @@ namespace gpui {
 void BaseInit(App* app);
 
 } // namespace gpui
+#endif // GPUI_BASE_LIB_H_

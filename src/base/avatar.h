@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_AVATAR_H_
+#define GPUI_BASE_AVATAR_H_
 /* Unstyled avatar — crates/base/src/avatar.rs */
 
 #include "gpui/gpui.h"
@@ -26,3 +28,4 @@ struct AvatarFallback {
     static El* New(Ctx* cx);
 };
 } // namespace gpui
+#endif // GPUI_BASE_AVATAR_H_

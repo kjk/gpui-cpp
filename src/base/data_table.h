@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DATA_TABLE_H_
+#define GPUI_BASE_DATA_TABLE_H_
 /* Unstyled data table — crates/ui/src/table/state.rs + table/data_table.rs */
 
 #include "gpui/gpui.h"
@@ -369,3 +371,4 @@ void TableOnAction(TableState* self, Ctx* cx, const ActionEvent* ev);
 void TableBindKeys(Ctx* cx, El* root, Entity<TableState> state);
 
 } // namespace gpui
+#endif // GPUI_BASE_DATA_TABLE_H_

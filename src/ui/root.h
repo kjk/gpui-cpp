@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_ROOT_H_
+#define GPUI_SRC_UI_ROOT_H_
 /* Themed Root — crates/ui/src/root.rs
 
    Root is the window's outermost view: the page, and over it the layers the
@@ -69,3 +71,4 @@ struct Root {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_ROOT_H_

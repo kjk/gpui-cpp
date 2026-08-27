@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SIZING_H_
+#define GPUI_SRC_UI_SIZING_H_
 /* Shared types for the themed gpui-component façade
    crates/ui/src/sizing.rs */
 
@@ -414,3 +416,4 @@ inline El* BindPathClick(El* e, Str name, Listener onClick) {
 }
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SIZING_H_

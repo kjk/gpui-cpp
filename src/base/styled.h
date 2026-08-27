@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_STYLED_H_
+#define GPUI_BASE_STYLED_H_
 /* StyledExt — crates/base/src/styled.rs
 
    Fluent style methods are El methods here. These two constructors are the
@@ -225,3 +227,4 @@ inline const char* const* StyledExtReflectionMethods(int* count) {
 }
 
 } // namespace gpui
+#endif // GPUI_BASE_STYLED_H_

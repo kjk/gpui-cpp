@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_LABEL_H_
+#define GPUI_UI_LABEL_H_
 /* Themed label — crates/ui/src/label.rs */
 
 #include "ui/sizing.h"
@@ -58,3 +60,4 @@ struct Label {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_LABEL_H_

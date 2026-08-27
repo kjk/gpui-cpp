@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_ALERT_H_
+#define GPUI_UI_ALERT_H_
 /* Themed alert — crates/ui/src/alert.rs */
 
 #include "ui/sizing.h"
@@ -53,3 +55,4 @@ struct Alert {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_ALERT_H_

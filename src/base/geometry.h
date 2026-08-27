@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_GEOMETRY_H_
+#define GPUI_BASE_GEOMETRY_H_
 /* Placement, Side and the axis helper — crates/base/src/geometry.rs
  *
  * The small geometry vocabulary the base layer adds to gpui's own. Rust
@@ -61,3 +63,4 @@ inline Edges EdgesAll(float value) {
 }
 
 } // namespace gpui
+#endif // GPUI_BASE_GEOMETRY_H_

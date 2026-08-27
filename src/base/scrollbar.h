@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_SCROLLBAR_H_
+#define GPUI_BASE_SCROLLBAR_H_
 /* Unstyled scrollbar — crates/base/src/scrollbar.rs */
 
 #include "gpui/gpui.h"
@@ -293,3 +295,4 @@ struct Scrollbar {
                         ScrollbarMode mode);
 };
 } // namespace gpui
+#endif // GPUI_BASE_SCROLLBAR_H_

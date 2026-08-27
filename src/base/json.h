@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_JSON_H_
+#define GPUI_BASE_JSON_H_
 /* A small JSON reader and writer.
 
    Rust reaches for serde_json to persist a dock layout; this is the part of
@@ -71,3 +73,4 @@ struct JsonWriter {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_JSON_H_

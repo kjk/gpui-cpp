@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TEXT_SELECTION_H_
+#define GPUI_BASE_TEXT_SELECTION_H_
 /* Unstyled selectable text host — crates/base/src/text_selection.rs */
 
 #include "gpui/gpui.h"
@@ -318,3 +320,4 @@ void WindowSelectionApply(Window* win);
 // Sweeps participant registrations not renewed while this frame rendered.
 void WindowSelectionFinishFrame(Window* win);
 } // namespace gpui
+#endif // GPUI_BASE_TEXT_SELECTION_H_

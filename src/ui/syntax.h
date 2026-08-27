@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SYNTAX_H_
+#define GPUI_SRC_UI_SYNTAX_H_
 /* Code-block highlighting without a grammar — crates/ui/src/highlighter
 
    Rust parses the fence's language with tree-sitter, runs the language's
@@ -82,3 +84,4 @@ Rgba SyntaxTokColor(SyntaxTok tok, ThemeMode mode, Rgba fallback);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SYNTAX_H_

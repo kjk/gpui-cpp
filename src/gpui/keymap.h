@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_KEYMAP_H_
+#define GPUI_GPUI_KEYMAP_H_
 /* Actions and the keymap — crates/gpui's `actions!`, `KeyBinding`,
    `key_context` and `on_action`, which gpui-component builds every component's
    keyboard on.
@@ -178,3 +180,4 @@ bool KeymapPending();
 void KeymapClearPending();
 
 } // namespace gpui
+#endif // GPUI_GPUI_KEYMAP_H_

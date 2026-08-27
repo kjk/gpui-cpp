@@ -1,3 +1,5 @@
+#ifndef GPUI_TAFFY_STYLE_H_
+#define GPUI_TAFFY_STYLE_H_
 /* A typed representation of the CSS style properties layout reads —
  * taffy/src/style/{compact_length,dimension,available_space,alignment,block,
  * flex,float,grid,mod}.rs, folded into one header the way `mod style` folds
@@ -1463,4 +1465,5 @@ inline bool operator==(const GridTemplateComponent& a,
 
 } // namespace taffy
 
+#endif // GPUI_TAFFY_STYLE_H_
 #endif // GPUI_TAFFY_STYLE_H_

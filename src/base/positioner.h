@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_POSITIONER_H_
+#define GPUI_BASE_POSITIONER_H_
 /* Popup positioning — crates/base/src/positioner.rs
  *
  * Every anchored surface resolves its position here, so flipping, alignment
@@ -82,3 +84,4 @@ ResolvedPosition PositionCorner(Anchor anchor, Point at, Size popup,
                                 Size view, float margin);
 
 } // namespace gpui
+#endif // GPUI_BASE_POSITIONER_H_

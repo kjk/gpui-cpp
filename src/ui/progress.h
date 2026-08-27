@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_PROGRESS_H_
+#define GPUI_SRC_UI_PROGRESS_H_
 /* Themed progress — crates/ui/src/progress */
 
 #include "ui/sizing.h"
@@ -52,3 +54,4 @@ struct ProgressCircle {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_PROGRESS_H_

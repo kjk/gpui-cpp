@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_FOCUS_TRAP_H_
+#define GPUI_BASE_FOCUS_TRAP_H_
 /* Focus trap — crates/base/src/focus_trap.rs
 
    A container that keeps Tab inside it: a dialog, a sheet, an alert. Rust
@@ -66,3 +68,4 @@ void FocusTrapArm(Window* win, int trapId, int hostFocusId = 0);
 void FocusTrapApplyPending(Window* win);
 
 } // namespace gpui
+#endif // GPUI_BASE_FOCUS_TRAP_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_PLATFORM_H_
+#define GPUI_GPUI_PLATFORM_H_
 /* The seam between the portable window logic (WindowCommon.cpp) and the OS
    window (Window_win.cpp / Window_linux.cpp).
 
@@ -224,3 +226,4 @@ void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n);
 void AppMenuChosen(int id);
 
 } // namespace gpui
+#endif // GPUI_GPUI_PLATFORM_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SWITCH_H_
+#define GPUI_SRC_UI_SWITCH_H_
 /* Themed switch — crates/ui/src/switch.rs */
 
 #include "ui/sizing.h"
@@ -30,3 +32,4 @@ struct Switch {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SWITCH_H_

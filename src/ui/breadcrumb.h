@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_BREADCRUMB_H_
+#define GPUI_UI_BREADCRUMB_H_
 /* Themed breadcrumb — crates/ui/src/breadcrumb.rs */
 
 #include "ui/sizing.h"
@@ -40,3 +42,4 @@ struct Breadcrumb {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_BREADCRUMB_H_

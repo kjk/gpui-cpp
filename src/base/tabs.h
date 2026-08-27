@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TABS_H_
+#define GPUI_BASE_TABS_H_
 /* Unstyled tabs — crates/base/src/tabs.rs */
 
 #include "base/state_style.h"
@@ -33,3 +35,4 @@ struct Tab {
                    const StateStyle* instance = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_TABS_H_

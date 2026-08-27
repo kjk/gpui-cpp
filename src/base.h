@@ -1,3 +1,5 @@
+#ifndef BASE_H_
+#define BASE_H_
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
@@ -1533,3 +1535,4 @@ inline void logf(const char* format, const TArgs&... args) {
     log(FormatTemp(format, args...));
 }
 } // namespace base
+#endif // BASE_H_

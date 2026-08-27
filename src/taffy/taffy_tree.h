@@ -1,3 +1,5 @@
+#ifndef GPUI_TAFFY_TAFFY_TREE_H_
+#define GPUI_TAFFY_TAFFY_TREE_H_
 /* TaffyTree — the tree that owns the nodes, and the entry point to the
  * high-level API. taffy/src/tree/taffy_tree.rs plus the traits in
  * taffy/src/tree/traits.rs.
@@ -197,4 +199,5 @@ struct TaffyTree {
 
 } // namespace taffy
 
+#endif // GPUI_TAFFY_TAFFY_TREE_H_
 #endif // GPUI_TAFFY_TAFFY_TREE_H_

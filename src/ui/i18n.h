@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_I18N_H_
+#define GPUI_UI_I18N_H_
 /* The strings a component shows, in the language the application asked for —
    `rust_i18n` and the `crates/ui/locales/ui.yml` catalogue behind it.
 
@@ -55,3 +57,4 @@ const LocaleRow* LocaleRowAt(int i);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_I18N_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_MARKDOWN_MARKDOWN_H_
+#define GPUI_MARKDOWN_MARKDOWN_H_
 /* src/lib.rs + src/configuration.rs — the public API of the `markdown` crate.
 
    `src/markdown/` is a C++ port of markdown-rs 1.0.0, the CommonMark + GFM
@@ -79,4 +81,5 @@ Str DecodeNumeric(Arena* a, Str value, int radix);
 
 } // namespace markdown
 
+#endif // GPUI_MARKDOWN_MARKDOWN_H_
 #endif // GPUI_MARKDOWN_MARKDOWN_H_

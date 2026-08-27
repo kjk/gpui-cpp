@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_POPUP_MENU_H_
+#define GPUI_BASE_POPUP_MENU_H_
 /* Unstyled popup menu — crates/ui/src/menu/popup_menu.rs */
 
 #include "gpui/gpui.h"
@@ -156,3 +158,4 @@ void PopupMenuAddRow(PopupMenuState* s, const PopupMenuRow& row);
 void PopupMenuConfirm(PopupMenuState* s, Ctx* cx, int ix);
 
 } // namespace gpui
+#endif // GPUI_BASE_POPUP_MENU_H_

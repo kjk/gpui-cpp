@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_STATE_STYLE_H_
+#define GPUI_BASE_STATE_STYLE_H_
 /* Semantic-state styles — crates/base/src/state_style.rs
 
    A control looks one way, and then differently when it is selected, pressed,
@@ -80,3 +82,4 @@ StateStyle StateStyleResolve(const StateStyle& instance,
 El* ElRefine(El* e, const StateStyle& s);
 
 } // namespace gpui
+#endif // GPUI_BASE_STATE_STYLE_H_

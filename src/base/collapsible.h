@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_COLLAPSIBLE_H_
+#define GPUI_BASE_COLLAPSIBLE_H_
 /* Unstyled collapsible — crates/base/src/collapsible.rs */
 
 #include "gpui/gpui.h"
@@ -22,3 +24,4 @@ struct Collapsible {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_COLLAPSIBLE_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_LINK_H_
+#define GPUI_UI_LINK_H_
 /* Themed link — crates/ui/src/link.rs */
 
 #include "ui/sizing.h"
@@ -25,3 +27,4 @@ struct Link {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_LINK_H_

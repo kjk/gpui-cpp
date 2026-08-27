@@ -231,10 +231,12 @@ export type BuildFlags = {
   /** Build for the browser instead of for this host. */
   wasm: boolean;
   clean: boolean;
+  /** Compile the library's individual source files instead of gpui.cpp. */
+  nonAmalgam: boolean;
 };
 
 export function defaultBuildFlags(): BuildFlags {
-  return { sawRel: false, sawDbg: false, debug: false, asan: false, clang: false, wasm: false, clean: false };
+  return { sawRel: false, sawDbg: false, debug: false, asan: false, clang: false, wasm: false, clean: false, nonAmalgam: false };
 }
 
 /**
@@ -310,6 +312,9 @@ export function outDirName(plat: Platform, f: BuildFlags): string {
   if (plat === "win" && f.clang) {
     name += "_clang";
   }
+  if (f.nonAmalgam) {
+    name += "_nonamalgam";
+  }
   // Only in this repo, where a plain build is the .work/ pair and a
   // GPUI_AMALGAM_DIR build is a published one: two amalgams, two out/ trees.
   // In gpui-cpp-dist every build is the published pair, so out/rel is out/rel.
@@ -361,7 +366,39 @@ function cppDir(rel: string): string[] {
     .sort();
 }
 
-function sourcesFor(name: string): string[] | null {
+function sourcePlatform(rel: string, plat: Platform): boolean {
+  if (/_win\.cpp$/.test(rel)) return plat === "win";
+  if (/_linux\.cpp$/.test(rel)) return plat === "linux";
+  if (/_mac\.cpp$/.test(rel)) return plat === "mac";
+  if (/_wasm\.cpp$/.test(rel)) return plat === "wasm";
+  if (/_mem_posix\.cpp$/.test(rel)) return plat === "linux" || plat === "mac";
+  if (/_posix\.cpp$/.test(rel)) return plat === "linux" || plat === "mac" || plat === "wasm";
+  return true;
+}
+
+function allCppDir(rel: string): string[] {
+  const dir = join(root, rel);
+  if (!existsSync(dir)) return [];
+  const result: string[] = [];
+  for (const ent of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const child = `${rel}/${ent.name}`;
+    if (ent.isDirectory()) result.push(...allCppDir(child));
+    else if (ent.name.endsWith(".cpp")) result.push(child);
+  }
+  return result;
+}
+
+function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[] | null {
+  if (nonAmalgam) {
+    if (name !== "hello_world") return null;
+    // hello_world uses the runtime and platform layer directly. Keep this
+    // smoke build focused on those library translation units; the themed
+    // component .cpp files are separate optional modules and are not pulled
+    // in by the example.
+    return allCppDir("src").filter(
+      (f) => (f === "src/base.cpp" || f.startsWith("src/gpui/") || f.startsWith("src/sys/")) && sourcePlatform(f, plat),
+    );
+  }
   if (dirExamples.includes(name)) {
     return [...amalgamSrc(), ...cppDir(`examples/${name}`)];
   }
@@ -382,6 +419,9 @@ function objGroup(f: string): string {
   }
   if (f.startsWith(amalgamPath("gpui")) || f.startsWith("src/gpui/")) {
     return "gpui";
+  }
+  if (f.startsWith("src/")) {
+    return `src-${dirname(f).replaceAll("/", "-")}`;
   }
   if (f.startsWith("examples/showcase/")) {
     return "showcase";
@@ -920,6 +960,7 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
       "/utf-8",
       "/I",
       amalgamDir(),
+      ...(f.nonAmalgam ? ["/I", "src", "/I", "src/gpui"] : []),
       "/DUNICODE",
       "/D_UNICODE",
       "/W4",
@@ -965,6 +1006,7 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
     "-std=c++20",
     "-I",
     amalgamDir(),
+    ...(f.nonAmalgam ? ["-I", "src", "-I", "src/gpui"] : []),
     "-Wall",
     "-Wextra",
     "-Werror",
@@ -1119,7 +1161,7 @@ function copyAsanDll(tc: Toolchain, dir: string): void {
 
 function buildOne(name: string, tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): void {
   const started = performance.now();
-  const src = sourcesFor(name);
+  const src = sourcesFor(name, tc.plat, f.nonAmalgam);
   if (!src) {
     fail(`Unknown target: ${name}`);
   }
@@ -1326,7 +1368,9 @@ export async function build(req: BuildRequest): Promise<void> {
   const from = `run from ${root}`;
   console.log(Object.keys(tc.env).length > 0 ? `${from}, in a shell with the MSVC environment set` : from);
   console.log(`Using ${tc.exe}`);
-  await ensureAmalgam(fail);
+  if (!flags.nonAmalgam) {
+    await ensureAmalgam(fail);
+  }
   const dir = outDir(plat, flags);
   if (flags.clean) {
     const abs = join(root, dir);

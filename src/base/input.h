@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INPUT_H_
+#define GPUI_BASE_INPUT_H_
 /* Unstyled input / textarea / editor — crates/base/src/input.
 
    The state engine is InputState in Gpui.h; this is element.rs, the half that
@@ -98,3 +100,4 @@ struct Editor {
     static El* New(Ctx* cx, InputState* state, const InputEditorStyle& style);
 };
 } // namespace gpui
+#endif // GPUI_BASE_INPUT_H_

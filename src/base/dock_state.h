@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DOCK_STATE_H_
+#define GPUI_BASE_DOCK_STATE_H_
 /* The serialised dock layout — crates/ui/src/dock/state.rs
 
    A DockArea can be written out and read back: the centre item, the three
@@ -153,3 +155,4 @@ void TilesFromMetas(TilesState* s, const TileMeta* metas, const int* panels,
                     int n);
 
 } // namespace gpui
+#endif // GPUI_BASE_DOCK_STATE_H_

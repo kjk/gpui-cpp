@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_NOTIFICATION_SETTINGS_H_
+#define GPUI_UI_NOTIFICATION_SETTINGS_H_
 /* NotificationSettings and NotificationType — crates/ui/src/notification.rs.
 
    This is a leaf because Theme owns the settings and Notification consumes
@@ -34,3 +36,4 @@ struct NotificationSettings {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_NOTIFICATION_SETTINGS_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SHEET_H_
+#define GPUI_SRC_UI_SHEET_H_
 /* Themed sheet — crates/ui/src/sheet.rs */
 
 #include "ui/sizing.h"
@@ -62,3 +64,4 @@ struct Sheet {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SHEET_H_

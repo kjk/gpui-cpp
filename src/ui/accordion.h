@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_ACCORDION_H_
+#define GPUI_UI_ACCORDION_H_
 /* Themed accordion — crates/ui/src/accordion.rs */
 
 #include "ui/sizing.h"
@@ -63,3 +65,4 @@ struct Accordion {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_ACCORDION_H_

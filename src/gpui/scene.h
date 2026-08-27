@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_SCENE_H_
+#define GPUI_GPUI_SCENE_H_
 /* A scene between the element tree and Paint.h, the shape GPUI's own scene
    is: a frame's drawing collected as a flat list of primitives, each one
    carrying its own content mask and its layer, rather than issued to a
@@ -274,3 +276,4 @@ const SceneStats& Stats();
 //   would get its own of.
 
 } // namespace gpui
+#endif // GPUI_GPUI_SCENE_H_

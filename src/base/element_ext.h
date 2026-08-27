@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_ELEMENT_EXT_H_
+#define GPUI_BASE_ELEMENT_EXT_H_
 
 #include "gpui/gpui.h"
 
@@ -11,3 +13,4 @@ inline El* UiRoot(Arena* a, Str id, int clickId = 0) {
     return e;
 }
 } // namespace gpui
+#endif // GPUI_BASE_ELEMENT_EXT_H_

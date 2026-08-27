@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DOCK_LAYOUT_H_
+#define GPUI_BASE_DOCK_LAYOUT_H_
 /* Pure dock layout algebra — crates/base/src/dock/layout
 
    PaneTree is the retained, renderer-independent shape upstream introduced
@@ -177,3 +179,4 @@ struct DockLayout {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_DOCK_LAYOUT_H_

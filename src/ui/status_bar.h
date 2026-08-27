@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_STATUS_BAR_H_
+#define GPUI_SRC_UI_STATUS_BAR_H_
 /* Themed status bar — crates/ui/src/status_bar.rs */
 
 #include "ui/sizing.h"
@@ -32,3 +34,4 @@ struct StatusBar {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_STATUS_BAR_H_

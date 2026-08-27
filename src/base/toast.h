@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TOAST_H_
+#define GPUI_BASE_TOAST_H_
 /* Unstyled toast — crates/base/src/toast.rs */
 
 #include "base/motion.h"
@@ -337,3 +339,4 @@ struct Toast {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_TOAST_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_VIRTUAL_LIST_H_
+#define GPUI_BASE_VIRTUAL_LIST_H_
 /* Unstyled virtual list host — crates/base/src/virtual_list.rs */
 
 #include "gpui/gpui.h"
@@ -207,3 +209,4 @@ El* virtual_list(Ctx* cx, Str id, Axis axis, const VirtualListOpts& opts);
 El* v_virtual_list(Ctx* cx, Str id, const VirtualListOpts& opts);
 El* h_virtual_list(Ctx* cx, Str id, const VirtualListOpts& opts);
 } // namespace gpui
+#endif // GPUI_BASE_VIRTUAL_LIST_H_

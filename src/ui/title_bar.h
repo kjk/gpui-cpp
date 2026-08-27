@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TITLE_BAR_H_
+#define GPUI_SRC_UI_TITLE_BAR_H_
 /* Themed title bar — crates/ui/src/title_bar.rs */
 
 #include "ui/sizing.h"
@@ -29,3 +31,4 @@ struct TitleBar {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TITLE_BAR_H_

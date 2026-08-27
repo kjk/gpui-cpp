@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SEPARATOR_H_
+#define GPUI_SRC_UI_SEPARATOR_H_
 /* Themed separator — crates/ui/src/separator.rs */
 
 #include "ui/sizing.h"
@@ -30,3 +32,4 @@ struct Separator {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SEPARATOR_H_

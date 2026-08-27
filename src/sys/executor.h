@@ -1,3 +1,5 @@
+#ifndef GPUI_SYS_EXECUTOR_H_
+#define GPUI_SYS_EXECUTOR_H_
 /* The executor: work that runs somewhere other than here, and how it gets
    back.
 
@@ -129,3 +131,4 @@ bool ExecHasThreads();
 constexpr int kExecMaxWorkers = 8;
 
 } // namespace gpui
+#endif // GPUI_SYS_EXECUTOR_H_

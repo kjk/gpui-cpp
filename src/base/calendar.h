@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_CALENDAR_H_
+#define GPUI_BASE_CALENDAR_H_
 /* Unstyled calendar — crates/base/src/calendar.rs */
 
 #include "gpui/gpui.h"
@@ -284,3 +286,4 @@ struct CalendarItem {
     static El* New(Ctx* cx, Str id = {}, Listener onClick = {});
 };
 } // namespace gpui
+#endif // GPUI_BASE_CALENDAR_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_ACCORDION_H_
+#define GPUI_BASE_ACCORDION_H_
 /* Unstyled accordion — crates/base/src/accordion.rs */
 
 #include "gpui/gpui.h"
@@ -46,3 +48,4 @@ struct AccordionItem {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_ACCORDION_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SETTING_H_
+#define GPUI_SRC_UI_SETTING_H_
 /* Themed settings — crates/ui/src/setting
 
    Rust's Settings is a sidebar of pages, each page a list of groups, each
@@ -397,3 +399,4 @@ struct Settings {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SETTING_H_

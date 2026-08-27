@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_COLOR_PICKER_H_
+#define GPUI_UI_COLOR_PICKER_H_
 /* Themed color picker — crates/ui/src/color_picker.rs */
 
 #include "ui/sizing.h"
@@ -40,3 +42,4 @@ struct ColorPicker {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_COLOR_PICKER_H_

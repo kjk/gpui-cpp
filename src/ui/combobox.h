@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_COMBOBOX_H_
+#define GPUI_UI_COMBOBOX_H_
 /* Themed combobox — crates/ui/src/combobox.rs
 
    A ComboBox is a Select whose list is always searchable: the same
@@ -178,3 +180,4 @@ struct Combobox {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_COMBOBOX_H_

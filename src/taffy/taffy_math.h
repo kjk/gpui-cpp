@@ -1,3 +1,5 @@
+#ifndef GPUI_TAFFY_TAFFY_MATH_H_
+#define GPUI_TAFFY_TAFFY_MATH_H_
 /* Numerical helpers for values that may not be defined —
  * taffy/src/util/math.rs.
  *
@@ -165,3 +167,4 @@ constexpr SizeFOpt AsOptional(SizeF s) {
 } // namespace taffy
 
 #endif // GPUI_TAFFY_MATH_H_
+#endif // GPUI_TAFFY_TAFFY_MATH_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_MARKDOWN_STATE_H_
+#define GPUI_MARKDOWN_STATE_H_
 /* src/state.rs — the name of every state function, and what one returns.
 
    Part of the C++ port of markdown-rs 1.0.0 (see src/markdown/readme.md).
@@ -384,4 +386,5 @@ State Call(Tokenizer* tokenizer, StateName name);
 
 } // namespace markdown
 
+#endif // GPUI_MARKDOWN_STATE_H_
 #endif // GPUI_MARKDOWN_STATE_H_

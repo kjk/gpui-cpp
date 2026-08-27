@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_CLIPBOARD_H_
+#define GPUI_UI_CLIPBOARD_H_
 /* Themed clipboard — crates/ui/src/clipboard.rs */
 
 #include "ui/sizing.h"
@@ -49,3 +51,4 @@ struct Clipboard {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_CLIPBOARD_H_

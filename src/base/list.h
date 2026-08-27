@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_LIST_H_
+#define GPUI_BASE_LIST_H_
 /* Unstyled list — crates/ui/src/list/list.rs */
 
 #include "gpui/gpui.h"
@@ -270,3 +272,4 @@ void ListClickRow(ListState* s, Ctx* cx, int ix, bool secondary);
 void ListRightClickRow(ListState* s, Ctx* cx, int ix);
 
 } // namespace gpui
+#endif // GPUI_BASE_LIST_H_

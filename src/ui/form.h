@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_FORM_H_
+#define GPUI_UI_FORM_H_
 /* Themed form — crates/ui/src/form */
 
 #include "ui/sizing.h"
@@ -107,3 +109,4 @@ component::Field field(El* control = nullptr);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_FORM_H_

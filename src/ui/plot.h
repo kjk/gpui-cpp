@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_PLOT_H_
+#define GPUI_UI_PLOT_H_
 /* Plot helpers — crates/ui/src/plot
    The d3 scales Chart maps data through; AreaChart is the render entry.
 
@@ -538,3 +540,4 @@ struct Tooltip {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_PLOT_H_

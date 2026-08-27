@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_THEME_H_
+#define GPUI_BASE_THEME_H_
 /* Base Theme — crates/base/src/theme.rs
 
    This is the application-owned Base global Rust exposes: semantic tokens
@@ -67,3 +69,4 @@ const BaseTheme* BaseThemeGlobal(const App* app);
 void BaseThemeSet(App* app, const BaseTheme& theme);
 
 } // namespace gpui
+#endif // GPUI_BASE_THEME_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TAB_H_
+#define GPUI_SRC_UI_TAB_H_
 /* Themed tabs — crates/ui/src/tab
 
    Rust splits this in two: `Tab` is one tab and `TabBar` is the strip that
@@ -166,3 +168,4 @@ using Tabs = TabBar;
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TAB_H_

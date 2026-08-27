@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SLIDER_H_
+#define GPUI_SRC_UI_SLIDER_H_
 /* Themed slider — crates/ui/src/slider.rs */
 
 #include "ui/sizing.h"
@@ -51,3 +53,4 @@ struct Slider {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SLIDER_H_

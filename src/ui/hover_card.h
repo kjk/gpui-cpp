@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_HOVER_CARD_H_
+#define GPUI_UI_HOVER_CARD_H_
 /* Themed hover card — crates/ui/src/hover_card.rs */
 
 #include "ui/sizing.h"
@@ -45,3 +47,4 @@ struct HoverCard {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_HOVER_CARD_H_

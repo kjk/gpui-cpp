@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_CHART_H_
+#define GPUI_UI_CHART_H_
 /* Themed charts — crates/ui/src/chart */
 
 #include "ui/sizing.h"
@@ -357,3 +359,4 @@ void SankeyChartThroughput(const SankeyLink* links, int nLinks, double* out,
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_CHART_H_

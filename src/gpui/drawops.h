@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_DRAWOPS_H_
+#define GPUI_GPUI_DRAWOPS_H_
 #include "gpui/gpui.h"
 
 // A drawing as a byte array: a stream of ops, each a `u16` opcode followed by
@@ -133,3 +135,4 @@ struct DrawOpsBuilder {
 };
 
 } // namespace gpui
+#endif // GPUI_GPUI_DRAWOPS_H_

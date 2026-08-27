@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_POPUP_H_
+#define GPUI_BASE_POPUP_H_
 /* Unstyled popup — crates/base/src/popup.rs */
 
 #include "gpui/gpui.h"
@@ -42,3 +44,4 @@ struct Popup {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_POPUP_H_

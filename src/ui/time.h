@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TIME_H_
+#define GPUI_SRC_UI_TIME_H_
 /* Themed calendar and date picker — crates/ui/src/time/ */
 
 #include "ui/sizing.h"
@@ -257,3 +259,4 @@ struct DatePicker {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TIME_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SELECT_H_
+#define GPUI_SRC_UI_SELECT_H_
 /* Themed select — crates/ui/src/select.rs
 
    Rust's Select is a trigger over a SearchableList: the list holds the items,
@@ -178,3 +180,4 @@ void SelectClear(SelectState* s, Ctx* cx);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SELECT_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_INPUT_H_
+#define GPUI_UI_INPUT_H_
 /* Themed input — crates/ui/src/input */
 
 #include "ui/sizing.h"
@@ -414,3 +416,4 @@ struct OtpInput {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_INPUT_H_

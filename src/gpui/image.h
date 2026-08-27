@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_IMAGE_H_
+#define GPUI_GPUI_IMAGE_H_
 /* Where an image element's `src` turns into pixels.
 
    GPUI resolves `img(source)` through its asset system: a path goes to the
@@ -59,3 +61,4 @@ Str ImageAssetFor(Arena* a, Str src);
 void ImageCacheClear();
 
 } // namespace gpui
+#endif // GPUI_GPUI_IMAGE_H_

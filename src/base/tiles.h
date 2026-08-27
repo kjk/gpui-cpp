@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TILES_H_
+#define GPUI_BASE_TILES_H_
 /* Unstyled tiles — crates/ui/src/dock/tiles.rs
 
    A tile is a panel that floats over the tiles area: it can be moved by its
@@ -282,3 +284,4 @@ Point apply_boundary_constraints(Point origin, float draggingWidth);
 Size content_size(const Bounds* tiles, int count);
 
 } // namespace gpui
+#endif // GPUI_BASE_TILES_H_

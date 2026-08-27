@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_LIST_H_
+#define GPUI_UI_LIST_H_
 /* Themed list — crates/ui/src/list */
 
 #include "ui/sizing.h"
@@ -127,3 +129,4 @@ struct List {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_LIST_H_

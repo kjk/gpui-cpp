@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_RESIZABLE_H_
+#define GPUI_SRC_UI_RESIZABLE_H_
 /* Themed resizable panels — crates/base/src/resizable
 
    Rust has no `ui/resizable.rs`: the state, the panels, the handle and the
@@ -26,3 +28,4 @@ struct Resizable {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_RESIZABLE_H_

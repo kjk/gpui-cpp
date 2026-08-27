@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_INSPECTOR_H_
+#define GPUI_UI_INSPECTOR_H_
 /* Themed inspector — crates/ui/src/inspector.rs
 
    GPUI's inspector picks an element out of the window and shows what it is,
@@ -65,3 +67,4 @@ struct Inspector {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_INSPECTOR_H_

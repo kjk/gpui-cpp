@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DIALOG_H_
+#define GPUI_BASE_DIALOG_H_
 /* Unstyled dialog — crates/base/src/dialog.rs */
 
 #include "gpui/gpui.h"
@@ -133,3 +135,4 @@ struct Dialog {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_DIALOG_H_

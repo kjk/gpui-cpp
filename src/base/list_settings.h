@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_LIST_SETTINGS_H_
+#define GPUI_BASE_LIST_SETTINGS_H_
 /* List presentation settings — crates/base/src/list_settings.rs */
 
 #include "gpui/gpui.h"
@@ -30,3 +32,4 @@ ListActiveStyle ListActiveStyleOf(const ListSettings& settings,
 El* ListActiveOverlay(Arena* a, Rgba border, float radius);
 
 } // namespace gpui
+#endif // GPUI_BASE_LIST_SETTINGS_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_NATIVE_MENU_H_
+#define GPUI_UI_NATIVE_MENU_H_
 /* A menu the OS draws — crates/ui/src/native_menu
 
    Unlike component::PopupMenu, which is drawn into the window and clipped to
@@ -72,3 +74,4 @@ int NativeMenuSelectable(const NativeMenu* m, const NativeMenuItem** out,
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_NATIVE_MENU_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_COMBOBOX_H_
+#define GPUI_BASE_COMBOBOX_H_
 /* Unstyled combobox — crates/base/src/combobox.rs */
 
 #include "gpui/gpui.h"
@@ -15,3 +17,4 @@ struct Combobox {
     static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui
+#endif // GPUI_BASE_COMBOBOX_H_

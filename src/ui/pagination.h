@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_PAGINATION_H_
+#define GPUI_UI_PAGINATION_H_
 /* Themed pagination — crates/ui/src/pagination.rs */
 
 #include "ui/sizing.h"
@@ -44,3 +46,4 @@ struct Pagination {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_PAGINATION_H_

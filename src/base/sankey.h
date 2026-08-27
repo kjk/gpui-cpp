@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_SANKEY_H_
+#define GPUI_BASE_SANKEY_H_
 /* Sankey layout — crates/ui/src/plot/shape/sankey.rs, after d3-sankey.
 
    A sankey is a set of nodes in columns and ribbons between them, each ribbon
@@ -133,3 +135,4 @@ SankeyError SankeyLayout(const Sankey* s, int nodeCount,
                          const SankeyLink* links, int nLinks, SankeyGraph* out);
 
 } // namespace gpui
+#endif // GPUI_BASE_SANKEY_H_

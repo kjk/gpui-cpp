@@ -1,3 +1,5 @@
+#ifndef GPUI_SYS_GPU_H_
+#define GPUI_SYS_GPU_H_
 /* This process' share of the GPU — crates/fps/src/gpu.rs
  *
  * The HUD reports CPU and memory from sysinfo.h; this is the third reading,
@@ -33,4 +35,5 @@ void GpuProbeFree();
 
 } // namespace gpui
 
+#endif // GPUI_SYS_GPU_H_
 #endif // GPUI_SYS_GPU_H_

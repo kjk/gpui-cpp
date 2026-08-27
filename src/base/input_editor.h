@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INPUT_EDITOR_H_
+#define GPUI_BASE_INPUT_EDITOR_H_
 /* Editor-side value and projection structure from
    crates/base/src/input/editor/{decorations,diagnostics,display_map,
    highlighting,indent}.rs.
@@ -214,3 +216,4 @@ struct FoldIconRenderer {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_INPUT_EDITOR_H_

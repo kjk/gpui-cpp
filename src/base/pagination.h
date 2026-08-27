@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_PAGINATION_H_
+#define GPUI_BASE_PAGINATION_H_
 /* Unstyled pagination — crates/base/src/pagination.rs */
 
 #include "gpui/gpui.h"
@@ -48,3 +50,4 @@ struct Pagination {
     static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui
+#endif // GPUI_BASE_PAGINATION_H_

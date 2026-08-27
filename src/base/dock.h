@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DOCK_H_
+#define GPUI_BASE_DOCK_H_
 /* Unstyled dock — crates/ui/src/dock
 
    The dock is a tree: a DockItem is either a group of tabs or a split of
@@ -700,3 +702,4 @@ struct DockArea {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_DOCK_H_

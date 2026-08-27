@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TEXT_BOUNDARY_H_
+#define GPUI_BASE_TEXT_BOUNDARY_H_
 /* Word and line boundaries — crates/base/src/text_boundary.rs
  *
  * What a double click takes, and what a triple click takes. `CharKind`
@@ -24,3 +26,4 @@ bool TextWordRangeAt(Str s, int off, int* outA, int* outB);
 void TextLineRangeAt(Str s, int off, int* outA, int* outB);
 
 } // namespace gpui
+#endif // GPUI_BASE_TEXT_BOUNDARY_H_

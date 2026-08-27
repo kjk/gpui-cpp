@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_RADIO_H_
+#define GPUI_BASE_RADIO_H_
 /* Unstyled radio — crates/base/src/radio.rs */
 
 #include "base/state_style.h"
@@ -26,3 +28,4 @@ struct Radio {
                    const StateStyle* instance = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_RADIO_H_

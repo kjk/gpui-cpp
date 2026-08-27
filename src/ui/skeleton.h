@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SKELETON_H_
+#define GPUI_SRC_UI_SKELETON_H_
 /* Themed skeleton — crates/ui/src/skeleton.rs */
 
 #include "ui/sizing.h"
@@ -22,3 +24,4 @@ struct Skeleton {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SKELETON_H_

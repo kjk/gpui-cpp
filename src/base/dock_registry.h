@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_DOCK_REGISTRY_H_
+#define GPUI_BASE_DOCK_REGISTRY_H_
 /* Persisted panel registry — crates/base/src/dock/registry.rs */
 
 #include "base/dock_state.h"
@@ -38,3 +40,4 @@ void register_panel(App* app, Str panelName, PanelRegistryBuild build,
                     void* data = nullptr);
 
 } // namespace gpui
+#endif // GPUI_BASE_DOCK_REGISTRY_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_HOVER_CARD_H_
+#define GPUI_BASE_HOVER_CARD_H_
 /* Unstyled hover card — crates/base/src/hover_card.rs */
 
 #include "gpui/gpui.h"
@@ -73,3 +75,4 @@ struct HoverCard {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_HOVER_CARD_H_

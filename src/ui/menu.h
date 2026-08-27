@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_MENU_H_
+#define GPUI_UI_MENU_H_
 /* Themed menu — crates/ui/src/menu */
 
 #include "ui/sizing.h"
@@ -217,3 +219,4 @@ Str AppMenuBarContext();
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_MENU_H_

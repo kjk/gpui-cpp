@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_COLOR_PICKER_H_
+#define GPUI_BASE_COLOR_PICKER_H_
 /* Unstyled color picker — crates/base/src/color_picker.rs */
 
 #include "gpui/gpui.h"
@@ -142,3 +144,4 @@ struct ColorSwatch {
                    AccessibilityRole role = AccessibilityRole::RadioButton);
 };
 } // namespace gpui
+#endif // GPUI_BASE_COLOR_PICKER_H_

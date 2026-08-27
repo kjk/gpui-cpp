@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TREE_H_
+#define GPUI_SRC_UI_TREE_H_
 /* Themed tree — crates/ui/src/tree.rs
 
    crates/ui's Tree is the base tree with the gallery's row: an indent per
@@ -28,3 +30,4 @@ struct Tree {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TREE_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_MEASURE_H_
+#define GPUI_BASE_MEASURE_H_
 /* Measurement logging — crates/base/src/measure.rs */
 
 #include "gpui/gpui.h"
@@ -20,3 +22,4 @@ void MeasureRun(Str name, MeasureFn fn);
 void MeasureRunIf(Str name, bool enabled, MeasureFn fn);
 
 } // namespace gpui
+#endif // GPUI_BASE_MEASURE_H_

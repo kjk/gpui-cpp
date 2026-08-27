@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TEXT_H_
+#define GPUI_SRC_UI_TEXT_H_
 /* Themed markdown view — crates/ui/src/text.
 
    Rust parses with the `markdown` crate into an mdast, folds that into its own
@@ -620,3 +622,4 @@ Str MdDecodeEntity(Arena* a, Str e);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TEXT_H_

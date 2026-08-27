@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_ALERT_DIALOG_H_
+#define GPUI_BASE_ALERT_DIALOG_H_
 /* Unstyled alert dialog — crates/base/src/alert_dialog.rs */
 
 #include "gpui/gpui.h"
@@ -57,3 +59,4 @@ struct AlertDialog {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_ALERT_DIALOG_H_

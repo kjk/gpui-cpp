@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_PAINTGPU_H_
+#define GPUI_GPUI_PAINTGPU_H_
 /* A second Windows backend for Paint.h, which draws the way GPUI's own
    renderer does. It is off by default and exists to be measured against the
    Direct2D one; see the note at the end for what it is worth and what it is
@@ -150,3 +152,4 @@ const FrameStats& LastFrameStats();
 } // namespace gpui
 
 #endif // GPUI_OS_WINDOWS
+#endif // GPUI_GPUI_PAINTGPU_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_COMPONENT_TRAITS_H_
+#define GPUI_BASE_COMPONENT_TRAITS_H_
 /* Component traits — crates/base/src/component_traits.rs
 
    Rust uses traits to require selected, disabled, focus-ring and collapsed
@@ -18,3 +20,4 @@ struct ComponentStateFlags {
 };
 
 } // namespace gpui
+#endif // GPUI_BASE_COMPONENT_TRAITS_H_

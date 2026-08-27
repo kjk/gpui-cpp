@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_BUTTON_H_
+#define GPUI_UI_BUTTON_H_
 /* Themed button — crates/ui/src/button/button.rs */
 
 #include "ui/sizing.h"
@@ -418,3 +420,4 @@ struct ButtonGroup {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_BUTTON_H_

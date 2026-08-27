@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SIDEBAR_H_
+#define GPUI_SRC_UI_SIDEBAR_H_
 /* Themed sidebar — crates/ui/src/sidebar */
 
 #include "ui/sizing.h"
@@ -245,3 +247,4 @@ struct Sidebar {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SIDEBAR_H_

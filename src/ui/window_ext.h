@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_WINDOW_EXT_H_
+#define GPUI_SRC_UI_WINDOW_EXT_H_
 /* WindowExt — crates/ui/src/window_ext.rs
 
    Rust's `Root` is the window's own view and it owns the layers drawn over
@@ -154,3 +156,4 @@ void WindowClearTextSelection(Ctx* cx);
 void WindowEndTextSelection(Ctx* cx);
 
 } // namespace gpui
+#endif // GPUI_SRC_UI_WINDOW_EXT_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_ASSETS_H_
+#define GPUI_GPUI_ASSETS_H_
 
 #include "base.h"
 
@@ -20,3 +22,4 @@ TempStr AssetsLoadTextTemp(Str relPath);
 bool AssetsFindDir(Str relDir, char* out, int cap);
 bool AssetsExists(Str relPath);
 } // namespace gpui
+#endif // GPUI_GPUI_ASSETS_H_

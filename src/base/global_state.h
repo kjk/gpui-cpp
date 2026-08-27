@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_GLOBAL_STATE_H_
+#define GPUI_BASE_GLOBAL_STATE_H_
 /* Application-wide Base behavior state — crates/base/src/global_state.rs */
 
 #include "gpui/gpui.h"
@@ -47,3 +49,4 @@ DeferredPopover BaseRegisterDeferredPopover(App* app, EntityId popover);
 bool BaseIsInDeferredContext(App* app);
 
 } // namespace gpui
+#endif // GPUI_BASE_GLOBAL_STATE_H_

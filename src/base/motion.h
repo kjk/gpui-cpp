@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_MOTION_H_
+#define GPUI_BASE_MOTION_H_
 /* Value transitions — crates/base/src/motion.rs
 
    A CSS-like timing policy for a value the caller owns. The caller asks for
@@ -353,3 +355,4 @@ inline float spring(Ctx* cx, TransitionId id, float target,
 } // namespace motion
 
 } // namespace gpui
+#endif // GPUI_BASE_MOTION_H_

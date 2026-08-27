@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_DIALOG_H_
+#define GPUI_UI_DIALOG_H_
 /* Themed dialog — crates/ui/src/dialog */
 
 #include "ui/sizing.h"
@@ -245,3 +247,4 @@ struct AlertDialog {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_DIALOG_H_

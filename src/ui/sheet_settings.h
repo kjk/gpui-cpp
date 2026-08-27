@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SHEET_SETTINGS_H_
+#define GPUI_SRC_UI_SHEET_SETTINGS_H_
 /* SheetSettings — crates/ui/src/sheet.rs.
 
    Kept in its own leaf header because Theme owns one and Sheet consumes it;
@@ -18,3 +20,4 @@ struct SheetSettings {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SHEET_SETTINGS_H_

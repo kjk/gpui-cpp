@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_EVENT_H_
+#define GPUI_BASE_EVENT_H_
 /* Interactive element extensions — crates/base/src/event.rs
 
    El owns the listeners directly in C++: OnClick/OnMouseDown/OnScroll and
@@ -12,3 +14,4 @@ inline bool IsDoubleClick(const ClickEvent* ev) {
 }
 
 } // namespace gpui
+#endif // GPUI_BASE_EVENT_H_

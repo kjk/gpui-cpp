@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_COMMAND_H_
+#define GPUI_UI_COMMAND_H_
 /* Themed command palette — crates/ui/src/command
 
    A search field over a filtered list of commands: groups, separators,
@@ -255,3 +257,4 @@ struct Command {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_COMMAND_H_

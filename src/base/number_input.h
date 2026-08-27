@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_NUMBER_INPUT_H_
+#define GPUI_BASE_NUMBER_INPUT_H_
 /* Unstyled number input — crates/base/src/number_input.rs */
 
 #include "gpui/gpui.h"
@@ -115,3 +117,4 @@ struct NumberInput {
                        bool controlsRight = false, El* children = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_NUMBER_INPUT_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SCROLL_H_
+#define GPUI_SRC_UI_SCROLL_H_
 /* Themed scroll — crates/ui/src/scroll */
 
 #include "ui/sizing.h"
@@ -84,3 +86,4 @@ struct ScrollableMask {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SCROLL_H_

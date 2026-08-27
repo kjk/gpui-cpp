@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_RESIZABLE_H_
+#define GPUI_BASE_RESIZABLE_H_
 /* Unstyled resizable — crates/base/src/resizable */
 
 #include "gpui/gpui.h"
@@ -257,3 +259,4 @@ ResizablePanelGroup* v_resizable(Ctx* cx, Str id,
                                   Entity<ResizableState> state = {});
 ResizablePanel* resizable_panel(Ctx* cx);
 } // namespace gpui
+#endif // GPUI_BASE_RESIZABLE_H_

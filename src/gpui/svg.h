@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_SVG_H_
+#define GPUI_GPUI_SVG_H_
 #include "gpui/gpui.h"
 #include "gpui/drawops.h"
 
@@ -51,3 +53,4 @@ const uint8_t* SvgDrawOpsFor(Str assetPath, int* lenOut);
 // icon_named!).
 Str IconNamePath(IconName name);
 } // namespace gpui
+#endif // GPUI_GPUI_SVG_H_

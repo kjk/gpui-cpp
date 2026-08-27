@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_POPOVER_H_
+#define GPUI_UI_POPOVER_H_
 /* Themed popover — crates/ui/src/popover.rs */
 
 #include "ui/sizing.h"
@@ -94,3 +96,4 @@ bool PopoverOpen(Ctx* cx, Str id);
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_POPOVER_H_

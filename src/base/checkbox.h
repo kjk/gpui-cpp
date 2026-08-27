@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_CHECKBOX_H_
+#define GPUI_BASE_CHECKBOX_H_
 /* Unstyled checkbox — crates/base/src/checkbox.rs */
 
 #include "base/state_style.h"
@@ -64,3 +66,4 @@ struct CheckboxIndicator {
                    const StateStyle* instance = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_CHECKBOX_H_

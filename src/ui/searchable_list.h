@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_SEARCHABLE_LIST_H_
+#define GPUI_SRC_UI_SEARCHABLE_LIST_H_
 /* Themed searchable list — crates/ui/src/searchable_list
 
    The machinery behind a Select and a ComboBox: a list with a query field,
@@ -331,3 +333,4 @@ struct SearchableList {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_SEARCHABLE_LIST_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_ANIMATION_H_
+#define GPUI_BASE_ANIMATION_H_
 /* Easing, interpolation and composable element effects —
    crates/base/src/animation.rs */
 
@@ -102,3 +104,4 @@ struct EffectTransition {
 using Transition = EffectTransition;
 
 } // namespace gpui
+#endif // GPUI_BASE_ANIMATION_H_

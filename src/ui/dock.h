@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_DOCK_H_
+#define GPUI_UI_DOCK_H_
 /* Themed dock — crates/ui/src/dock
 
    DockArea renders a DockState: the centre item, the three Docks around it,
@@ -89,3 +91,4 @@ struct DockArea {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_DOCK_H_

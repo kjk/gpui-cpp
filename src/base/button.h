@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_BUTTON_H_
+#define GPUI_BASE_BUTTON_H_
 /* Unstyled button — crates/base/src/button.rs */
 
 #include "base/state_style.h"
@@ -30,3 +32,4 @@ struct Button {
                    const ButtonStyles* styles = nullptr, bool selected = false);
 };
 } // namespace gpui
+#endif // GPUI_BASE_BUTTON_H_

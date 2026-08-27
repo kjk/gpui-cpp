@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_SHEET_H_
+#define GPUI_BASE_SHEET_H_
 /* Unstyled sheet — crates/base/src/sheet.rs */
 
 #include "gpui/gpui.h"
@@ -80,3 +82,4 @@ struct Sheet {
     El* IntoEl();
 };
 } // namespace gpui
+#endif // GPUI_BASE_SHEET_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_AVATAR_H_
+#define GPUI_UI_AVATAR_H_
 /* Themed avatar — crates/ui/src/avatar */
 
 #include "ui/sizing.h"
@@ -69,3 +71,4 @@ struct AvatarGroup {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_AVATAR_H_

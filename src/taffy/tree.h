@@ -1,3 +1,5 @@
+#ifndef GPUI_TAFFY_TREE_H_
+#define GPUI_TAFFY_TREE_H_
 /* The data a layout run passes down and hands back, and the per-node cache —
  * taffy/src/tree/{node,layout,cache}.rs.
  *
@@ -295,4 +297,5 @@ struct Cache {
 
 } // namespace taffy
 
+#endif // GPUI_TAFFY_TREE_H_
 #endif // GPUI_TAFFY_TREE_H_

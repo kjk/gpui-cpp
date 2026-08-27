@@ -1,3 +1,5 @@
+#ifndef GPUI_MARKDOWN_TOKENIZER_H_
+#define GPUI_MARKDOWN_TOKENIZER_H_
 /* src/tokenizer.rs, src/parser.rs, src/subtokenize.rs, src/resolve.rs — the
    machine the constructs are written against.
 
@@ -248,4 +250,5 @@ Node* ToMdastCompile(const Vec<Event>& events, ParseState* parseState);
 
 } // namespace markdown
 
+#endif // GPUI_MARKDOWN_TOKENIZER_H_
 #endif // GPUI_MARKDOWN_TOKENIZER_H_

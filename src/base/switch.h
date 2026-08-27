@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_SWITCH_H_
+#define GPUI_BASE_SWITCH_H_
 /* Unstyled switch — crates/base/src/switch.rs */
 
 #include "base/state_style.h"
@@ -57,3 +59,4 @@ struct SwitchThumb {
                    const StateStyle* instance = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_SWITCH_H_

@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_TOGGLE_H_
+#define GPUI_BASE_TOGGLE_H_
 /* Unstyled toggle — crates/base/src/toggle.rs */
 
 #include "base/state_style.h"
@@ -24,3 +26,4 @@ struct Toggle {
                    const StateStyle* instance = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_TOGGLE_H_

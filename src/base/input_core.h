@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_INPUT_CORE_H_
+#define GPUI_BASE_INPUT_CORE_H_
 /* Source-shaped input modes and presentation seams —
    crates/base/src/input/base/{kind,mod,native,state}.rs.
 
@@ -162,3 +164,4 @@ bool InputPerformNativeMenuItem(InputState* state, App* app, Window* win,
                                 const NativeMenuItem& item);
 
 } // namespace gpui
+#endif // GPUI_BASE_INPUT_CORE_H_

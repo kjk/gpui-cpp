@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_LINK_H_
+#define GPUI_BASE_LINK_H_
 /* Unstyled link — crates/base/src/link.rs */
 
 #include "base/state_style.h"
@@ -26,3 +28,4 @@ struct Link {
                    const LinkStyles* styles = nullptr);
 };
 } // namespace gpui
+#endif // GPUI_BASE_LINK_H_

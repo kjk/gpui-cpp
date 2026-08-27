@@ -1,3 +1,5 @@
+#ifndef GPUI_UI_DESCRIPTION_LIST_H_
+#define GPUI_UI_DESCRIPTION_LIST_H_
 /* Themed description list — crates/ui/src/description_list.rs */
 
 #include "ui/sizing.h"
@@ -78,3 +80,4 @@ struct DescriptionList {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_UI_DESCRIPTION_LIST_H_

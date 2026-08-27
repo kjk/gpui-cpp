@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_VIRTUAL_LIST_H_
+#define GPUI_SRC_UI_VIRTUAL_LIST_H_
 /* Themed virtual list — crates/ui/src/virtual_list.rs */
 
 #include "ui/sizing.h"
@@ -68,3 +70,4 @@ struct VirtualList {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_VIRTUAL_LIST_H_

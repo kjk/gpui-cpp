@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_PAINT_H_
+#define GPUI_GPUI_PAINT_H_
 /* The 2D drawing surface, one signature per operation the element tree needs.
    Direct2D + DirectWrite behind Paint_win.cpp, cairo + Pango behind
    Paint_linux.cpp. Everything above this line is portable.
@@ -199,3 +201,4 @@ int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
 float TextLayoutBaseline(TextLayout* tl);
 
 } // namespace gpui
+#endif // GPUI_GPUI_PAINT_H_

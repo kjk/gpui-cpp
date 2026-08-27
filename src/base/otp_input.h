@@ -1,3 +1,5 @@
+#ifndef GPUI_BASE_OTP_INPUT_H_
+#define GPUI_BASE_OTP_INPUT_H_
 /* Unstyled OTP input — crates/base/src/otp_input.rs */
 
 #include "gpui/gpui.h"
@@ -53,3 +55,4 @@ struct OtpInput {
     static El* New(Ctx* cx, Str id, Entity<OtpState> state);
 };
 } // namespace gpui
+#endif // GPUI_BASE_OTP_INPUT_H_

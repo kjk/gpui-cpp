@@ -1,3 +1,5 @@
+#ifndef GPUI_GPUI_ASSET_ICONS_H_
+#define GPUI_GPUI_ASSET_ICONS_H_
 #include "base.h"
 
 // Every file in `assets/icons`, converted to the `drawops.h` byte stream
@@ -35,3 +37,4 @@ const uint8_t* AssetIconFind(Str name, int* lenOut);
 const uint8_t* AssetIconForPath(Str assetPath, int* lenOut);
 
 } // namespace gpui
+#endif // GPUI_GPUI_ASSET_ICONS_H_

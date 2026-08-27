@@ -1,3 +1,5 @@
+#ifndef GPUI_SRC_UI_TABLE_H_
+#define GPUI_SRC_UI_TABLE_H_
 /* Themed table — crates/ui/src/table */
 
 #include "ui/sizing.h"
@@ -341,3 +343,4 @@ struct Table {
 
 } // namespace component
 } // namespace gpui
+#endif // GPUI_SRC_UI_TABLE_H_
