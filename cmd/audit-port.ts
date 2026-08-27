@@ -84,7 +84,6 @@ const partialUi = new Set([
   "searchable_list",
   "select",
   "setting",
-  "sidebar",
   "table",
   "text",
   "theme",

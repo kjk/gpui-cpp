@@ -124,8 +124,8 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
         component::Sidebar::New(cx, StrL("sidebar"))
             ->Collapsible(kModes[app->mode])
             ->Collapsed(collapsed)
-            ->Header(component::SidebarHeader(cx, brand))
-            ->Footer(component::SidebarFooter(cx, user))
+            ->Header(component::SidebarHeader::New(cx)->Child(brand))
+            ->Footer(component::SidebarFooter::New(cx)->Child(user))
             ->Child(component::SidebarGroup::New(cx, StrL("Application"))
                         ->Child(menu))
             ->IntoEl());

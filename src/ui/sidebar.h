@@ -44,6 +44,29 @@ struct SidebarLayout {
 SidebarLayout SidebarLayoutFor(SidebarCollapsible collapsible, bool collapsed,
                                float expandedWidth, Side side);
 
+struct SidebarMenuItem;
+struct SidebarMenu;
+struct SidebarGroup;
+
+// SidebarItem. Rust uses a Clone + Collapsible trait so Sidebar and
+// SidebarGroup can contain any one item type. Frame builders here own their
+// values in the arena, so the same contract is a POD function table: the
+// container supplies the collapsed state and stable path id at render time.
+using SidebarItemRender =
+    El* (*)(void* value, Ctx* cx, Str id, bool collapsed);
+
+struct SidebarItem {
+    void* value = nullptr;
+    SidebarItemRender render = nullptr;
+
+    static SidebarItem New(void* value, SidebarItemRender render);
+    static SidebarItem From(SidebarMenuItem* item);
+    static SidebarItem From(SidebarMenu* menu);
+    static SidebarItem From(SidebarGroup* group);
+    bool IsValid() const { return value && render; }
+    El* Render(Ctx* cx, Str id, bool collapsed) const;
+};
+
 // COLLAPSED_WIDTH: the width an icon-collapsed sidebar keeps.
 const float kSidebarCollapsedWidth = 48;
 
@@ -104,9 +127,12 @@ struct SidebarMenu {
     Ctx* cx = nullptr;
     ArenaVec<SidebarMenuItem*> items;
     bool collapsed = false;
+    Style style = {};
+    uint32_t styleSet = 0;
 
     static SidebarMenu* New(Ctx* cx);
     SidebarMenu* Child(SidebarMenuItem* item);
+    SidebarMenu* Refine(const Style& v, uint32_t fields);
     El* IntoEl(Str id);
 };
 
@@ -114,20 +140,56 @@ struct SidebarGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str label = {};
+    // `menus` remains the compatibility view; `children` is SidebarItem's
+    // source-shaped generic content and is what rendering consumes.
     ArenaVec<SidebarMenu*> menus;
+    ArenaVec<SidebarItem> children;
     bool collapsed = false;
 
     static SidebarGroup* New(Ctx* cx, Str label);
     SidebarGroup* Child(SidebarMenu* menu);
+    SidebarGroup* Child(SidebarMenuItem* item);
+    SidebarGroup* Child(SidebarItem item);
     El* IntoEl(Str id);
 };
 
-// The header and the footer are the same box under two names: a full-width
-// row that lights up on hover and stays lit while selected.
-El* SidebarHeader(Ctx* cx, El* child, bool selected = false,
-                  Listener onClick = {});
-El* SidebarFooter(Ctx* cx, El* child, bool selected = false,
-                  Listener onClick = {});
+struct SidebarHeader {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    ArenaVec<El*> children;
+    Style style = {};
+    uint32_t styleSet = 0;
+    bool selected = false;
+    bool collapsed = false;
+    Listener onClick = {};
+
+    static SidebarHeader* New(Ctx* cx);
+    SidebarHeader* Child(El* child);
+    SidebarHeader* Selected(bool v);
+    SidebarHeader* Collapsed(bool v);
+    SidebarHeader* OnClick(Listener fn);
+    SidebarHeader* Refine(const Style& v, uint32_t fields);
+    El* IntoEl();
+};
+
+struct SidebarFooter {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    ArenaVec<El*> children;
+    Style style = {};
+    uint32_t styleSet = 0;
+    bool selected = false;
+    bool collapsed = false;
+    Listener onClick = {};
+
+    static SidebarFooter* New(Ctx* cx);
+    SidebarFooter* Child(El* child);
+    SidebarFooter* Selected(bool v);
+    SidebarFooter* Collapsed(bool v);
+    SidebarFooter* OnClick(Listener fn);
+    SidebarFooter* Refine(const Style& v, uint32_t fields);
+    El* IntoEl();
+};
 
 // The button that collapses the sidebar. The icon says which way it will go
 // and which edge it is on.
@@ -151,21 +213,33 @@ struct Sidebar {
     Str id = {};
     El* header = nullptr;
     El* footer = nullptr;
+    // `groups` remains for source compatibility with the first C++ surface;
+    // generic SidebarItem content is the structural port of Sidebar<E>.
     ArenaVec<SidebarGroup*> groups;
+    ArenaVec<SidebarItem> content;
     Side side = Side::Left;
     SidebarCollapsible collapsible = SidebarCollapsible::Icon;
     bool collapsed = false;
     // DEFAULT_WIDTH; COLLAPSED_WIDTH is 48 and not the caller's to set.
     float width = 255;
+    Style style = {};
+    uint32_t styleSet = 0;
 
     static Sidebar* New(Ctx* cx, Str id);
     Sidebar* WithSide(Side v);
     Sidebar* Collapsible(SidebarCollapsible v);
+    Sidebar* Collapsible(bool v);
     Sidebar* Collapsed(bool v);
     Sidebar* Header(El* e);
+    Sidebar* Header(SidebarHeader* e);
     Sidebar* Footer(El* e);
+    Sidebar* Footer(SidebarFooter* e);
     Sidebar* Child(SidebarGroup* group);
+    Sidebar* Child(SidebarMenu* menu);
+    Sidebar* Child(SidebarMenuItem* item);
+    Sidebar* Child(SidebarItem item);
     Sidebar* W(float px);
+    Sidebar* Refine(const Style& v, uint32_t fields);
     El* IntoEl();
 };
 

@@ -23,6 +23,21 @@ static void IconCollapsedUsesTheIconWidth() {
     utassertnear(l.wrapperWidth, kSidebarCollapsedWidth);
 }
 
+static void BoolCollapsibleRemainsBackwardCompatible() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+    Sidebar* icon = Sidebar::New(&cx, StrL("icon"))->Collapsible(true);
+    Sidebar* fixed = Sidebar::New(&cx, StrL("fixed"))->Collapsible(false);
+    utassert(icon->collapsible == SidebarCollapsible::Icon);
+    utassert(fixed->collapsible == SidebarCollapsible::None);
+    AppGlobalClear(&app);
+    ArenaDelete(a);
+}
+
 static void IconExpandedUsesTheExpandedWidth() {
     SidebarLayout l = Layout(SidebarCollapsible::Icon, false, 240, Side::Left);
     utassert(!l.iconCollapsed);
@@ -75,13 +90,176 @@ static void OffcanvasCollapsesToNothing() {
     SidebarLayout noWidthOpen =
         Layout(SidebarCollapsible::Offcanvas, false, 0, Side::Left);
     utassert(noWidthOpen.wrapper == SidebarWrapperKind::None);
+
+    SidebarLayout right =
+        Layout(SidebarCollapsible::Offcanvas, true, 240, Side::Right);
+    utassert(!right.alignChildToEnd);
+}
+
+namespace {
+struct CustomSidebarItem {
+    int renders = 0;
+    bool collapsed = false;
+    Str id = {};
+};
+} // namespace
+
+static El* RenderCustomSidebarItem(void* data, Ctx* cx, Str id,
+                                   bool collapsed) {
+    CustomSidebarItem* item = (CustomSidebarItem*)data;
+    item->renders++;
+    item->collapsed = collapsed;
+    item->id = id;
+    return Div(cx->a)->Id(id)->H(20);
+}
+
+static void SidebarItemAllowsGenericNestedContent() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    CustomSidebarItem nested = {};
+    SidebarGroup* group = SidebarGroup::New(&cx, StrL("Custom"))->Child(
+        SidebarItem::New(&nested, &RenderCustomSidebarItem));
+    El* groupEl = group->IntoEl(StrL("group"));
+    utassert(groupEl != nullptr);
+    utassert(nested.renders == 1);
+    utassert(!nested.collapsed);
+    utassert(StrSame(nested.id, StrL("0")));
+
+    CustomSidebarItem direct = {};
+    Sidebar* sidebar = Sidebar::New(&cx, StrL("generic-sidebar"))
+                           ->Collapsed(true)
+                           ->Child(SidebarItem::New(
+                               &direct, &RenderCustomSidebarItem));
+    El* wrapper = sidebar->IntoEl();
+    utassert(wrapper != nullptr);
+    utassert(direct.renders == 1);
+    utassert(direct.collapsed);
+    utassert(sidebar->content.len == 1);
+
+    AppGlobalClear(&app);
+    ArenaDelete(a);
+}
+
+static int ChildCount(El* e) {
+    int count = 0;
+    for (El* child = e ? e->first : nullptr; child; child = child->next) {
+        count++;
+    }
+    return count;
+}
+
+static void HeaderFooterAndMenuRetainTheirBuilderSurface() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    Style refined = {};
+    refined.pad = EdgesAll(3);
+    SidebarHeader* header = SidebarHeader::New(&cx)
+                                ->Selected(true)
+                                ->Collapsed(true)
+                                ->Refine(refined, StyleFieldPad);
+    SidebarFooter* footer = SidebarFooter::New(&cx)->Selected(true);
+    for (int i = 0; i < 40; i++) {
+        header->Child(Div(a));
+        footer->Child(Div(a));
+    }
+    El* headerEl = header->IntoEl();
+    El* footerEl = footer->IntoEl();
+    utassert(header->children.len == 40);
+    utassert(footer->children.len == 40);
+    utassert(ChildCount(headerEl) == 40);
+    utassert(ChildCount(footerEl) == 1);
+    utassert(ChildCount(footerEl ? footerEl->first : nullptr) == 40);
+    utassertnear(headerEl->style.pad.left, 3);
+    utassert(headerEl->style.hasBg);
+    utassert(footerEl->style.hasBg);
+
+    Style menuStyle = {};
+    menuStyle.gapX = 17;
+    menuStyle.gapY = 19;
+    El* menuEl = SidebarMenu::New(&cx)
+                     ->Refine(menuStyle, StyleFieldGap)
+                     ->Child(SidebarMenuItem::New(&cx, StrL("row")))
+                     ->IntoEl(StrL("menu"));
+    utassertnear(menuEl->style.gapX, 17);
+    utassertnear(menuEl->style.gapY, 19);
+
+    AppGlobalClear(&app);
+    ArenaDelete(a);
+}
+
+static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    // Set collapsed before rendering, as SidebarItem::Render does.
+    SidebarMenuItem* iconItem =
+        SidebarMenuItem::New(&cx, StrL("Projects"))->Icon(IconName::Folder);
+    iconItem->collapsed = true;
+    El* iconRow = iconItem->IntoEl(StrL("collapsed-icon"))->first;
+    SidebarMenuItem* plainItem = SidebarMenuItem::New(&cx, StrL("Plain"));
+    plainItem->collapsed = true;
+    El* plainRow = plainItem->IntoEl(StrL("collapsed-plain"))->first;
+    utassert(iconRow && StrSame(iconRow->style.tooltip, StrL("Projects")));
+    utassert(plainRow && !plainRow->style.tooltip.s);
+    utassert(iconRow && StrSame(iconRow->id, StrL("item")));
+    utassert(plainRow && StrSame(plainRow->id, StrL("item")));
+    El* activeRow = SidebarMenuItem::New(&cx, StrL("Active"))
+                        ->Active(true)
+                        ->IntoEl(StrL("active"))
+                        ->first;
+    utassert(activeRow && activeRow->style.fontMedium);
+
+    Sidebar* sidebar = Sidebar::New(&cx, StrL("scrolling-sidebar"))
+                           ->Collapsible(SidebarCollapsible::None)
+                           ->Child(SidebarMenuItem::New(&cx, StrL("Direct")));
+    El* root = sidebar->IntoEl();
+    El* content = root ? root->first : nullptr;
+    El* viewport = content ? content->first : nullptr;
+    utassert(root && StrSame(root->id, StrL("scrolling-sidebar")));
+    utassert(content && content->style.minH == 0);
+    utassert(viewport && viewport->style.overflowY == Overflow::Scroll);
+    utassert(viewport && viewport->onScroll.IsValid());
+
+    Style fill = {};
+    fill.width = kFill;
+    fill.borderR = 5;
+    fill.pad = EdgesAll(99);
+    El* nonPixel = Sidebar::New(&cx, StrL("fill-sidebar"))
+                       ->Refine(fill, StyleFieldWidth | StyleFieldBorderR |
+                                          StyleFieldPad)
+                       ->IntoEl();
+    utassert(nonPixel && StrSame(nonPixel->id, StrL("fill-sidebar")));
+    utassertnear(nonPixel->style.width, kFill);
+    utassertnear(nonPixel->style.borderR, 5);
+    utassertnear(nonPixel->style.pad.left, 0);
+
+    AppGlobalClear(&app);
+    ArenaDelete(a);
 }
 
 void TestSidebar() {
     TestSuite("sidebar");
+    BoolCollapsibleRemainsBackwardCompatible();
     IconCollapsedUsesTheIconWidth();
     IconExpandedUsesTheExpandedWidth();
     AWidthThatIsNotInPixelsLeavesTheWrapperAlone();
     NoneIgnoresTheCollapsedFlag();
     OffcanvasCollapsesToNothing();
+    SidebarItemAllowsGenericNestedContent();
+    HeaderFooterAndMenuRetainTheirBuilderSurface();
+    CollapsedTooltipRequiresAnIconAndContentScrolls();
 }

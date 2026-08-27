@@ -64,6 +64,7 @@ The important non-mechanical mappings are encoded in the audit:
 | `ui/menu/popup_menu` | `ui/popup_menu.h`, `ui/menu*` | canonical UI include over shared `base/popup_menu*` behavior |
 | `ui/plot/shape/sankey` | `ui/sankey.h`, `ui/plot*` | canonical UI include over the dependency-free `base/sankey*` layout port |
 | `ui/scroll/*` | `ui/scroll*`, integrated `gpui::ScrollRect` | transparent mask/handle siblings collapse onto the renderer-owned viewport; source-shaped builders retain the distinction |
+| `ui/sidebar/*` | `ui/sidebar*` | `SidebarItem` is a POD render function table; menus, groups and the sidebar compose through the same generic item seam |
 | `ui/highlighter/*` | `ui/highlighter*`, `ui/syntax*` | one scanner-backed adapter |
 | `ui/text/format/html` | `ui/text*`, `ui/html*` | one handwritten-parser adapter |
 | serde-backed state | `base/json*` | private support, not a Base public module |
@@ -176,6 +177,12 @@ The important non-mechanical mappings are encoded in the audit:
   per-anchor stacks, measure variable card heights, pause timeouts on focus,
   hover or inactive windows, and preserve click/close/system delivery order.
   Rust's retained action/content closures project to renderable entities.
+- UI Sidebar restores the source composition hierarchy: `SidebarItem` is the
+  POD-friendly trait projection used by a sidebar and its groups, while menus,
+  menu items, headers and footers retain their own builders and refinements.
+  The content owns a keyed vertical scroll viewport; icon collapse, offcanvas
+  release, active and hover styling, and footer spacing follow the pinned
+  implementation.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes

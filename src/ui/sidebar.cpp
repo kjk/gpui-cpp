@@ -1,6 +1,7 @@
 #include "ui/sidebar.h"
 #include "base/motion.h"
 #include "ui/button.h"
+#include "ui/scroll.h"
 
 namespace gpui {
 
@@ -10,6 +11,57 @@ namespace component {
 static const float kSidebarMotionMs = 200.f;
 
 // DEFAULT_WIDTH is the caller's; COLLAPSED_WIDTH is not.
+
+struct SidebarScrollState {
+    float y = 0;
+
+    static void OnScroll(SidebarScrollState* self, Ctx* cx,
+                         const ScrollEvent* ev) {
+        self->y = ev->offsetY;
+        Notify(cx);
+    }
+};
+
+SidebarItem SidebarItem::New(void* value, SidebarItemRender render) {
+    SidebarItem item;
+    item.value = value;
+    item.render = render;
+    return item;
+}
+
+static El* RenderSidebarMenuItem(void* value, Ctx*, Str id, bool collapsed) {
+    SidebarMenuItem* item = (SidebarMenuItem*)value;
+    item->collapsed = collapsed;
+    return item->IntoEl(id);
+}
+
+static El* RenderSidebarMenu(void* value, Ctx*, Str id, bool collapsed) {
+    SidebarMenu* menu = (SidebarMenu*)value;
+    menu->collapsed = collapsed;
+    return menu->IntoEl(id);
+}
+
+static El* RenderSidebarGroup(void* value, Ctx*, Str id, bool collapsed) {
+    SidebarGroup* group = (SidebarGroup*)value;
+    group->collapsed = collapsed;
+    return group->IntoEl(id);
+}
+
+SidebarItem SidebarItem::From(SidebarMenuItem* item) {
+    return New(item, item ? &RenderSidebarMenuItem : nullptr);
+}
+
+SidebarItem SidebarItem::From(SidebarMenu* menu) {
+    return New(menu, menu ? &RenderSidebarMenu : nullptr);
+}
+
+SidebarItem SidebarItem::From(SidebarGroup* group) {
+    return New(group, group ? &RenderSidebarGroup : nullptr);
+}
+
+El* SidebarItem::Render(Ctx* cx, Str id, bool collapsed) const {
+    return IsValid() ? render(value, cx, id, collapsed) : nullptr;
+}
 
 void SidebarMenuState::OnItemClick(SidebarMenuState* self, Ctx* cx,
                                    const ClickEvent* ev) {
@@ -115,16 +167,19 @@ El* SidebarMenuItem::IntoEl(Str id) {
                   ->Gap(8)
                   ->ItemsCenter()
                   ->Radius(th.radius)
-                  ->Font(14);
+                  ->Font(14)
+                  ->PathId(StrL("item"));
     bool hoverable = !active && !disabled;
     if (hoverable) {
-        row->HoverBg(th.tokens.sidebarAccent)->HoverFg(th.sidebarAccentFg);
+        row->HoverBg(BackgroundOpacity(th.tokens.sidebarAccent, 0.8f))
+            ->HoverFg(th.sidebarAccentFg);
     }
     if (active) {
-        row->Bg(th.tokens.sidebarAccent)->Fg(th.sidebarAccentFg);
+        row->Bg(th.tokens.sidebarAccent)->Fg(th.sidebarAccentFg)->Medium();
     }
     Rgba fg =
         disabled ? th.mutedFg : (active ? th.sidebarAccentFg : th.sidebarFg);
+    row->Fg(fg);
     if (icon != IconName::None) {
         row->Child(IconEl(a, icon, 16)->Fg(fg));
     }
@@ -133,7 +188,9 @@ El* SidebarMenuItem::IntoEl(Str id) {
         // The label has nowhere to go, so it becomes the tooltip. Rust places
         // it to the right of the item; a tip here sits where the window puts
         // it.
-        row->Tip(label);
+        if (icon != IconName::None) {
+            row->Tip(label);
+        }
     } else {
         row->H(28);
         El* mid = Div(a)->FlexRow()->Flex1()->Gap(8)->JustifyBetween();
@@ -164,7 +221,7 @@ El* SidebarMenuItem::IntoEl(Str id) {
         // open rules before handing over to the caller.
         Listener l =
             isSubmenu ? ListenTo(st, &SidebarMenuState::OnItemClick) : onClick;
-        BindClick(row, StrL("row"), l);
+        BindClick(row, StrL("item"), l);
     }
     // context_menu(..): a right press on the row opens the caller's menu
     // where the pointer is.
@@ -208,10 +265,16 @@ SidebarMenu* SidebarMenu::Child(SidebarMenuItem* item) {
     }
     return this;
 }
+SidebarMenu* SidebarMenu::Refine(const Style& v, uint32_t fields) {
+    StyleApplyFields(&style, v, fields);
+    styleSet |= fields;
+    return this;
+}
 
 El* SidebarMenu::IntoEl(Str id) {
     IdScope scope(cx, id);
-    El* col = Div(a)->Id(id)->FlexCol()->W(kFill)->Gap(8);
+    El* col = Div(a)->FlexCol()->W(kFill)->Gap(8);
+    StyleApplyFields(&col->style, style, styleSet);
     for (int i = 0; i < items.len; i++) {
         items[i]->collapsed = collapsed;
         col->Child(items[i]->IntoEl(StrDup(a, fmt("%d", i))));
@@ -230,6 +293,16 @@ SidebarGroup* SidebarGroup::New(Ctx* cx, Str label) {
 SidebarGroup* SidebarGroup::Child(SidebarMenu* menu) {
     if (menu) {
         menus.Append(a, menu);
+        children.Append(a, SidebarItem::From(menu));
+    }
+    return this;
+}
+SidebarGroup* SidebarGroup::Child(SidebarMenuItem* item) {
+    return Child(SidebarItem::From(item));
+}
+SidebarGroup* SidebarGroup::Child(SidebarItem item) {
+    if (item.IsValid()) {
+        children.Append(a, item);
     }
     return this;
 }
@@ -237,7 +310,7 @@ SidebarGroup* SidebarGroup::Child(SidebarMenu* menu) {
 El* SidebarGroup::IntoEl(Str id) {
     const Theme& th = ThemeNow(cx->app);
     IdScope scope(cx, id);
-    El* col = Div(a)->Id(id)->FlexCol()->W(kFill);
+    El* col = Div(a)->FlexCol()->W(kFill);
     if (!collapsed && label.s) {
         col->Child(Div(a)
                        ->FlexRow()
@@ -250,16 +323,17 @@ El* SidebarGroup::IntoEl(Str id) {
                            RgbaOpacity(th.sidebarFg, 0.7f))));
     }
     El* inner = Div(a)->FlexCol()->W(kFill)->Gap(8);
-    for (int i = 0; i < menus.len; i++) {
-        menus[i]->collapsed = collapsed;
-        inner->Child(menus[i]->IntoEl(StrDup(a, fmt("%d", i))));
+    for (int i = 0; i < children.len; i++) {
+        inner->Child(children[i].Render(cx, StrDup(a, fmt("%d", i)),
+                                        collapsed));
     }
     col->Child(inner);
     return col;
 }
 
-static El* SidebarBand(Ctx* cx, El* child, bool selected, Listener onClick,
-                       Str id) {
+static El* SidebarBand(Ctx* cx, const ArenaVec<El*>& children, bool selected,
+                       Listener onClick, Str id, const Style& style,
+                       uint32_t styleSet) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)
@@ -272,24 +346,93 @@ static El* SidebarBand(Ctx* cx, El* child, bool selected, Listener onClick,
                   ->Radius(th.radius)
                   ->HoverBg(th.tokens.sidebarAccent)
                   ->HoverFg(th.sidebarAccentFg);
+    StyleApplyFields(&row->style, style, styleSet);
     if (selected) {
         row->Bg(th.tokens.sidebarAccent)->Fg(th.sidebarAccentFg);
     }
+    for (int i = 0; i < children.len; i++) {
+        row->Child(children[i]);
+    }
+    return BindClick(row, id, onClick);
+}
+
+SidebarHeader* SidebarHeader::New(Ctx* cx) {
+    SidebarHeader* header = ArenaNew<SidebarHeader>(cx->a);
+    header->a = cx->a;
+    header->cx = cx;
+    return header;
+}
+SidebarHeader* SidebarHeader::Child(El* child) {
     if (child) {
-        row->Child(child);
+        children.Append(a, child);
+    }
+    return this;
+}
+SidebarHeader* SidebarHeader::Selected(bool v) {
+    selected = v;
+    return this;
+}
+SidebarHeader* SidebarHeader::Collapsed(bool v) {
+    collapsed = v;
+    return this;
+}
+SidebarHeader* SidebarHeader::OnClick(Listener fn) {
+    onClick = fn;
+    return this;
+}
+SidebarHeader* SidebarHeader::Refine(const Style& v, uint32_t fields) {
+    StyleApplyFields(&style, v, fields);
+    styleSet |= fields;
+    return this;
+}
+El* SidebarHeader::IntoEl() {
+    return SidebarBand(cx, children, selected, onClick,
+                       StrL("sidebar-header"), style, styleSet);
+}
+
+SidebarFooter* SidebarFooter::New(Ctx* cx) {
+    SidebarFooter* footer = ArenaNew<SidebarFooter>(cx->a);
+    footer->a = cx->a;
+    footer->cx = cx;
+    return footer;
+}
+SidebarFooter* SidebarFooter::Child(El* child) {
+    if (child) {
+        children.Append(a, child);
+    }
+    return this;
+}
+SidebarFooter* SidebarFooter::Selected(bool v) {
+    selected = v;
+    return this;
+}
+SidebarFooter* SidebarFooter::Collapsed(bool v) {
+    collapsed = v;
+    return this;
+}
+SidebarFooter* SidebarFooter::OnClick(Listener fn) {
+    onClick = fn;
+    return this;
+}
+SidebarFooter* SidebarFooter::Refine(const Style& v, uint32_t fields) {
+    StyleApplyFields(&style, v, fields);
+    styleSet |= fields;
+    return this;
+}
+El* SidebarFooter::IntoEl() {
+    // Footer's Styled/InteractiveElement implementation belongs to `base`,
+    // which the themed outer row wraps as one child upstream.
+    El* base = Div(a)->FlexRow()->Gap(8)->W(kFill);
+    StyleApplyFields(&base->style, style, styleSet);
+    for (int i = 0; i < children.len; i++) {
+        base->Child(children[i]);
     }
     if (onClick.IsValid()) {
-        BindClick(row, id, onClick);
+        BindClick(base, StrL("sidebar-footer-base"), onClick);
     }
-    return row;
-}
-
-El* SidebarHeader(Ctx* cx, El* child, bool selected, Listener onClick) {
-    return SidebarBand(cx, child, selected, onClick, StrL("sidebar-header"));
-}
-
-El* SidebarFooter(Ctx* cx, El* child, bool selected, Listener onClick) {
-    return SidebarBand(cx, child, selected, onClick, StrL("sidebar-footer"));
+    ArenaVec<El*> one;
+    one.Append(a, base);
+    return SidebarBand(cx, one, selected, {}, StrL("sidebar-footer"), {}, 0);
 }
 
 SidebarToggleButton* SidebarToggleButton::New(Ctx* cx) {
@@ -345,6 +488,10 @@ Sidebar* Sidebar::Collapsible(SidebarCollapsible v) {
     collapsible = v;
     return this;
 }
+Sidebar* Sidebar::Collapsible(bool v) {
+    collapsible = v ? SidebarCollapsible::Icon : SidebarCollapsible::None;
+    return this;
+}
 Sidebar* Sidebar::Collapsed(bool v) {
     collapsed = v;
     return this;
@@ -353,18 +500,47 @@ Sidebar* Sidebar::Header(El* e) {
     header = e;
     return this;
 }
+Sidebar* Sidebar::Header(SidebarHeader* e) {
+    return Header(e ? e->IntoEl() : nullptr);
+}
 Sidebar* Sidebar::Footer(El* e) {
     footer = e;
     return this;
 }
+Sidebar* Sidebar::Footer(SidebarFooter* e) {
+    return Footer(e ? e->IntoEl() : nullptr);
+}
 Sidebar* Sidebar::Child(SidebarGroup* group) {
     if (group) {
         groups.Append(a, group);
+        content.Append(a, SidebarItem::From(group));
+    }
+    return this;
+}
+Sidebar* Sidebar::Child(SidebarMenu* menu) {
+    return Child(SidebarItem::From(menu));
+}
+Sidebar* Sidebar::Child(SidebarMenuItem* item) {
+    return Child(SidebarItem::From(item));
+}
+Sidebar* Sidebar::Child(SidebarItem item) {
+    if (item.IsValid()) {
+        content.Append(a, item);
     }
     return this;
 }
 Sidebar* Sidebar::W(float px) {
     width = px;
+    style.width = px;
+    styleSet |= StyleFieldWidth;
+    return this;
+}
+Sidebar* Sidebar::Refine(const Style& v, uint32_t fields) {
+    StyleApplyFields(&style, v, fields);
+    styleSet |= fields;
+    if ((fields & StyleFieldWidth) && v.width > 0) {
+        width = v.width;
+    }
     return this;
 }
 
@@ -410,21 +586,24 @@ El* Sidebar::IntoEl() {
     // SidebarLayout::new says what the mode and the flag come to: the width
     // the wrapper takes, which rendering the rows use, and which end the
     // content is pinned to.
+    float expandedWidth =
+        (styleSet & StyleFieldWidth) ? (style.width > 0 ? style.width : 0.f)
+                                     : width;
     SidebarLayout layout =
-        SidebarLayoutFor(collapsible, collapsed, width, side);
+        SidebarLayoutFor(collapsible, collapsed, expandedWidth, side);
     bool iconCollapsed = layout.iconCollapsed;
     // EffectTransition::width over SIDEBAR_TRANSITION_DURATION: the box around
     // the sidebar takes the width and clips, while the sidebar inside keeps
     // its own — which is what slides the content out of view rather than
     // squeezing it. The end the content is pinned to is what decides which way
     // it goes.
-    float target = layout.wrapper == SidebarWrapperKind::None
-                       ? width
-                       : layout.wrapperWidth;
-    Motion motion = MotionNew(kSidebarMotionMs);
-    motion.ease = EaseInOutCubic;
-    float wrapW =
-        MotionValue(cx, MotionId(id, StrL("sidebar-width")), target, motion);
+    float wrapW = layout.wrapperWidth;
+    if (layout.wrapper == SidebarWrapperKind::Animated) {
+        Motion motion = MotionNew(kSidebarMotionMs);
+        motion.ease = EaseInOutCubic;
+        wrapW = MotionValue(cx, MotionId(id, StrL("sidebar-width")),
+                            layout.wrapperWidth, motion);
+    }
     // render_child: the sidebar is still built while it is on its way out, and
     // only dropped once there is no room left to show it in.
     if (layout.offcanvasCollapsed && wrapW <= 0.5f) {
@@ -432,9 +611,7 @@ El* Sidebar::IntoEl() {
     }
     // The sidebar's own width is the one it is heading for, so its rows are
     // laid out at their final size while the wrapper reveals them.
-    float natural = layout.wrapper == SidebarWrapperKind::None
-                        ? width
-                        : (iconCollapsed ? kSidebarCollapsedWidth : width);
+    float natural = iconCollapsed ? kSidebarCollapsedWidth : width;
 
     // The sidebar names itself, and the groups under it are named by their
     // place in it.
@@ -445,12 +622,22 @@ El* Sidebar::IntoEl() {
                    ->Shrink0()
                    ->W(natural)
                    ->H(kFill)
+                   ->ClipX()
+                   ->ClipY()
                    ->Bg(th.sidebar)
                    ->Fg(th.sidebarFg);
     if (SideIsLeft(side)) {
         root->BorderR(1, th.sidebarBorder);
     } else {
         root->BorderL(1, th.sidebarBorder);
+    }
+    // Sidebar clears caller padding before refine_style. The C++ Style is a
+    // field mask rather than Option<Edge>, so omitting that bit is the same
+    // reset. Every other Styled field is retained. The refinement follows
+    // the side border upstream, so callers may replace that border too.
+    StyleApplyFields(&root->style, style, styleSet & ~StyleFieldPad);
+    if (iconCollapsed) {
+        root->W(kSidebarCollapsedWidth);
     }
     if (iconCollapsed) {
         root->Gap(8);
@@ -465,36 +652,59 @@ El* Sidebar::IntoEl() {
         box->Child(header);
         root->Child(box);
     }
-    El* content = Div(a)->FlexCol()->W(kFill)->Flex1();
-    El* inner = Div(a)->FlexCol()->W(kFill);
+    El* body = Div(a)->FlexCol()->W(kFill)->Flex1()->MinH(0);
+    El* inner = Div(a)->FlexCol()->W(kFill)->Shrink0();
     if (iconCollapsed) {
         inner->Pad(8);
     } else {
         inner->PadX(12);
     }
-    for (int i = 0; i < groups.len; i++) {
-        groups[i]->collapsed = iconCollapsed;
+    for (int i = 0; i < this->content.len; i++) {
         // The groups are rows of a `list(..)` in Rust, which has no gap of
         // its own: `pt_3` on the first and `pb_3` on the last are the whole
         // of the spacing around them, and two groups touch. `inner`'s
         // `gap_y_3` never applies, since the list is its only child.
-        El* box = Div(a)->FlexCol()->W(kFill)->Child(
-            groups[i]->IntoEl(StrDup(a, fmt("%d", i))));
+        El* box = Div(a)->FlexCol()->W(kFill)->Child(this->content[i].Render(
+            cx, StrDup(a, fmt("%d", i)), iconCollapsed));
         if (i == 0) {
             box->PadT(12);
         }
-        if (i + 1 == groups.len) {
+        if (i + 1 == this->content.len) {
             box->PadB(12);
         }
         inner->Child(box);
     }
-    content->Child(inner);
-    root->Child(content);
+    Entity<SidebarScrollState> scrollState = KeyedEntity<SidebarScrollState>(
+        cx, KeyedName(cx, StrL("sidebar-content-scroll")));
+    SidebarScrollState* scroll = scrollState.Get(cx);
+    El* viewport = gpui::Scrollbar::Vertical(
+                       cx, StrL("sidebar-content-scroll"),
+                       scroll ? scroll->y : 0,
+                       ListenTo(scrollState, &SidebarScrollState::OnScroll))
+                       ->W(kFill)
+                       ->H(kFill)
+                       ->Child(inner);
+    body->Child(viewport);
+    root->Child(body);
     if (footer) {
         El* box = Div(a)->FlexRow()->W(kFill)->PadX(iconCollapsed ? 8.f : 12.f);
+        if (iconCollapsed) {
+            box->PadT(8);
+        }
         box->PadB(12);
         box->Child(footer);
         root->Child(box);
+    }
+    if (layout.wrapper == SidebarWrapperKind::None) {
+        return root;
+    }
+    if (layout.wrapper == SidebarWrapperKind::Static) {
+        return Div(a)
+            ->FlexRow()
+            ->W(layout.wrapperWidth)
+            ->H(kFill)
+            ->Shrink0()
+            ->ClipX();
     }
     // sidebar_wrapper: a clipping box of the animated width, with the sidebar
     // pinned to whichever end it slides from. At rest it is exactly the

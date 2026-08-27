@@ -7372,3 +7372,39 @@ the audit moves to 80 full, 41 partial, 8 adapters and 2 exclusions with 324
 unresolved partial-module spellings. MSVC debug/release, MSVC ASan and clang-cl
 release pass 19,700 checks; wasm passes its 18,995 applicable checks; and the
 release story build passes.
+
+## Sidebar items again compose through the source hierarchy
+
+The sidebar port previously hard-wired `Sidebar -> SidebarGroup ->
+SidebarMenu -> SidebarMenuItem`, even though the pinned module makes both the
+sidebar and each group generic over `SidebarItem`. Header and footer were free
+functions rather than values, caller styles could not refine a sidebar or
+menu, and the content column was clipped but did not scroll. Collapsed items
+also exposed their label tooltip without requiring an icon, unlike the source.
+
+`SidebarItem` is now the POD function-table projection of the Rust trait. A
+sidebar or group accepts menu items, menus, groups or application-defined
+items through that same seam, while the old typed arrays remain populated for
+source-compatible builder-capacity tests. `SidebarHeader` and `SidebarFooter`
+are arena builders with arbitrary children, selected/collapsed state,
+interactivity and style refinement; the footer preserves the source's inner
+base element. Sidebar and menu refinements, the boolean collapsible overload,
+active medium weight, 80% hover fill, icon-only collapsed tooltips and pinned
+header/footer padding are restored.
+
+The content now owns keyed scroll state and a renderer-backed vertical
+viewport. The wrapper follows the source's three-way layout: `None` returns
+the sidebar itself, non-pixel collapsed offcanvas uses a static zero-width
+clip, and pixel widths animate with content pinned toward the appropriate
+edge. The existing motion seam supplies the source's cubic transition and
+keeps the child mounted until the offcanvas close reaches zero.
+
+Tests cover generic custom items at both nesting levels, the header/footer
+builders, style refinement, unbounded children, source scroll structure,
+tooltip eligibility and every wrapper/side/non-pixel case. The light-theme
+story was compared directly with the pinned Rust story; remaining image
+differences are text rasterization and one-pixel backend placement rather than
+missing sidebar structure. UI Sidebar is full: the audit moves to 81 full, 40
+partial, 8 adapters and 2 exclusions, with 323 unresolved partial-module
+spellings. MSVC and clang-cl release plus MSVC ASan pass 19,734 checks, wasm
+passes its 19,029 applicable checks, and the release story build passes.
