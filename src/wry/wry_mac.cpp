@@ -845,7 +845,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     // anything else fills the parent.
     double scale = ScaleFactor(parentView);
     NSRect frame;
-    if (asChild) {
+    if (asChild && attrs->hasBounds) {
         double x = ToLogical(attrs->bounds.position.x, attrs->bounds.position.logical, scale);
         double y = ToLogical(attrs->bounds.position.y, attrs->bounds.position.logical, scale);
         double w = ToLogical(attrs->bounds.size.width, attrs->bounds.size.logical, scale);

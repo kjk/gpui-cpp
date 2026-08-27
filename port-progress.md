@@ -9270,3 +9270,10 @@ override boundary, just like empty environment variables and the pinned
 loader. This prevents an empty managed browser-argument value from appending a
 spurious separator and keeps empty path/channel policies on their normal
 fallback paths.
+
+`WebViewAttributes` can now represent Rust's public `bounds: Option<Rect>`
+rather than only its default value. `hasBounds` defaults true beside the same
+logical 200 by 200 rect, so existing callers are unchanged; false takes Wry's
+Windows `CW_USEDEFAULT` creation branch followed by its default zero rect, and
+a macOS child begins at its parent bounds. The default-value regression test
+covers the presence bit and all four coordinates.

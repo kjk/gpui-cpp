@@ -2843,10 +2843,17 @@ static HWND CreateContainerHwnd(HWND parent, const WebViewAttributes* attrs, boo
     int w = 0;
     int h = 0;
     if (isChild) {
-        x = ToPhysical(attrs->bounds.position.x, attrs->bounds.position.logical, scale);
-        y = ToPhysical(attrs->bounds.position.y, attrs->bounds.position.logical, scale);
-        w = ToPhysical(attrs->bounds.size.width, attrs->bounds.size.logical, scale);
-        h = ToPhysical(attrs->bounds.size.height, attrs->bounds.size.logical, scale);
+        if (attrs->hasBounds) {
+            x = ToPhysical(attrs->bounds.position.x, attrs->bounds.position.logical, scale);
+            y = ToPhysical(attrs->bounds.position.y, attrs->bounds.position.logical, scale);
+            w = ToPhysical(attrs->bounds.size.width, attrs->bounds.size.logical, scale);
+            h = ToPhysical(attrs->bounds.size.height, attrs->bounds.size.logical, scale);
+        } else {
+            x = CW_USEDEFAULT;
+            y = CW_USEDEFAULT;
+            w = CW_USEDEFAULT;
+            h = CW_USEDEFAULT;
+        }
     } else if (!ParentBounds(parent, &w, &h)) {
         return nullptr;
     }
@@ -4202,7 +4209,8 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     }
 
     if (asChild) {
-        if (!WebViewSetBounds(wv, attrs->bounds)) {
+        Rect bounds = attrs->hasBounds ? attrs->bounds : Rect{};
+        if (!WebViewSetBounds(wv, bounds)) {
             WebViewFree(wv);
             return nullptr;
         }

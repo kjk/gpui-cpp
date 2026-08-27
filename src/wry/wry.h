@@ -342,7 +342,9 @@ struct WebViewAttributes {
     bool autoplay = true;
     ProxyConfig proxyConfig;
     bool focused = true;
-    /** Only honoured by a child webview. Rust defaults it to 200×200. */
+    /** Rust's `bounds: Option<Rect>`; defaults to `Some(200×200)`. */
+    bool hasBounds = true;
+    /** Only honoured by a child webview when `hasBounds` is true. */
     Rect bounds = {{0, 0, true}, {200, 200, true}};
     /** `with_background_throttling`; false is Rust's `None`. */
     bool hasBackgroundThrottling = false;
