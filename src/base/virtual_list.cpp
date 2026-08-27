@@ -191,50 +191,119 @@ VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
     return VirtualListVisibleRows(count, itemSize, h->offset, h->viewport);
 }
 
+void ItemSizeLayoutBuild(ItemSizeLayout* layout, Axis axis,
+                         const float* itemSizes, int count,
+                         float uniformItemSize, float gap,
+                         float crossSize) {
+    if (!layout) {
+        return;
+    }
+    layout->sizes.len = 0;
+    layout->origins.len = 0;
+    layout->contentSize = {};
+    float origin = 0;
+    for (int i = 0; i < count; i++) {
+        float item = itemSizes ? itemSizes[i] : uniformItemSize;
+        float extent = item + (i + 1 < count ? gap : 0.f);
+        layout->origins.Append(origin);
+        layout->sizes.Append(extent);
+        origin += extent;
+    }
+    if (axis == Axis::Horizontal) {
+        layout->contentSize.w = origin;
+        layout->contentSize.h = crossSize;
+    } else {
+        layout->contentSize.w = crossSize;
+        layout->contentSize.h = origin;
+    }
+}
+
 El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
     Arena* a = cx->a;
+    VirtualListFrameState frame;
+    float viewport = o.layoutAxis == Axis::Horizontal ? o.viewW : o.viewH;
+    float crossSize =
+        o.layoutAxis == Axis::Horizontal ? o.viewH : o.viewW;
+    ItemSizeLayoutBuild(&frame.sizeLayout, o.layoutAxis, o.sizes, o.count,
+                        o.rowH, o.gap, crossSize);
     // The layout is where the handle is answered: it learns how many items
     // there are and how much of them is showing, a pending scroll_to_item is
     // applied against that, and the offset is clamped to the list.
-    float offset = o.scrollY;
+    float offset =
+        o.layoutAxis == Axis::Horizontal ? o.scrollX : o.scrollY;
     if (o.handle) {
-        VirtualListHandleLayout(o.handle, o.sizes, o.count, o.rowH, o.viewH);
+        o.handle->axis = o.layoutAxis;
+        const float* sizes =
+            frame.sizeLayout.sizes.len ? frame.sizeLayout.sizes.els : nullptr;
+        VirtualListHandleLayout(o.handle, sizes, o.count, 0, viewport);
         offset = o.handle->offset;
     }
     // The rows the viewport can show, and a spacer at each end standing in
     // for the ones that were not built — without the second one the list
     // would scroll only as far as the last row it made.
-    VirtualRange range =
-        o.sizes ? VirtualListVisibleRange(o.sizes, o.count, offset, o.viewH)
-                : VirtualListVisibleRows(o.count, o.rowH, offset, o.viewH);
-    El* list = Div(a)->FlexCol();
-    if (range.first > 0) {
-        float before = o.sizes
-                           ? VirtualListItemOrigin(o.sizes, o.count, range.first)
-                           : (float)range.first * o.rowH;
-        list->Child(Div(a)->H(before));
+    const float* layoutSizes =
+        frame.sizeLayout.sizes.len ? frame.sizeLayout.sizes.els : nullptr;
+    frame.visible = VirtualListVisibleRange(layoutSizes, o.count, offset,
+                                            viewport);
+    El* list = Div(a);
+    if (o.layoutAxis == Axis::Horizontal) {
+        list->FlexRow();
+    } else {
+        list->FlexCol();
     }
-    for (int ix = range.first; ix < range.end; ix++) {
+    if (frame.visible.first > 0) {
+        frame.before = frame.sizeLayout.origins[frame.visible.first];
+        El* spacer = Div(a);
+        if (o.layoutAxis == Axis::Horizontal) {
+            spacer->W(frame.before);
+        } else {
+            spacer->H(frame.before);
+        }
+        list->Child(spacer);
+    }
+    for (int ix = frame.visible.first; ix < frame.visible.end; ix++) {
         if (El* built = o.row ? o.row(o.user, cx, ix) : nullptr) {
+            if (o.gap != 0 && ix + 1 < o.count) {
+                El* allocation = Div(a);
+                if (o.layoutAxis == Axis::Horizontal) {
+                    allocation->FlexRow()->W(frame.sizeLayout.sizes[ix]);
+                } else {
+                    allocation->FlexCol()->H(frame.sizeLayout.sizes[ix]);
+                }
+                allocation->Child(built);
+                built = allocation;
+            }
             list->Child(built);
         }
     }
-    if (range.end < o.count) {
-        float content = o.sizes ? VirtualListContentSize(o.sizes, o.count)
-                                : (float)o.count * o.rowH;
-        float built = o.sizes
-                          ? VirtualListItemOrigin(o.sizes, o.count, range.end)
-                          : (float)range.end * o.rowH;
-        list->Child(Div(a)->H(content - built));
+    if (frame.visible.end < o.count) {
+        float content = o.layoutAxis == Axis::Horizontal
+                            ? frame.sizeLayout.contentSize.w
+                            : frame.sizeLayout.contentSize.h;
+        frame.after = content - frame.sizeLayout.origins[frame.visible.end];
+        El* spacer = Div(a);
+        if (o.layoutAxis == Axis::Horizontal) {
+            spacer->W(frame.after);
+        } else {
+            spacer->H(frame.after);
+        }
+        list->Child(spacer);
     }
 
-    El* e = New(cx, id)->H(o.viewH + o.pad * 2)->ClipY()->ScrollY(offset);
+    frame.scrollOffset = offset;
+    El* e = New(cx, id)->ClipY()->ClipX();
+    if (o.layoutAxis == Axis::Horizontal) {
+        e->W(o.viewW + o.pad * 2)
+            ->ScrollX(offset)
+            ->ScrollY(o.scrollY);
+    } else {
+        e->H(o.viewH + o.pad * 2)
+            ->ScrollY(offset)
+            ->ScrollX(o.scrollX);
+    }
     if (o.pad > 0) {
         e->Pad(o.pad);
     }
-    // Both axes: a row wider than the viewport slides under it rather than
-    // being cut, which is what the story's Axis: Both asks for.
-    e->ClipX()->ScrollX(o.scrollX);
     if (o.axis == ScrollAxis::Vertical) {
         e->HideScrollbarX();
     } else if (o.axis == ScrollAxis::Horizontal) {
@@ -249,5 +318,20 @@ El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
 El* VirtualList::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     return Div(a)->Id(id);
+}
+
+El* virtual_list(Ctx* cx, Str id, Axis axis,
+                 const VirtualListOpts& opts) {
+    VirtualListOpts copy = opts;
+    copy.layoutAxis = axis;
+    return VirtualList::New(cx, id, copy);
+}
+
+El* v_virtual_list(Ctx* cx, Str id, const VirtualListOpts& opts) {
+    return virtual_list(cx, id, Axis::Vertical, opts);
+}
+
+El* h_virtual_list(Ctx* cx, Str id, const VirtualListOpts& opts) {
+    return virtual_list(cx, id, Axis::Horizontal, opts);
 }
 } // namespace gpui

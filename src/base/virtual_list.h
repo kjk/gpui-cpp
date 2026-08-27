@@ -113,6 +113,38 @@ VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
                                     const float* sizes, int count,
                                     float itemSize);
 
+// request_layout's retained calculation: each along-axis extent (including
+// the gap after every item but the last), its cumulative origin, total content
+// size and the bounds from the last layout. Rust retains this by element id;
+// the C++ frame state computes the same POD-visible result while building.
+struct ItemSizeLayout {
+    Vec<float> sizes;
+    Vec<float> origins;
+    Size contentSize = {};
+    Bounds lastLayoutBounds = {};
+
+    ~ItemSizeLayout() {
+        sizes.Reset();
+        origins.Reset();
+    }
+};
+
+void ItemSizeLayoutBuild(ItemSizeLayout* layout, Axis axis,
+                         const float* itemSizes, int count,
+                         float uniformItemSize, float gap,
+                         float crossSize);
+
+// The per-frame state the source Element passes from request_layout through
+// prepaint to paint. Elements are arena children here, so their visible range
+// and spacer extents are the retained part needed by the builder.
+struct VirtualListFrameState {
+    VirtualRange visible = {};
+    ItemSizeLayout sizeLayout;
+    float scrollOffset = 0;
+    float before = 0;
+    float after = 0;
+};
+
 // virtual_list.rs's list itself. Rust's `v_virtual_list(entity, id, sizes,
 // |_, range, _, _| ...)` hands the closure the whole visible range and takes
 // back the rows; this asks for one row at a time and carries the user pointer
@@ -126,6 +158,9 @@ struct VirtualListOpts {
     int count = 0;
     float rowH = 32;
     float viewH = 192;
+    // The horizontal counterpart. `rowH` remains the historical name for a
+    // uniform along-axis extent, so it is a width when layoutAxis is horizontal.
+    float viewW = 192;
     const float* sizes = nullptr;
     // The offsets, for a list without a handle. A list with one reads its
     // offset from the handle instead — `track_scroll(&handle)`.
@@ -143,6 +178,11 @@ struct VirtualListOpts {
     // does not draw the bar along the bottom — Rust's `.scrollbar(&handle,
     // axis)` hangs the bar layer beside the list rather than inside it.
     ScrollAxis axis = ScrollAxis::Both;
+    // Source Axis: which coordinate holds item origins. This is independent
+    // of `axis` above, which selects the visible scrollbar skin.
+    Axis layoutAxis = Axis::Vertical;
+    // Included after every item except the last, as request_layout does.
+    float gap = 0;
     // The list's own inset, which behaves as CSS scroll-padding does: the two
     // ends keep their inset and a row scrolled under the edge clips flush
     // against it. `viewH` is the rows' height, so the element is this much
@@ -160,4 +200,10 @@ struct VirtualList {
     // would scroll only as far as the last row it made.
     static El* New(Ctx* cx, Str id, const VirtualListOpts& o);
 };
+
+// Source-named constructors. The callback and entity closure are represented
+// by VirtualListOpts::row + user under the repository's no-closure rule.
+El* virtual_list(Ctx* cx, Str id, Axis axis, const VirtualListOpts& opts);
+El* v_virtual_list(Ctx* cx, Str id, const VirtualListOpts& opts);
+El* h_virtual_list(Ctx* cx, Str id, const VirtualListOpts& opts);
 } // namespace gpui

@@ -199,6 +199,80 @@ static void TheHandleAnswersTheVisibleRange() {
     utassert(r.first == want.first && r.end == want.end);
 }
 
+static void ItemSizeLayoutCarriesOriginsGapsAndCrossSize() {
+    const float sizes[] = {20, 30, 40};
+    ItemSizeLayout vertical;
+    ItemSizeLayoutBuild(&vertical, Axis::Vertical, sizes, 3, 0, 4, 80);
+    utassert(vertical.sizes.len == 3 && vertical.origins.len == 3);
+    utassertnear(vertical.sizes[0], 24.f);
+    utassertnear(vertical.sizes[1], 34.f);
+    utassertnear(vertical.sizes[2], 40.f);
+    utassertnear(vertical.origins[0], 0.f);
+    utassertnear(vertical.origins[1], 24.f);
+    utassertnear(vertical.origins[2], 58.f);
+    utassertnear(vertical.contentSize.w, 80.f);
+    utassertnear(vertical.contentSize.h, 98.f);
+
+    ItemSizeLayout horizontal;
+    ItemSizeLayoutBuild(&horizontal, Axis::Horizontal, nullptr, 3, 20, 0,
+                        10);
+    utassertnear(horizontal.contentSize.w, 60.f);
+    utassertnear(horizontal.contentSize.h, 10.f);
+}
+
+struct BuiltRows {
+    int indices[32] = {};
+    int count = 0;
+};
+
+static El* CaptureVirtualRow(void* user, Ctx* cx, int ix) {
+    BuiltRows* rows = (BuiltRows*)user;
+    if (rows->count < (int)(sizeof(rows->indices) / sizeof(rows->indices[0]))) {
+        rows->indices[rows->count++] = ix;
+    }
+    return Div(cx->a)->W(20)->H(10);
+}
+
+static void HorizontalConstructorUsesXAxisEndToEnd() {
+    App app;
+    Window* win = new Window();
+    Arena* arena = ArenaNew();
+    win->app = &app;
+    Ctx cx = {&app, win, arena, {}};
+    VirtualListScrollHandle handle;
+    VirtualListScrollToItemDeferred(&handle, 12, ScrollStrategy::Top);
+    BuiltRows rows;
+    VirtualListOpts opts;
+    opts.count = 20;
+    opts.rowH = 20;
+    opts.viewW = 60;
+    opts.viewH = 10;
+    opts.scrollY = 7;
+    opts.handle = &handle;
+    opts.row = &CaptureVirtualRow;
+    opts.user = &rows;
+    El* root = h_virtual_list(&cx, StrL("horizontal"), opts);
+    utassert(handle.axis == Axis::Horizontal);
+    utassertnear(handle.offset, 200.f);
+    utassertnear(root->scrollX, 200.f);
+    utassertnear(root->scrollY, 7.f);
+    utassert(root->first && root->first == root->last);
+    El* list = root->first;
+    utassert(list->style.dir == FlexDir::Row);
+    bool containsTarget = false;
+    for (int i = 0; i < rows.count; i++) {
+        containsTarget = containsTarget || rows.indices[i] == 12;
+    }
+    utassert(containsTarget);
+
+    rows.count = 0;
+    opts.count = 0;
+    v_virtual_list(&cx, StrL("empty"), opts);
+    utassert(rows.count == 0);
+    delete win;
+    ArenaDelete(arena);
+}
+
 void TestVirtualList() {
     TestSuite("virtual_list");
     TheTopOfTheListStartsAtZero();
@@ -216,4 +290,6 @@ void TestVirtualList() {
     ScrollToBottomGoesAsFarAsThereIs();
     TheOffsetIsClampedToTheList();
     TheHandleAnswersTheVisibleRange();
+    ItemSizeLayoutCarriesOriginsGapsAndCrossSize();
+    HorizontalConstructorUsesXAxisEndToEnd();
 }

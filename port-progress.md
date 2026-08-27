@@ -7863,3 +7863,38 @@ unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 19,996 checks; wasm passes
 its 19,291 applicable checks. The release story and showcase builds compile
 their two distinct tree renderers against the richer callback.
+
+## Base virtual list implements both source axes
+
+The visible-range scan, variable and uniform extents, deferred scroll handle,
+minimal/center strategies, end clamp and vertical spacer builder were already
+present. The port's `axis` option only selected which scrollbar skin to hide,
+though: every list still built a column, measured `viewH`, moved `scrollY` and
+used height spacers. Consequently Rust's horizontal constructor and its
+horizontal test had no behavioral counterpart, and the request-layout/frame
+state types were absent.
+
+`ItemSizeLayout` now calculates source-shaped per-item extents (including the
+gap after every item but the last), cumulative origins, and along/cross content
+size. `VirtualListFrameState` carries that calculation, the visible range,
+offset and spacer extents through one frame build. `layoutAxis` is independent
+of the existing scrollbar-visibility axis: horizontal lists use `viewW`, an X
+handle and X scroll, a row flex line, width spacers and Y cross-axis scroll;
+vertical lists retain the corresponding Y behavior. The source-named
+`virtual_list`, `v_virtual_list` and `h_virtual_list` constructors select this
+axis while the callback/user pair remains the no-closure representation of
+Rust's entity closure. This runtime builds its arena element tree before Taffy
+lays it out, so the viewport along each axis is explicit in the options rather
+than discovered inside an Element request-layout callback; callers can still
+override the returned box's style, and all ported uses already supply the
+viewport they virtualize against.
+
+Tests cover gap/origin/content layout, deferred horizontal scrolling, X/Y
+offset separation, row-direction construction, target-range inclusion and an
+empty wrapper that requests no rows, in addition to the existing range and
+handle suite. Base virtual list is full within that frame-tree seam: the audit
+moves to 96 full, 25 partial, 8 adapters and 2 exclusions with 277 unresolved
+partial-module spellings and no full-module errors. MSVC debug/release,
+clang-cl release and MSVC ASan pass 20,015 checks; wasm passes its 19,310
+applicable checks. The release story and showcase builds compile their
+vertical list users unchanged.
