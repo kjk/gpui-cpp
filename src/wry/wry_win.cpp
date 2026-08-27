@@ -1776,6 +1776,8 @@ struct ProtocolCopy {
     void (*handler)(void* ctx, Str id, const Request* request, RequestResponder* responder);
 };
 
+struct WebViewEventState;
+
 struct WebView {
     Str id = {};  // heap
     HWND parent = nullptr;
@@ -1787,6 +1789,7 @@ struct WebView {
     ICoreWebView2Controller* controller = nullptr;
     ICoreWebView2* webview = nullptr;
     ICoreWebView2Environment* env = nullptr;
+    WebViewEventState* eventCallbacks = nullptr;
 
     void* ctx = nullptr;
     void (*ipcHandler)(void* ctx, Str url, Str body) = nullptr;
@@ -1806,6 +1809,40 @@ struct WebView {
     // "http" or "https", the scheme custom protocols are tunnelled over.
     const char* httpOrHttps = "http";
 };
+
+// WebView2 owns event handlers and may have queued one when the C++ owner is
+// released. Rust closures own everything they capture; this shared record is
+// the equivalent boundary for callbacks that need the WebView while it lives.
+struct WebViewEventState {
+    LONG refs = 1;
+    LONG alive = 1;
+    WebView* webview = nullptr;
+
+    void AddRef() { InterlockedIncrement(&refs); }
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            delete this;
+        }
+    }
+};
+
+static void ReleaseWebViewEventState(void* ctx) {
+    ((WebViewEventState*)ctx)->Release();
+}
+
+static WebView* LiveWebView(void* ctx) {
+    WebViewEventState* state = (WebViewEventState*)ctx;
+    if (!state || InterlockedCompareExchange(&state->alive, 0, 0) == 0) {
+        return nullptr;
+    }
+    return state->webview;
+}
+
+template <typename H, typename F>
+static H* MkWebViewHandler(WebView* webview, F fn) {
+    webview->eventCallbacks->AddRef();
+    return MkHandler<H>(webview->eventCallbacks, fn, ReleaseWebViewEventState);
+}
 
 // `RequestAsyncResponder`. The args and the deferral are held until the
 // handler answers, which it may do from another thread.
@@ -2618,8 +2655,8 @@ static HRESULT PrepareRequest(WebView* wv, ICoreWebView2WebResourceRequest* req,
 
 static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
                                       ICoreWebView2WebResourceRequestedEventArgs* args) {
-    WebView* wv = (WebView*)ctx;
-    if (!args) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv || !args) {
         return S_OK;
     }
     ICoreWebView2WebResourceRequest* req = nullptr;
@@ -2709,9 +2746,10 @@ static bool AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* tok
     }
 
     auto* handler =
-        MkHandler<Handler2<ICoreWebView2WebResourceRequestedEventHandler, ICoreWebView2*,
-                           ICoreWebView2WebResourceRequestedEventArgs*>>(wv,
-                                                                        OnWebResourceRequested);
+        MkWebViewHandler<Handler2<ICoreWebView2WebResourceRequestedEventHandler,
+                                  ICoreWebView2*,
+                                  ICoreWebView2WebResourceRequestedEventArgs*>>(
+            wv, OnWebResourceRequested);
     HRESULT hr = wv->webview->add_WebResourceRequested(handler, token);
     handler->Release();
     if (FAILED(hr)) {
@@ -2744,15 +2782,19 @@ static Str UrlFromWebView(ICoreWebView2* webview) {
 }
 
 static HRESULT OnWindowCloseRequested(void* ctx, ICoreWebView2*, IUnknown*) {
-    if (DestroyWindow((HWND)ctx)) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv) {
+        return S_OK;
+    }
+    if (DestroyWindow(wv->hwnd)) {
         return S_OK;
     }
     return HRESULT_FROM_WIN32(GetLastError());
 }
 
 static HRESULT OnDocumentTitleChanged(void* ctx, ICoreWebView2* sender, IUnknown*) {
-    WebView* wv = (WebView*)ctx;
-    if (!sender || !wv->documentTitleChangedHandler) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv || !sender || !wv->documentTitleChangedHandler) {
         return S_OK;
     }
     LPWSTR title = nullptr;
@@ -2766,7 +2808,10 @@ static HRESULT OnDocumentTitleChanged(void* ctx, ICoreWebView2* sender, IUnknown
 
 static HRESULT OnContentLoading(void* ctx, ICoreWebView2* sender,
                                 ICoreWebView2ContentLoadingEventArgs*) {
-    WebView* wv = (WebView*)ctx;
+    WebView* wv = LiveWebView(ctx);
+    if (!wv) {
+        return S_OK;
+    }
     if (sender && wv->onPageLoadHandler) {
         Str url;
         HRESULT hr = UrlFromWebViewInner(sender, &url);
@@ -2780,7 +2825,10 @@ static HRESULT OnContentLoading(void* ctx, ICoreWebView2* sender,
 
 static HRESULT OnNavigationCompleted(void* ctx, ICoreWebView2* sender,
                                      ICoreWebView2NavigationCompletedEventArgs*) {
-    WebView* wv = (WebView*)ctx;
+    WebView* wv = LiveWebView(ctx);
+    if (!wv) {
+        return S_OK;
+    }
     if (sender && wv->onPageLoadHandler) {
         Str url;
         HRESULT hr = UrlFromWebViewInner(sender, &url);
@@ -2794,8 +2842,8 @@ static HRESULT OnNavigationCompleted(void* ctx, ICoreWebView2* sender,
 
 static HRESULT OnNavigationStarting(void* ctx, ICoreWebView2*,
                                     ICoreWebView2NavigationStartingEventArgs* args) {
-    WebView* wv = (WebView*)ctx;
-    if (!args || !wv->navigationHandler) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv || !args || !wv->navigationHandler) {
         return S_OK;
     }
     LPWSTR uri = nullptr;
@@ -2813,8 +2861,8 @@ static HRESULT OnNavigationStarting(void* ctx, ICoreWebView2*,
 // window and nothing they do can block on it.
 static HRESULT OnNewWindowRequested(void* ctx, ICoreWebView2*,
                                     ICoreWebView2NewWindowRequestedEventArgs* args) {
-    WebView* wv = (WebView*)ctx;
-    if (!args) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv || !args) {
         return S_OK;
     }
     if (!wv->newWindowReqHandler) {
@@ -2890,8 +2938,8 @@ static HRESULT OnPermissionRequested(void*, ICoreWebView2*,
 
 static HRESULT OnDownloadStarting(void* ctx, ICoreWebView2*,
                                   ICoreWebView2DownloadStartingEventArgs* args) {
-    WebView* wv = (WebView*)ctx;
-    if (!args) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv || !args) {
         return S_OK;
     }
 
@@ -2946,8 +2994,8 @@ static HRESULT OnDownloadStarting(void* ctx, ICoreWebView2*,
 
 static HRESULT OnWebMessageReceived(void* ctx, ICoreWebView2*,
                                     ICoreWebView2WebMessageReceivedEventArgs* args) {
-    WebView* wv = (WebView*)ctx;
-    if (!args || !wv->ipcHandler) {
+    WebView* wv = LiveWebView(ctx);
+    if (!wv || !args || !wv->ipcHandler) {
         return S_OK;
     }
     LPWSTR source = nullptr;
@@ -2967,8 +3015,9 @@ static HRESULT OnWebMessageReceived(void* ctx, ICoreWebView2*,
 
 static bool AttachHandlers(WebView* wv, EventRegistrationToken* token) {
     {
-        auto* h = MkHandler<Handler2<ICoreWebView2WindowCloseRequestedEventHandler, ICoreWebView2*,
-                                     IUnknown*>>(wv->hwnd, OnWindowCloseRequested);
+        auto* h =
+            MkWebViewHandler<Handler2<ICoreWebView2WindowCloseRequestedEventHandler,
+                                      ICoreWebView2*, IUnknown*>>(wv, OnWindowCloseRequested);
         HRESULT hr = wv->webview->add_WindowCloseRequested(h, token);
         h->Release();
         if (FAILED(hr)) {
@@ -2976,8 +3025,9 @@ static bool AttachHandlers(WebView* wv, EventRegistrationToken* token) {
         }
     }
     if (wv->documentTitleChangedHandler) {
-        auto* h = MkHandler<Handler2<ICoreWebView2DocumentTitleChangedEventHandler, ICoreWebView2*,
-                                     IUnknown*>>(wv, OnDocumentTitleChanged);
+        auto* h =
+            MkWebViewHandler<Handler2<ICoreWebView2DocumentTitleChangedEventHandler,
+                                      ICoreWebView2*, IUnknown*>>(wv, OnDocumentTitleChanged);
         HRESULT hr = wv->webview->add_DocumentTitleChanged(h, token);
         h->Release();
         if (FAILED(hr)) {
@@ -2986,17 +3036,17 @@ static bool AttachHandlers(WebView* wv, EventRegistrationToken* token) {
     }
     if (wv->onPageLoadHandler) {
         auto* started =
-            MkHandler<Handler2<ICoreWebView2ContentLoadingEventHandler, ICoreWebView2*,
-                               ICoreWebView2ContentLoadingEventArgs*>>(wv, OnContentLoading);
+            MkWebViewHandler<Handler2<ICoreWebView2ContentLoadingEventHandler, ICoreWebView2*,
+                                      ICoreWebView2ContentLoadingEventArgs*>>(wv,
+                                                                             OnContentLoading);
         HRESULT hr = wv->webview->add_ContentLoading(started, token);
         started->Release();
         if (FAILED(hr)) {
             return false;
         }
-        auto* finished =
-            MkHandler<Handler2<ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2*,
-                               ICoreWebView2NavigationCompletedEventArgs*>>(wv,
-                                                                           OnNavigationCompleted);
+        auto* finished = MkWebViewHandler<
+            Handler2<ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2*,
+                     ICoreWebView2NavigationCompletedEventArgs*>>(wv, OnNavigationCompleted);
         hr = wv->webview->add_NavigationCompleted(finished, token);
         finished->Release();
         if (FAILED(hr)) {
@@ -3004,8 +3054,9 @@ static bool AttachHandlers(WebView* wv, EventRegistrationToken* token) {
         }
     }
     if (wv->navigationHandler) {
-        auto* h = MkHandler<Handler2<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2*,
-                                     ICoreWebView2NavigationStartingEventArgs*>>(
+        auto* h = MkWebViewHandler<
+            Handler2<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2*,
+                     ICoreWebView2NavigationStartingEventArgs*>>(
             wv, OnNavigationStarting);
         HRESULT hr = wv->webview->add_NavigationStarting(h, token);
         h->Release();
@@ -3014,8 +3065,9 @@ static bool AttachHandlers(WebView* wv, EventRegistrationToken* token) {
         }
     }
     {
-        auto* h = MkHandler<Handler2<ICoreWebView2NewWindowRequestedEventHandler, ICoreWebView2*,
-                                     ICoreWebView2NewWindowRequestedEventArgs*>>(
+        auto* h = MkWebViewHandler<
+            Handler2<ICoreWebView2NewWindowRequestedEventHandler, ICoreWebView2*,
+                     ICoreWebView2NewWindowRequestedEventArgs*>>(
             wv, OnNewWindowRequested);
         HRESULT hr = wv->webview->add_NewWindowRequested(h, token);
         h->Release();
@@ -3036,8 +3088,9 @@ static bool AttachDownloadHandlers(WebView* wv, EventRegistrationToken* token) {
         return false;
     }
     auto* handler =
-        MkHandler<Handler2<ICoreWebView2DownloadStartingEventHandler, ICoreWebView2*,
-                           ICoreWebView2DownloadStartingEventArgs*>>(wv, OnDownloadStarting);
+        MkWebViewHandler<Handler2<ICoreWebView2DownloadStartingEventHandler, ICoreWebView2*,
+                                  ICoreWebView2DownloadStartingEventArgs*>>(wv,
+                                                                           OnDownloadStarting);
     HRESULT hr = webview4->add_DownloadStarting(handler, token);
     handler->Release();
     Rel(&webview4);
@@ -3057,9 +3110,10 @@ static bool AttachIpcHandler(WebView* wv, EventRegistrationToken* token) {
                  "window.chrome.webview.postMessage(s) }) });"))) {
         return false;
     }
-    auto* h = MkHandler<Handler2<ICoreWebView2WebMessageReceivedEventHandler, ICoreWebView2*,
-                                 ICoreWebView2WebMessageReceivedEventArgs*>>(wv,
-                                                                            OnWebMessageReceived);
+    auto* h =
+        MkWebViewHandler<Handler2<ICoreWebView2WebMessageReceivedEventHandler, ICoreWebView2*,
+                                  ICoreWebView2WebMessageReceivedEventArgs*>>(
+            wv, OnWebMessageReceived);
     HRESULT hr = wv->webview->add_WebMessageReceived(h, token);
     h->Release();
     return SUCCEEDED(hr);
@@ -3254,6 +3308,8 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     wv->controller = controller;
     wv->webview = webview;
     wv->env = env;
+    wv->eventCallbacks = new WebViewEventState();
+    wv->eventCallbacks->webview = wv;
     wv->ctx = attrs->ctx;
     wv->ipcHandler = attrs->ipcHandler;
     wv->navigationHandler = attrs->navigationHandler;
@@ -3396,6 +3452,10 @@ void WebViewFree(WebView* wv) {
     if (!wv) {
         return;
     }
+    if (wv->eventCallbacks) {
+        InterlockedExchange(&wv->eventCallbacks->alive, 0);
+        wv->eventCallbacks->webview = nullptr;
+    }
     if (wv->downloadCallbacks) {
         InterlockedExchange(&wv->downloadCallbacks->alive, 0);
     }
@@ -3418,6 +3478,10 @@ void WebViewFree(WebView* wv) {
     Rel(&wv->webview);
     Rel(&wv->controller);
     Rel(&wv->env);
+    if (wv->eventCallbacks) {
+        wv->eventCallbacks->Release();
+        wv->eventCallbacks = nullptr;
+    }
     for (int i = 0; i < wv->protocols.len; i++) {
         StrFree(wv->protocols[i].name);
     }

@@ -9136,3 +9136,11 @@ the same way Wry's closure is. It is released after a normal invocation, on a
 synchronous `ExecuteScript` failure, or when WebView2 cancels and releases the
 handler without invoking it; the last path previously leaked the copied
 callback record.
+
+Windows WebView2 event handlers no longer retain a raw `WebView*` by
+themselves. Window-close, title, page-load, navigation, new-window, IPC,
+download-start and custom-protocol handlers share a refcounted live-view
+record; teardown marks it dead before closing the controller and queued
+handlers then return without touching the deleted owner. This gives the C
+callback form the lifetime Wry's owned closures already have, including
+partial-construction failure paths.
