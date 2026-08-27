@@ -9220,3 +9220,11 @@ installs drag/drop interception and applies bounds. An extension failure
 therefore has the same native side-effect boundary. The public attribute
 comments also state the actual Rust `Option<String>` mapping: null is `None`,
 while a non-null empty string is an explicit value.
+
+Installed WebView2 discovery now applies the pinned loader's exact four-part
+minimum, `86.0.616.0`, before accepting either a `ClientState\\EBWebView` or
+legacy `Clients\\pv` registration. An older or malformed Stable registration
+is skipped so Beta, Dev or Canary can still satisfy Wry, rather than selecting
+the first existing client and failing environment creation later. As in the
+real loader, an explicitly selected fixed-version folder is checked for its
+client DLL but is not filtered by this installed-runtime floor.

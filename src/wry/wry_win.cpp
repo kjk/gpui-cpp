@@ -1307,6 +1307,52 @@ struct RuntimeInfo {
     int runtimeType;
 };
 
+// WebView2LoaderStatic's kMinimumCompatibleVersion. This is deliberately not
+// TargetCompatibleBrowserVersion: installed-runtime discovery uses this older
+// floor and lets the runtime validate the environment options itself.
+static const uint32_t kMinimumCompatibleRuntimeVersion[4] = {86, 0, 616, 0};
+
+static bool ParseRuntimeVersion(const WCHAR* text, uint32_t version[4]) {
+    if (!text) {
+        return false;
+    }
+    for (int part = 0; part < 4; part++) {
+        if (*text < L'0' || *text > L'9') {
+            return false;
+        }
+        uint32_t value = 0;
+        do {
+            uint32_t digit = (uint32_t)(*text - L'0');
+            if (value > (UINT32_MAX - digit) / 10) {
+                return false;
+            }
+            value = value * 10 + digit;
+            text++;
+        } while (*text >= L'0' && *text <= L'9');
+        version[part] = value;
+        if (part < 3) {
+            if (*text != L'.') {
+                return false;
+            }
+            text++;
+        }
+    }
+    return *text == 0;
+}
+
+static bool IsCompatibleInstalledRuntime(const WCHAR* versionText) {
+    uint32_t version[4];
+    if (!ParseRuntimeVersion(versionText, version)) {
+        return false;
+    }
+    for (int i = 0; i < 4; i++) {
+        if (version[i] != kMinimumCompatibleRuntimeVersion[i]) {
+            return version[i] > kMinimumCompatibleRuntimeVersion[i];
+        }
+    }
+    return true;
+}
+
 static const WCHAR* ArchFolder() {
 #if defined(_M_ARM64)
     return L"arm64";
@@ -1406,7 +1452,12 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
     for (int i = 0; i < (int)(sizeof(places) / sizeof(places[0])); i++) {
         WCHAR folder[MAX_PATH * 2];
         if (!RegReadStr(places[i].root, key, L"EBWebView", places[i].flags, folder,
-                        (DWORD)(sizeof(folder) / sizeof(folder[0])))) {
+                         (DWORD)(sizeof(folder) / sizeof(folder[0])))) {
+            continue;
+        }
+        const WCHAR* version = wcsrchr(folder, L'\\');
+        version = version ? version + 1 : folder;
+        if (!IsCompatibleInstalledRuntime(version)) {
             continue;
         }
         swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
@@ -1414,8 +1465,7 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
         if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
             continue;
         }
-        FileVersion(out->clientDll, out->version,
-                    (int)(sizeof(out->version) / sizeof(out->version[0])));
+        wcscpy_s(out->version, version);
         if (out->version[0] != 0 && channel->name[0] != 0) {
             wcscat_s(out->version, L" ");
             wcscat_s(out->version, channel->name);
@@ -1428,8 +1478,11 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
     WCHAR location[MAX_PATH * 2];
     WCHAR version[64];
     if (!RuntimeVersionAndLocation(channel->id, version,
-                                   (DWORD)(sizeof(version) / sizeof(version[0])), location,
-                                   (DWORD)(sizeof(location) / sizeof(location[0])))) {
+                                    (DWORD)(sizeof(version) / sizeof(version[0])), location,
+                                    (DWORD)(sizeof(location) / sizeof(location[0])))) {
+        return false;
+    }
+    if (!IsCompatibleInstalledRuntime(version)) {
         return false;
     }
     swprintf_s(out->clientDll, L"%s\\%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", location,
