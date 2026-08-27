@@ -1580,13 +1580,16 @@ static bool LeastStableFromEnvironment(bool fallback) {
     return fallback;
 }
 
-static bool FindRuntime(RuntimeInfo* out, IUnknown* options = nullptr) {
+static bool FindRuntime(RuntimeInfo* out, IUnknown* options = nullptr,
+                        bool useOverrides = true) {
     out->version[0] = 0;
     out->clientDll[0] = 0;
     out->runtimeType = 0;
 
-    WCHAR* folder = LoaderOverrideDup(L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
-                                       L"BrowserExecutableFolder");
+    WCHAR* folder = useOverrides
+                        ? LoaderOverrideDup(L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
+                                            L"BrowserExecutableFolder")
+                        : nullptr;
     if (folder && folder[0] != 0) {
         // A fixed-version drop: the folder is already the versioned one.
         WCHAR* resolvedFolder = FixedRuntimeFolderDup(folder);
@@ -1625,8 +1628,10 @@ static bool FindRuntime(RuntimeInfo* out, IUnknown* options = nullptr) {
         // COREWEBVIEW2_RELEASE_CHANNELS_NONE means the default set.
         releaseChannels = 15;
     }
-    releaseChannels = ReleaseChannelsFromEnvironment(releaseChannels);
-    leastStable = LeastStableFromEnvironment(leastStable);
+    if (useOverrides) {
+        releaseChannels = ReleaseChannelsFromEnvironment(releaseChannels);
+        leastStable = LeastStableFromEnvironment(leastStable);
+    }
     int count = (int)(sizeof(kRuntimeChannels) / sizeof(kRuntimeChannels[0]));
     for (int step = 0; step < count; step++) {
         int i = leastStable ? count - step - 1 : step;
@@ -1785,7 +1790,8 @@ static HRESULT CreateEnvironmentWithOptions(
 // GetAvailableCoreWebView2BrowserVersionString reports.
 Str WebViewVersionTemp() {
     RuntimeInfo rt;
-    if (!FindRuntime(&rt) || rt.version[0] == 0) {
+    if ((!FindRuntime(&rt) || rt.version[0] == 0) &&
+        (!FindRuntime(&rt, nullptr, false) || rt.version[0] == 0)) {
         return {};
     }
     return WstrToUtf8Temp(rt.version);
@@ -1793,7 +1799,7 @@ Str WebViewVersionTemp() {
 
 bool WebViewAvailable() {
     RuntimeInfo rt;
-    return FindRuntime(&rt);
+    return FindRuntime(&rt) || FindRuntime(&rt, nullptr, false);
 }
 
 // ─── COM plumbing ────────────────────────────────────────────────────────

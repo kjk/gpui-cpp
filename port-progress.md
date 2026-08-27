@@ -9242,3 +9242,10 @@ process's current working directory. Drive-rooted and UNC folders remain
 absolute. Resolution and final client-path overflow fail discovery cleanly,
 so launching the same Wry port from another directory no longer changes which
 WebView2 runtime it loads.
+
+Windows version and availability queries now preserve the pinned loader's
+fallback boundary: if discovery with environment or policy overrides fails to
+produce a runtime version, they retry the caller's original unoverridden
+selection. Environment creation still honours a bad administrator/user
+override as an error, as the loader does; only the informational
+`GetAvailableCoreWebView2BrowserVersionString` behavior falls back.
