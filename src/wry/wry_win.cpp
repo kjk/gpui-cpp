@@ -185,6 +185,8 @@ struct DECLSPEC_UUID("d6eb91dd-c3d2-45e5-bd29-6dc2bc4de9cf") ICoreWebView2Enviro
 struct DECLSPEC_UUID("f06f41bf-4b5a-49d8-b9f6-fa16cd29f274") ICoreWebView2Environment9;
 struct DECLSPEC_UUID("ee0eb9df-6f12-46ce-b53f-3f47b9c928e0") ICoreWebView2Environment10;
 struct DECLSPEC_UUID("12aae616-8ccb-44ec-bcb3-eb1831881635") ICoreWebView2ControllerOptions;
+struct DECLSPEC_UUID("06c991d8-9e7e-11ed-a8fc-0242ac120002") ICoreWebView2ControllerOptions2;
+struct DECLSPEC_UUID("b32b191a-8998-57ca-b7cb-e04617e4ce4a") ICoreWebView2ControllerOptions3;
 struct DECLSPEC_UUID("4d00c0d1-9434-4eb6-8078-8697a560334f") ICoreWebView2Controller;
 struct DECLSPEC_UUID("c979903e-d4ca-4228-92eb-47ee3fa96eab") ICoreWebView2Controller2;
 struct DECLSPEC_UUID("f9614724-5d2b-41dc-aef7-73d62b51543b") ICoreWebView2Controller3;
@@ -321,6 +323,16 @@ virtual HRESULT STDMETHODCALLTYPE get_ProfileName( LPWSTR *value) = 0;
 virtual HRESULT STDMETHODCALLTYPE put_ProfileName( LPCWSTR value) = 0;
 virtual HRESULT STDMETHODCALLTYPE get_IsInPrivateModeEnabled( BOOL *value) = 0;
 virtual HRESULT STDMETHODCALLTYPE put_IsInPrivateModeEnabled( BOOL value) = 0;
+};
+
+struct ICoreWebView2ControllerOptions2 : ICoreWebView2ControllerOptions {
+virtual HRESULT STDMETHODCALLTYPE get_ScriptLocale( LPWSTR *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_ScriptLocale( LPCWSTR value) = 0;
+};
+
+struct ICoreWebView2ControllerOptions3 : ICoreWebView2ControllerOptions2 {
+virtual HRESULT STDMETHODCALLTYPE get_DefaultBackgroundColor( COREWEBVIEW2_COLOR *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_DefaultBackgroundColor( COREWEBVIEW2_COLOR value) = 0;
 };
 
 struct ICoreWebView2Controller : IUnknown {
@@ -2088,16 +2100,35 @@ static ICoreWebView2Controller* CreateController(HWND hwnd, ICoreWebView2Environ
     ICoreWebView2Environment10* env10 = nullptr;
     if (SUCCEEDED(env->QueryInterface(__uuidof(ICoreWebView2Environment10), (void**)&env10))) {
         ICoreWebView2ControllerOptions* opts = nullptr;
-        if (SUCCEEDED(env10->CreateCoreWebView2ControllerOptions(&opts)) && opts) {
-            opts->put_IsInPrivateModeEnabled(incognito ? TRUE : FALSE);
-            hr = env10->CreateCoreWebView2ControllerWithOptions(hwnd, opts, handler);
-            Rel(&opts);
+        hr = env10->CreateCoreWebView2ControllerOptions(&opts);
+        if (SUCCEEDED(hr) && !opts) {
+            hr = E_POINTER;
         }
+        if (SUCCEEDED(hr) && backgroundColor) {
+            ICoreWebView2ControllerOptions3* opts3 = nullptr;
+            if (SUCCEEDED(opts->QueryInterface(__uuidof(ICoreWebView2ControllerOptions3),
+                                               (void**)&opts3))) {
+                COREWEBVIEW2_COLOR color;
+                color.R = backgroundColor->r;
+                color.G = backgroundColor->g;
+                color.B = backgroundColor->b;
+                color.A = backgroundColor->a != 0 ? 255 : 0;
+                hr = opts3->put_DefaultBackgroundColor(color);
+                Rel(&opts3);
+            }
+        }
+        if (SUCCEEDED(hr)) {
+            hr = opts->put_IsInPrivateModeEnabled(incognito ? TRUE : FALSE);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = env10->CreateCoreWebView2ControllerWithOptions(hwnd, opts, handler);
+        }
+        Rel(&opts);
         Rel(&env10);
-    }
-    if (FAILED(hr)) {
-        // No ICoreWebView2Environment10, or its options failed: the plain
-        // entry point, which is what mod.rs falls back to.
+    } else {
+        // The plain entry point is Rust's fallback only when environment 10
+        // is absent. Once options exist, their errors must not silently drop
+        // incognito or another requested option.
         hr = env->CreateCoreWebView2Controller(hwnd, handler);
     }
     handler->Release();
@@ -2107,10 +2138,8 @@ static ICoreWebView2Controller* CreateController(HWND hwnd, ICoreWebView2Environ
     }
     PumpUntil(&wait.done);
 
-    // Rust asks ICoreWebView2ControllerOptions3 for the background colour
-    // before the controller exists; that interface is newer than the runtime
-    // this port has to work on, so the colour is set on the controller
-    // itself, which init_webview does anyway.
+    // init_webview sets this again, as the pinned source does. The options3
+    // call above prevents the first frame flashing the runtime default.
     if (wait.controller && backgroundColor) {
         SetBackgroundColor(wait.controller, *backgroundColor);
     }

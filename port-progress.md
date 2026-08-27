@@ -9031,3 +9031,13 @@ max-age is resolved against current Unix time. Shared cleanup owns all strings
 without an STL container or a cookie/time dependency. MSVC release passes
 20,826 checks, the release webview example builds with clang-cl, and the
 portable cookie API plus macOS stubs compile and link on the remote Mac.
+
+The controller-options path now has the same failure boundary as pinned Wry.
+If `ICoreWebView2Environment10` exists, failure to create options, set
+incognito or create the controller fails construction; it no longer falls
+back to the legacy call and silently loses the requested option. The legacy
+call remains the compatibility path only when environment 10 is absent.
+`ICoreWebView2ControllerOptions3` is transcribed as well, so a requested
+background color is installed before creation to avoid a default-color first
+frame and then repeated on the controller exactly as Rust does. The strict
+MSVC and clang-cl release webview builds pass, as do all 20,826 release tests.
