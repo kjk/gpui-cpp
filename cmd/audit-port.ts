@@ -46,7 +46,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
   .split(/\s+/);
 
 const partialBase = new Set([
-  "dialog",
   "dock",
   "global_state",
   "input",
@@ -319,6 +318,7 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     targets: ["src/gpui/gpui.h"],
   },
   "base/lib.rs::fn init": { spellings: ["BaseInit"] },
+  "base/dialog.rs::fn init": { spellings: ["DialogInitKeys"] },
   "base/geometry.rs::struct Edges": {
     spellings: ["Edges"],
     targets: ["src/gpui/gpui.h", "src/base/geometry.h"],

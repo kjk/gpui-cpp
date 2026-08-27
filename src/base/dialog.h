@@ -15,6 +15,32 @@ enum class DialogChangeReason : uint8_t {
     Imperative
 };
 
+struct DialogOpenChangeEvent {
+    bool open = false;
+    DialogChangeReason reason = DialogChangeReason::Imperative;
+};
+
+struct DialogHandleState {
+    EntityId self = {};
+    bool open = false;
+    Listener onOpenChange = {};
+};
+
+// Rust clones an Rc<Cell<bool>>. This tree's shared, stale-safe ownership
+// projection is an Entity handle: copies name the same open cell and become
+// inert when the application drops it.
+struct DialogHandle {
+    Entity<DialogHandleState> state = {};
+
+    static DialogHandle New(Ctx* cx, bool open = false);
+    bool IsValid() const { return state.IsValid(); }
+    bool IsOpen(App* app, bool fallback = false) const;
+    void OnOpenChange(App* app, Listener listener) const;
+    bool SetOpen(Ctx* cx, bool open, DialogChangeReason reason) const;
+    bool Open(Ctx* cx) const;
+    bool Close(Ctx* cx) const;
+};
+
 // What an action asks a dialog to do. Rust binds escape to Cancel and enter
 // to Confirm in the "Dialog" key context.
 enum class DialogAction : uint8_t {
@@ -83,7 +109,9 @@ struct DialogClose {
 // The trigger takes the press, not the click, and stops it there — Rust's
 // DialogTrigger is an on_mouse_down with cx.stop_propagation().
 struct DialogTrigger {
-    static El* New(Ctx* cx, Listener onOpen = {});
+    static El* New(Ctx* cx, Listener onOpen = {},
+                   DialogHandle handle = {},
+                   Str id = StrL("dialog-trigger"));
 };
 
 struct Dialog {
@@ -93,8 +121,12 @@ struct Dialog {
     // it is open. A stack of dialogs names one trap per layer, so the top one
     // traps on its own rather than sharing with the dialog underneath.
     Str trap = {};
+    bool open = true;
+    DialogHandle handle = {};
 
     static Dialog* New(Ctx* cx);
+    Dialog* Open(bool value);
+    Dialog* Handle(DialogHandle value);
     Dialog* Trap(Str name);
     Dialog* Backdrop(El* backdrop);
     Dialog* Popup(El* popup);

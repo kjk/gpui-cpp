@@ -92,10 +92,83 @@ static void ABackdropPressDismissesOnlyWhenAllFourHold() {
     utassert(DialogBackdropCloses(true, true, MouseButton::Left, 34, 34));
 }
 
+namespace {
+struct DialogHandleRecorder {
+    int changes = 0;
+    int triggerCalls = 0;
+    DialogOpenChangeEvent last = {};
+
+    static void OnChange(DialogHandleRecorder* self, Ctx*,
+                         const DialogOpenChangeEvent* ev) {
+        self->changes++;
+        self->last = *ev;
+    }
+    static void OnTrigger(DialogHandleRecorder* self, Ctx*,
+                          const MouseDownEvent*) {
+        self->triggerCalls++;
+    }
+};
+} // namespace
+
+// DialogHandle's Entity projection preserves Rust's shared-clone behavior:
+// imperative and trigger changes reach every copy and carry their reason.
+static void ASharedHandleControlsTriggersAndHosts() {
+    App app = {};
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+    Entity<DialogHandleRecorder> recorder =
+        EntityNewState<DialogHandleRecorder>(&app);
+    DialogHandle handle = DialogHandle::New(&cx, false);
+    DialogHandle copy = handle;
+    handle.OnOpenChange(&app,
+                        ListenTo(recorder, &DialogHandleRecorder::OnChange));
+
+    utassert(!handle.IsOpen(&app) && !copy.IsOpen(&app));
+    utassert(copy.Open(&cx));
+    DialogHandleRecorder* seen = recorder.Get(&app);
+    utassert(seen && seen->changes == 1 && seen->last.open);
+    utassert(seen->last.reason == DialogChangeReason::Imperative);
+    utassert(handle.IsOpen(&app));
+    // Replacing true with true is the source's no-op.
+    utassert(!handle.Open(&cx) && seen->changes == 1);
+
+    utassert(handle.Close(&cx));
+    El* closed = Dialog::New(&cx)->Handle(copy)->IntoEl();
+    utassert(closed->accessibility.role == AccessibilityRole::None);
+    El* closedAlert = AlertDialog::New(&cx)->Handle(copy)->IntoEl();
+    utassert(closedAlert->accessibility.role == AccessibilityRole::None);
+
+    El* trigger = DialogTrigger::New(
+        &cx, ListenTo(recorder, &DialogHandleRecorder::OnTrigger), copy);
+    utassert(trigger->onMouseDown.IsValid());
+    MouseDownEvent right = {};
+    right.button = MouseButton::Right;
+    ListenerCall(&app, win, trigger->onMouseDown, &right);
+    utassert(!handle.IsOpen(&app) && seen->triggerCalls == 0);
+    MouseDownEvent down = {};
+    ListenerCall(&app, win, trigger->onMouseDown, &down);
+    utassert(handle.IsOpen(&app));
+    utassert(seen->changes == 3 && seen->last.open);
+    utassert(seen->last.reason == DialogChangeReason::TriggerPress);
+    utassert(seen->triggerCalls == 1);
+
+    El* open = Dialog::New(&cx)->Handle(handle)->IntoEl();
+    utassert(open->accessibility.role == AccessibilityRole::Dialog);
+    El* openAlert = AlertDialog::New(&cx)->Handle(handle)->IntoEl();
+    utassert(openAlert->accessibility.role == AccessibilityRole::AlertDialog);
+
+    EntityDropAll(&app);
+    ArenaDelete(arena);
+    delete win;
+}
+
 void TestDialog() {
     TestSuite("dialog");
     EscapeCancelsAndEnterConfirms();
     TheActionsRunTheSameHandlersTheButtonsDo();
     KeyboardOffRemovesTheBindings();
     ABackdropPressDismissesOnlyWhenAllFourHold();
+    ASharedHandleControlsTriggersAndHosts();
 }

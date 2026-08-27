@@ -38,13 +38,10 @@ El* AlertDialogAction::New(Ctx* cx) {
     return Div(a)->PathClick(id)->OnClickAction(action::Confirm());
 }
 // The trigger takes the press, not the click, as its Rust counterpart does.
-El* AlertDialogTrigger::New(Ctx* cx, Listener onOpen) {
-    Arena* a = cx->a;
-    El* e = Div(a);
-    if (onOpen.IsValid()) {
-        e->OnMouseDown(onOpen);
-    }
-    return e;
+El* AlertDialogTrigger::New(Ctx* cx, Listener onOpen,
+                            DialogHandle handle) {
+    return DialogTrigger::New(cx, onOpen, handle,
+                              StrL("alert-dialog-trigger"));
 }
 
 AlertDialog* AlertDialog::New(Ctx* cx) {
@@ -69,6 +66,16 @@ AlertDialog* AlertDialog::Trap(Str name) {
     return this;
 }
 
+AlertDialog* AlertDialog::Open(bool value) {
+    open = value;
+    return this;
+}
+
+AlertDialog* AlertDialog::Handle(DialogHandle value) {
+    handle = value;
+    return this;
+}
+
 AlertDialog* AlertDialog::Backdrop(El* backdrop) {
     if (backdrop) {
         root->Child(backdrop);
@@ -87,6 +94,7 @@ AlertDialog* AlertDialog::Popup(El* popup) {
 }
 
 El* AlertDialog::IntoEl() {
-    return root;
+    bool visible = handle.IsValid() ? handle.IsOpen(cx->app, open) : open;
+    return visible ? root : Div(cx->a);
 }
 } // namespace gpui

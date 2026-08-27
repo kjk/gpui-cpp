@@ -207,6 +207,11 @@ The important non-mechanical mappings are encoded in the audit:
   entity. The unstyled root owns Confirm/Cancel keyboard behavior and focus;
   UI ColorPicker accepts that retained entity directly, with the older keyed
   id/callback path retained for compatibility.
+- Base Dialog restores the shared `DialogHandle` as a generational entity
+  handle with controlled open state and reasoned callbacks. Dialog and Alert
+  Dialog triggers open the shared handle on mouse-down and both modal hosts
+  follow it; `DialogInitKeys` is the module-qualified projection of Rust's
+  crate-level `init`.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -237,7 +242,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 311 declaration spellings still reported in partial modules,
+  2. Review the 309 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

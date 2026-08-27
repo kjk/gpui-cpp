@@ -6,6 +6,50 @@
 
 namespace gpui {
 
+DialogHandle DialogHandle::New(Ctx* cx, bool open) {
+    DialogHandle handle;
+    handle.state = EntityNewState<DialogHandleState>(cx->app);
+    if (DialogHandleState* state = handle.state.Get(cx)) {
+        state->self = handle.state.id;
+        state->open = open;
+    }
+    return handle;
+}
+
+bool DialogHandle::IsOpen(App* app, bool fallback) const {
+    DialogHandleState* value = state.Get(app);
+    return value ? value->open : fallback;
+}
+
+void DialogHandle::OnOpenChange(App* app, Listener listener) const {
+    if (DialogHandleState* value = state.Get(app)) {
+        value->onOpenChange = listener;
+    }
+}
+
+bool DialogHandle::SetOpen(Ctx* cx, bool open,
+                           DialogChangeReason reason) const {
+    DialogHandleState* value = state.Get(cx);
+    if (!value || value->open == open) {
+        return false;
+    }
+    value->open = open;
+    if (value->onOpenChange.IsValid()) {
+        DialogOpenChangeEvent event = {open, reason};
+        ListenerCall(cx->app, cx->win, value->onOpenChange, &event);
+    }
+    NotifyEntity(cx->app, value->self, cx->win);
+    return true;
+}
+
+bool DialogHandle::Open(Ctx* cx) const {
+    return SetOpen(cx, true, DialogChangeReason::Imperative);
+}
+
+bool DialogHandle::Close(Ctx* cx) const {
+    return SetOpen(cx, false, DialogChangeReason::Imperative);
+}
+
 Str DialogContext() {
     return StrL("Dialog");
 }
@@ -99,12 +143,38 @@ bool DialogBackdropCloses(bool overlayClosable, bool topmost,
     return button == MouseButton::Left && overlayClosable && topmost;
 }
 
-El* DialogTrigger::New(Ctx* cx, Listener onOpen) {
+struct DialogTriggerState {
+    DialogHandle handle = {};
+    Listener onOpen = {};
+
+    static void OnMouseDown(DialogTriggerState* self, Ctx* cx,
+                            const MouseDownEvent* ev) {
+        if (!ev || ev->button != MouseButton::Left) {
+            return;
+        }
+        if (self->handle.IsValid()) {
+            self->handle.SetOpen(cx, true,
+                                 DialogChangeReason::TriggerPress);
+        }
+        if (self->onOpen.IsValid()) {
+            ListenerCall(cx->app, cx->win, self->onOpen, ev);
+        }
+        WindowStopPropagation(cx);
+    }
+};
+
+El* DialogTrigger::New(Ctx* cx, Listener onOpen, DialogHandle handle,
+                       Str id) {
     Arena* a = cx->a;
     El* e = Div(a);
-    if (onOpen.IsValid()) {
-        e->OnMouseDown(onOpen);
+    Entity<DialogTriggerState> trigger =
+        ElementStateEntity<DialogTriggerState>(
+            cx, id, StrL("gpui::DialogTriggerState"));
+    if (DialogTriggerState* state = trigger.Get(cx)) {
+        state->handle = handle;
+        state->onOpen = onOpen;
     }
+    e->OnMouseDown(ListenTo(trigger, &DialogTriggerState::OnMouseDown));
     return e;
 }
 
@@ -149,6 +219,16 @@ Dialog* Dialog::Trap(Str name) {
     return this;
 }
 
+Dialog* Dialog::Open(bool value) {
+    open = value;
+    return this;
+}
+
+Dialog* Dialog::Handle(DialogHandle value) {
+    handle = value;
+    return this;
+}
+
 Dialog* Dialog::Backdrop(El* backdrop) {
     if (backdrop) {
         root->Child(backdrop);
@@ -171,6 +251,7 @@ Dialog* Dialog::Popup(El* popup) {
 }
 
 El* Dialog::IntoEl() {
-    return root;
+    bool visible = handle.IsValid() ? handle.IsOpen(cx->app, open) : open;
+    return visible ? root : Div(cx->a);
 }
 } // namespace gpui

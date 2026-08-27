@@ -7550,3 +7550,36 @@ pass 19,814 checks; wasm passes its 19,109 applicable checks. The release story
 build and pinned light-theme comparison pass. An interaction capture grows the
 live page from 57 to 292 primitives and lays out the full 9x11 palette and hex
 row after the trigger click.
+
+## Base Dialog restores its shared handle
+
+Dialog already owned the pinned key bindings, focus trap, semantic parts and
+backdrop-dismissal predicate, but the source's public `DialogHandle` was
+absent. A trigger and modal host therefore could not share controlled open
+state, cloned owners could not observe one another, and no callback could
+distinguish an imperative open from a trigger press. The audit's other missing
+declaration, `init`, is the existing module-qualified `DialogInitKeys`; it
+installs the same Escape/Enter bindings lazily per keymap generation.
+
+`DialogHandle` now projects Rust's cloned `Rc<Cell<bool>>` as the runtime's
+POD generational `Entity` handle. Copies name one `DialogHandleState`, stale
+copies become inert, idempotent updates do nothing, and changes deliver a
+`DialogOpenChangeEvent` carrying the new value and exact
+`DialogChangeReason` before notifying the window. `Open` and `Close` use the
+Imperative reason.
+
+Dialog and AlertDialog triggers accept the handle, open it with TriggerPress
+on left mouse-down, invoke the compatibility callback second, and stop the
+press from bubbling as upstream does. Both Base modal hosts accept controlled
+`Open` and shared `Handle` state and render an empty element while closed;
+the alert specialization delegates its trigger through the same contract.
+
+Tests cover shared copies, callback ordering/reasons, idempotence, trigger
+propagation and visibility/roles for both hosts alongside the existing key and
+backdrop cases. Base Dialog is full: the audit moves to 86 full, 35 partial,
+8 adapters and 2 exclusions with 309 unresolved partial-module spellings.
+The declaration audit records `DialogInitKeys` as the module-qualified
+projection of Rust's free `init` and reports no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 19,831 checks; wasm passes
+its 19,126 applicable checks. The release story build and pinned light-theme
+dialog comparison pass.
