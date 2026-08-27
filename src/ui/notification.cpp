@@ -192,7 +192,7 @@ static void SysEntryRemoveAt(NotificationSystemState* state, int ix) {
 
 // The platform's response, on the main thread. Only the tag comes back, so
 // everything else is what the registry kept.
-static void OnSysNotifyResponse(Str tag, void*) {
+static void OnSysNotifyResponse(Str tag) {
     NotificationSystemResponse(tag);
 }
 
@@ -204,7 +204,7 @@ void NotificationInitSystem(App* app) {
     gSysApp = app;
     if (!gSysInited) {
         gSysInited = true;
-        SysNotifyOnResponse(OnSysNotifyResponse, nullptr);
+        SysNotifyOnResponse(MkFunc1Void(OnSysNotifyResponse));
         // Whatever the platform is holding — on Windows a notification area
         // icon — is given back when the process goes.
         AppOnShutdown(SysNotifyShutdown);

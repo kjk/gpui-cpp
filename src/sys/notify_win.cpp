@@ -35,8 +35,7 @@ struct WinNotify {
     // second post replaces the first, which is what a tag asks for anyway.
     char tag[kTagCap] = {};
     char appName[128] = {};
-    SysNotifyResponseFn onResponse = nullptr;
-    void* user = nullptr;
+    SysNotifyResponseFn onResponse = {};
 };
 
 static WinNotify gNotify;
@@ -74,8 +73,8 @@ static LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT msg, WPARAM wp,
         char tag[kTagCap];
         StrCopyZ(tag, kTagCap, gNotify.tag);
         gNotify.tag[0] = 0;
-        if (gNotify.onResponse && tag[0]) {
-            gNotify.onResponse(Str(tag), gNotify.user);
+        if (gNotify.onResponse.IsValid() && tag[0]) {
+            gNotify.onResponse.Call(Str(tag));
         }
     } else if (ev == NIN_BALLOONTIMEOUT || ev == NIN_BALLOONHIDE) {
         // Timed out into the Action Center, or taken off the screen. Either
@@ -196,9 +195,8 @@ void SysNotifyDismiss(Str tag) {
     gNotify.tag[0] = 0;
 }
 
-void SysNotifyOnResponse(SysNotifyResponseFn fn, void* user) {
+void SysNotifyOnResponse(SysNotifyResponseFn fn) {
     gNotify.onResponse = fn;
-    gNotify.user = user;
 }
 
 void SysNotifyShutdown() {
@@ -212,8 +210,7 @@ void SysNotifyShutdown() {
         DestroyWindow(gNotify.hwnd);
         gNotify.hwnd = nullptr;
     }
-    gNotify.onResponse = nullptr;
-    gNotify.user = nullptr;
+    gNotify.onResponse = {};
     gNotify.tag[0] = 0;
 }
 

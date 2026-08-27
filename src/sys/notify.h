@@ -33,7 +33,7 @@ namespace gpui {
 // on_system_notification_response: the user clicked a notification, and this
 // is the tag it was posted under. Called on the main thread, from whatever
 // pumps the platform's events.
-typedef void (*SysNotifyResponseFn)(Str tag, void* user);
+using SysNotifyResponseFn = Func1<Str>;
 
 // Whether posts reach anything at all. False is not an error — the caller
 // carries on without the system half.
@@ -54,7 +54,7 @@ void SysNotifyDismiss(Str tag);
 
 // The single app-global handler, as gpui keeps a single one: a later call
 // replaces an earlier. Null unregisters.
-void SysNotifyOnResponse(SysNotifyResponseFn fn, void* user);
+void SysNotifyOnResponse(SysNotifyResponseFn fn);
 
 // Give back whatever the platform is holding — on Windows, the notification
 // area icon. Called from AppFree's shutdown hooks; safe with nothing posted.

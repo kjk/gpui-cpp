@@ -18,7 +18,7 @@ bool SysNotifyShow(Str, Str, Str) {
     return false;
 }
 void SysNotifyDismiss(Str) {}
-void SysNotifyOnResponse(SysNotifyResponseFn, void*) {}
+void SysNotifyOnResponse(SysNotifyResponseFn) {}
 void SysNotifyShutdown() {}
 
 } // namespace gpui
