@@ -206,6 +206,16 @@ struct NewWindowFeatures {
     double height = 0;
 };
 
+/** `with_download_started_handler`. `path` starts as WebView2's suggested
+    absolute UTF-8 path and may be replaced for the duration of the call.
+    Return true to accept the download at that path, false to cancel it. */
+using DownloadStartedHandler = bool (*)(void* ctx, Str url, Str* path);
+
+/** `with_download_completed_handler`. `path` is null unless WebView2 reports
+    a successfully completed download, matching Rust's `Option<PathBuf>`.
+    All strings are borrowed for the duration of the call. */
+using DownloadCompletedHandler = void (*)(void* ctx, Str url, const Str* path, bool success);
+
 // ─── attributes ──────────────────────────────────────────────────────────
 
 /** `wry::WebViewAttributes` and, below the line, the Windows half of
@@ -248,6 +258,8 @@ struct WebViewAttributes {
     bool (*navigationHandler)(void* ctx, Str url) = nullptr;
     void (*documentTitleChangedHandler)(void* ctx, Str title) = nullptr;
     void (*onPageLoadHandler)(void* ctx, PageLoadEvent event, Str url) = nullptr;
+    DownloadStartedHandler downloadStartedHandler = nullptr;
+    DownloadCompletedHandler downloadCompletedHandler = nullptr;
     /** `window.open`. Null denies every request, which is what wry's
         `NewWindowRequested` handler does when no closure is set. */
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,

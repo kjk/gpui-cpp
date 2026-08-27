@@ -21,6 +21,8 @@ void TestWryUri() {
     utassert(!attrs.hasTrafficLightInset);
     utassert(!attrs.hasBackgroundThrottling);
     utassert(attrs.webviewConfiguration == nullptr);
+    utassert(attrs.downloadStartedHandler == nullptr);
+    utassert(attrs.downloadCompletedHandler == nullptr);
 
     // The crate's own case, verbatim.
     Str scheme = StrL("http");

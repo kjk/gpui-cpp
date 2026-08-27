@@ -8986,3 +8986,13 @@ entry. Directory, interface and synchronous WebView2 failures now fail
 construction instead of silently returning a webview with no extensions;
 asynchronous load failures are logged by the completion handler. The release
 webview example compiles with MSVC's strict warning set after the change.
+
+Windows downloads now expose the two pinned Wry callbacks. A starting handler
+receives the source URL and mutable suggested path and can accept with that
+path or cancel; a completion handler is attached to each operation and
+receives the original URL, an optional successful result path and the terminal
+success flag. The completion COM object shares a small liveness record rather
+than retaining the C++ `WebView`, so an operation that outlasts teardown cannot
+call through a dead builder context. A requested handler on a WebView2 runtime
+too old for `ICoreWebView2_4` fails construction, matching Rust's interface
+cast rather than silently ignoring the option.

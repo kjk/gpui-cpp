@@ -144,7 +144,9 @@ builder extensions named above and the Windows-only builder extensions
 scrollbar style, extensions). Enabling extensions and naming an extension
 path performs the pinned source's second step too: the Windows backend walks
 that directory and loads each unpacked extension through
-`ICoreWebView2Profile7`.
+`ICoreWebView2Profile7`. Windows download handlers can allow or cancel a
+download, replace its destination path and observe terminal completion with
+the original URL, optional result path and success bit.
 
 The macOS backend has all of that except what the platform does not have: the
 custom protocol work-around is Windows' alone (WKWebView takes a scheme
@@ -158,10 +160,8 @@ Not ported, each for a reason:
   The API is `cookie::Cookie` from the `cookie` crate throughout — a parser,
   a builder and a `time::OffsetDateTime` — so porting the four calls means
   porting a cookie crate. Nothing here wants one yet.
-- **Downloads** (`with_download_started_handler`,
-  `with_download_completed_handler`). WebView2's own download behaviour is
-  what the default handler allows anyway; a custom one is a `PathBuf` API
-  plus a `StateChanged` handler per operation, and no caller needs it.
+- **Downloads on macOS**. The Windows `DownloadStarting` and per-operation
+  `StateChanged` paths are ported; WKWebView's download delegates are not yet.
 - **Drag and drop** (`DragDropEvent`, `webview2/drag_drop.rs`). Behind wry's
   own `drag-drop` feature flag, and it is an `IDropTarget` on the container
   plus the composition windows under it.

@@ -89,6 +89,8 @@ typedef int COREWEBVIEW2_BROWSING_DATA_KINDS;
 typedef int COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT;
 typedef int COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND;
 typedef int COREWEBVIEW2_DEFAULT_DOWNLOAD_DIALOG_CORNER_ALIGNMENT;
+typedef int COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON;
+typedef int COREWEBVIEW2_DOWNLOAD_STATE;
 typedef int COREWEBVIEW2_FAVICON_IMAGE_FORMAT;
 typedef int COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND;
 typedef int COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL;
@@ -122,6 +124,10 @@ struct ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler;
 struct ICoreWebView2DOMContentLoadedEventHandler;
 struct ICoreWebView2DevToolsProtocolEventReceiver;
 struct ICoreWebView2DownloadStartingEventHandler;
+struct ICoreWebView2DownloadStartingEventArgs;
+struct ICoreWebView2DownloadOperation;
+struct ICoreWebView2BytesReceivedChangedEventHandler;
+struct ICoreWebView2EstimatedEndTimeChangedEventHandler;
 struct ICoreWebView2ExecuteScriptWithResultCompletedHandler;
 struct ICoreWebView2FaviconChangedEventHandler;
 struct ICoreWebView2FocusChangedEventHandler;
@@ -154,6 +160,7 @@ struct ICoreWebView2ServerCertificateErrorDetectedEventHandler;
 struct ICoreWebView2SharedBuffer;
 struct ICoreWebView2SourceChangedEventHandler;
 struct ICoreWebView2StatusBarTextChangedEventHandler;
+struct ICoreWebView2StateChangedEventHandler;
 struct ICoreWebView2TrySuspendCompletedHandler;
 struct ICoreWebView2WebResourceResponseReceivedEventHandler;
 struct ICoreWebView2ZoomFactorChangedEventHandler;
@@ -240,6 +247,10 @@ struct DECLSPEC_UUID("15e1c6a3-c72a-4df3-91d7-d097fbec6bfd") ICoreWebView2Permis
 struct DECLSPEC_UUID("b99369f3-9b11-47b5-bc6f-8e7895fcea17") ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler;
 struct DECLSPEC_UUID("49511172-cc67-4bca-9923-137112f4c4cc") ICoreWebView2ExecuteScriptCompletedHandler;
 struct DECLSPEC_UUID("e9710a06-1d1d-49b2-8234-226f35846ae5") ICoreWebView2ClearBrowsingDataCompletedHandler;
+struct DECLSPEC_UUID("3d6b6cf2-afe1-44c7-a995-c65117714336") ICoreWebView2DownloadOperation;
+struct DECLSPEC_UUID("e99bbe21-43e9-4544-a732-282764eafa60") ICoreWebView2DownloadStartingEventArgs;
+struct DECLSPEC_UUID("efedc989-c396-41ca-83f7-07f845a55724") ICoreWebView2DownloadStartingEventHandler;
+struct DECLSPEC_UUID("81336594-7ede-4ba9-bf71-acf0a95b58dd") ICoreWebView2StateChangedEventHandler;
 struct DECLSPEC_UUID("2fde08a8-1e9a-4766-8c05-95a9ceb9d1c5") ICoreWebView2EnvironmentOptions;
 struct DECLSPEC_UUID("57d29cc3-c84f-42a0-b0e2-effbd5e179de") ICoreWebView2EnvironmentOptions6;
 struct DECLSPEC_UUID("7c7ecf51-e918-5caf-853c-e9a2bcc27775") ICoreWebView2EnvironmentOptions8;
@@ -645,6 +656,47 @@ struct ICoreWebView2ProfileAddBrowserExtensionCompletedHandler : IUnknown {
 virtual HRESULT STDMETHODCALLTYPE Invoke( HRESULT errorCode, ICoreWebView2BrowserExtension *result) = 0;
 };
 
+struct ICoreWebView2DownloadOperation : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE add_BytesReceivedChanged( ICoreWebView2BytesReceivedChangedEventHandler *eventHandler, EventRegistrationToken *token) = 0;
+virtual HRESULT STDMETHODCALLTYPE remove_BytesReceivedChanged( EventRegistrationToken token) = 0;
+virtual HRESULT STDMETHODCALLTYPE add_EstimatedEndTimeChanged( ICoreWebView2EstimatedEndTimeChangedEventHandler *eventHandler, EventRegistrationToken *token) = 0;
+virtual HRESULT STDMETHODCALLTYPE remove_EstimatedEndTimeChanged( EventRegistrationToken token) = 0;
+virtual HRESULT STDMETHODCALLTYPE add_StateChanged( ICoreWebView2StateChangedEventHandler *eventHandler, EventRegistrationToken *token) = 0;
+virtual HRESULT STDMETHODCALLTYPE remove_StateChanged( EventRegistrationToken token) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Uri( LPWSTR *uri) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_ContentDisposition( LPWSTR *contentDisposition) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_MimeType( LPWSTR *mimeType) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_TotalBytesToReceive( INT64 *totalBytesToReceive) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_BytesReceived( INT64 *bytesReceived) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_EstimatedEndTime( LPWSTR *estimatedEndTime) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_ResultFilePath( LPWSTR *resultFilePath) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_State( COREWEBVIEW2_DOWNLOAD_STATE *downloadState) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_InterruptReason( COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON *interruptReason) = 0;
+virtual HRESULT STDMETHODCALLTYPE Cancel() = 0;
+virtual HRESULT STDMETHODCALLTYPE Pause() = 0;
+virtual HRESULT STDMETHODCALLTYPE Resume() = 0;
+virtual HRESULT STDMETHODCALLTYPE get_CanResume( BOOL *canResume) = 0;
+};
+
+struct ICoreWebView2DownloadStartingEventArgs : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_DownloadOperation( ICoreWebView2DownloadOperation **downloadOperation) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Cancel( BOOL *cancel) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_Cancel( BOOL cancel) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_ResultFilePath( LPWSTR *resultFilePath) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_ResultFilePath( LPCWSTR resultFilePath) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Handled( BOOL *handled) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_Handled( BOOL handled) = 0;
+virtual HRESULT STDMETHODCALLTYPE GetDeferral( ICoreWebView2Deferral **deferral) = 0;
+};
+
+struct ICoreWebView2DownloadStartingEventHandler : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE Invoke( ICoreWebView2 *sender, ICoreWebView2DownloadStartingEventArgs *args) = 0;
+};
+
+struct ICoreWebView2StateChangedEventHandler : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE Invoke( ICoreWebView2DownloadOperation *sender, IUnknown *args) = 0;
+};
+
 struct ICoreWebView2WebMessageReceivedEventArgs : IUnknown {
 virtual HRESULT STDMETHODCALLTYPE get_Source( LPWSTR *value) = 0;
 virtual HRESULT STDMETHODCALLTYPE get_WebMessageAsJson( LPWSTR *value) = 0;
@@ -821,6 +873,8 @@ virtual HRESULT STDMETHODCALLTYPE put_ScrollBarStyle( COREWEBVIEW2_SCROLLBAR_STY
 // The handful of enum values we pass. Spelled out rather than typedef'd as a
 // whole enum, since the ABI only cares that they are ints.
 enum {
+    kDownloadStateInProgress = 0,
+    kDownloadStateCompleted = 2,
     kMoveFocusReasonProgrammatic = 0,
     kPermissionKindClipboardRead = 6,
     kPermissionStateAllow = 1,
@@ -1205,6 +1259,73 @@ static H* MkHandler(void* ctx, F fn) {
     return h;
 }
 
+// A download completion handler shares this liveness record rather than
+// borrowing its WebView. Rust's StateChanged closure owns its callback; the
+// C callback's opaque context is only promised to live with the WebView, so
+// a completion arriving after teardown is discarded.
+struct DownloadCallbackState {
+    LONG refs = 1;
+    LONG alive = 1;
+    void* ctx = nullptr;
+    DownloadCompletedHandler fn = nullptr;
+
+    void AddRef() { InterlockedIncrement(&refs); }
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            delete this;
+        }
+    }
+};
+
+struct DownloadStateHandler : ComObj<ICoreWebView2StateChangedEventHandler> {
+    DownloadCallbackState* callback = nullptr;
+    LONG fired = 0;
+
+    ~DownloadStateHandler() override {
+        if (callback) {
+            callback->Release();
+        }
+    }
+
+    HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2DownloadOperation* operation, IUnknown*) override {
+        if (!operation || !callback ||
+            InterlockedCompareExchange(&callback->alive, 0, 0) == 0 || !callback->fn) {
+            return S_OK;
+        }
+        COREWEBVIEW2_DOWNLOAD_STATE state = 0;
+        HRESULT hr = operation->get_State(&state);
+        if (FAILED(hr) || state == kDownloadStateInProgress) {
+            return hr;
+        }
+        if (InterlockedCompareExchange(&fired, 1, 0) != 0) {
+            return S_OK;
+        }
+
+        LPWSTR uriRaw = nullptr;
+        hr = operation->get_Uri(&uriRaw);
+        if (FAILED(hr)) {
+            return hr;
+        }
+        Str uri = TakePwstrTemp(uriRaw);
+        bool success = state == kDownloadStateCompleted;
+        Str path;
+        const Str* pathArg = nullptr;
+        if (success) {
+            LPWSTR pathRaw = nullptr;
+            hr = operation->get_ResultFilePath(&pathRaw);
+            if (FAILED(hr)) {
+                return hr;
+            }
+            path = TakePwstrTemp(pathRaw);
+            pathArg = &path;
+        }
+        if (InterlockedCompareExchange(&callback->alive, 0, 0) != 0) {
+            callback->fn(callback->ctx, uri, pathArg, success);
+        }
+        return S_OK;
+    }
+};
+
 template <typename T>
 static void Rel(T** p) {
     if (p && *p) {
@@ -1387,6 +1508,9 @@ struct WebView {
     bool (*navigationHandler)(void* ctx, Str url) = nullptr;
     void (*documentTitleChangedHandler)(void* ctx, Str title) = nullptr;
     void (*onPageLoadHandler)(void* ctx, PageLoadEvent event, Str url) = nullptr;
+    DownloadStartedHandler downloadStartedHandler = nullptr;
+    DownloadCompletedHandler downloadCompletedHandler = nullptr;
+    DownloadCallbackState* downloadCallbacks = nullptr;
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,
                                              const NewWindowFeatures* features) = nullptr;
 
@@ -2213,6 +2337,62 @@ static HRESULT OnPermissionRequested(void*, ICoreWebView2*,
     return S_OK;
 }
 
+static HRESULT OnDownloadStarting(void* ctx, ICoreWebView2*,
+                                  ICoreWebView2DownloadStartingEventArgs* args) {
+    WebView* wv = (WebView*)ctx;
+    if (!args) {
+        return S_OK;
+    }
+
+    ICoreWebView2DownloadOperation* operation = nullptr;
+    HRESULT hr = args->get_DownloadOperation(&operation);
+    if (FAILED(hr) || !operation) {
+        return hr;
+    }
+
+    LPWSTR uriRaw = nullptr;
+    hr = operation->get_Uri(&uriRaw);
+    if (FAILED(hr)) {
+        Rel(&operation);
+        return hr;
+    }
+    Str uri = TakePwstrTemp(uriRaw);
+
+    if (wv->downloadCompletedHandler) {
+        DownloadStateHandler* handler = new DownloadStateHandler();
+        handler->callback = wv->downloadCallbacks;
+        handler->callback->AddRef();
+        EventRegistrationToken token = {};
+        hr = operation->add_StateChanged(handler, &token);
+        handler->Release();
+        if (FAILED(hr)) {
+            Rel(&operation);
+            return hr;
+        }
+    }
+
+    if (wv->downloadStartedHandler) {
+        LPWSTR pathRaw = nullptr;
+        hr = args->get_ResultFilePath(&pathRaw);
+        if (FAILED(hr)) {
+            Rel(&operation);
+            return hr;
+        }
+        Str path = TakePwstrTemp(pathRaw);
+        if (wv->downloadStartedHandler(wv->ctx, uri, &path)) {
+            hr = args->put_ResultFilePath(ToCWstrTemp(path));
+            if (SUCCEEDED(hr)) {
+                hr = args->put_Handled(TRUE);
+            }
+        } else {
+            hr = args->put_Cancel(TRUE);
+        }
+    }
+
+    Rel(&operation);
+    return hr;
+}
+
 static HRESULT OnWebMessageReceived(void* ctx, ICoreWebView2*,
                                     ICoreWebView2WebMessageReceivedEventArgs* args) {
     WebView* wv = (WebView*)ctx;
@@ -2270,6 +2450,28 @@ static void AttachHandlers(WebView* wv, EventRegistrationToken* token) {
         wv->webview->add_NewWindowRequested(h, token);
         h->Release();
     }
+}
+
+static bool AttachDownloadHandlers(WebView* wv, EventRegistrationToken* token) {
+    if (!wv->downloadStartedHandler && !wv->downloadCompletedHandler) {
+        return true;
+    }
+    ICoreWebView2_4* webview4 = nullptr;
+    if (FAILED(wv->webview->QueryInterface(__uuidof(ICoreWebView2_4), (void**)&webview4))) {
+        logf("wry: this WebView2 runtime does not support download handlers\n");
+        return false;
+    }
+    auto* handler =
+        MkHandler<Handler2<ICoreWebView2DownloadStartingEventHandler, ICoreWebView2*,
+                           ICoreWebView2DownloadStartingEventArgs*>>(wv, OnDownloadStarting);
+    HRESULT hr = webview4->add_DownloadStarting(handler, token);
+    handler->Release();
+    Rel(&webview4);
+    if (FAILED(hr)) {
+        logf("wry: adding the download handler failed, hr 0x%x\n", (int)hr);
+        return false;
+    }
+    return true;
 }
 
 // `attach_ipc_handler`: the page gets a frozen `window.ipc` whose
@@ -2449,6 +2651,13 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     wv->navigationHandler = attrs->navigationHandler;
     wv->documentTitleChangedHandler = attrs->documentTitleChangedHandler;
     wv->onPageLoadHandler = attrs->onPageLoadHandler;
+    wv->downloadStartedHandler = attrs->downloadStartedHandler;
+    wv->downloadCompletedHandler = attrs->downloadCompletedHandler;
+    if (attrs->downloadCompletedHandler) {
+        wv->downloadCallbacks = new DownloadCallbackState();
+        wv->downloadCallbacks->ctx = attrs->ctx;
+        wv->downloadCallbacks->fn = attrs->downloadCompletedHandler;
+    }
     wv->newWindowReqHandler = attrs->newWindowReqHandler;
     wv->httpOrHttps = attrs->useHttpsScheme ? "https" : "http";
     // `attributes.id.unwrap_or_else(|| hwnd.to_string())`.
@@ -2472,6 +2681,10 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
     EventRegistrationToken token = {};
     SetWebViewSettings(webview, attrs);
     AttachHandlers(wv, &token);
+    if (!AttachDownloadHandlers(wv, &token)) {
+        WebViewFree(wv);
+        return nullptr;
+    }
     AttachIpcHandler(wv, &token);
     if (wv->protocols.len > 0) {
         AttachCustomProtocolHandler(wv, &token);
@@ -2532,6 +2745,9 @@ void WebViewFree(WebView* wv) {
     if (!wv) {
         return;
     }
+    if (wv->downloadCallbacks) {
+        InterlockedExchange(&wv->downloadCallbacks->alive, 0);
+    }
     if (wv->controller) {
         wv->controller->Close();
     }
@@ -2539,6 +2755,9 @@ void WebViewFree(WebView* wv) {
         DestroyWindow(wv->hwnd);
     }
     DetachParentSubclass(wv->parent);
+    if (wv->downloadCallbacks) {
+        wv->downloadCallbacks->Release();
+    }
     Rel(&wv->webview);
     Rel(&wv->controller);
     Rel(&wv->env);
