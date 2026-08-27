@@ -1705,6 +1705,9 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         DispatchMouseDownOut(win, in);
         // The bar took the press, so nothing is waiting to become a click.
         ClearPendingClick(win);
+        // d8376ad5 moved Rust's notify below its thumb/track branch. This
+        // shared dispatch point already covers both: a track jump gets a
+        // frame immediately even when the scroll handle only stages state.
         AppInvalidate(win);
         return;
     }

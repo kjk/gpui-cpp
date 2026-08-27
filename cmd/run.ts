@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "476d9770e2ef8ca21bb7e9cd8809acb3888a6814",
+  sha: "d8376ad5635b963b2e751fbd4e328f9195d565a5",
   date: "2026-08-27",
-  subject: "shell: Add gpui-shell, a scriptable application runtime on gpui-base (#2821)",
+  subject: "scrollbar: fix repaint after clicking the track to jump (#2843)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
@@ -526,15 +526,15 @@ export const gpuiComponent = {
  */
 export const zedGpui = {
   repo: "https://github.com/zed-industries/zed",
-  sha: "8b1497dbd22fb06f5838a7c0b84a1e54fafa71bc",
-  date: "2026-08-17",
-  subject: "gpui: Add spring animations; examples (#62778)",
+  sha: "f66ed399cdde86092af8af3dc7b418abf45f37f8",
+  date: "2026-08-26",
+  subject: "gpui: Fix stale pending input when a window is blurred (#63271)",
   crates: {
     gpui: "0.2.2",
     gpui_platform: "0.2.2",
     gpui_macros: "0.2.2",
   },
-  lock: "git+https://github.com/zed-industries/zed#8b1497dbd22fb06f5838a7c0b84a1e54fafa71bc",
+  lock: "git+https://github.com/zed-industries/zed#f66ed399cdde86092af8af3dc7b418abf45f37f8",
 } as const;
 
 /**

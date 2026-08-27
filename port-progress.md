@@ -9356,3 +9356,15 @@ examples are not ported: QuickJS is a third-party runtime, and the shell's
 async filesystem/process/network stack crosses this tree's explicit runtime
 and network exclusions. MSVC release tests pass 20,949 checks, and the release
 story and showcase targets build with `/W4 /WX`.
+
+`9890a77c` updates the Zed GPUI dependency and adjusts only the excluded Shell
+crate; `97e4f402` likewise changes only Shell, its JavaScript stories and
+documentation. They need no C++ source port. The reference GPUI pin advances
+with the next applicable checkin.
+
+`d8376ad5` ensures both branches of a scrollbar track press request a repaint.
+The C++ runtime already did this at the shared dispatch point after
+`ScrollbarPress`, covering a thumb drag and a track jump alike; that
+equivalence is now called out beside the invalidation. The existing dispatch
+regression exercises an isolated custom scroll listener and verifies that a
+track press updates it immediately without entering drag state.
