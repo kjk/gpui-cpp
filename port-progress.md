@@ -7716,3 +7716,43 @@ with 291 unresolved partial-module spellings and no full-module errors. MSVC
 debug/release and MSVC ASan pass 19,917 checks; a warning-clean wasm
 `hello_world` build exercises the portable amalgamation. The release story
 build and pinned light-theme Introduction comparison pass.
+
+## UI List restores the delegate contract
+
+The list already virtualized section headers, rows and footers and carried the
+selection state, but its delegate was three loose render pointers. The public
+`ListDelegate` declaration was absent, search never reached the delegate, and
+selection, right-click, confirm, cancel and load-more calls only reached the
+port-specific event shortcut. Dynamic section counts, delegate-provided empty,
+initial and loading views, source defaults, the representative measurement
+index and the `scrollbar_visible` / `search_placeholder` options could not be
+expressed through one source-shaped contract.
+
+`component::ListDelegate` is now the POD function-table projection of the Rust
+trait. Its rendering and dynamic-policy functions have the same default
+semantics; lifecycle calls are retained generational `Listener`s so no
+frame-arena pointer survives into input dispatch. `ListState` exposes the
+source selection, right-click, query, measurement and load-more operations,
+owns its trimmed last query, suppresses duplicate input changes, and invokes
+the delegate at the exact selection/confirm/cancel points. The synchronous
+`performSearch` callback is the documented projection of the standing async
+exclusion.
+
+The complete delegate path now derives and flattens section counts itself,
+uses the requested `itemToMeasure`, chooses delegate loading/initial/empty
+views, applies the 20-row load-more default and makes scrollbar visibility and
+search placeholder configurable. ARIA positions are section-relative as in
+the source, both selection directions scroll with Rust's `Top` strategy, and
+List no longer bakes the story's padding/border/radius into every instance.
+The main story supplies those styles explicitly; embedded popover and sheet
+lists therefore no longer receive an accidental second frame.
+
+Tests cover function-table defaults, dynamic section flattening, virtual row
+rendering, custom placeholders, query trim/deduplication and explicit search,
+all delegate lifecycle hooks, secondary confirmation, IndexPath conversion
+outside-press cleanup, disabled right-click behavior and default policy. UI
+List is full: the audit moves to 91 full, 30 partial, 8
+adapters and 2 exclusions with 290 unresolved partial-module spellings and no
+full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
+19,957 checks; wasm passes its 19,252 applicable checks. The release story
+build and pinned light-theme List comparison pass.

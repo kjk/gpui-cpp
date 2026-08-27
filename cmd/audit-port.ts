@@ -70,7 +70,6 @@ const partialUi = new Set([
   "global_state",
   "input",
   "inspector",
-  "list",
   "menu",
   "plot",
   "searchable_list",

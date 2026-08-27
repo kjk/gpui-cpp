@@ -185,6 +185,187 @@ static void AListThatHasNotMeasuredHasNoHeights() {
     utassertnear(s.rowH, 32.f);
 }
 
+struct ListDelegateSink {
+    int searches = 0;
+    Str query = {};
+    int selections = 0;
+    bool hasSelection = false;
+    IndexPath selected = {};
+    int rightClicks = 0;
+    bool hasRightClick = false;
+    int confirms = 0;
+    bool secondary = false;
+    int cancels = 0;
+    int loads = 0;
+
+    ~ListDelegateSink() { StrFree(query); }
+
+    static El* Render(ListDelegateSink*, Ctx* cx) { return Div(cx->a); }
+    static void OnSearch(ListDelegateSink* self, Ctx*,
+                         const ListSearchRequest* ev) {
+        self->searches++;
+        StrFree(self->query);
+        self->query = StrDup(ev->query);
+    }
+    static void OnSelection(ListDelegateSink* self, Ctx*,
+                            const ListSelectionChange* ev) {
+        self->selections++;
+        self->hasSelection = ev->hasIndex;
+        self->selected = ev->index;
+    }
+    static void OnRightClick(ListDelegateSink* self, Ctx*,
+                             const ListSelectionChange* ev) {
+        self->rightClicks++;
+        self->hasRightClick = ev->hasIndex;
+    }
+    static void OnConfirm(ListDelegateSink* self, Ctx*,
+                          const ListConfirmRequest* ev) {
+        self->confirms++;
+        self->secondary = ev->secondary;
+    }
+    static void OnCancel(ListDelegateSink* self, Ctx*, const void*) {
+        self->cancels++;
+    }
+    static void OnLoadMore(ListDelegateSink* self, Ctx*, const void*) {
+        self->loads++;
+    }
+};
+
+struct ListRenderProbe {
+    int sectionsCalls = 0;
+    int itemCountCalls = 0;
+    int renderCalls = 0;
+};
+
+static int DelegateSections(Ctx*, void* data) {
+    ((ListRenderProbe*)data)->sectionsCalls++;
+    return 2;
+}
+
+static int DelegateItems(Ctx*, void* data, int section) {
+    ((ListRenderProbe*)data)->itemCountCalls++;
+    return section == 0 ? 2 : 1;
+}
+
+static component::ListItem* DelegateItem(Ctx* cx, void* data, int section,
+                                         int row, int entry) {
+    ListRenderProbe* probe = (ListRenderProbe*)data;
+    probe->renderCalls++;
+    utassert(entry == (section == 0 ? row : 2 + row));
+    return component::ListItem::New(cx, Div(cx->a)->H(24));
+}
+
+static void TheDelegateTableOwnsTheWholeContract() {
+    component::ListDelegate defaults;
+    utassert(defaults.sectionsCount == nullptr);
+    utassert(defaults.itemsCount == nullptr);
+    utassert(defaults.renderItem == nullptr);
+    utassert(!defaults.performSearch.IsValid());
+    utassert(!defaults.setSelectedIndex.IsValid());
+    utassert(defaults.loadMoreThreshold == nullptr);
+
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    win->frameArena = arena;
+    ThemeInstall(&app, ThemeMode::Light, ThemeLight());
+    Entity<ListState> state = EntityNewState<ListState>(&app);
+    Entity<ListDelegateSink> sink = EntityNew<ListDelegateSink>(&app);
+    Ctx cx = {&app, win, arena, sink.id};
+    InputState query;
+    ListRenderProbe probe;
+    component::ListDelegate delegate;
+    delegate.data = &probe;
+    delegate.sectionsCount = &DelegateSections;
+    delegate.itemsCount = &DelegateItems;
+    delegate.renderItem = &DelegateItem;
+    delegate.performSearch = ListenTo(sink, &ListDelegateSink::OnSearch);
+    delegate.setSelectedIndex =
+        ListenTo(sink, &ListDelegateSink::OnSelection);
+    delegate.setRightClickedIndex =
+        ListenTo(sink, &ListDelegateSink::OnRightClick);
+    delegate.confirm = ListenTo(sink, &ListDelegateSink::OnConfirm);
+    delegate.cancel = ListenTo(sink, &ListDelegateSink::OnCancel);
+    delegate.loadMore = ListenTo(sink, &ListDelegateSink::OnLoadMore);
+
+    El* root = component::List::New(&cx, StrL("delegate-list"), state)
+                   ->WithDelegate(delegate)
+                   ->Searchable(&query, {})
+                   ->SearchPlaceholder(StrL("Find"))
+                   ->ScrollbarVisible(false)
+                   ->H(120)
+                   ->IntoEl();
+    ListState* list = state.Get(&app);
+    utassert(root && list);
+    utassert(list->count == 3 && list->sectionCounts.len == 2);
+    utassert(list->sectionCounts[0] == 2 && list->sectionCounts[1] == 1);
+    utassert(probe.sectionsCalls == 1 && probe.itemCountCalls == 2);
+    // One representative item plus every visible item.
+    utassert(probe.renderCalls >= 4);
+    utassert(StrEqI(query.placeholder, StrL("Find")));
+    utassert(query.onChange.IsValid());
+    utassert(list->loadMoreThreshold == 20);
+    utassert(!list->loading && !list->hasMore);
+
+    InputSetValue(&query, StrL("  alpha  "));
+    InputEvent changed = {InputEventKind::Change};
+    ListState::OnQueryInput(list, &cx, &changed);
+    ListDelegateSink* got = sink.Get(&app);
+    utassert(got->searches == 1 && StrEqI(got->query, StrL("alpha")));
+    utassert(list->selected == 0 && got->hasSelection);
+    IndexPath first = {0, 0, 0};
+    utassert(got->selected == first);
+    // The Input Change subscription suppresses a duplicate trimmed query.
+    InputSetValue(&query, StrL("alpha"));
+    ListState::OnQueryInput(list, &cx, &changed);
+    utassert(got->searches == 1);
+    // set_query explicitly searches even when set_value would emit nothing.
+    ListSetQuery(list, &cx, StrL("alpha"));
+    utassert(got->searches == 2);
+
+    int selections = got->selections;
+    ListPerform(list, &cx, ListAction::SelectNext, false);
+    utassert(list->selected == 1 && got->selections == selections + 1);
+    selections = got->selections;
+    ListPerform(list, &cx, ListAction::Confirm, true);
+    utassert(got->selections == selections + 1);
+    utassert(got->confirms == 1 && got->secondary);
+
+    selections = got->selections;
+    ListClickRow(list, &cx, 2, false);
+    utassert(list->selected == 2 && got->selections == selections + 1);
+    utassert(got->confirms == 2 && !got->secondary);
+    utassert(got->rightClicks == 1 && !got->hasRightClick);
+    ListRightClickRow(list, &cx, 1);
+    utassert(got->rightClicks == 2 && got->hasRightClick);
+    IndexPath right;
+    utassert(ListRightClickedIndex(list, &right));
+    IndexPath second = {0, 1, 0};
+    utassert(right == second);
+    MouseDownEvent outside = {};
+    ListState::OnMouseDownOut(list, &cx, &outside);
+    utassert(!ListRightClickedIndex(list, nullptr));
+    utassert(got->rightClicks == 3 && !got->hasRightClick);
+
+    list->selectable = false;
+    ListRightClickRow(list, &cx, 1);
+    utassert(!ListRightClickedIndex(list, nullptr));
+    utassert(got->rightClicks == 3);
+    list->selectable = true;
+
+    ListPerform(list, &cx, ListAction::Cancel, false);
+    utassert(got->cancels == 1 && list->selected == -1);
+    utassert(!got->hasSelection);
+    ListRequestLoadMore(list, &cx);
+    utassert(got->loads == 1);
+
+    WindowMotionFree(win);
+    delete win;
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 void TestList() {
     TheKeyTable();
     NextAndPrevWrap();
@@ -196,4 +377,5 @@ void TestList() {
     EachRowKindKeepsItsOwnHeight();
     TheHeightsAreRebuiltOnlyWhenSomethingMoved();
     AListThatHasNotMeasuredHasNoHeights();
+    TheDelegateTableOwnsTheWholeContract();
 }

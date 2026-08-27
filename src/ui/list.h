@@ -41,6 +41,35 @@ struct ListItem {
 // click; the caller's children are what it draws.
 ListItem* ListSeparatorItem(Ctx* cx, El* child = nullptr);
 
+// crates/ui/src/list/delegate.rs. Rust expresses this as a generic trait;
+// C++ keeps the render half as a POD function table and the calls that must
+// survive the frame as generational Listeners. Null entries have the source
+// defaults: one section, no header/footer/initial view, the built-in empty and
+// loading views, not loading, no more rows, threshold 20, and no-op lifecycle
+// hooks. `itemsCount` and `renderItem` are the two required trait methods.
+struct ListDelegate {
+    void* data = nullptr;
+    int (*sectionsCount)(Ctx* cx, void* data) = nullptr;
+    int (*itemsCount)(Ctx* cx, void* data, int section) = nullptr;
+    ListItem* (*renderItem)(Ctx* cx, void* data, int section, int row,
+                            int entry) = nullptr;
+    El* (*renderSectionHeader)(Ctx* cx, void* data, int section) = nullptr;
+    El* (*renderSectionFooter)(Ctx* cx, void* data, int section) = nullptr;
+    El* (*renderEmpty)(Ctx* cx, void* data) = nullptr;
+    El* (*renderInitial)(Ctx* cx, void* data) = nullptr;
+    bool (*isLoading)(Ctx* cx, void* data) = nullptr;
+    El* (*renderLoading)(Ctx* cx, void* data) = nullptr;
+    bool (*hasMore)(Ctx* cx, void* data) = nullptr;
+    int (*loadMoreThreshold)(void* data) = nullptr;
+
+    Listener performSearch = {};
+    Listener setSelectedIndex = {};
+    Listener setRightClickedIndex = {};
+    Listener confirm = {};
+    Listener cancel = {};
+    Listener loadMore = {};
+};
+
 // The list, bound to the ListState that answers its keys and clicks the way
 // an Input is bound to an InputState. The rows come from the caller one at a
 // time rather than all at once: only the ones the viewport can show are ever
@@ -50,14 +79,11 @@ struct List {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<ListState> state = {};
-    // The delegate. Rust's is a trait with closures over the view; an element
-    // here carries no closure, so it is a pointer to the caller's data and
-    // the three render functions that read it.
-    void* data = nullptr;
-    ListItem* (*item)(Ctx* cx, void* data, int section, int row,
-                      int entry) = nullptr;
-    El* (*header)(Ctx* cx, void* data, int section) = nullptr;
-    El* (*footer)(Ctx* cx, void* data, int section) = nullptr;
+    ListDelegate delegate = {};
+    // True only for the complete function-table path. The older Items /
+    // Headers builders remain source-compatible and leave state-owned loading
+    // policy alone.
+    bool delegateSet = false;
     // The search field, when the list is searchable.
     InputState* search = nullptr;
     Listener onSearchFocus;
@@ -70,9 +96,16 @@ struct List {
     // render_empty: what to show when there is nothing in the list. Null
     // takes Rust's own — a muted Inbox icon.
     El* empty = nullptr;
+    Str searchPlaceholder = {};
+    UiSize size = UiSize::Medium;
+    bool scrollbarVisible = true;
+    // Styled padding is extracted from the outer List and passed to the
+    // virtual rows upstream, so it does not inset the search field.
+    float padding = 0;
     float h = 320;
 
     static List* New(Ctx* cx, Str id, Entity<ListState> state);
+    List* WithDelegate(const ListDelegate& value);
     // The sections and their item counts, which the state flattens.
     List* Sections(const int* counts, int n);
     List* Count(int n);
@@ -81,6 +114,10 @@ struct List {
     List* Headers(El* (*headerFn)(Ctx*, void*, int),
                   El* (*footerFn)(Ctx*, void*, int) = nullptr);
     List* Searchable(InputState* search, Listener onFocus);
+    List* SearchPlaceholder(Str value);
+    List* WithSize(UiSize value);
+    List* ScrollbarVisible(bool value);
+    List* Padding(float value);
     List* Loading(El* e);
     List* Initial(El* e);
     List* Empty(El* e);

@@ -27,6 +27,26 @@ struct ListEvent {
     bool secondary = false;
 };
 
+// The synchronous C++ projection of the non-rendering calls on UI's
+// ListDelegate trait. A ListDelegate installs these retained Listeners on its
+// ListState, so calls made later by a key or pointer event still resolve the
+// delegate's owning entity generationally rather than retaining a frame-local
+// pointer.
+struct ListSelectionChange {
+    bool hasIndex = false;
+    IndexPath index = {};
+};
+
+struct ListSearchRequest {
+    // Borrowed for the duration of the listener call. The state separately
+    // owns `lastQuery`, just as Rust's ListState owns its last_query String.
+    Str query = {};
+};
+
+struct ListConfirmRequest {
+    bool secondary = false;
+};
+
 // What a keystroke asks a list to do. Rust binds up, down, enter, escape and
 // secondary-enter in the "List" key context; this is that table, read as an
 // answer rather than routed as an action.
@@ -128,7 +148,22 @@ struct ListState {
     bool hasMore = false;
     int loadMoreThreshold = 20;
     Listener onEvent = {};
+    // ListDelegate::perform_search / set_selected_index /
+    // set_right_clicked_index / confirm / cancel / load_more. The required
+    // Rust set_selected_index method may be empty in C++ because ListState
+    // also retains the selection itself; the other five have empty defaults
+    // upstream too.
+    Listener onPerformSearch = {};
+    Listener onSetSelectedIndex = {};
+    Listener onSetRightClickedIndex = {};
+    Listener onConfirm = {};
+    Listener onCancel = {};
     Listener onLoadMore = {};
+    // query_input and last_query. UI supplies the InputState when searchable;
+    // the owned copy makes repeated Change events with the same trimmed value
+    // no-ops, matching on_query_input_event.
+    InputState* queryInput = nullptr;
+    Str lastQuery = {};
     // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
@@ -140,6 +175,7 @@ struct ListState {
     FocusHandle focus = {};
 
     ~ListState() {
+        StrFree(lastQuery);
         sectionCounts.Reset();
         rowHeights.Reset();
     }
@@ -152,6 +188,9 @@ struct ListState {
     static void OnRowMouseDown(ListState* self, Ctx* cx,
                                const MouseDownEvent* ev, intptr_t ix);
     static void OnScroll(ListState* self, Ctx* cx, const ScrollEvent* ev);
+    static void OnQueryInput(ListState* self, Ctx* cx, const InputEvent* ev);
+    static void OnMouseDownOut(ListState* self, Ctx* cx,
+                               const MouseDownEvent* ev);
 };
 
 // The sections and their item counts, which is what RowsCache is built from.
@@ -190,6 +229,21 @@ void ListScrollToItem(ListState* s, int entry, ScrollStrategy strategy);
 // and there is more to come. Rust asks this while it renders the visible
 // range, and so does the list here.
 bool ListShouldLoadMore(const ListState* s, int lastVisibleRow);
+
+// The state-facing methods whose Rust counterparts live on ListState<D>.
+// Selection setters synchronize the delegate but do not emit ListEvent;
+// movement/click helpers below emit at the same points as upstream.
+void ListSetSelectedIndex(ListState* s, Ctx* cx, int entry,
+                          bool scroll = false,
+                          ScrollStrategy strategy = ScrollStrategy::Top);
+void ListSetRightClickedIndex(ListState* s, Ctx* cx, int entry);
+bool ListSelectedIndex(const ListState* s, IndexPath* out);
+bool ListRightClickedIndex(const ListState* s, IndexPath* out);
+void ListSetItemToMeasureIndex(ListState* s, Ctx* cx, IndexPath path);
+// set_query writes the query input silently and explicitly starts the search,
+// as Rust does because InputState::set_value does not emit Change.
+void ListSetQuery(ListState* s, Ctx* cx, Str query);
+void ListRequestLoadMore(ListState* s, Ctx* cx);
 
 // rows_cache.next / .prev. Both wrap: past the last row is the first, and
 // before the first is the last. With nothing selected, next takes the first

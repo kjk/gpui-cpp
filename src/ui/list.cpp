@@ -104,10 +104,16 @@ List* List::New(Ctx* cx, Str id, Entity<ListState> state) {
     l->state = state;
     return l;
 }
+List* List::WithDelegate(const ListDelegate& value) {
+    delegate = value;
+    delegateSet = true;
+    return this;
+}
 List* List::Sections(const int* counts, int n) {
     ListState* s = state.Get(cx);
     if (s) {
-        ListSetSections(s, counts, n, header != nullptr, footer != nullptr);
+        ListSetSections(s, counts, n, delegate.renderSectionHeader != nullptr,
+                        delegate.renderSectionFooter != nullptr);
     }
     return this;
 }
@@ -119,20 +125,20 @@ List* List::Count(int n) {
     return this;
 }
 List* List::Items(void* d, ListItem* (*fn)(Ctx*, void*, int, int, int)) {
-    data = d;
-    item = fn;
+    delegate.data = d;
+    delegate.renderItem = fn;
     return this;
 }
 List* List::Headers(El* (*headerFn)(Ctx*, void*, int),
                     El* (*footerFn)(Ctx*, void*, int)) {
-    header = headerFn;
-    footer = footerFn;
+    delegate.renderSectionHeader = headerFn;
+    delegate.renderSectionFooter = footerFn;
     // The flattening depends on whether there are headers and footers at all,
     // so a list that says so after its sections says it again.
     ListState* s = state.Get(cx);
     if (s) {
-        s->sectionHeaders = header != nullptr;
-        s->sectionFooters = footer != nullptr;
+        s->sectionHeaders = delegate.renderSectionHeader != nullptr;
+        s->sectionFooters = delegate.renderSectionFooter != nullptr;
     }
     return this;
 }
@@ -143,6 +149,26 @@ ListItem* ListSeparatorItem(Ctx* cx, El* child) {
 List* List::Searchable(InputState* s, Listener onFocus) {
     search = s;
     onSearchFocus = onFocus;
+    return this;
+}
+
+List* List::SearchPlaceholder(Str value) {
+    searchPlaceholder = value;
+    return this;
+}
+
+List* List::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+
+List* List::ScrollbarVisible(bool value) {
+    scrollbarVisible = value;
+    return this;
+}
+
+List* List::Padding(float value) {
+    padding = value < 0 ? 0 : value;
     return this;
 }
 
@@ -212,6 +238,49 @@ El* List::IntoEl() {
     ListState* s = state.Get(cx);
     if (s) {
         s->self = state.id;
+        s->queryInput = search;
+        s->onPerformSearch = delegate.performSearch;
+        s->onSetSelectedIndex = delegate.setSelectedIndex;
+        s->onSetRightClickedIndex = delegate.setRightClickedIndex;
+        s->onConfirm = delegate.confirm;
+        s->onCancel = delegate.cancel;
+        if (delegateSet) {
+            s->onLoadMore = delegate.loadMore;
+        }
+        if (delegateSet) {
+            int sections = delegate.sectionsCount
+                               ? delegate.sectionsCount(cx, delegate.data)
+                               : 1;
+            if (sections < 1) {
+                sections = 1;
+            }
+            if (delegate.itemsCount) {
+                s->sectionCounts.Clear();
+                s->count = 0;
+                for (int section = 0; section < sections; section++) {
+                    int n = delegate.itemsCount(cx, delegate.data, section);
+                    if (n < 0) {
+                        n = 0;
+                    }
+                    s->sectionCounts.Append(n);
+                    s->count += n;
+                }
+                s->sectionHeaders = delegate.renderSectionHeader != nullptr;
+                s->sectionFooters = delegate.renderSectionFooter != nullptr;
+            }
+            s->loading = delegate.isLoading
+                             ? delegate.isLoading(cx, delegate.data)
+                             : false;
+            s->hasMore = delegate.hasMore
+                             ? delegate.hasMore(cx, delegate.data)
+                             : false;
+            s->loadMoreThreshold = delegate.loadMoreThreshold
+                                       ? delegate.loadMoreThreshold(delegate.data)
+                                       : 20;
+            if (s->loadMoreThreshold < 0) {
+                s->loadMoreThreshold = 0;
+            }
+        }
     }
 
     // Two elements, because Rust has two views. `List::render` is
@@ -224,10 +293,7 @@ El* List::IntoEl() {
                    ->PathClick(id)
                    ->Role(AccessibilityRole::List)
                    ->FlexCol()
-                   ->W(kFill)
-                   ->Pad(8)
-                   ->Radius(th.radius)
-                   ->Border(1, th.border);
+                   ->W(kFill);
     // `v_flex().size_full().relative().overflow_hidden()`: no gap between the
     // query row and the rows under it — the row's own bottom border is what
     // separates them.
@@ -245,11 +311,13 @@ El* List::IntoEl() {
         // which is "Search..." in the locale this tree ships. Rust sets it on
         // the state when the list makes it, so a caller that gave a field of
         // its own with a placeholder already on it keeps that one.
-        if (!search->placeholder.s) {
-            InputSetPlaceholder(search, Tr("List.search_placeholder"));
-        }
+        InputSetPlaceholder(search, searchPlaceholder.s
+                                        ? searchPlaceholder
+                                        : Tr("List.search_placeholder"));
+        search->onChange = ListenTo(state, &ListState::OnQueryInput);
         searchRow->Child(Div(a)->Flex1()->Child(
             Input::New(cx, StrL("search"), search)
+                ->WithSize(size)
                 ->Appearance(false)
                 ->Cleanable(true)
                 ->Prefix(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg))
@@ -265,18 +333,29 @@ El* List::IntoEl() {
     s->viewportH = h;
 
     if (s->loading) {
-        inner->Child(loading ? loading : ListLoadingView(cx, h));
+        El* loadingView = delegate.renderLoading
+                              ? delegate.renderLoading(cx, delegate.data)
+                              : loading;
+        inner->Child(loadingView ? loadingView : ListLoadingView(cx, h));
         return root;
     }
     // render_initial: what the list shows before anything has been searched
     // for. Rust asks for it only while the query field is empty, which is the
     // one place it could be reached from.
-    if (initial && (!search || search->text.len == 0)) {
-        inner->Child(initial);
-        return root;
+    if (search && search->text.len == 0) {
+        El* initialView = delegate.renderInitial
+                              ? delegate.renderInitial(cx, delegate.data)
+                              : initial;
+        if (initialView) {
+            inner->Child(initialView);
+            return root;
+        }
     }
     if (s->count == 0) {
-        inner->Child(empty ? empty : DefaultEmpty(cx, h));
+        El* emptyView = delegate.renderEmpty
+                            ? delegate.renderEmpty(cx, delegate.data)
+                            : empty;
+        inner->Child(emptyView ? emptyView : DefaultEmpty(cx, h));
         return root;
     }
 
@@ -290,9 +369,14 @@ El* List::IntoEl() {
     // that answers null for the row it was asked to measure should not
     // collapse the list to zero-height rows.
     float itemH = s->rowH;
-    if (item) {
-        ListRow m = ListRowAt(s, ListRowOfEntry(s, 0));
-        ListItem* probe = item(cx, data, m.section, m.row, m.entry);
+    if (delegate.renderItem) {
+        int measureEntry = ListEntryOf(s, s->itemToMeasure);
+        if (measureEntry < 0) {
+            measureEntry = 0;
+        }
+        ListRow m = ListRowAt(s, ListRowOfEntry(s, measureEntry));
+        ListItem* probe = delegate.renderItem(cx, delegate.data, m.section,
+                                              m.row, m.entry);
         if (probe) {
             float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
                                   probe->IntoEl(StrL("list-measure"), {}, {}))
@@ -303,19 +387,19 @@ El* List::IntoEl() {
         }
     }
     float headerH = s->sectionHeaders ? s->headerH : 0;
-    if (s->sectionHeaders && header) {
-        float got =
-            MeasureEl(cx->win ? &cx->win->paint : nullptr, header(cx, data, 0))
-                .h;
+    if (s->sectionHeaders && delegate.renderSectionHeader) {
+        float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
+                              delegate.renderSectionHeader(cx, delegate.data, 0))
+                        .h;
         if (got > 0) {
             headerH = got;
         }
     }
     float footerH = s->sectionFooters ? s->footerH : 0;
-    if (s->sectionFooters && footer) {
-        float got =
-            MeasureEl(cx->win ? &cx->win->paint : nullptr, footer(cx, data, 0))
-                .h;
+    if (s->sectionFooters && delegate.renderSectionFooter) {
+        float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
+                              delegate.renderSectionFooter(cx, delegate.data, 0))
+                        .h;
         if (got > 0) {
             footerH = got;
         }
@@ -332,10 +416,14 @@ El* List::IntoEl() {
                    ->FlexCol()
                    ->W(kFill)
                    ->H(h)
+                   ->Pad(padding)
                    ->ClipY()
                    ->ScrollY(s->scrollY)
                    ->ScrollFromPath()
                    ->OnScroll(ListenTo(state, &ListState::OnScroll));
+    if (!scrollbarVisible) {
+        body->HideScrollbar();
+    }
     // The two spacers stand in for the rows that were not built. With a size
     // per row they are the running scan `VirtualListItemOrigin` does, not a
     // count times one height.
@@ -350,11 +438,18 @@ El* List::IntoEl() {
         ListRow row = ListRowAt(s, r);
         El* el = nullptr;
         if (row.kind == ListRowKind::SectionHeader) {
-            el = header ? header(cx, data, row.section) : nullptr;
+            el = delegate.renderSectionHeader
+                     ? delegate.renderSectionHeader(cx, delegate.data,
+                                                    row.section)
+                     : nullptr;
         } else if (row.kind == ListRowKind::SectionFooter) {
-            el = footer ? footer(cx, data, row.section) : nullptr;
-        } else if (item) {
-            ListItem* it = item(cx, data, row.section, row.row, row.entry);
+            el = delegate.renderSectionFooter
+                     ? delegate.renderSectionFooter(cx, delegate.data,
+                                                    row.section)
+                     : nullptr;
+        } else if (delegate.renderItem) {
+            ListItem* it = delegate.renderItem(cx, delegate.data, row.section,
+                                               row.row, row.entry);
             if (it) {
                 it->selected = s->selectable && s->selected == row.entry;
                 it->secondarySelected = s->rightClicked == row.entry;
@@ -366,7 +461,7 @@ El* List::IntoEl() {
                 el = it->IntoEl(StrDup(a, IndexPathIdStr(a, row.Path())),
                                 ListenerArg(click, row.entry),
                                 ListenerArg(down, row.entry));
-                el->AriaPositionInSet(row.entry + 1)
+                el->AriaPositionInSet(row.row + 1)
                     ->AriaSizeOfSet(s->count);
             }
         }
@@ -395,8 +490,7 @@ El* List::IntoEl() {
     // more rows. Rust runs it as a background task; here it is a listener the
     // caller answers on the next frame.
     if (ListShouldLoadMore(s, range.end) && s->onLoadMore.IsValid()) {
-        ListEvent ev = {ListEventKind::Select, s->count, false};
-        ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
+        ListRequestLoadMore(s, cx);
     }
     // list.rs declares the "List" context on the element it tracks focus on
     // — `list-state`, not `list` — and both are hit targets, which is what
@@ -410,6 +504,9 @@ El* List::IntoEl() {
         ->TrackFocus(s->focus)
         ->FocusRing(false)
         ->FocusOnPress();
+    if (s->rightClicked >= 0) {
+        inner->OnMouseDownOut(ListenTo(state, &ListState::OnMouseDownOut));
+    }
     ListBindKeys(cx, inner, state);
     return root;
 }

@@ -246,6 +246,7 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     component::List* list =
         component::List::New(cx, StrL("list-story"), self->list)
             ->H(WindowSize(cx->win).dipH - 247)
+            ->Padding(8)
             ->Headers(&SectionHeader, &SectionFooter)
             ->Items(self, &RenderQuote);
     int counts[8];
@@ -256,7 +257,11 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     if (self->searchable) {
         list->Searchable(&self->search, Listen(cx, &FocusSearch));
     }
-    El* frame = list->IntoEl();
+    El* frame = list->IntoEl()
+                    ->Flex1()
+                    ->W(kFill)
+                    ->Border(1, ThemeNow(cx->app).border)
+                    ->Radius(ThemeNow(cx->app).radius);
     page->Child(frame);
     return page;
 }

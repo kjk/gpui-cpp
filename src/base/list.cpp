@@ -246,6 +246,139 @@ bool ListShouldLoadMore(const ListState* s, int lastVisibleRow) {
     return ListRowCount(s) - lastVisibleRow <= s->loadMoreThreshold;
 }
 
+static void CallSelection(ListState* s, Ctx* cx, Listener listener, int entry) {
+    if (!listener.IsValid()) {
+        return;
+    }
+    ListSelectionChange ev;
+    ev.hasIndex = entry >= 0;
+    ev.index = ListIndexPathOf(s, entry);
+    ListenerCall(cx->app, cx->win, listener, &ev);
+}
+
+void ListSetSelectedIndex(ListState* s, Ctx* cx, int entry, bool scroll,
+                          ScrollStrategy strategy) {
+    if (!s || !cx) {
+        return;
+    }
+    if (entry < 0 || entry >= s->count) {
+        entry = -1;
+    }
+    s->selected = entry;
+    CallSelection(s, cx, s->onSetSelectedIndex, entry);
+    if (scroll && entry >= 0) {
+        ListScrollToItem(s, entry, strategy);
+    }
+    Notify(cx);
+}
+
+void ListSetRightClickedIndex(ListState* s, Ctx* cx, int entry) {
+    if (!s || !cx) {
+        return;
+    }
+    if (entry < 0 || entry >= s->count) {
+        entry = -1;
+    }
+    s->rightClicked = entry;
+    CallSelection(s, cx, s->onSetRightClickedIndex, entry);
+    Notify(cx);
+}
+
+bool ListSelectedIndex(const ListState* s, IndexPath* out) {
+    if (!s || s->selected < 0 || s->selected >= s->count) {
+        return false;
+    }
+    if (out) {
+        *out = ListIndexPathOf(s, s->selected);
+    }
+    return true;
+}
+
+bool ListRightClickedIndex(const ListState* s, IndexPath* out) {
+    if (!s || s->rightClicked < 0 || s->rightClicked >= s->count) {
+        return false;
+    }
+    if (out) {
+        *out = ListIndexPathOf(s, s->rightClicked);
+    }
+    return true;
+}
+
+void ListSetItemToMeasureIndex(ListState* s, Ctx* cx, IndexPath path) {
+    if (!s) {
+        return;
+    }
+    s->itemToMeasure = path;
+    if (cx) {
+        Notify(cx);
+    }
+}
+
+static bool ListSpace(char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static Str TrimQuery(Str query) {
+    while (query.len > 0 && ListSpace(query.s[0])) {
+        query.s++;
+        query.len--;
+    }
+    while (query.len > 0 && ListSpace(query.s[query.len - 1])) {
+        query.len--;
+    }
+    return query;
+}
+
+static bool SameStr(Str a, Str b) {
+    return a.len == b.len &&
+           (a.len == 0 || (a.s && b.s && memcmp(a.s, b.s, (size_t)a.len) == 0));
+}
+
+static void StartSearch(ListState* s, Ctx* cx, Str query, bool dedupe) {
+    query = TrimQuery(query);
+    if (dedupe && SameStr(query, s->lastQuery)) {
+        return;
+    }
+    if (s->onPerformSearch.IsValid()) {
+        ListSearchRequest ev = {query};
+        ListenerCall(cx->app, cx->win, s->onPerformSearch, &ev);
+    }
+    // The Rust task may complete later; this port's standing async exclusion
+    // makes perform_search synchronous. Selection and scroll are nevertheless
+    // advanced at the same semantic point.
+    ListSetSelectedIndex(s, cx, s->count > 0 ? 0 : -1, false);
+    s->scrollY = 0;
+    StrFree(s->lastQuery);
+    s->lastQuery = query.len > 0 ? StrDup(query) : Str{};
+    Notify(cx);
+}
+
+void ListSetQuery(ListState* s, Ctx* cx, Str query) {
+    if (!s || !cx) {
+        return;
+    }
+    if (s->queryInput) {
+        InputSetValue(s->queryInput, query);
+    }
+    StartSearch(s, cx, query, false);
+}
+
+void ListState::OnQueryInput(ListState* self, Ctx* cx,
+                             const InputEvent* ev) {
+    if (!self || !self->queryInput || !ev ||
+        ev->kind != InputEventKind::Change) {
+        return;
+    }
+    StartSearch(self, cx, InputValue(self->queryInput), true);
+}
+
+void ListRequestLoadMore(ListState* s, Ctx* cx) {
+    if (!s || !cx || !s->onLoadMore.IsValid()) {
+        return;
+    }
+    ListenerCall(cx->app, cx->win, s->onLoadMore, nullptr);
+}
+
 // cx.emit(ListEvent::..). Rust has only the subscriber list; the state's own
 // onEvent is the shorthand this port already had for the single-subscriber
 // case, so an event goes to it and to everything that has subscribed.
@@ -263,8 +396,7 @@ static void ListSelect(ListState* s, Ctx* cx, int ix) {
     if (!s->selectable) {
         return;
     }
-    s->selected = ix;
-    Notify(cx);
+    ListSetSelectedIndex(s, cx, ix, false);
     ListEmit(s, cx, ListEventKind::Select, ix, false);
 }
 
@@ -281,20 +413,28 @@ void ListPerform(ListState* s, Ctx* cx, ListAction act, bool secondary) {
         case ListAction::SelectNext:
             if (s->count > 0) {
                 ListSelect(s, cx, ListNextIndex(s));
-                ListScrollToItem(s, s->selected, ScrollStrategy::Bottom);
+                ListScrollToItem(s, s->selected, ScrollStrategy::Top);
             }
             break;
         case ListAction::Confirm:
             // on_action_confirm: nothing to confirm with no rows and no
             // selection.
             if (s->count > 0 && s->selected >= 0) {
+                CallSelection(s, cx, s->onSetSelectedIndex, s->selected);
+                if (s->onConfirm.IsValid()) {
+                    ListConfirmRequest ev = {secondary};
+                    ListenerCall(cx->app, cx->win, s->onConfirm, &ev);
+                }
                 Notify(cx);
                 ListEmit(s, cx, ListEventKind::Confirm, s->selected, secondary);
             }
             break;
         case ListAction::Cancel:
             if (s->resetOnCancel) {
-                s->selected = -1;
+                ListSetSelectedIndex(s, cx, -1, false);
+            }
+            if (s->onCancel.IsValid()) {
+                ListenerCall(cx->app, cx->win, s->onCancel, nullptr);
             }
             Notify(cx);
             ListEmit(s, cx, ListEventKind::Cancel, s->selected, false);
@@ -308,15 +448,31 @@ void ListClickRow(ListState* s, Ctx* cx, int ix, bool secondary) {
     if (!s->selectable) {
         return;
     }
-    s->rightClicked = -1;
+    ListSetRightClickedIndex(s, cx, -1);
     s->selected = ix;
+    // on_action_confirm deliberately synchronizes selected_index once more
+    // before confirm, which is part of ListDelegate's contract.
+    CallSelection(s, cx, s->onSetSelectedIndex, s->selected);
+    if (s->onConfirm.IsValid()) {
+        ListConfirmRequest confirm = {secondary};
+        ListenerCall(cx->app, cx->win, s->onConfirm, &confirm);
+    }
     Notify(cx);
     ListEmit(s, cx, ListEventKind::Confirm, ix, secondary);
 }
 
 void ListRightClickRow(ListState* s, Ctx* cx, int ix) {
-    s->rightClicked = ix;
-    Notify(cx);
+    if (!s->selectable) {
+        return;
+    }
+    ListSetRightClickedIndex(s, cx, ix);
+}
+
+void ListState::OnMouseDownOut(ListState* self, Ctx* cx,
+                               const MouseDownEvent*) {
+    if (self && self->rightClicked >= 0) {
+        ListSetRightClickedIndex(self, cx, -1);
+    }
 }
 
 void ListState::OnRowClick(ListState* self, Ctx* cx, const ClickEvent* ev,
