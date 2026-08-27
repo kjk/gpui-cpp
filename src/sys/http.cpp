@@ -30,11 +30,6 @@ static bool HasPrefixI(Str s, const char* prefix) {
     return StrCmpNI(s.s, prefix, n) == 0;
 }
 
-// base.h has no case-sensitive Str compare and a URL is bytes, so this is it.
-static bool UrlEq(Str a, Str b) {
-    return StrEq(a, b);
-}
-
 bool HttpUrlIsRemote(Str url) {
     if (!url.s || url.len <= 0) {
         return false;
@@ -172,7 +167,7 @@ FetchState HttpFetch(Str url, const uint8_t** bytes, int* len) {
     gFetchLock.Lock();
     for (int i = 0; i < kFetchSlots; i++) {
         FetchSlot* s = &gFetch[i];
-        if (s->state == FetchState::None || !UrlEq(s->url, url)) {
+        if (s->state == FetchState::None || !base::StrEq(s->url, url)) {
             continue;
         }
         FetchState st = s->state;
