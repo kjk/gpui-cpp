@@ -2094,6 +2094,132 @@ static void TwoFindBarsHaveTwoPrevButtons() {
     EntityDropAll(&app);
 }
 
+// crates/ui/src/input/state.rs, editor.rs and popovers/*.rs. The three text
+// aliases share InputState in this runtime, but the tagged façade must retain
+// their concrete identity and every source-named overlay must operate on the
+// same sessions the editor renders.
+static void TheUiInputFacadeKeepsTheSourceShapes() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+
+    InputState state;
+    InputSetValue(&state, StrL("alpha"));
+    component::AnyInputState any = component::AnyInputState::From(&state);
+    utassert(any.kind == component::AnyInputKind::Input);
+    utassert(any.AsInput() == &state && !any.AsTextarea() && !any.AsEditor());
+    utassert(StrEqI(any.Value(a, &app), StrL("alpha")));
+
+    state.masked = true;
+    Str masked = any.Value(a, &app);
+    utassert(masked.len == 15); // five UTF-8 bullets
+    state.masked = false;
+    InputFocus(&state, &app, win);
+    utassert(any.FocusHandleOf(win, &app).IsValid());
+    utassert(FocusHandleIsFocused(win, any.FocusHandleOf(win, &app)));
+
+    state.kind = InputKind::Textarea;
+    any = component::AnyInputState::From(&state);
+    utassert(any.AsTextarea() == &state && !any.AsInput());
+    state.kind = InputKind::Editor;
+    any = component::AnyInputState::From(&state);
+    utassert(any.AsEditor() == &state && !any.AsTextarea());
+
+    Entity<OtpState> otp = EntityNewState<OtpState>(&app);
+    OtpState* otpState = otp.Get(&app);
+    memcpy(otpState->value, "42", 2);
+    otpState->len = 2;
+    component::AnyInputState anyOtp = component::AnyInputState::FromOtp(otp);
+    utassert(anyOtp.AsOtp().id == otp.id && !anyOtp.AsEditor());
+    utassert(StrEqI(anyOtp.Value(a, &app), StrL("42")));
+    otpState->masked = true;
+    utassert(anyOtp.Value(a, &app).len == 6);
+    utassert(anyOtp == component::AnyInputState::FromOtp(otp));
+
+    gpui::Style refinement;
+    refinement.width = 321;
+    El* editor = component::Editor::New(&cx, StrL("source-editor"), &state)
+                     ->H(180)
+                     ->Readonly()
+                     ->Disabled(true)
+                     ->TabIndex(3)
+                     ->AriaLabel(StrL("Source"))
+                     ->Language(StrL("rust"))
+                     ->ActiveLine()
+                     ->IndentGuides()
+                     ->Folding()
+                     ->Refine(refinement, StyleFieldWidth)
+                     ->IntoEl();
+    utassert(editor);
+    utassert(state.kind == InputKind::Editor);
+    utassert(state.mode.kind == LayoutModeKind::CodeEditor);
+    utassert(state.mode.folding);
+    utassert(state.readonly && state.disabled);
+    utassert(editor->style.tabIndex == 3);
+    utassert(editor->accessibility.role ==
+             AccessibilityRole::MultilineTextInput);
+    utassert((editor->refineSet & StyleFieldWidth) != 0);
+    utassert(state.focus.IsValid());
+
+    state.disabled = false;
+    state.readonly = false;
+    InputSetValue(&state, StrL("a"));
+    CompletionItem completions[2] = {};
+    completions[0].label = StrL("alpha");
+    completions[1].label = StrL("atom");
+    component::CompletionMenu* completion =
+        component::CompletionMenu::New(&cx, &state)
+            ->UpdateQuery(0, StrL("a"))
+            ->Show(1, completions, 2);
+    utassert(state.completion.open && state.completion.items.len == 2);
+    utassert(StrEqI(state.completion.query, StrL("a")));
+    El* completionEl = completion->IntoEl();
+    utassert(completionEl && completionEl->onMouseDownOut.IsValid());
+    utassert(completion->HandleAction(InputAction::MoveDown));
+    utassert(state.completion.selected == 1);
+    completion->Hide();
+    utassert(!state.completion.open);
+
+    CodeActionItem actions[2] = {};
+    actions[0].title = StrL("First");
+    actions[1].title = StrL("Second");
+    component::CodeActionMenu* codeActions =
+        component::CodeActionMenu::New(&cx, &state)->Show(1, actions, 2);
+    El* codeActionEl = codeActions->IntoEl();
+    utassert(codeActionEl && codeActionEl->onMouseDownOut.IsValid());
+    utassert(codeActions->HandleAction(InputAction::MoveDown));
+    utassert(state.codeActions.selected == 1);
+    codeActions->Hide();
+    utassert(!state.codeActions.open);
+
+    Diagnostic diagnostic;
+    diagnostic.range = {0, 1};
+    diagnostic.severity = DiagnosticSeverity::Warning;
+    diagnostic.message = StrL("**warning**");
+    state.diagnostics.Append(diagnostic);
+    state.hoverDiagnosticX = 20;
+    state.hoverDiagnosticY = 30;
+    state.popoverTriggerBounds = {10, 20, 30, 16};
+    El* diagnosticEl =
+        component::DiagnosticPopover::New(&cx, &state, 0)->IntoEl();
+    utassert(diagnosticEl && diagnosticEl->style.explicitPositioner);
+    state.hoverX = 40;
+    state.hoverY = 50;
+    El* hoverEl = component::HoverPopover::New(&cx, &state, {0, 1},
+                                               StrL("`hover`"))
+                      ->IntoEl();
+    utassert(hoverEl && hoverEl->style.explicitPositioner);
+
+    InputBlur(&state, &app, win);
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2171,4 +2297,5 @@ void TestInputState() {
     DocumentColorsAreAskedForAgainAfterAnEdit();
     DocumentColorResponsesUseTheRustLimit();
     TwoFindBarsHaveTwoPrevButtons();
+    TheUiInputFacadeKeepsTheSourceShapes();
 }

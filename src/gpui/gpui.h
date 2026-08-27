@@ -3388,6 +3388,9 @@ struct CompletionSession {
     int triggerStart = -1;
     int offset = 0;
     int selected = 0;
+    // ContextMenuDelegate::query. The menu keeps its own copy so a provider's
+    // transient query can still color the matching label prefix next frame.
+    Str query = {};
     // What the provider answered, in its own order.
     Vec<CompletionItem> items;
     // Bumped whenever the content changes. A renderer that mirrors this menu
@@ -3425,6 +3428,10 @@ using OverlayActionFn = bool (*)(void* data, InputOverlayKind kind,
 struct InputState {
     InputKind kind = InputKind::Input;
     LayoutMode mode = {};
+    // InputBaseState::focus_handle. All three mode aliases expose this same
+    // retained handle, and AnyInputState forwards it without inspecting the
+    // frame tree.
+    FocusHandle focus = {};
     // Rust's `Rope`. NUL-terminated past `len` so a `const char*` reader still
     // works; the terminator is not counted.
     Vec<char> text;
@@ -3598,6 +3605,13 @@ struct InputState {
     Bounds contentBox = {};
     // input_bounds: the whole field, what a press outside the run maps against.
     Bounds inputBounds = {};
+    // input/popovers::Popover's trigger and laid-out surface. RangeOut fills
+    // the first from the active symbol/diagnostic; BoundsOut fills the second
+    // after Positioner has moved it. Together they keep the hover alive while
+    // the pointer crosses from the editor into its popover.
+    Selection popoverTriggerRange = {};
+    Bounds popoverTriggerBounds = {};
+    Bounds popoverBounds = {};
     // scroll_handle: how far the field has scrolled under its own box, and
     // the box it scrolls inside. Positive-down, as El::ScrollY takes it; Rust
     // keeps the same pair, negative, on a ScrollHandle.
@@ -5124,6 +5138,11 @@ void ClipboardSetText(Window* win, Str text);
 // Take it back off. The result is arena-allocated and empty when the
 // clipboard holds no text.
 Str ClipboardGetText(Arena* a, Window* win);
+
+// macOS NSTextContent autofill metadata. The other platforms intentionally
+// accept and ignore it, matching gpui-component's cfg-gated implementation.
+// An empty value clears the metadata.
+void WindowSetTextContentType(Window* win, Str value);
 
 // cx.open_url: hand a link to whatever the desktop opens links with. Rust's
 // takes an `&str` and answers nothing, and so does this — a browser that

@@ -8723,3 +8723,51 @@ The MSVC suite passes all 20,602 checks. Its source-named motion integration
 now explicitly disables the host accessibility preference while exercising
 the keyed transition path; the pure state test covers reduced motion itself,
 so test results no longer depend on the desktop setting.
+
+## UI input restores the editor state and retained overlay structure
+
+The themed input controls already exercised a broad editor engine, but the UI
+module still flattened the source's public structure. `Editor` was exposed as
+the port-only `Highlighter`, the four editor popovers had no independently
+nameable view, and `AnyInputState` had no tagged representation across input,
+textarea, editor and OTP state. Completion/code-action rows also only worked
+from the keyboard, hover content followed the pointer instead of its shaped
+symbol range, and text fields did not retain the focus handle the source state
+publishes.
+
+`AnyInputState` now keeps the four source variants, forwards value and focus
+queries, masks values by UTF-8 character count and retains OTP's generational
+identity. The shared text engine retains its own `FocusHandle`; binding,
+programmatic focus and blur all use it without overriding an explicitly named
+handle. `Editor` is the source-shaped styled façade with the exact 1.5 line
+height path, appearance/border/disabled/readonly/tab/accessibility refinements
+and custom native context menu. The C++ state-flattening adapter also forwards
+language, decorations, active-line, indent-guide, search, folding and
+diagnostics configuration, so the story gallery now uses `Editor` directly;
+`Highlighter` remains only the dependency-free compatibility implementation.
+
+`CompletionMenu`, `CodeActionMenu`, `DiagnosticPopover` and `HoverPopover` are
+now explicit source-named builders over the sessions already retained by
+`InputState`. Completion queries are owned with the session and color the same
+leading label span as Rust; rows select on hover, confirm on click and dismiss
+on an outside press. Documentation remains selectable markdown and preserves
+the source's side-by-side/stacked width decision. Hover and diagnostic
+surfaces measure their exact shaped trigger range, use the shared `Positioner`
+to prefer above and flip below, stay alive while the pointer moves into the
+surface, and clear on an outside press.
+
+The no-tree-sitter `Tree` is the same zero-sized cfg placeholder upstream
+exports. The only deliberate representation collapse is entity ownership:
+the three text variants point at the port's view-owned `InputState`, while OTP
+keeps a generational entity. The macOS-only content-type behavior is no longer
+a gap: every source variant maps to its pinned NSTextContent value, the Cocoa
+view dynamically adopts that optional protocol, and Windows/Linux/wasm keep
+the same intentional no-op as Rust's non-macOS cfg.
+
+Tests cover tags, masked values, retained focus, source editor styling,
+completion query/state/actions, interactive dismiss surfaces and range-based
+popover placement. UI input is full: the audit moves to 118 full, 3 partial,
+8 adapters and 2 exclusions with 110 unresolved partial-module spellings, all
+confined to Base dock/input and UI dock. MSVC release passes 20,635 checks,
+strict Linux g++ passes its 20,621 applicable checks, and the release story
+gallery compiles.

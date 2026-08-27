@@ -105,6 +105,7 @@ static bool PressedButton(MouseButton* out) {
 @interface GpuiView : NSView <NSTextInputClient> {
   @public
     gpui::Window* win;
+    __strong NSString* textContentType;
 }
 @end
 
@@ -115,6 +116,12 @@ static bool PressedButton(MouseButton* out) {
 }
 - (BOOL)acceptsFirstResponder {
     return YES;
+}
+- (NSString*)contentType {
+    return textContentType;
+}
+- (void)setContentType:(NSString*)value {
+    textContentType = [value copy];
 }
 - (BOOL)acceptsFirstMouse:(NSEvent*)event {
     (void)event;
@@ -1157,6 +1164,26 @@ void ClipboardSetText(Window* win, Str text) {
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     [pb clearContents];
     [pb setString:s forType:NSPasteboardTypeString];
+}
+
+void WindowSetTextContentType(Window* win, Str value) {
+    if (!win || !win->plat || !win->plat->view) return;
+    // native.rs installs NSTextContent dynamically because older SDKs do not
+    // publish the protocol. Keep that availability behavior while the view's
+    // two accessors retain the value under ARC.
+    static bool installed = false;
+    if (!installed) {
+        installed = true;
+        Protocol* protocol = objc_getProtocol("NSTextContent");
+        if (protocol) class_addProtocol([GpuiView class], protocol);
+    }
+    NSString* content = nil;
+    if (value.s && value.len > 0) {
+        content = [[NSString alloc] initWithBytes:value.s
+                                           length:(NSUInteger)value.len
+                                         encoding:NSUTF8StringEncoding];
+    }
+    [win->plat->view setContentType:content];
 }
 
 Str ClipboardGetText(Arena* a, Window* win) {

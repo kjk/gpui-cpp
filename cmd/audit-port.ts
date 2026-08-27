@@ -47,14 +47,13 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 
 const partialBase = new Set(["dock", "input"]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
-const partialUi = new Set(["dock", "input"]);
+const partialUi = new Set(["dock"]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
 
 const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
   "base/input":
     "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
-  "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",
 };
 
 const adapterReasons: Record<string, string> = {

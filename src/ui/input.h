@@ -6,6 +6,46 @@ namespace gpui {
 
 namespace component {
 
+// input/mod.rs's no-tree-sitter projection. Tree-sitter is a standing
+// dependency exclusion, and upstream publishes this zero-sized placeholder
+// under the same cfg so callers can still name the type.
+namespace input_syntax {
+struct Tree {};
+} // namespace input_syntax
+
+enum class AnyInputKind : uint8_t {
+    None,
+    Input,
+    Textarea,
+    Editor,
+    Otp
+};
+
+// state.rs AnyInputState. Rust's four Entity variants become a tag plus the
+// port's retained state handles: the three text modes intentionally share
+// InputState, while OTP keeps its own generational entity.
+struct AnyInputState {
+    AnyInputKind kind = AnyInputKind::None;
+    InputState* text = nullptr;
+    Entity<OtpState> otp = {};
+
+    static AnyInputState From(InputState* state);
+    static AnyInputState FromInput(InputState* state);
+    static AnyInputState FromTextarea(InputState* state);
+    static AnyInputState FromEditor(InputState* state);
+    static AnyInputState FromOtp(Entity<OtpState> state);
+    InputState* AsInput() const;
+    InputState* AsTextarea() const;
+    InputState* AsEditor() const;
+    Entity<OtpState> AsOtp() const;
+    Str Value(Arena* a, App* app) const;
+    FocusHandle FocusHandleOf(const Window* window, App* app) const;
+    bool operator==(const AnyInputState& other) const;
+    bool operator!=(const AnyInputState& other) const {
+        return !(*this == other);
+    }
+};
+
 enum class InputAlign : uint8_t {
     Left,
     Center,
@@ -139,6 +179,120 @@ struct SearchPanel {
     InputState* target = nullptr;
 
     static SearchPanel* New(Ctx* cx, Str id, InputState* target);
+    El* IntoEl();
+};
+
+struct NativeMenu;
+using EditorContextMenuFn = NativeMenu* (*)(Ctx* cx, NativeMenu* empty,
+                                            void* data);
+
+// editor.rs Editor. Highlighter remains the compatibility spelling for the
+// earlier façade; Editor is the source-shaped styled control over the same
+// retained InputState engine.
+struct Editor {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Str id = {};
+    InputState* state = nullptr;
+    float height = 0;
+    float fontSize = 0;
+    bool appearance = true;
+    bool bordered = true;
+    bool disabled = false;
+    bool readonly = false;
+    int tabIndex = 0;
+    AccessibilityRole accessibilityRole =
+        AccessibilityRole::MultilineTextInput;
+    Str ariaLabel = {};
+    EditorContextMenuFn contextMenu = nullptr;
+    void* contextMenuData = nullptr;
+    // The port keeps EditorState's source-language/decorations settings on
+    // the frame value which binds that state. These are forwarded to the
+    // compatibility Highlighter implementation; callers can stay on the
+    // source-shaped Editor surface.
+    Str language = {};
+    const TextSpan* decorations = nullptr;
+    int nDecorations = 0;
+    bool activeLine = false;
+    bool indentGuides = false;
+    bool searchable = true;
+    bool folding = false;
+    const Diagnostic* diagnostics = nullptr;
+    int nDiagnostics = 0;
+    gpui::Style style = {};
+    uint32_t styleFields = 0;
+
+    static Editor* New(Ctx* cx, InputState* state);
+    static Editor* New(Ctx* cx, Str id, InputState* state);
+    Editor* H(float value);
+    Editor* Font(float value);
+    Editor* Appearance(bool value);
+    Editor* Bordered(bool value);
+    Editor* Disabled(bool value);
+    Editor* Readonly(bool value = true);
+    Editor* TabIndex(int value);
+    Editor* Role(AccessibilityRole value);
+    Editor* AriaLabel(Str value);
+    Editor* ContextMenu(EditorContextMenuFn fn, void* data = nullptr);
+    Editor* Language(Str value);
+    Editor* Decorations(const TextSpan* runs, int n);
+    Editor* ActiveLine(bool value = true);
+    Editor* IndentGuides(bool value = true);
+    Editor* Searchable(bool value);
+    Editor* Diagnostics(const Diagnostic* items, int n);
+    Editor* Folding(bool value = true);
+    Editor* Refine(const gpui::Style& value, uint32_t fields);
+    El* IntoEl();
+};
+
+// The four retained editor overlays in input/popovers. Their durable state is
+// already part of InputState; these source-named values are the themed view
+// and operation façade over it.
+struct CompletionMenu {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    InputState* editor = nullptr;
+    Str query = {};
+
+    static CompletionMenu* New(Ctx* cx, InputState* editor);
+    CompletionMenu* UpdateQuery(int startOffset, Str query);
+    CompletionMenu* Show(int offset, const CompletionItem* items, int n);
+    void Hide();
+    bool HandleAction(InputAction action);
+    El* IntoEl();
+};
+
+struct CodeActionMenu {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    InputState* state = nullptr;
+
+    static CodeActionMenu* New(Ctx* cx, InputState* state);
+    CodeActionMenu* Show(int offset, const CodeActionItem* items, int n);
+    void Hide();
+    bool HandleAction(InputAction action);
+    El* IntoEl();
+};
+
+struct DiagnosticPopover {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    InputState* state = nullptr;
+    int diagnostic = -1;
+
+    static DiagnosticPopover* New(Ctx* cx, InputState* state, int diagnostic);
+    El* IntoEl();
+};
+
+struct HoverPopover {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    InputState* editor = nullptr;
+    Selection symbolRange = {};
+    Str hover = {};
+
+    static HoverPopover* New(Ctx* cx, InputState* editor,
+                             Selection symbolRange, Str hover);
     El* IntoEl();
 };
 

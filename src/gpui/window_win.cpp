@@ -1134,6 +1134,11 @@ void ClipboardSetText(Window* win, Str text) {
     CloseClipboard();
 }
 
+void WindowSetTextContentType(Window* win, Str value) {
+    (void)win;
+    (void)value;
+}
+
 Str ClipboardGetText(Arena* a, Window* win) {
     if (!OpenClipboard(Hwnd(win))) {
         return {};

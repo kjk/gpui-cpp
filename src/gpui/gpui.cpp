@@ -1590,6 +1590,13 @@ El* El::BindInput(InputState* s) {
     // keyboard. Declared here rather than by each caller, since an element
     // bound to an InputState is the field.
     if (s) {
+        if (style.focusId != 0) {
+            // An explicitly named test/adapter handle is authoritative and
+            // becomes the state's handle too.
+            s->focus.id = style.focusId;
+        } else if (!s->focus.IsValid()) {
+            s->focus = FocusHandleNew((App*)nullptr);
+        }
         InputInitKeys();
         KeyContext(InputContext());
         // A press on a field focuses it — `InputState::on_mouse_down` calls
@@ -1598,6 +1605,9 @@ El* El::BindInput(InputState* s) {
         // resolves. Without it a clicked field took the characters (they go
         // to the focused InputState) but not the arrows, the escape or the
         // backspace, which are actions and so want the context.
+        if (style.focusId == 0) {
+            TrackFocus(s->focus);
+        }
         FocusOnPress();
     }
     return this;

@@ -144,7 +144,7 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
         Div(a)->FlexCol()->W(kFill)->Radius(th.radius)->Border(1, th.border);
     // The editor owns the box its rows scroll inside, so the caret can bring
     // the view with it.
-    component::Highlighter* ed = component::Highlighter::New(
+    component::Editor* ed = component::Editor::New(
         cx, StrL("editor"), self->tab == 0 ? &self->code : &self->decorations);
     ed->H(WindowSize(cx->win).dipH - 262)->ActiveLine()->IndentGuides();
     if (self->tab == 0) {

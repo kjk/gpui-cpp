@@ -1,10 +1,282 @@
 #include "ui/i18n.h"
 #include "ui/input.h"
 #include "ui/button.h"
+#include "ui/highlighter.h"
+#include "ui/native_menu.h"
 
 namespace gpui {
 
 namespace component {
+
+AnyInputState AnyInputState::From(InputState* state) {
+    if (!state) return {};
+    switch (state->kind) {
+        case InputKind::Textarea:
+            return FromTextarea(state);
+        case InputKind::Editor:
+            return FromEditor(state);
+        default:
+            return FromInput(state);
+    }
+}
+
+AnyInputState AnyInputState::FromInput(InputState* state) {
+    AnyInputState out;
+    out.kind = state ? AnyInputKind::Input : AnyInputKind::None;
+    out.text = state;
+    return out;
+}
+
+AnyInputState AnyInputState::FromTextarea(InputState* state) {
+    AnyInputState out;
+    out.kind = state ? AnyInputKind::Textarea : AnyInputKind::None;
+    out.text = state;
+    return out;
+}
+
+AnyInputState AnyInputState::FromEditor(InputState* state) {
+    AnyInputState out;
+    out.kind = state ? AnyInputKind::Editor : AnyInputKind::None;
+    out.text = state;
+    return out;
+}
+
+AnyInputState AnyInputState::FromOtp(Entity<OtpState> state) {
+    AnyInputState out;
+    out.kind = state.IsValid() ? AnyInputKind::Otp : AnyInputKind::None;
+    out.otp = state;
+    return out;
+}
+
+InputState* AnyInputState::AsInput() const {
+    return kind == AnyInputKind::Input ? text : nullptr;
+}
+
+InputState* AnyInputState::AsTextarea() const {
+    return kind == AnyInputKind::Textarea ? text : nullptr;
+}
+
+InputState* AnyInputState::AsEditor() const {
+    return kind == AnyInputKind::Editor ? text : nullptr;
+}
+
+Entity<OtpState> AnyInputState::AsOtp() const {
+    return kind == AnyInputKind::Otp ? otp : Entity<OtpState>{};
+}
+
+static Str MaskedInputValue(Arena* a, Str text) {
+    int chars = 0;
+    for (int i = 0; i < text.len; i++) {
+        if (((uint8_t)text.s[i] & 0xc0) != 0x80) chars++;
+    }
+    char* out = (char*)Alloc(a, chars * 3 + 1);
+    if (!out) return {};
+    int n = 0;
+    for (int i = 0; i < chars; i++) {
+        memcpy(out + n, "\xE2\x80\xA2", 3);
+        n += 3;
+    }
+    out[n] = 0;
+    return Str(out, n);
+}
+
+Str AnyInputState::Value(Arena* a, App* app) const {
+    if (kind == AnyInputKind::Otp) {
+        OtpState* state = otp.Get(app);
+        if (!state) return {};
+        Str value(state->value, state->len);
+        return state->masked ? MaskedInputValue(a, value) : StrDup(a, value);
+    }
+    if (!text) return {};
+    Str value = InputValue(text);
+    return text->masked ? MaskedInputValue(a, value) : StrDup(a, value);
+}
+
+FocusHandle AnyInputState::FocusHandleOf(const Window* window, App* app) const {
+    if (kind == AnyInputKind::Otp) {
+        OtpState* state = otp.Get(app);
+        return state ? state->focus : FocusHandle{};
+    }
+    if (!text) return {};
+    if (text->focus.IsValid()) return text->focus;
+    // A state first observed after an old frame can still recover the handle
+    // that frame focused. The next BindInput stores it on the state.
+    return text->focused && text->focusWin == window ? WindowFocused(window)
+                                                     : FocusHandle{};
+}
+
+bool AnyInputState::operator==(const AnyInputState& other) const {
+    return kind == other.kind && text == other.text && otp.id == other.otp.id;
+}
+
+struct EditorContextMenuState {
+    EditorContextMenuFn build = nullptr;
+    void* data = nullptr;
+
+    static void OnMouseDown(EditorContextMenuState* self, Ctx* cx,
+                            const MouseDownEvent* event) {
+        if (!self->build || !event || event->button != MouseButton::Right ||
+            event->phase != DispatchPhase::Bubble) {
+            return;
+        }
+        NativeMenu* menu = NativeMenu::New(cx);
+        menu = self->build(cx, menu, self->data);
+        if (menu && !menu->IsEmpty()) {
+            menu->Show(event->x, event->y);
+            WindowStopPropagation(cx);
+        }
+    }
+};
+
+Editor* Editor::New(Ctx* cx, InputState* state) {
+    return New(cx, StrL("editor"), state);
+}
+
+Editor* Editor::New(Ctx* cx, Str id, InputState* state) {
+    Editor* editor = ArenaNew<Editor>(cx->a);
+    editor->a = cx->a;
+    editor->cx = cx;
+    editor->id = id;
+    editor->state = state;
+    return editor;
+}
+
+Editor* Editor::H(float value) {
+    height = value;
+    return this;
+}
+
+Editor* Editor::Font(float value) {
+    fontSize = value;
+    return this;
+}
+
+Editor* Editor::Appearance(bool value) {
+    appearance = value;
+    return this;
+}
+
+Editor* Editor::Bordered(bool value) {
+    bordered = value;
+    return this;
+}
+
+Editor* Editor::Disabled(bool value) {
+    disabled = value;
+    return this;
+}
+
+Editor* Editor::Readonly(bool value) {
+    readonly = value;
+    return this;
+}
+
+Editor* Editor::TabIndex(int value) {
+    tabIndex = value;
+    return this;
+}
+
+Editor* Editor::Role(AccessibilityRole value) {
+    accessibilityRole = value;
+    return this;
+}
+
+Editor* Editor::AriaLabel(Str value) {
+    ariaLabel = value;
+    return this;
+}
+
+Editor* Editor::ContextMenu(EditorContextMenuFn fn, void* data) {
+    contextMenu = fn;
+    contextMenuData = data;
+    return this;
+}
+
+Editor* Editor::Language(Str value) {
+    language = value;
+    return this;
+}
+
+Editor* Editor::Decorations(const TextSpan* runs, int n) {
+    decorations = runs;
+    nDecorations = n;
+    return this;
+}
+
+Editor* Editor::ActiveLine(bool value) {
+    activeLine = value;
+    return this;
+}
+
+Editor* Editor::IndentGuides(bool value) {
+    indentGuides = value;
+    return this;
+}
+
+Editor* Editor::Searchable(bool value) {
+    searchable = value;
+    return this;
+}
+
+Editor* Editor::Diagnostics(const Diagnostic* items, int n) {
+    diagnostics = items;
+    nDiagnostics = n;
+    return this;
+}
+
+Editor* Editor::Folding(bool value) {
+    folding = value;
+    return this;
+}
+
+Editor* Editor::Refine(const gpui::Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleFields |= fields;
+    return this;
+}
+
+El* Editor::IntoEl() {
+    if (!state) return Div(a);
+    state->kind = InputKind::Editor;
+    state->mode.kind = LayoutModeKind::CodeEditor;
+    state->disabled = disabled;
+    state->readonly = readonly;
+
+    Highlighter* highlighter = Highlighter::New(cx, id, state);
+    highlighter->Searchable(searchable)
+        ->ActiveLine(activeLine)
+        ->IndentGuides(indentGuides)
+        ->Folding(folding)
+        ->Decorations(decorations, nDecorations)
+        ->Diagnostics(diagnostics, nDiagnostics);
+    if (language.s) highlighter->Language(language);
+    if (height > 0 || height == kFill) highlighter->H(height);
+    if (fontSize > 0) highlighter->Font(fontSize);
+    El* element = highlighter->IntoEl();
+
+    const Theme& theme = ThemeNow(cx->app);
+    element->TabIndex(tabIndex)
+        ->Role(accessibilityRole)
+        ->AriaDisabled(disabled);
+    if (ariaLabel.s) element->AriaLabel(ariaLabel);
+    if (appearance) element->Bg(theme.inputBg);
+    if (bordered) element->Border(1, theme.inputBorder)->Radius(theme.radius);
+    if (disabled) element->Opacity(0.5f);
+    if (styleFields) element->Refine(style, styleFields);
+
+    if (contextMenu) {
+        Entity<EditorContextMenuState> menuState =
+            ElementStateEntity<EditorContextMenuState>(
+                cx, id, StrL("component::EditorContextMenu"));
+        if (EditorContextMenuState* menu = menuState.Get(cx)) {
+            menu->build = contextMenu;
+            menu->data = contextMenuData;
+            element->OnMouseDown(
+                ListenTo(menuState, &EditorContextMenuState::OnMouseDown));
+        }
+    }
+    return element;
+}
 
 Input* Input::New(Ctx* cx, Str id, InputState* state) {
     Arena* a = cx->a;
@@ -150,6 +422,67 @@ static bool InputContentIsSecret(bool hasContentType,
             contentType == InputContentType::NewPassword);
 }
 
+// content_type.rs::ns_text_content_type. These are WHATWG autocomplete names,
+// which are also the values GPUI's NSTextContent adapter publishes on macOS.
+static Str InputNativeContentType(bool present, InputContentType value) {
+    if (!present) return {};
+    switch (value) {
+        case InputContentType::Name: return StrL("name");
+        case InputContentType::NamePrefix: return StrL("honorific-prefix");
+        case InputContentType::GivenName: return StrL("given-name");
+        case InputContentType::MiddleName: return StrL("additional-name");
+        case InputContentType::FamilyName: return StrL("family-name");
+        case InputContentType::NameSuffix: return StrL("honorific-suffix");
+        case InputContentType::Nickname: return StrL("nickname");
+        case InputContentType::JobTitle: return StrL("organization-title");
+        case InputContentType::OrganizationName: return StrL("organization");
+        case InputContentType::Location: return StrL("location");
+        case InputContentType::FullStreetAddress: return StrL("street-address");
+        case InputContentType::StreetAddressLine1: return StrL("address-line1");
+        case InputContentType::StreetAddressLine2: return StrL("address-line2");
+        case InputContentType::AddressCity: return StrL("address-level2");
+        case InputContentType::AddressState: return StrL("address-level1");
+        case InputContentType::AddressCityAndState:
+            return StrL("address-level1+2");
+        case InputContentType::Sublocality: return StrL("address-level3");
+        case InputContentType::CountryName: return StrL("country-name");
+        case InputContentType::PostalCode: return StrL("postal-code");
+        case InputContentType::TelephoneNumber: return StrL("tel");
+        case InputContentType::EmailAddress: return StrL("email");
+        case InputContentType::Url: return StrL("url");
+        case InputContentType::CreditCardNumber: return StrL("cc-number");
+        case InputContentType::CreditCardName: return StrL("cc-name");
+        case InputContentType::CreditCardGivenName: return StrL("cc-given-name");
+        case InputContentType::CreditCardMiddleName:
+            return StrL("cc-additional-name");
+        case InputContentType::CreditCardFamilyName:
+            return StrL("cc-family-name");
+        case InputContentType::CreditCardSecurityCode: return StrL("cc-csc");
+        case InputContentType::CreditCardExpiration: return StrL("cc-exp");
+        case InputContentType::CreditCardExpirationMonth:
+            return StrL("cc-exp-month");
+        case InputContentType::CreditCardExpirationYear:
+            return StrL("cc-exp-year");
+        case InputContentType::CreditCardType: return StrL("cc-type");
+        case InputContentType::Username: return StrL("username");
+        case InputContentType::Password: return StrL("password");
+        case InputContentType::NewPassword: return StrL("new-password");
+        case InputContentType::OneTimeCode: return StrL("one-time-code");
+        case InputContentType::ShipmentTrackingNumber:
+            return StrL("shipment-tracking-number");
+        case InputContentType::FlightNumber: return StrL("flight-number");
+        case InputContentType::DateTime: return StrL("date-time");
+        case InputContentType::Birthdate: return StrL("bday");
+        case InputContentType::BirthdateDay: return StrL("bday-day");
+        case InputContentType::BirthdateMonth: return StrL("bday-month");
+        case InputContentType::BirthdateYear: return StrL("bday-year");
+        case InputContentType::CellularEid:
+        case InputContentType::CellularImei:
+            return {};
+    }
+    return {};
+}
+
 El* Input::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     // Rust's Input is the field and nothing else — `.flex().size_full()` — and
@@ -163,6 +496,10 @@ El* Input::IntoEl() {
         col->Child(TextEl(a, label)->Font(12)->Fg(th.foreground));
     }
     bool focused = state && state->focused && !disabled;
+    if (focused && !readonly && !(state && state->readonly)) {
+        WindowSetTextContentType(
+            cx->win, InputNativeContentType(hasContentType, contentType));
+    }
     // input_h / input_px / input_py / input_text_size, by size.
     float h = kInputHeight, padX = kInputPadX, padY = kInputPadY,
           font = kInputTextSize;

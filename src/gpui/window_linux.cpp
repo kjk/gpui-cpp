@@ -901,6 +901,11 @@ void ClipboardSetText(Window* win, Str text) {
     XFlush(gDpy);
 }
 
+void WindowSetTextContentType(Window* win, Str value) {
+    (void)win;
+    (void)value;
+}
+
 // A paste on X11 is a round trip: ask the selection owner to write the text
 // into a property on our window, then wait for the SelectionNotify that says
 // it is there. Windows and Cocoa read the clipboard straight out, so this is

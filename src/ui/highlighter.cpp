@@ -1,9 +1,97 @@
 #include "ui/highlighter.h"
 #include "ui/input.h"
+#include "ui/popover.h"
+#include "ui/text.h"
+#include "base/positioner.h"
 
 namespace gpui {
 
 namespace component {
+
+// CompletionMenu and CodeActionMenu are retained entities in Rust. Their
+// durable data already lives on InputState here; this small keyed entity is
+// the listener owner that gives the frame rows the same pointer behavior.
+struct InputMenuViewState {
+    InputState* input = nullptr;
+
+    static void CompletionClick(InputMenuViewState* self, Ctx* cx,
+                                const ClickEvent*, intptr_t ix) {
+        if (!self || !self->input || ix < 0 ||
+            ix >= self->input->completion.items.len) {
+            return;
+        }
+        self->input->completion.selected = (int)ix;
+        InputAcceptCompletion(self->input, cx->app, cx->win);
+        Notify(cx);
+    }
+
+    static void CompletionHover(InputMenuViewState* self, Ctx* cx,
+                                const HoverEvent* event, intptr_t ix) {
+        if (!self || !self->input || !event || !event->hovered || ix < 0 ||
+            ix >= self->input->completion.items.len ||
+            self->input->completion.selected == ix) {
+            return;
+        }
+        self->input->completion.selected = (int)ix;
+        Notify(cx);
+    }
+
+    static void CompletionOutside(InputMenuViewState* self, Ctx* cx,
+                                  const MouseDownEvent*) {
+        if (!self || !self->input) return;
+        InputDismissCompletion(self->input);
+        Notify(cx);
+    }
+
+    static void CodeActionClick(InputMenuViewState* self, Ctx* cx,
+                                const ClickEvent*, intptr_t ix) {
+        if (!self || !self->input || ix < 0 ||
+            ix >= self->input->codeActions.items.len) {
+            return;
+        }
+        self->input->codeActions.selected = (int)ix;
+        InputPerformCodeAction(self->input, cx->app, cx->win);
+        Notify(cx);
+    }
+
+    static void CodeActionHover(InputMenuViewState* self, Ctx* cx,
+                                const HoverEvent* event, intptr_t ix) {
+        if (!self || !self->input || !event || !event->hovered || ix < 0 ||
+            ix >= self->input->codeActions.items.len ||
+            self->input->codeActions.selected == ix) {
+            return;
+        }
+        self->input->codeActions.selected = (int)ix;
+        Notify(cx);
+    }
+
+    static void CodeActionOutside(InputMenuViewState* self, Ctx* cx,
+                                  const MouseDownEvent*) {
+        if (!self || !self->input) return;
+        InputDismissCodeActions(self->input);
+        Notify(cx);
+    }
+
+    static void PopoverOutside(InputMenuViewState* self, Ctx* cx,
+                               const MouseDownEvent*) {
+        if (!self || !self->input) return;
+        self->input->hoverText = {};
+        self->input->hoverRange = {};
+        self->input->hoverAsked = true;
+        self->input->hoverDiagnostic = -1;
+        self->input->popoverBounds = {};
+        Notify(cx);
+    }
+};
+
+static Entity<InputMenuViewState> InputMenuView(Ctx* cx, InputState* input,
+                                                 const char* kind) {
+    Entity<InputMenuViewState> entity = ElementStateEntity<InputMenuViewState>(
+        cx, fmt("%s-%p", Str(kind), (void*)input),
+        StrL("gpui::component::InputMenuViewState"));
+    if (InputMenuViewState* state = entity.Get(cx)) state->input = input;
+    return entity;
+}
 
 Highlighter* Highlighter::New(Ctx* cx, InputState* state) {
     return New(cx, StrL("editor"), state);
@@ -41,6 +129,322 @@ Highlighter* Highlighter::ActiveLine(bool v) {
 Highlighter* Highlighter::IndentGuides(bool v) {
     indentGuides = v;
     return this;
+}
+
+CompletionMenu* CompletionMenu::New(Ctx* cx, InputState* editor) {
+    CompletionMenu* menu = ArenaNew<CompletionMenu>(cx->a);
+    menu->a = cx->a;
+    menu->cx = cx;
+    menu->editor = editor;
+    return menu;
+}
+
+CompletionMenu* CompletionMenu::UpdateQuery(int startOffset, Str value) {
+    query = value;
+    if (editor && editor->completion.triggerStart < 0) {
+        editor->completion.triggerStart = startOffset;
+    }
+    return this;
+}
+
+CompletionMenu* CompletionMenu::Show(int offset,
+                                     const CompletionItem* items, int n) {
+    if (editor) {
+        int start = editor->completion.triggerStart >= 0
+                        ? editor->completion.triggerStart
+                        : offset;
+        InputPresentCompletionItems(editor, start, query, items, n);
+        editor->completion.offset = offset;
+        if (cx->win) AppInvalidate(cx->win);
+    }
+    return this;
+}
+
+void CompletionMenu::Hide() {
+    InputDismissCompletion(editor);
+    if (cx && cx->win) AppInvalidate(cx->win);
+}
+
+bool CompletionMenu::HandleAction(InputAction action) {
+    return editor &&
+           InputCompletionAction(editor, cx->app, cx->win, action);
+}
+
+El* CompletionMenu::IntoEl() {
+    if (!editor || !editor->completion.open ||
+        editor->completion.items.len <= 0) {
+        return nullptr;
+    }
+    const Theme& theme = ThemeNow(cx->app);
+    float x = editor->caretWinX > 0 ? editor->caretWinX - 4.f
+                                    : editor->inputBounds.x;
+    float lineH = editor->lastLineH > 0 ? editor->lastLineH : 20.f;
+    float y = editor->caretWinY > 0 ? editor->caretWinY + 4.f
+                                    : editor->inputBounds.y + lineH + 4.f;
+    float configuredMax = editor->completionMenuMaxW;
+    float windowW = cx->win ? WindowSize(cx->win).dipW : 0.f;
+    float maxW = configuredMax;
+    if (windowW > 0 && windowW - x < maxW) maxW = windowW - x;
+    if (maxW < 120.f) maxW = 120.f;
+    const float gap = 4.f;
+    bool vertical = windowW > 0 &&
+                    x + configuredMax + gap + configuredMax + gap > windowW;
+    Entity<InputMenuViewState> view =
+        InputMenuView(cx, editor, "completion-menu");
+
+    El* list = PopoverSurface(
+        cx, Div(a)->FlexCol()->MinW(120)->MaxW(maxW)->MaxH(240)->ClipY()->Pad(
+                4));
+    for (int i = 0; i < editor->completion.items.len; i++) {
+        const CompletionItem& item = editor->completion.items[i];
+        bool selected = i == editor->completion.selected;
+        El* row = Div(a)
+                      ->FlexRow()
+                      ->Gap(8)
+                      ->Pad(4)
+                      ->ItemsCenter()
+                      ->Radius(theme.radius * 0.5f)
+                      ->Font(12)
+                      ->HoverBg(BackgroundOpacity(theme.tokens.accent, 0.8f))
+                      ->OnClick(ListenTo(view, &InputMenuViewState::CompletionClick,
+                                         i))
+                      ->OnHover(ListenTo(view, &InputMenuViewState::CompletionHover,
+                                         i));
+        if (selected) row->Bg(theme.tokens.accent)->Fg(theme.accentFg);
+        El* label = TextEl(a, item.label)->LineHeight(1.f);
+        int matched = editor->completion.query.len;
+        if (matched > item.label.len) matched = item.label.len;
+        if (matched > 0) {
+            TextSpan* prefix = ArenaNew<TextSpan>(a);
+            prefix->lo = 0;
+            prefix->hi = matched;
+            prefix->color = theme.blue;
+            label->Spans(prefix, 1);
+        }
+        if (item.deprecated) label->Strikethrough();
+        row->Child(label);
+        if (item.detail.len > 0) {
+            El* detail = TextEl(a, item.detail)
+                              ->LineHeight(1.f)
+                              ->Italic()
+                              ->Fg(selected ? theme.accentFg : theme.mutedFg);
+            if (item.deprecated) detail->Strikethrough();
+            row->Child(detail);
+        }
+        list->Child(row);
+    }
+    El* menu = Div(a)->Gap(gap)->ItemsStart()->Child(list);
+    vertical ? menu->FlexCol() : menu->FlexRow();
+
+    Str documentation = InputCompletionDocumentation(editor);
+    if (documentation.len > 0) {
+        if (vertical) {
+            for (int i = 0; i < documentation.len; i++) {
+                if (documentation.s[i] == '\n') {
+                    documentation = Str(documentation.s, i);
+                    break;
+                }
+            }
+        }
+        TextViewStyle textStyle = TextViewStyle::Default();
+        textStyle.ParagraphGap(8);
+        menu->Child(
+            PopoverSurface(cx, Div(a)
+                                   ->W(configuredMax)
+                                   ->MaxH(240)
+                                   ->ClipY()
+                                   ->PadX(8)
+                                   ->PadY(4))
+                ->Child(TextView::New(cx, documentation)
+                            ->Font(12)
+                            ->Style(textStyle)
+                            ->Selectable()
+                            ->IntoEl()));
+    }
+    return Div(a)
+        ->Fixed()
+        ->Left(x)
+        ->Top(y)
+        ->OnMouseDownOut(
+            ListenTo(view, &InputMenuViewState::CompletionOutside))
+        ->Child(menu);
+}
+
+CodeActionMenu* CodeActionMenu::New(Ctx* cx, InputState* state) {
+    CodeActionMenu* menu = ArenaNew<CodeActionMenu>(cx->a);
+    menu->a = cx->a;
+    menu->cx = cx;
+    menu->state = state;
+    return menu;
+}
+
+CodeActionMenu* CodeActionMenu::Show(int offset,
+                                     const CodeActionItem* items, int n) {
+    (void)offset;
+    InputPresentCodeActions(state, items, n);
+    if (cx->win) AppInvalidate(cx->win);
+    return this;
+}
+
+void CodeActionMenu::Hide() {
+    InputDismissCodeActions(state);
+    if (cx && cx->win) AppInvalidate(cx->win);
+}
+
+bool CodeActionMenu::HandleAction(InputAction action) {
+    return state && InputCodeActionAction(state, cx->app, cx->win, action);
+}
+
+El* CodeActionMenu::IntoEl() {
+    if (!state || !state->codeActions.open || state->codeActions.items.len <= 0)
+        return nullptr;
+    const Theme& theme = ThemeNow(cx->app);
+    float x = state->caretWinX > 0 ? state->caretWinX - 4.f
+                                   : state->inputBounds.x;
+    float lineH = state->lastLineH > 0 ? state->lastLineH : 20.f;
+    float y = state->caretWinY > 0 ? state->caretWinY + 4.f
+                                   : state->inputBounds.y + lineH + 4.f;
+    float windowW = cx->win ? WindowSize(cx->win).dipW : 320.f;
+    float maxW = windowW > x ? windowW - x : 120.f;
+    if (maxW > 320.f) maxW = 320.f;
+    if (maxW < 120.f) maxW = 120.f;
+    El* list = PopoverSurface(
+        cx, Div(a)->FlexCol()->MinW(120)->MaxW(maxW)->MaxH(480)->ClipY()->Pad(
+                4));
+    Entity<InputMenuViewState> view =
+        InputMenuView(cx, state, "code-action-menu");
+    for (int i = 0; i < state->codeActions.items.len; i++) {
+        bool selected = i == state->codeActions.selected;
+        El* row = Div(a)
+                      ->FlexRow()
+                      ->W(kFill)
+                      ->Gap(8)
+                      ->Pad(4)
+                      ->ItemsCenter()
+                      ->Radius(theme.radius * 0.5f)
+                      ->Font(12)
+                      ->HoverBg(BackgroundOpacity(theme.tokens.accent, 0.8f))
+                      ->OnClick(ListenTo(view, &InputMenuViewState::CodeActionClick,
+                                         i))
+                      ->OnHover(ListenTo(view, &InputMenuViewState::CodeActionHover,
+                                         i));
+        if (selected) row->Bg(theme.tokens.accent)->Fg(theme.accentFg);
+        row->Child(
+            TextEl(a, state->codeActions.items[i].title)->LineHeight(1.f));
+        list->Child(row);
+    }
+    return Div(a)
+        ->Fixed()
+        ->Left(x)
+        ->Top(y)
+        ->OnMouseDownOut(
+            ListenTo(view, &InputMenuViewState::CodeActionOutside))
+        ->Child(list);
+}
+
+DiagnosticPopover* DiagnosticPopover::New(Ctx* cx, InputState* state,
+                                           int diagnostic) {
+    DiagnosticPopover* popover = ArenaNew<DiagnosticPopover>(cx->a);
+    popover->a = cx->a;
+    popover->cx = cx;
+    popover->state = state;
+    popover->diagnostic = diagnostic;
+    return popover;
+}
+
+El* DiagnosticPopover::IntoEl() {
+    if (!state || diagnostic < 0 || diagnostic >= state->diagnostics.len)
+        return nullptr;
+    const Theme& theme = ThemeNow(cx->app);
+    const Diagnostic& item = state->diagnostics[diagnostic];
+    Rgba foreground = theme.blue;
+    if (item.severity == DiagnosticSeverity::Error) foreground = theme.red;
+    else if (item.severity == DiagnosticSeverity::Warning)
+        foreground = theme.yellow;
+    else if (item.severity == DiagnosticSeverity::Hint)
+        foreground = theme.cyan;
+    Rgba background = RgbaMix(theme.background, foreground, 0.8f);
+    TextViewStyle textStyle = TextViewStyle::Default();
+    textStyle.ParagraphGap(8);
+    El* body = TextView::New(cx, item.message)
+                   ->Font(12)
+                   ->Style(textStyle)
+                   ->Selectable()
+                   ->IntoEl();
+    El* surface = Div(a)
+        ->MinW(200)
+        ->MaxW(500)
+        ->MaxH(320)
+        ->ClipY()
+        ->PadX(4)
+        ->PadY(2)
+        ->Radius(theme.radius)
+        ->Bg(background)
+        ->Fg(foreground)
+        ->Border(1, foreground)
+        ->BoundsOut(&state->popoverBounds)
+        ->Child(body);
+    Entity<InputMenuViewState> view =
+        InputMenuView(cx, state, "diagnostic-popover");
+    surface->OnMouseDownOut(
+        ListenTo(view, &InputMenuViewState::PopoverOutside));
+    Bounds trigger = state->popoverTriggerBounds;
+    if (trigger.w <= 0 || trigger.h <= 0) {
+        trigger = {state->hoverDiagnosticX, state->hoverDiagnosticY, 1, 1};
+    }
+    return Positioner::Side(cx, trigger)
+        ->Placement(gpui::Placement::Top)
+        ->Align(gpui::Align::Start)
+        ->Margin(8)
+        ->Child(surface)
+        ->IntoEl();
+}
+
+HoverPopover* HoverPopover::New(Ctx* cx, InputState* editor,
+                                Selection symbolRange, Str hover) {
+    HoverPopover* popover = ArenaNew<HoverPopover>(cx->a);
+    popover->a = cx->a;
+    popover->cx = cx;
+    popover->editor = editor;
+    popover->symbolRange = symbolRange;
+    popover->hover = hover;
+    return popover;
+}
+
+El* HoverPopover::IntoEl() {
+    if (!editor || hover.len <= 0) return nullptr;
+    const Theme& theme = ThemeNow(cx->app);
+    TextViewStyle textStyle = TextViewStyle::Default();
+    textStyle.ParagraphGap(8);
+    El* surface = PopoverSurface(
+        cx, Div(a)
+                ->MinW(200)
+                ->MaxW(500)
+                ->MaxH(320)
+                ->ClipY()
+                ->PadX(8)
+                ->PadY(4));
+    surface->Child(TextView::New(cx, hover)
+                       ->Font(12)
+                       ->Style(textStyle)
+                       ->Selectable()
+                       ->IntoEl())
+        ->Fg(theme.foreground)
+        ->BoundsOut(&editor->popoverBounds);
+    Entity<InputMenuViewState> view =
+        InputMenuView(cx, editor, "hover-popover");
+    surface->OnMouseDownOut(
+        ListenTo(view, &InputMenuViewState::PopoverOutside));
+    Bounds trigger = editor->popoverTriggerBounds;
+    if (trigger.w <= 0 || trigger.h <= 0) {
+        trigger = {editor->hoverX, editor->hoverY, 1, 1};
+    }
+    return Positioner::Side(cx, trigger)
+        ->Placement(gpui::Placement::Top)
+        ->Align(gpui::Align::Start)
+        ->Margin(8)
+        ->Child(surface)
+        ->IntoEl();
 }
 
 // The language's captures over the whole document, as runs the rows slice
@@ -423,195 +827,20 @@ El* Highlighter::IntoEl() {
                        ->ScrollY(state ? state->scrollY : 0)
                        ->Child(editor);
     }
-    // The completion menu, under the caret: the list on the left and the
-    // selected item's documentation beside it, which is what CompletionMenu
-    // defers into place.
-    El* completionMenu = nullptr;
-    if (state && state->completion.open && state->completion.items.len > 0) {
-        // `cursor_origin + (-4, line_height + 4)`, in window coordinates —
-        // the caret's own box is what the editor measured last frame.
-        float x = state->caretWinX > 0 ? state->caretWinX - 4.f
-                                       : state->inputBounds.x;
-        // The caret's row. Wrapped rows report their boxes and the menu is
-        // placed under the one the caret is on; without wrapping every row is
-        // a line high and the arithmetic is the same one the caret's own
-        // scrolling uses.
-        float y = state->caretWinY > 0
-                      ? state->caretWinY + 4.f
-                      : state->inputBounds.y + kInputLineH + 4.f;
-        // CompletionMenuOptions::max_width, clamped to what is left of the
-        // window to the right of the menu — and if the list and the pane
-        // beside it would not both fit, the pane goes underneath instead.
-        float configuredMax = state->completionMenuMaxW;
-        float winW = cx->win ? WindowSize(cx->win).dipW : 0.f;
-        float maxW = configuredMax;
-        if (winW > 0 && winW - x < maxW) {
-            maxW = winW - x;
-        }
-        if (maxW < 120.f) {
-            maxW = 120.f;
-        }
-        const float kPopoverGap = 4.f;
-        bool vertical = winW > 0 && x + configuredMax + kPopoverGap +
-                                            configuredMax + kPopoverGap >
-                                        winW;
-        El* list = PopoverSurface(
-            cx,
-            Div(a)->FlexCol()->MinW(120)->MaxW(maxW)->MaxH(240)->ClipY()->Pad(
-                4));
-        for (int i = 0; i < state->completion.items.len; i++) {
-            const CompletionItem& item = state->completion.items[i];
-            bool selected = i == state->completion.selected;
-            El* row = Div(a)
-                          ->FlexRow()
-                          ->Gap(8)
-                          ->Pad(4)
-                          ->ItemsCenter()
-                          ->Radius(th.radius * 0.5f)
-                          ->Font(12);
-            if (selected) {
-                row->Bg(th.tokens.accent)->Fg(th.accentFg);
-            }
-            El* label = TextEl(a, item.label)->LineHeight(1.f);
-            if (item.deprecated) {
-                label->Strikethrough();
-            }
-            row->Child(label);
-            if (item.detail.len > 0) {
-                row->Child(TextEl(a, item.detail)
-                               ->LineHeight(1.f)
-                               ->Italic()
-                               ->Fg(selected ? th.accentFg : th.mutedFg));
-            }
-            list->Child(row);
-        }
-        El* menu = Div(a)->Gap(kPopoverGap)->ItemsStart()->Child(list);
-        if (vertical) {
-            menu->FlexCol();
-        } else {
-            menu->FlexRow();
-        }
-        // The documentation of the item the selection is on, beside the list
-        // — or under it where there is no room for both. `resolve_completions`
-        // fills it in the first time the item is looked at.
-        Str doc = InputCompletionDocumentation(state);
-        if (doc.len > 0) {
-            // Stacked, only the first line of it: a pane as tall as the list
-            // beneath the list would cover the document.
-            if (vertical) {
-                for (int i = 0; i < doc.len; i++) {
-                    if (doc.s[i] == '\n') {
-                        doc = Str(doc.s, i);
-                        break;
-                    }
-                }
-            }
-            menu->Child(
-                PopoverSurface(cx, Div(a)
-                                       ->W(configuredMax)
-                                       ->MaxH(240)
-                                       ->ClipY()
-                                       ->PadX(8)
-                                       ->PadY(4))
-                    ->Child(TextView::New(cx, doc)->Font(12)->IntoEl()));
-        }
-        completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(menu);
+    El* completionMenu = CompletionMenu::New(cx, state)->IntoEl();
+    if (!completionMenu) {
+        completionMenu = CodeActionMenu::New(cx, state)->IntoEl();
     }
 
-    // The code action menu, in the same place under the caret: one column of
-    // titles, no pane beside it — CodeActionMenu, which is the completion
-    // menu's list over a list of actions.
-    if (!completionMenu && state && state->codeActions.open &&
-        state->codeActions.items.len > 0) {
-        float x = state->caretWinX > 0 ? state->caretWinX - 4.f
-                                       : state->inputBounds.x;
-        float y = state->caretWinY > 0
-                      ? state->caretWinY + 4.f
-                      : state->inputBounds.y + kInputLineH + 4.f;
-        El* list = Div(a)
-                       ->FlexCol()
-                       ->W(320)
-                       ->MaxH(480)
-                       ->ClipY()
-                       ->Pad(4)
-                       ->Radius(th.radius)
-                       ->Bg(th.tokens.background)
-                       ->Border(1, th.border);
-        for (int i = 0; i < state->codeActions.items.len; i++) {
-            bool selected = i == state->codeActions.selected;
-            El* row = Div(a)
-                          ->FlexRow()
-                          ->W(kFill)
-                          ->Gap(8)
-                          ->Pad(4)
-                          ->ItemsCenter()
-                          ->Radius(th.radius * 0.5f)
-                          ->Font(12);
-            if (selected) {
-                row->Bg(th.tokens.accent)->Fg(th.accentFg);
-            }
-            row->Child(TextEl(a, state->codeActions.items[i].title)
-                           ->LineHeight(1.f));
-            list->Child(row);
-        }
-        completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(list);
-    }
-
-    // The diagnostic popover: what the pointer is over, in the severity's
-    // own colours — `px_1().py_0p5()` over a background the colour is blended
-    // a fifth into, with the message as markdown.
     El* diagPopover = nullptr;
-    if (state && state->hoverDiagnostic >= 0 &&
-        state->hoverDiagnostic < state->diagnostics.len) {
-        const Diagnostic& dg = state->diagnostics[state->hoverDiagnostic];
-        Rgba fg = style.diagnostics.info;
-        if (dg.severity == DiagnosticSeverity::Error) {
-            fg = style.diagnostics.error;
-        } else if (dg.severity == DiagnosticSeverity::Warning) {
-            fg = style.diagnostics.warning;
-        } else if (dg.severity == DiagnosticSeverity::Hint) {
-            fg = style.diagnostics.hint;
+    if (state) {
+        diagPopover =
+            DiagnosticPopover::New(cx, state, state->hoverDiagnostic)->IntoEl();
+        if (!diagPopover && state->hoverDiagnostic < 0) {
+            diagPopover = HoverPopover::New(cx, state, state->hoverRange,
+                                            state->hoverText)
+                              ->IntoEl();
         }
-        // `bg.blend(colour.alpha(0.2))`: a fifth of the status colour over
-        // the window's own background. RgbaMix weights its first argument, so
-        // the background is the one that takes the four fifths.
-        Rgba bg = RgbaMix(th.background, fg, 0.8f);
-        El* body = TextView::New(cx, dg.message)->Font(12)->IntoEl();
-        diagPopover = Div(a)
-                          ->Fixed()
-                          ->Left(state->hoverDiagnosticX + 8)
-                          ->Top(state->hoverDiagnosticY + 18)
-                          ->MaxW(420)
-                          ->PadX(4)
-                          ->PadY(2)
-                          ->Radius(th.radius)
-                          ->Bg(bg)
-                          ->Fg(fg)
-                          ->Border(1, fg)
-                          ->Child(body);
-    }
-    // The hover popover: what the provider said about the word the pointer is
-    // resting on, as markdown in a plain popover — HoverPopover, which is the
-    // diagnostic's neighbour without the severity colouring.
-    El* hoverPopover = nullptr;
-    if (state && state->hoverText.len > 0 && state->hoverDiagnostic < 0) {
-        hoverPopover = Div(a)
-                           ->Fixed()
-                           ->Left(state->hoverX + 8)
-                           ->Top(state->hoverY + 18)
-                           ->MinW(200)
-                           ->MaxW(500)
-                           ->PadX(8)
-                           ->PadY(4)
-                           ->Radius(th.radius)
-                           ->Bg(th.tokens.background)
-                           ->Border(1, th.border)
-                           ->Child(TextView::New(cx, state->hoverText)
-                                       ->Font(12)
-                                       ->IntoEl());
-    }
-    if (hoverPopover && !diagPopover) {
-        diagPopover = hoverPopover;
     }
     if (completionMenu) {
         // The menu is over the rows either way, so it goes in beside them

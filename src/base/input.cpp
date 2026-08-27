@@ -524,13 +524,16 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     if (InputUpdateInlineCompletion(state, state->completion.open)) {
         WindowRequestAnimationFrame(cx->win);
     }
-    state->hoverDiagnostic = -1;
     if ((state->diagnostics.len > 0 || state->hoverProvider ||
          state->definitionProvider) &&
         cx->win) {
         float mx = cx->win->mouseX;
         float my = cx->win->mouseY;
         bool inside = state->inputBounds.Contains({mx, my});
+        bool overPopover = state->popoverBounds.Contains({mx, my});
+        if (!overPopover) {
+            state->hoverDiagnostic = -1;
+        }
         int at =
             inside ? InputIndexForPosition(state, &cx->win->paint, mx, my) : -1;
         // handle_mouse_move: with the shortcut modifier down the pointer is
@@ -559,7 +562,10 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         // handle_hover_popover. The provider is asked once per word: while
         // the pointer stays inside the word it was asked about, what it said
         // stands. A diagnostic under the pointer wins, and so does a drag.
-        if (!state->hoverProvider || !inside || state->selecting ||
+        if (overPopover) {
+            // The source keeps the union of trigger and popover live. The
+            // popover's own outside listener clears it on a press elsewhere.
+        } else if (!state->hoverProvider || !inside || state->selecting ||
             state->hoverDiagnostic >= 0 || secondary) {
             state->hoverText = Str{};
             state->hoverRange = Selection{};
@@ -758,6 +764,27 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 // the run and the y comes off the row.
                 el->RangeOut(lo, hi, &state->hoverDef.bounds);
             }
+        }
+        // input/popovers::Popover::trigger_bounds: use the exact shaped range,
+        // not the pointer that happened to ask for it. Diagnostic and hover
+        // popovers are mutually exclusive, as they are in the source.
+        Selection popoverRange = state->hoverRange;
+        if (state->hoverDiagnostic >= 0 &&
+            state->hoverDiagnostic < state->diagnostics.len) {
+            popoverRange = state->diagnostics[state->hoverDiagnostic].range;
+        }
+        int popoverLo = popoverRange.start - start;
+        int popoverHi = popoverRange.end - start;
+        if (popoverLo < 0) popoverLo = 0;
+        if (popoverHi > line.len) popoverHi = line.len;
+        if (popoverHi > popoverLo) {
+            if (state->popoverTriggerRange.start != popoverRange.start ||
+                state->popoverTriggerRange.end != popoverRange.end) {
+                state->popoverTriggerRange = popoverRange;
+                state->popoverTriggerBounds = {};
+                WindowRequestAnimationFrame(cx->win);
+            }
+            el->RangeOut(popoverLo, popoverHi, &state->popoverTriggerBounds);
         }
         RowMatchWashes(a, el, style, state, start, line.len, &matchAt);
         if (state->softWrap) {
@@ -2263,6 +2290,7 @@ Str InputCompletionDocumentation(InputState* s) {
 
 CompletionSession::~CompletionSession() {
     items.Reset();
+    StrFree(query);
     if (arena) {
         ArenaDelete(arena);
     }
@@ -2280,6 +2308,8 @@ void InputDismissCompletion(InputState* s) {
     s->completion.triggerStart = -1;
     s->completion.selected = 0;
     s->completion.items.Clear();
+    StrFree(s->completion.query);
+    s->completion.query = {};
     s->completion.revision++;
 }
 
@@ -2322,6 +2352,9 @@ void InputRequestCompletion(InputState* s, App* app, Window* win, bool force) {
         s->completion.items.Append(items.els[i]);
     }
     s->completion.open = n > 0;
+    Str queryCopy = query.len > 0 ? StrDup(query) : Str{};
+    StrFree(s->completion.query);
+    s->completion.query = queryCopy;
     s->completion.triggerStart = start;
     s->completion.offset = InputCursor(s);
     s->completion.selected = 0;
@@ -2388,7 +2421,6 @@ void InputPresentCompletionItems(InputState* s, int triggerStart, Str query,
     if (!s) {
         return;
     }
-    (void)query;
     s->completion.items.Clear();
     for (int i = 0; i < n; i++) {
         s->completion.items.Append(items[i]);
@@ -2397,6 +2429,9 @@ void InputPresentCompletionItems(InputState* s, int triggerStart, Str query,
     s->completion.offset = InputCursor(s);
     s->completion.selected = 0;
     s->completion.open = n > 0;
+    Str queryCopy = query.len > 0 ? StrDup(query) : Str{};
+    StrFree(s->completion.query);
+    s->completion.query = queryCopy;
     s->completion.revision++;
 }
 
@@ -4225,6 +4260,10 @@ void InputFocus(InputState* s, App* app, Window* win) {
     if (win->input && win->input != s) {
         InputBlur(win->input, app, win);
     }
+    if (!s->focus.IsValid()) {
+        s->focus = FocusHandleNew(app);
+    }
+    FocusHandleFocus(win, s->focus);
     s->focused = true;
     s->focusWin = win;
     win->input = s;
@@ -4246,6 +4285,9 @@ void InputBlur(InputState* s, App* app, Window* win) {
     s->focusWin = nullptr;
     if (win) {
         BlinkStop(app, win, &s->blink);
+        if (FocusHandleIsFocused(win, s->focus)) {
+            WindowSetFocusId(win, 0);
+        }
         if (win->input == s) {
             win->input = nullptr;
             win->prevInput = nullptr;
