@@ -779,29 +779,29 @@ enum class ScrollbarMode : uint8_t {
 // never depends on the much larger component-specific Theme/ThemeTokens
 // surface. Defaults keep the bare runtime usable without src/ui.
 struct RuntimeStyle {
-    Rgba background = Rgb(0xfa, 0xfa, 0xfa);
-    Rgba foreground = Rgb(0x17, 0x17, 0x17);
-    Rgba mutedForeground = Rgb(0x73, 0x73, 0x73);
-    Rgba border = Rgb(0xe5, 0xe5, 0xe5);
-    Rgba ring = Rgb(0x17, 0x17, 0x17);
-    Rgba inspectorAccent = Rgb(0x3b, 0x82, 0xf6);
-    Rgba popover = Rgb(0xfa, 0xfa, 0xfa);
-    Rgba popoverForeground = Rgb(0x17, 0x17, 0x17);
-    Background progress = Background(Rgb(0x17, 0x17, 0x17));
-    Background scrollbarThumb = Background(Rgba8(0x17, 0x17, 0x17, 0x33));
-    Background scrollbarThumbHover = Background(Rgba8(0x17, 0x17, 0x17, 0x66));
-    Background scrollbarTrack = Background(Rgba8(0, 0, 0, 0));
+    Rgba background{Rgb(0xfa, 0xfa, 0xfa)};
+    Rgba foreground{Rgb(0x17, 0x17, 0x17)};
+    Rgba mutedForeground{Rgb(0x73, 0x73, 0x73)};
+    Rgba border{Rgb(0xe5, 0xe5, 0xe5)};
+    Rgba ring{Rgb(0x17, 0x17, 0x17)};
+    Rgba inspectorAccent{Rgb(0x3b, 0x82, 0xf6)};
+    Rgba popover{Rgb(0xfa, 0xfa, 0xfa)};
+    Rgba popoverForeground{Rgb(0x17, 0x17, 0x17)};
+    Background progress{Rgb(0x17, 0x17, 0x17)};
+    Background scrollbarThumb{Rgba8(0x17, 0x17, 0x17, 0x33)};
+    Background scrollbarThumbHover{Rgba8(0x17, 0x17, 0x17, 0x66)};
+    Background scrollbarTrack{Rgba8(0, 0, 0, 0)};
 
     // Compatibility styling for the old arena-only ButtonEl helper. New UI
     // code uses component::Button and never reads these fields directly.
-    Background legacyPrimary = Background(Rgb(0x17, 0x17, 0x17));
-    Rgba legacyPrimaryForeground = Rgb(0xfa, 0xfa, 0xfa);
-    Rgba legacyPrimaryHover = Rgb(0x35, 0x35, 0x35);
-    Background legacyMuted = Background(Rgb(0xf5, 0xf5, 0xf5));
-    Background legacySecondary = Background(Rgb(0xf5, 0xf5, 0xf5));
-    Rgba legacySecondaryForeground = Rgb(0x17, 0x17, 0x17);
-    Rgba legacySecondaryHover = Rgb(0xe5, 0xe5, 0xe5);
-    Rgba legacySecondaryActive = Rgb(0xd4, 0xd4, 0xd4);
+    Background legacyPrimary{Rgb(0x17, 0x17, 0x17)};
+    Rgba legacyPrimaryForeground{Rgb(0xfa, 0xfa, 0xfa)};
+    Rgba legacyPrimaryHover{Rgb(0x35, 0x35, 0x35)};
+    Background legacyMuted{Rgb(0xf5, 0xf5, 0xf5)};
+    Background legacySecondary{Rgb(0xf5, 0xf5, 0xf5)};
+    Rgba legacySecondaryForeground{Rgb(0x17, 0x17, 0x17)};
+    Rgba legacySecondaryHover{Rgb(0xe5, 0xe5, 0xe5)};
+    Rgba legacySecondaryActive{Rgb(0xd4, 0xd4, 0xd4)};
 
     float radius = 6.f;
     float fontSize = 16.f;
@@ -1859,7 +1859,7 @@ struct El {
     gpui::Bounds* rangeOut = nullptr;
     float* caretOutX = nullptr;
     float* caretOutY = nullptr;
-    Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
+    Rgba selColor{Rgba8(0x6b, 0xb3, 0xf0, 90)};
     // The input method's provisional run, underlined the way Rust gives the
     // marked range its own UnderlineStyle. Same offsets, same -1 for none.
     int markLo = -1;
