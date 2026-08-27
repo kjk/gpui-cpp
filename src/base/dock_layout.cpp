@@ -58,13 +58,13 @@ PaneRef PaneNode::Kind() const {
     return ref;
 }
 
-void PaneNode::Walk(void (*visit)(const PaneNode*, void*), void* data) const {
-    if (visit) {
-        visit(this, data);
+void PaneNode::Walk(Func1<const PaneNode*> visit) const {
+    if (visit.IsValid()) {
+        visit.Call(this);
     }
     if (paneKind == PaneKind::Split) {
         for (int i = 0; i < children.len; i++) {
-            children[i]->Walk(visit, data);
+            children[i]->Walk(visit);
         }
     }
 }
@@ -201,13 +201,13 @@ bool PaneTree::ContainsPanel(PanelId panel) const {
     return FindPanelNode(panel, nullptr);
 }
 
-static void CollectNodeIds(const PaneNode* node, void* data) {
-    ((Vec<NodeId>*)data)->Append(node->nodeId);
+static void CollectNodeIds(Vec<NodeId>* out, const PaneNode* node) {
+    out->Append(node->nodeId);
 }
 
 void PaneTree::NodeIds(Vec<NodeId>* out) const {
     if (out && root) {
-        root->Walk(CollectNodeIds, out);
+        root->Walk(MkFunc1(CollectNodeIds, out));
     }
 }
 

@@ -63,7 +63,7 @@ struct PaneNode {
     static PaneNode* Tiles(NodeId id);
     NodeId Id() const { return nodeId; }
     PaneRef Kind() const;
-    void Walk(void (*visit)(const PaneNode*, void*), void* data) const;
+    void Walk(Func1<const PaneNode*> visit) const;
     bool Empty() const;
     ~PaneNode();
 };
