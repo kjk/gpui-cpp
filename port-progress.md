@@ -8861,3 +8861,67 @@ Base dock is full: the audit moves to 120 full, 1 partial, 8 adapters and 2
 exclusions with 52 unresolved spellings, all confined to Base input. MSVC
 release passes 20,698 checks, strict Linux g++ passes its 20,684 applicable
 checks, and the release story gallery compiles.
+
+## Base input restores the source editor and LSP structure
+
+The live input engine already covered editing, selection, undo/redo, IME,
+masking, movement, scrolling, search/replace, folding, diagnostics, document
+colors, semantic tokens, completion, inline completion, hover, definitions and
+code actions. Its public representation still predated the current Rust
+module: one large `InputState` exposed the behavior directly, while the mode
+markers, rope extension facade, decoration collections, diagnostic set,
+display projection, highlighting contracts and LSP capability aggregate had
+no source-named boundary. That was the last partial module in Base or UI.
+
+`InputMode`, `TextareaMode`, `EditorMode`, `InputModeKind`, `MultiLineMode`,
+the three state aliases and the input/editor extras now preserve the source's
+mode split over the runtime record. `InputPresentation`, `InputStyles` and the
+action-only `NativeMenu` separate state, semantic styling and context-menu
+capabilities from themed UI. `InputEdit`, `RopeLines` and `RopeExt` expose the
+same UTF-8 byte/point, UTF-16, clipping, line and word operations over the
+port's text storage.
+
+Editor data is split along the Rust files. Independently managed, copyable
+`TextDecorationCollection` handles normalize UTF-8 boundaries, survive their
+owner safely and follow edits with the pinned never-grow-at-edges behavior.
+`DiagnosticSet` owns messages, codes, related locations, tags and serialized
+provider data, keeps entries ordered and implements range/offset queries.
+`BufferPoint`, `DisplayPoint`, `WrappingIndent` and `DisplayMap` compose a
+buffer-to-wrap projection with the existing fold projection; wrapping counts
+Unicode scalars, honors tab width and reserves the first line's indentation on
+continuation rows. `TabSize`, `HighlightStyleResolver`, `InputHighlighter`,
+its factory/shared resolver and `FoldIconRenderer` restore the remaining
+parser-independent editor contracts.
+
+The existing provider callbacks are now grouped into the source traits:
+`CompletionProvider`, `CodeActionProvider`, `DefinitionProvider`,
+`DocumentColorProvider`, `HoverProvider`,
+`DocumentRangeSemanticTokensProvider` and `ShowDocumentHandler`. `Lsp`
+installs those capabilities atomically into an editor, retains an unbounded
+code-action provider list, owns the completion-menu options and forwards the
+same update/reset and visible-range cache queries. `CompletionMenuState`,
+`CodeActionMenuState` and `HoverPopoverState` are borrowed views over the
+retained runtime sessions. A provider's inline-completion debounce is now
+wired into the actual clock instead of always using the default 300 ms.
+
+Four representation differences are deliberate and visible in the source.
+Rust instantiates `InputBaseState<M>` over ropey's persistent `Rope`; this
+runtime keeps one mode-tagged `InputState` over a flat UTF-8 buffer, so the
+three state names are aliases and `RopeExt` is a value facade. Rust provider
+traits return cancellable tasks; the repository excludes async, so the same
+contracts are function tables whose collection calls report their unbounded
+total before filling a caller buffer. The live painter still performs shaped
+pixel wrapping and records its row boxes, while the standalone dependency-free
+`DisplayMap` accepts the measured column capacity. Finally, arbitrary LSP JSON
+diagnostic data is preserved as serialized `Str`, and the renderer's
+non-optional `TextSpan` makes the first decoration win an entire conflicting
+overlap instead of merging individual optional style properties.
+
+Tests cover mode/presentation/menu capability snapshots, rope/edit mapping,
+tab indentation, independent decoration normalization and edit tracking,
+diagnostic ownership and queries, UTF-8 wrapping plus fold composition,
+highlight resolution, provider installation, cache windowing and overlay
+state. Base input is full: the audit reaches 121 full modules, 0 partial, 8
+adapters and 2 standing exclusions, with no unresolved public declaration in
+either crate. MSVC release passes 20,799 checks and strict Linux g++ passes its
+20,785 applicable checks.
