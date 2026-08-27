@@ -68,7 +68,6 @@ const adapterBase = new Set(["component_traits", "element_ext", "event", "measur
 const partialUi = new Set([
   "button",
   "combobox",
-  "dialog",
   "dock",
   "form",
   "global_state",

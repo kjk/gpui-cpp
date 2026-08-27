@@ -212,6 +212,13 @@ The important non-mechanical mappings are encoded in the audit:
   Dialog triggers open the shared handle on mouse-down and both modal hosts
   follow it; `DialogInitKeys` is the module-qualified projection of Rust's
   crate-level `init`.
+- UI Dialog is again the same public family as Rust: `DialogButtonProps`,
+  `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`,
+  `DialogFooter`, its close/action marker parts, and the distinct
+  `component::AlertDialog` façade. The shared renderer still preserves the
+  port's compact string/body compatibility API, while alert hosts keep the
+  AlertDialog role and non-dismissible backdrop default. Themed buttons now
+  carry Cancel/Confirm actions instead of bypassing the dialog action path.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -242,7 +249,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 309 declaration spellings still reported in partial modules,
+  2. Review the 300 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

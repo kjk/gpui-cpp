@@ -62,6 +62,8 @@ struct Button {
     bool joined = false;
     bool edgeT = true, edgeB = true, edgeL = true, edgeR = true;
     Listener onClick;
+    uint32_t clickAction = 0;
+    intptr_t clickActionArg = 0;
     // ButtonStyles: what the caller wants a selected or a disabled button to
     // look like, over what the variant computed. resolve_style's order is
     // fixed — the value state first, disabled last.
@@ -113,6 +115,7 @@ struct Button {
     // Accessibility state only; Selected controls the visual state.
     Button* Toggled(bool v = true);
     Button* OnClick(Listener l);
+    Button* OnClickAction(uint32_t action, intptr_t arg = 0);
     El* IntoEl();
 };
 

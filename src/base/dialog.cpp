@@ -196,7 +196,11 @@ El* DialogDescription::New(Ctx* cx) {
 }
 El* DialogClose::New(Ctx* cx, int clickId) {
     Arena* a = cx->a;
-    return UiRoot(a, StrL("dialog-close"), clickId);
+    // footer.rs wraps this part specifically to raise Cancel. A numeric id
+    // remains a compatibility identity, but dispatch is semantic just like
+    // AlertDialogCancel and the Escape binding.
+    return UiRoot(a, StrL("dialog-close"), clickId)
+        ->OnClickAction(action::Cancel());
 }
 
 Dialog* Dialog::New(Ctx* cx) {

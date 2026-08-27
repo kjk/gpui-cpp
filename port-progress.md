@@ -7583,3 +7583,40 @@ projection of Rust's free `init` and reports no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan pass 19,831 checks; wasm passes
 its 19,126 applicable checks. The release story build and pinned light-theme
 dialog comparison pass.
+
+## UI Dialog restores its component family
+
+The themed port rendered the pinned dialog surface, but it flattened all
+seven Rust dialog files into one `component::Dialog`. `AlertDialog` was only
+described by comments and alert-only flags on that builder; the public
+`DialogButtonProps`, content/header/footer parts, action wrappers and
+`ANIMATION_DURATION` were absent. Default footer buttons also called view
+listeners directly, while Rust dispatches the same Cancel/Confirm actions as
+Escape and Enter.
+
+UI Dialog now exposes `DialogButtonProps`, `DialogContent`, `DialogHeader`,
+`DialogTitle`, `DialogDescription`, `DialogFooter`, `DialogFooterButton`,
+`DialogClose` and `DialogAction` with the source defaults. The shared action
+props own both labels, both variants, Cancel visibility and the retained
+listeners; Dialog's older convenience methods forward into that value.
+`ANIMATION_DURATION` is the public 250 ms source constant and the existing
+motion uses it directly. The footer keeps the source row, gap, line height and
+bottom rounding, and the title/description/header/content builders carry their
+own source styles rather than relying on caller reconstruction.
+
+`component::AlertDialog` is a distinct façade over the shared styled surface.
+It selects Base AlertDialog as its modal host, so accessibility reports an
+AlertDialog rather than a Dialog, disables backdrop dismissal, hides the close
+button by default, and forwards the opinionated alert vocabulary. The alert
+story now constructs that type rather than emulating it with Dialog flags.
+Base `DialogClose` now dispatches Cancel like its Rust wrapper and the themed
+Button supports a retained click action, so OK, Cancel, the corner close and
+backdrop activation reach the same action handlers as the keyboard.
+
+Tests cover all declarative part defaults, marker semantics, action dispatch,
+the shared button props, the public duration and alert-host defaults. UI
+Dialog is full: the audit moves to 87 full, 34 partial, 8 adapters and 2
+exclusions with 300 unresolved partial-module spellings and no full-module
+errors. MSVC debug/release, clang-cl release and MSVC ASan pass 19,857 checks;
+wasm passes its 19,152 applicable checks. The release story build and pinned
+light-theme Dialog and AlertDialog comparisons pass.

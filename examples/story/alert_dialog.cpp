@@ -130,17 +130,17 @@ static const AlertSpec kAlerts[] = {
 
 // Each section opens its own alert; alert_dialog_story.rs builds ten of them
 // and no two are alike.
-static component::Dialog* Alert(AlertDialogStory* self, Ctx* cx) {
+static component::AlertDialog* Alert(AlertDialogStory* self, Ctx* cx) {
     const Theme& th = ThemeNow(cx->app);
     Listener close = Listen(cx, &CloseAlert);
     // The alert layer never turns its overlay on, so the page behind keeps
     // its own colors.
-    component::Dialog* d = component::Dialog::New(cx)
-                               ->Open(true)
-                               ->Overlay(false)
-                               ->OnClose(close)
-                               ->OnOk(Listen(cx, &OnAlertOk))
-                               ->OnCancel(Listen(cx, &OnAlertCancel));
+    component::AlertDialog* d = component::AlertDialog::New(cx)
+                                    ->Open(true)
+                                    ->Overlay(false)
+                                    ->OnClose(close)
+                                    ->OnOk(Listen(cx, &OnAlertOk))
+                                    ->OnCancel(Listen(cx, &OnAlertCancel));
 
     switch (self->open) {
         case AlertDefault:

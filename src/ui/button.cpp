@@ -161,6 +161,11 @@ Button* Button::OnClick(Listener l) {
     onClick = l;
     return this;
 }
+Button* Button::OnClickAction(uint32_t action, intptr_t arg) {
+    clickAction = action;
+    clickActionArg = arg;
+    return this;
+}
 
 El* Button::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
@@ -511,6 +516,9 @@ El* Button::IntoEl() {
     }
     if (interactive && onClick.IsValid()) {
         e->OnClick(onClick);
+    }
+    if (interactive && clickAction) {
+        e->OnClickAction(clickAction, clickActionArg);
     }
     // The ink the label and the icons inherit, so the pointer can move it:
     // `text_color(normal_style.fg)` on the root, with `hover` and `active`

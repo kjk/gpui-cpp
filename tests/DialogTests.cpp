@@ -164,6 +164,80 @@ static void ASharedHandleControlsTriggersAndHosts() {
     delete win;
 }
 
+// crates/ui/src/dialog is seven public parts plus an AlertDialog façade. Keep
+// those contracts visible even though all parts ultimately build the same POD
+// element tree in C++.
+static void ThemedPartsAndAlertDefaultsMatchTheSource() {
+    App app = {};
+    ThemeSet(&app, ThemeMode::Light);
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+
+    float animationDuration = component::ANIMATION_DURATION;
+    utassert(animationDuration == 250.f);
+    component::DialogButtonProps props;
+    utassert(props.okVariant == component::ButtonVariant::Primary);
+    utassert(props.cancelVariant == component::ButtonVariant::Default);
+    utassert(!props.showCancel);
+    props.OkText(StrL("Proceed"))
+        ->CancelText(StrL("Wait"))
+        ->OkVariant(component::ButtonVariant::Danger)
+        ->CancelVariant(component::ButtonVariant::Ghost)
+        ->ShowCancel();
+    utassert(props.okText.len == 7 &&
+             memcmp(props.okText.s, "Proceed", 7) == 0);
+    utassert(props.cancelText.len == 4 &&
+             memcmp(props.cancelText.s, "Wait", 4) == 0);
+    utassert(props.okVariant == component::ButtonVariant::Danger);
+    utassert(props.cancelVariant == component::ButtonVariant::Ghost);
+    utassert(props.showCancel);
+    utassert(props.RenderOk(&cx, StrL("ok"))->clickAction ==
+             action::Confirm());
+    utassert(props.RenderCancel(&cx, StrL("cancel"))->clickAction ==
+             action::Cancel());
+
+    El* content = component::DialogContent::New(&cx)
+                      ->Child(TextEl(arena, StrL("body")))
+                      ->IntoEl();
+    utassert(content->style.dir == FlexDir::Col &&
+             content->style.flexGrow == 1);
+    El* header = component::DialogHeader::New(&cx)->IntoEl();
+    utassert(header->style.dir == FlexDir::Col &&
+             header->style.gapY == 8);
+    El* title = component::DialogTitle::New(&cx)->IntoEl();
+    utassert(title->style.fontSize == 16 && title->style.fontSemibold);
+    El* description = component::DialogDescription::New(&cx)->IntoEl();
+    utassert(description->style.fontSize == 14 &&
+             description->style.hasColor);
+    El* footer = component::DialogFooter::New(&cx)->IntoEl();
+    utassert(footer->style.dir == FlexDir::Row &&
+             footer->style.justify == Justify::End);
+    component::DialogClose* close = component::DialogClose::New(&cx);
+    utassert(close->semantic.IsCancel() && !close->semantic.IsAction());
+    utassert(close->slot->clickAction == action::Cancel());
+    component::DialogAction* actionPart = component::DialogAction::New(&cx);
+    utassert(!actionPart->semantic.IsCancel() &&
+             actionPart->semantic.IsAction());
+    utassert(actionPart->root->clickAction == action::Confirm());
+
+    component::AlertDialog* alert = component::AlertDialog::New(&cx);
+    utassert(alert->base && !alert->base->overlayClosable);
+    utassert(!alert->base->closeButton);
+    utassert(alert->base->alertHost);
+    alert->Confirm()->ButtonProps(props)->CloseButton();
+    utassert(alert->base->buttonProps.showCancel);
+    utassert(alert->base->buttonProps.cancelVariant ==
+             component::ButtonVariant::Ghost);
+    utassert(alert->base->closeButton);
+
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+    ArenaDelete(arena);
+    delete win;
+}
+
 void TestDialog() {
     TestSuite("dialog");
     EscapeCancelsAndEnterConfirms();
@@ -171,4 +245,5 @@ void TestDialog() {
     KeyboardOffRemovesTheBindings();
     ABackdropPressDismissesOnlyWhenAllFourHold();
     ASharedHandleControlsTriggersAndHosts();
+    ThemedPartsAndAlertDefaultsMatchTheSource();
 }

@@ -7,17 +7,208 @@ namespace gpui {
 
 namespace component {
 
-// dialog.rs: ANIMATION_DURATION, and the curve the panel comes down along.
-// Rust names it inline as `cubic_bezier(0.32, 0.72, 0., 1.)`; an easing here
-// is a function pointer, so the curve is a function.
-static const float kDialogMotionMs = 250.f;
-
 static float DialogEase(float t) {
     // x1 = 1/3, x2 = 2/3 make the bezier's time mapping the identity, which
     // keeps the trajectory this dialog was tuned with before `cubic_bezier`
     // solved for x; vaul's (0.32, 0.72, 0, 1) is far more front-loaded under
     // the CSS-correct solver.
     return CubicBezier(1.f / 3.f, 0.72f, 2.f / 3.f, 1.f, t);
+}
+
+static void ApplyDialogButtonVariant(Button* button, ButtonVariant variant) {
+    switch (variant) {
+        case ButtonVariant::Primary:
+            button->Primary();
+            break;
+        case ButtonVariant::Secondary:
+            button->Secondary();
+            break;
+        case ButtonVariant::Danger:
+            button->Danger();
+            break;
+        case ButtonVariant::Info:
+            button->Info();
+            break;
+        case ButtonVariant::Success:
+            button->Success();
+            break;
+        case ButtonVariant::Warning:
+            button->Warning();
+            break;
+        case ButtonVariant::Ghost:
+            button->Ghost();
+            break;
+        case ButtonVariant::Link:
+            button->Link();
+            break;
+        case ButtonVariant::Text:
+            button->Text();
+            break;
+        case ButtonVariant::Default:
+            break;
+    }
+}
+
+DialogButtonProps* DialogButtonProps::OkText(Str value) {
+    okText = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::OkVariant(ButtonVariant value) {
+    okVariant = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::CancelText(Str value) {
+    cancelText = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::CancelVariant(ButtonVariant value) {
+    cancelVariant = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::ShowCancel(bool value) {
+    showCancel = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::OnOk(Listener value) {
+    onOk = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::OnCancel(Listener value) {
+    onCancel = value;
+    return this;
+}
+DialogButtonProps* DialogButtonProps::OnClose(Listener value) {
+    onClose = value;
+    return this;
+}
+El* DialogButtonProps::RenderOk(Ctx* cx, Str id, bool outline) const {
+    Button* button = Button::New(cx, id)
+                         ->Label(okText.s ? okText : Tr("Dialog.ok"))
+                         ->OnClickAction(action::Confirm());
+    ApplyDialogButtonVariant(button, okVariant);
+    if (outline) {
+        button->Outline();
+    }
+    return button->IntoEl();
+}
+El* DialogButtonProps::RenderCancel(Ctx* cx, Str id) const {
+    Button* button = Button::New(cx, id)
+                         ->Label(cancelText.s ? cancelText
+                                             : Tr("Dialog.cancel"))
+                         ->OnClickAction(action::Cancel());
+    ApplyDialogButtonVariant(button, cancelVariant);
+    return button->IntoEl();
+}
+
+DialogContent* DialogContent::New(Ctx* cx) {
+    DialogContent* part = ArenaNew<DialogContent>(cx->a);
+    part->root = Div(cx->a)
+                     ->FlexCol()
+                     ->W(kFill)
+                     ->Flex1()
+                     ->Radius(ThemeNow(cx->app).radiusLg);
+    return part;
+}
+DialogContent* DialogContent::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+El* DialogContent::IntoEl() {
+    return root;
+}
+
+DialogHeader* DialogHeader::New(Ctx* cx) {
+    DialogHeader* part = ArenaNew<DialogHeader>(cx->a);
+    part->root = Div(cx->a)->FlexCol()->Gap(8);
+    return part;
+}
+DialogHeader* DialogHeader::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+El* DialogHeader::IntoEl() {
+    return root;
+}
+
+DialogTitle* DialogTitle::New(Ctx* cx) {
+    DialogTitle* part = ArenaNew<DialogTitle>(cx->a);
+    part->root = gpui::DialogTitle::New(cx)
+                     ->Font(16)
+                     ->Semibold()
+                     ->LineHeight(1.f);
+    return part;
+}
+DialogTitle* DialogTitle::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+El* DialogTitle::IntoEl() {
+    return root;
+}
+
+DialogDescription* DialogDescription::New(Ctx* cx) {
+    DialogDescription* part = ArenaNew<DialogDescription>(cx->a);
+    part->root = gpui::DialogDescription::New(cx)
+                     ->Font(14)
+                     ->Fg(ThemeNow(cx->app).mutedFg);
+    return part;
+}
+DialogDescription* DialogDescription::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+El* DialogDescription::IntoEl() {
+    return root;
+}
+
+DialogFooter* DialogFooter::New(Ctx* cx) {
+    DialogFooter* part = ArenaNew<DialogFooter>(cx->a);
+    float radius = ThemeNow(cx->app).radiusLg;
+    part->root = Div(cx->a)
+                     ->FlexRow()
+                     ->Gap(8)
+                     ->JustifyEnd()
+                     ->LineHeight(1.f)
+                     ->Corners(0, 0, radius, radius);
+    return part;
+}
+DialogFooter* DialogFooter::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+El* DialogFooter::IntoEl() {
+    return root;
+}
+
+DialogClose* DialogClose::New(Ctx* cx) {
+    DialogClose* part = ArenaNew<DialogClose>(cx->a);
+    part->slot = gpui::DialogClose::New(cx);
+    part->root = Div(cx->a)->W(kFill)->H(kFill)->Child(part->slot);
+    return part;
+}
+DialogClose* DialogClose::Child(El* child) {
+    slot->Child(child);
+    return this;
+}
+El* DialogClose::IntoEl() {
+    return root;
+}
+
+DialogAction* DialogAction::New(Ctx* cx) {
+    DialogAction* part = ArenaNew<DialogAction>(cx->a);
+    part->root = Div(cx->a)
+                     ->W(kFill)
+                     ->H(kFill)
+                     ->PathClick(StrL("dialog-action"))
+                     ->OnClickAction(action::Confirm());
+    return part;
+}
+DialogAction* DialogAction::Child(El* child) {
+    root->Child(child);
+    return this;
+}
+El* DialogAction::IntoEl() {
+    return root;
 }
 
 Dialog* Dialog::New(Ctx* cx) {
@@ -97,24 +288,32 @@ Dialog* Dialog::HeaderCentered(bool v) {
     return this;
 }
 Dialog* Dialog::OkText(Str s) {
-    okText = s;
+    buttonProps.okText = s;
     return this;
 }
 Dialog* Dialog::CancelText(Str s) {
-    cancelText = s;
+    buttonProps.cancelText = s;
+    return this;
+}
+Dialog* Dialog::CancelVariant(ButtonVariant v) {
+    buttonProps.cancelVariant = v;
     return this;
 }
 Dialog* Dialog::OkVariant(ButtonVariant v, bool outline) {
-    okVariant = v;
+    buttonProps.okVariant = v;
     okOutline = outline;
     return this;
 }
 Dialog* Dialog::ShowCancel(bool v) {
-    showCancel = v;
+    buttonProps.showCancel = v;
+    return this;
+}
+Dialog* Dialog::ButtonProps(const DialogButtonProps& value) {
+    buttonProps = value;
     return this;
 }
 Dialog* Dialog::Confirm() {
-    showCancel = true;
+    buttonProps.showCancel = true;
     return this;
 }
 Dialog* Dialog::CloseButton(bool v) {
@@ -142,15 +341,15 @@ Dialog* Dialog::FooterDivider(bool v) {
     return this;
 }
 Dialog* Dialog::OnClose(Listener fn) {
-    onClose = fn;
+    buttonProps.onClose = fn;
     return this;
 }
 Dialog* Dialog::OnCancel(Listener fn) {
-    onCancel = fn;
+    buttonProps.onCancel = fn;
     return this;
 }
 Dialog* Dialog::OnOk(Listener fn) {
-    onOk = fn;
+    buttonProps.onOk = fn;
     return this;
 }
 
@@ -180,16 +379,19 @@ El* Dialog::Header() {
             line = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Child(ic)->Child(
                 text);
         }
-        head->Child(DialogTitle::New(cx)->Child(line));
+        head->Child(DialogTitle::New(cx)->Child(line)->IntoEl());
     } else if (ic) {
         head->Child(ic);
     }
     if (description.s && description.len > 0) {
-        head->Child(DialogDescription::New(cx)->Child(TextEl(a, description)
-                                                          ->Font(14)
-                                                          ->Fg(th.mutedFg)
-                                                          ->Wrap()
-                                                          ->W(kFill)));
+        head->Child(
+            DialogDescription::New(cx)
+                ->Child(TextEl(a, description)
+                            ->Font(14)
+                            ->Fg(th.mutedFg)
+                            ->Wrap()
+                            ->W(kFill))
+                ->IntoEl());
     }
     if (body) {
         head->Child(body);
@@ -229,30 +431,12 @@ El* Dialog::Actions() {
     // do not, and two dialogs at once shared one hover state — pointing at
     // the top one's close x lit up the one behind it too.
     El* cancel = nullptr;
-    if (showCancel) {
-        cancel = Button::New(cx, LayerId(StrL("dialog-cancel")))
-                     ->Label(cancelText.s ? cancelText : Tr("Dialog.cancel"))
-                     ->Outline()
-                     ->OnClick(onCancel.IsValid() ? onCancel : onClose)
-                     ->IntoEl();
+    if (buttonProps.showCancel) {
+        cancel = buttonProps.RenderCancel(
+            cx, LayerId(StrL("dialog-cancel")));
     }
-    Button* okBtn = Button::New(cx, LayerId(StrL("dialog-ok")))
-                        ->Label(okText.s ? okText : Tr("Dialog.ok"))
-                        ->OnClick(onOk);
-    switch (okVariant) {
-        case ButtonVariant::Danger:
-            okBtn->Danger();
-            break;
-        case ButtonVariant::Default:
-            break;
-        default:
-            okBtn->Primary();
-            break;
-    }
-    if (okOutline) {
-        okBtn->Outline();
-    }
-    El* ok = okBtn->IntoEl();
+    El* ok = buttonProps.RenderOk(cx, LayerId(StrL("dialog-ok")),
+                                  okOutline);
 
     // Stacked, the primary action leads; in a row it sits at the end.
     if (footerVertical) {
@@ -311,7 +495,8 @@ El* Dialog::IntoEl(WinSize size) {
                     ->Radius(th.radius)
                     ->HoverBg(th.secondaryHover)
                     ->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg));
-        BindClick(x, LayerId(StrL("dialog-close-x")), onClose);
+        x->PathClick(LayerId(StrL("dialog-close-x")))
+            ->OnClickAction(action::Cancel());
         panel->Child(x);
     }
     // Fixed, not absolute: Rust hangs the dialog off the window Root, so it
@@ -321,7 +506,7 @@ El* Dialog::IntoEl(WinSize size) {
     // second while the panel comes down from the top edge.
     float delta = MotionAppear(
         cx, MotionId(StrL("dialog"), StrDup(a, fmt("%d", layerIx))),
-        kDialogMotionMs, DialogEase);
+        ANIMATION_DURATION, DialogEase);
     El* backdrop = DialogBackdrop::New(cx)
                        ->Fixed()
                        ->Top(windowPadding.top)
@@ -331,9 +516,9 @@ El* Dialog::IntoEl(WinSize size) {
     if (overlay) {
         backdrop->Bg(th.tokens.overlay);
     }
-    if (overlayClosable && onClose.IsValid()) {
-        backdrop->OnClick(onClose)
-            ->Click(HashClickId(LayerId(StrL("dialog-backdrop"))));
+    if (overlayClosable) {
+        backdrop->PathClick(LayerId(StrL("dialog-backdrop")))
+            ->OnClickAction(action::Cancel());
     }
     // DialogProps::margin_top: a tenth of the viewport down from the top,
     // not centered in it.
@@ -352,16 +537,162 @@ El* Dialog::IntoEl(WinSize size) {
     // run the same two handlers the Cancel and OK buttons carry, which is
     // what Rust's on_action pair does with a ClickEvent::default().
     if (keyboard) {
-        DialogBindKeys(cx, popup, trap, onCancel, onOk, onClose);
+        DialogBindKeys(cx, popup, trap, buttonProps.onCancel,
+                       buttonProps.onOk, buttonProps.onClose);
     }
-    return gpui::Dialog::New(cx)
-        ->Trap(trap)
-        ->Backdrop(backdrop)
-        ->Popup(popup)
-        ->IntoEl()
-        // `.with_animation("fade-in", .., |this, delta| this.opacity(delta))`:
-        // the backdrop and the panel fade in together, as one layer.
-        ->Opacity(delta);
+    El* host = nullptr;
+    if (alertHost) {
+        host = gpui::AlertDialog::New(cx)
+                   ->Trap(trap)
+                   ->Backdrop(backdrop)
+                   ->Popup(popup)
+                   ->IntoEl();
+    } else {
+        host = gpui::Dialog::New(cx)
+                   ->Trap(trap)
+                   ->Backdrop(backdrop)
+                   ->Popup(popup)
+                   ->IntoEl();
+    }
+    // `.with_animation("fade-in", .., |this, delta| this.opacity(delta))`:
+    // the backdrop and the panel fade in together, as one layer.
+    return host->Opacity(delta);
+}
+
+AlertDialog* AlertDialog::New(Ctx* cx) {
+    AlertDialog* alert = ArenaNew<AlertDialog>(cx->a);
+    // alert_dialog.rs: alerts never close from the backdrop and do not show
+    // the corner close button unless explicitly requested.
+    alert->base = Dialog::New(cx)->OverlayClosable(false)->CloseButton(false);
+    alert->base->alertHost = true;
+    return alert;
+}
+AlertDialog* AlertDialog::Title(Str value) {
+    base->Title(value);
+    return this;
+}
+AlertDialog* AlertDialog::Description(Str value) {
+    base->Description(value);
+    return this;
+}
+AlertDialog* AlertDialog::Open(bool value) {
+    base->Open(value);
+    return this;
+}
+AlertDialog* AlertDialog::Body(El* value) {
+    base->Body(value);
+    return this;
+}
+AlertDialog* AlertDialog::Surface(El* value) {
+    base->Surface(value);
+    return this;
+}
+AlertDialog* AlertDialog::W(float value) {
+    base->W(value);
+    return this;
+}
+AlertDialog* AlertDialog::H(float value) {
+    base->H(value);
+    return this;
+}
+AlertDialog* AlertDialog::Overlay(bool value) {
+    base->Overlay(value);
+    return this;
+}
+AlertDialog* AlertDialog::Keyboard(bool value) {
+    base->Keyboard(value);
+    return this;
+}
+AlertDialog* AlertDialog::Layer(int value) {
+    base->Layer(value);
+    return this;
+}
+AlertDialog* AlertDialog::Radius(float value) {
+    base->Radius(value);
+    return this;
+}
+AlertDialog* AlertDialog::Bg(Background value) {
+    base->Bg(value);
+    return this;
+}
+AlertDialog* AlertDialog::Fg(Rgba value) {
+    base->Fg(value);
+    return this;
+}
+AlertDialog* AlertDialog::Icon(IconName value, Rgba color, float size) {
+    base->Icon(value, color, size);
+    return this;
+}
+AlertDialog* AlertDialog::HeaderCentered(bool value) {
+    base->HeaderCentered(value);
+    return this;
+}
+AlertDialog* AlertDialog::ButtonProps(const DialogButtonProps& value) {
+    base->ButtonProps(value);
+    return this;
+}
+AlertDialog* AlertDialog::OkText(Str value) {
+    base->OkText(value);
+    return this;
+}
+AlertDialog* AlertDialog::CancelText(Str value) {
+    base->CancelText(value);
+    return this;
+}
+AlertDialog* AlertDialog::CancelVariant(ButtonVariant value) {
+    base->CancelVariant(value);
+    return this;
+}
+AlertDialog* AlertDialog::OkVariant(ButtonVariant value, bool outline) {
+    base->OkVariant(value, outline);
+    return this;
+}
+AlertDialog* AlertDialog::ShowCancel(bool value) {
+    base->ShowCancel(value);
+    return this;
+}
+AlertDialog* AlertDialog::Confirm() {
+    base->Confirm();
+    return this;
+}
+AlertDialog* AlertDialog::CloseButton(bool value) {
+    base->CloseButton(value);
+    return this;
+}
+AlertDialog* AlertDialog::Footer(El* value) {
+    base->Footer(value);
+    return this;
+}
+AlertDialog* AlertDialog::FooterVertical(bool value) {
+    base->FooterVertical(value);
+    return this;
+}
+AlertDialog* AlertDialog::FooterStretch(bool value) {
+    base->FooterStretch(value);
+    return this;
+}
+AlertDialog* AlertDialog::FooterMuted(bool value) {
+    base->FooterMuted(value);
+    return this;
+}
+AlertDialog* AlertDialog::FooterDivider(bool value) {
+    base->FooterDivider(value);
+    return this;
+}
+AlertDialog* AlertDialog::OnClose(Listener value) {
+    base->OnClose(value);
+    return this;
+}
+AlertDialog* AlertDialog::OnCancel(Listener value) {
+    base->OnCancel(value);
+    return this;
+}
+AlertDialog* AlertDialog::OnOk(Listener value) {
+    base->OnOk(value);
+    return this;
+}
+El* AlertDialog::IntoEl(WinSize size) {
+    return base->IntoEl(size);
 }
 
 } // namespace component
