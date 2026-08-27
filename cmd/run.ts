@@ -506,16 +506,17 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 // gpui-cpp-dist carries: a snapshot has to be able to fetch and cargo-build
 // the Rust twin without the rest of cmd/ coming along for the ride.
 
-/** Spec we port: crates/base, crates/ui, crates/story, examples. */
+/** Spec we port: crates/base, crates/ui, crates/story, crates/webview, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "91217366a5765600a127bf108ce00b7143a93381",
+  sha: "6d07863fe7077f85abfa0ec2fcb05f3e17c573b2",
   date: "2026-08-27",
-  subject: "editor: Fix input line selection on soft_wrapped multiple lines (#2656)",
+  subject: "webview: Add an owned handle for raw Wry access (#2827)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
     "gpui-component-story": "0.5.1",
+    "gpui-wry": "0.5.0",
   },
   dir: ".work/gpui-component",
 } as const;

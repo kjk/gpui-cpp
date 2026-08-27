@@ -9378,3 +9378,12 @@ edge instead of collapsing it to the logical line start. The regression finds
 a real shaped wrap boundary and verifies that clicks on its two rows return
 the same offset with opposite affinities. MSVC release tests pass 20,956
 checks.
+
+`77832fa6` changes only Shell documentation, and `808aa84e` changes only the
+excluded Shell crate, so neither has a C++ change. `6d07863f` adds the
+cloneable, UI-thread-local `WebViewHandle` from `gpui-wry`. The C++ entity and
+every returned handle now share explicit ownership of the raw Wry view: the
+entity destructor hides the native child immediately, while native destruction
+waits for the final handle, matching Rust's `Rc<wry::WebView>` lifetime and its
+parent-window warning. The public pin metadata now names `gpui-wry` among the
+ported crates. MSVC release tests pass 20,961 checks.

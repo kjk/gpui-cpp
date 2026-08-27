@@ -11,6 +11,20 @@
 void TestWryUri() {
     TestSuite("wry_uri");
 
+    // gpui-wry's owned raw handle is copyable even when empty. A real handle
+    // follows the same operations while retaining the shared native view.
+    WebView empty;
+    WebViewHandle handle = WebViewGetHandle(&empty);
+    utassert(!handle.IsValid());
+    utassert(handle.Raw() == nullptr);
+    WebViewHandle copy = handle;
+    utassert(!copy.IsValid());
+    copy = copy;
+    utassert(copy.Raw() == nullptr);
+    WebViewHandle assigned;
+    assigned = copy;
+    utassert(!assigned.IsValid());
+
     // `WebViewAttributes::default`, including the Darwin fields that live in
     // Rust's separate `PlatformSpecificWebViewAttributes` builder state.
     wry::WebViewAttributes attrs;

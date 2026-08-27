@@ -42,9 +42,33 @@
 
 namespace gpui {
 
+struct WebView;
+struct WebViewHandleState;
+
+/** An owned, UI-thread-local handle to the raw wry webview. Copies prolong
+    the native control's lifetime, like Rust's `WebViewHandle(Rc<wry::WebView>)`.
+    Every copy must be dropped before the parent window is destroyed. */
+struct WebViewHandle {
+    WebViewHandle() = default;
+    WebViewHandle(const WebViewHandle& other);
+    WebViewHandle& operator=(const WebViewHandle& other);
+    ~WebViewHandle();
+
+    /** `WebViewHandle::raw`. Null for an empty handle. */
+    wry::WebView* Raw() const;
+    bool IsValid() const { return Raw() != nullptr; }
+
+  private:
+    WebViewHandleState* state = nullptr;
+
+    explicit WebViewHandle(WebViewHandleState* state);
+    friend Entity<WebView> WebViewNew(Ctx* cx,
+                                      const wry::WebViewAttributes* attrs);
+};
+
 /** `gpui_wry::WebView`. */
 struct WebView {
-    wry::WebView* webview = nullptr;
+    WebViewHandle owned;
     bool visible = true;
     // Where the element last was, which is the box the OS control is moved
     // to. Rust keeps this too, filled by the `canvas` in its render.
@@ -99,7 +123,11 @@ void WebViewLoadUrl(WebView* self, Str url);
 void WebViewBack(WebView* self);
 /** `WebView::raw`: the wry webview, for everything this façade does not
     wrap. Null until one has been made. */
-wry::WebView* WebViewRaw(WebView* self);
+wry::WebView* WebViewRaw(const WebView* self);
+/** `WebView::handle`: an owned copy that may outlive the entity. Dropping
+    the entity hides the child view, while native destruction waits for this
+    and every other outstanding handle. */
+WebViewHandle WebViewGetHandle(const WebView* self);
 
 /** `WebViewElement`: the box the webview is kept in. Fills its parent, and
     moves the OS control to wherever layout put it. */

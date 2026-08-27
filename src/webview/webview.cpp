@@ -6,23 +6,67 @@
 
 namespace gpui {
 
+struct WebViewHandleState {
+    int refs = 1;
+    wry::WebView* raw = nullptr;
+};
+
+static void WebViewHandleRetain(WebViewHandleState* state) {
+    if (state) {
+        state->refs++;
+    }
+}
+
+static void WebViewHandleRelease(WebViewHandleState* state) {
+    if (!state || --state->refs > 0) {
+        return;
+    }
+    wry::WebViewFree(state->raw);
+    delete state;
+}
+
+WebViewHandle::WebViewHandle(WebViewHandleState* value) : state(value) {}
+
+WebViewHandle::WebViewHandle(const WebViewHandle& other) : state(other.state) {
+    WebViewHandleRetain(state);
+}
+
+WebViewHandle& WebViewHandle::operator=(const WebViewHandle& other) {
+    if (this == &other) {
+        return *this;
+    }
+    WebViewHandleRetain(other.state);
+    WebViewHandleRelease(state);
+    state = other.state;
+    return *this;
+}
+
+WebViewHandle::~WebViewHandle() {
+    WebViewHandleRelease(state);
+}
+
+wry::WebView* WebViewHandle::Raw() const {
+    return state ? state->raw : nullptr;
+}
+
 WebView::~WebView() {
-    // `impl Drop for WebView` hides it; the Rc it held is what actually
-    // closed the webview, and here that is this call.
-    if (webview) {
-        wry::WebViewFree(webview);
-        webview = nullptr;
+    // `impl Drop for WebView` hides it. Releasing `owned` after this body is
+    // the Rc drop: an outstanding WebViewHandle postpones native destruction.
+    if (wry::WebView* raw = owned.Raw()) {
+        wry::WebViewFocusParent(raw);
+        wry::WebViewSetVisible(raw, false);
     }
 }
 
 void WebView::OnWindowMouseDown(WebView* self, Ctx* cx, const MouseDownEvent* ev) {
     (void)cx;
-    if (!self->webview || !ev) {
+    wry::WebView* raw = self->owned.Raw();
+    if (!raw || !ev) {
         return;
     }
     Point p = {ev->x, ev->y};
     if (!self->bounds.Contains(p)) {
-        wry::WebViewFocusParent(self->webview);
+        wry::WebViewFocusParent(raw);
     }
 }
 
@@ -42,25 +86,32 @@ Entity<WebView> WebViewNew(Ctx* cx, const wry::WebViewAttributes* attrs) {
     wry::WebViewAttributes copy = *attrs;
     // `WebView::new` starts it at nothing and lets the element place it.
     copy.bounds = wry::Rect{wry::LogicalPosition(0, 0), wry::LogicalSize(0, 0)};
-    self->webview = wry::WebViewNew(window, &copy, /*asChild=*/true);
-    self->visible = self->webview != nullptr;
+    wry::WebView* raw = wry::WebViewNew(window, &copy, /*asChild=*/true);
+    if (raw) {
+        WebViewHandleState* state = new WebViewHandleState();
+        state->raw = raw;
+        self->owned = WebViewHandle(state);
+    }
+    self->visible = raw != nullptr;
     return handle;
 }
 
 void WebViewShow(WebView* self) {
-    if (!self || !self->webview) {
+    wry::WebView* raw = WebViewRaw(self);
+    if (!raw) {
         return;
     }
-    wry::WebViewSetVisible(self->webview, true);
+    wry::WebViewSetVisible(raw, true);
     self->visible = true;
 }
 
 void WebViewHide(WebView* self) {
-    if (!self || !self->webview) {
+    wry::WebView* raw = WebViewRaw(self);
+    if (!raw) {
         return;
     }
-    wry::WebViewFocusParent(self->webview);
-    wry::WebViewSetVisible(self->webview, false);
+    wry::WebViewFocusParent(raw);
+    wry::WebViewSetVisible(raw, false);
     self->visible = false;
 }
 
@@ -73,19 +124,23 @@ Bounds WebViewBounds(const WebView* self) {
 }
 
 void WebViewLoadUrl(WebView* self, Str url) {
-    if (self && self->webview) {
-        wry::WebViewLoadUrl(self->webview, url);
+    if (wry::WebView* raw = WebViewRaw(self)) {
+        wry::WebViewLoadUrl(raw, url);
     }
 }
 
 void WebViewBack(WebView* self) {
-    if (self && self->webview) {
-        wry::WebViewEval(self->webview, StrL("history.back();"));
+    if (wry::WebView* raw = WebViewRaw(self)) {
+        wry::WebViewEval(raw, StrL("history.back();"));
     }
 }
 
-wry::WebView* WebViewRaw(WebView* self) {
-    return self ? self->webview : nullptr;
+wry::WebView* WebViewRaw(const WebView* self) {
+    return self ? self->owned.Raw() : nullptr;
+}
+
+WebViewHandle WebViewGetHandle(const WebView* self) {
+    return self ? self->owned : WebViewHandle();
 }
 
 // The element's prepaint: layout has decided where the box is, so the OS
@@ -98,7 +153,8 @@ static void PaintWebView(PaintCtx* ctx, El* e, void* user) {
     WebView* self = (WebView*)user;
     Bounds b = e->Bounds();
     self->bounds = b;
-    if (!self->webview || !self->visible) {
+    wry::WebView* raw = self->owned.Raw();
+    if (!raw || !self->visible) {
         return;
     }
     bool same = self->hasApplied && self->applied.x == b.x && self->applied.y == b.y &&
@@ -111,7 +167,7 @@ static void PaintWebView(PaintCtx* ctx, El* e, void* user) {
     wry::Rect r;
     r.position = wry::LogicalPosition(b.x, b.y);
     r.size = wry::LogicalSize(b.w, b.h);
-    wry::WebViewSetBounds(self->webview, r);
+    wry::WebViewSetBounds(raw, r);
 }
 
 El* WebViewEl(Entity<WebView> view, Ctx* cx) {
