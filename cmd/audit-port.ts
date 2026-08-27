@@ -58,7 +58,6 @@ const partialUi = new Set([
   "dock",
   "global_state",
   "input",
-  "menu",
   "plot",
   "text",
   "theme",

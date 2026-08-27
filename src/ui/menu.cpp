@@ -1,11 +1,35 @@
 #include "ui/menu.h"
 #include "base/actions.h"
 #include "base/focus_trap.h"
+#include "gpui/keymap.h"
 #include "ui/kbd.h"
 
 namespace gpui {
 
 namespace component {
+
+namespace popup_menu {
+void init() { PopupMenuInitKeys(); }
+} // namespace popup_menu
+
+Str AppMenuBarContext() { return StrL("AppMenuBar"); }
+
+namespace app_menu_bar {
+void init() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
+    }
+    bound = KeymapGeneration();
+    const char* context = "AppMenuBar";
+    KeyBinding bindings[] = {
+        {"escape", action::Cancel(), context},
+        {"left", action::SelectLeft(), context},
+        {"right", action::SelectRight(), context},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+} // namespace app_menu_bar
 
 Entity<PopupMenuState> PopupMenuStateFor(Ctx* cx, Str id) {
     return KeyedEntity<PopupMenuState>(cx, KeyedName(cx, id));
@@ -25,7 +49,7 @@ PopupMenu* PopupMenu::New(Ctx* cx, Str id, Entity<PopupMenuState> state) {
     return m;
 }
 
-static MenuItem* MenuAdd(PopupMenu* m, MenuItemKind kind) {
+static MenuItem* MenuAdd(PopupMenu* m, PopupMenuItem kind) {
     MenuItem fresh;
     fresh.kind = kind;
     if (!m->items.Append(m->a, fresh)) {
@@ -85,14 +109,14 @@ PopupMenu* PopupMenu::Label(Str label) {
     return this;
 }
 PopupMenu* PopupMenu::Element(El* el) {
-    MenuItem* it = MenuAdd(this, MenuItemKind::Item);
+    MenuItem* it = MenuAdd(this, PopupMenuItem::ElementItem);
     if (it) {
         it->element = el;
     }
     return this;
 }
 PopupMenu* PopupMenu::Submenu(Str label, PopupMenu* menu) {
-    MenuItem* it = MenuAdd(this, MenuItemKind::Item);
+    MenuItem* it = MenuAdd(this, PopupMenuItem::Submenu);
     if (it) {
         it->label = label;
         it->submenu = menu;
@@ -290,7 +314,8 @@ El* PopupMenu::IntoEl() {
     PopupMenuBeginRows(s);
     for (const MenuItem& it : items) {
         PopupMenuRow row;
-        row.clickable = it.kind == MenuItemKind::Item && !it.disabled;
+        row.clickable = it.kind != PopupMenuItem::Separator &&
+                        it.kind != PopupMenuItem::Label && !it.disabled;
         row.submenu = it.submenu != nullptr;
         row.link = it.isLink;
         row.href = it.href;
@@ -322,7 +347,8 @@ El* PopupMenu::IntoEl() {
             continue;
         }
         bool lit =
-            selected == i && !it.disabled && it.kind == MenuItemKind::Item;
+            selected == i && !it.disabled &&
+            it.kind != PopupMenuItem::Label;
         El* row = Div(a)
                       ->Role(AccessibilityRole::MenuItem)
                       ->AriaLabel(it.label)
@@ -394,7 +420,7 @@ El* PopupMenu::IntoEl() {
         if (it.submenu) {
             row->Child(IconEl(a, IconName::ChevronRight, 14)->Fg(fg));
         }
-        if (it.kind == MenuItemKind::Item && !it.disabled) {
+        if (it.kind != PopupMenuItem::Label && !it.disabled) {
             if (it.submenu) {
                 BindClick(row, StrDup(a, fmt("%d", i)),
                           ListenerArg(submenuClick, i));
@@ -509,12 +535,29 @@ El* DropdownMenu::IntoEl() {
     return wrap;
 }
 
+DropdownMenuPopover* DropdownMenuPopover::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
+    DropdownMenuPopover* d = ArenaNew<DropdownMenuPopover>(a);
+    d->a = a;
+    d->cx = cx;
+    d->id = id;
+    return d;
+}
+
+DropdownMenuPopover* DropdownMenuPopover::Anchor(gpui::Anchor value) {
+    anchorRight = value == gpui::Anchor::TopRight ||
+                  value == gpui::Anchor::BottomRight;
+    return this;
+}
+
 ContextMenu* ContextMenu::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     ContextMenu* c = ArenaNew<ContextMenu>(a);
     c->a = a;
     c->cx = cx;
     c->id = id;
+    c->state = ElementStateEntity<ContextMenuState>(
+        cx, id, StrL("gpui::ContextMenuState"));
     return c;
 }
 ContextMenu* ContextMenu::Child(El* e) {
@@ -523,18 +566,47 @@ ContextMenu* ContextMenu::Child(El* e) {
 }
 ContextMenu* ContextMenu::Menu(PopupMenu* m) {
     menu = m;
+    if (ContextMenuState* st = state.Get(cx)) {
+        st->menu = m ? m->state : Entity<PopupMenuState>{};
+    }
     return this;
+}
+
+void ContextMenuState::OnMouseDown(ContextMenuState* self, Ctx* cx,
+                                   const MouseDownEvent* ev) {
+    if (!self || !ev || ev->button != MouseButton::Right) {
+        return;
+    }
+    PopupMenuState* menu = self->menu.Get(cx);
+    if (!menu) {
+        return;
+    }
+    self->previousFocus = WindowFocused(cx->win);
+    self->position = {ev->x - ev->el.x, ev->y - ev->el.y};
+    self->open = true;
+    menu->x = self->position.x;
+    menu->y = self->position.y;
+    PopupMenuOpen(menu, cx);
+}
+
+ContextMenu* ContextMenuExt::Wrap(Ctx* cx, Str id, El* child,
+                                  PopupMenu* menu) {
+    return ContextMenu::New(cx, id)->Child(child)->Menu(menu);
 }
 
 El* ContextMenu::IntoEl() {
     El* box = child ? child : Div(a);
     PopupMenuState* st = menu ? menu->state.Get(cx) : nullptr;
-    if (!st) {
+    ContextMenuState* context = state.Get(cx);
+    if (!st || !context) {
         return box;
     }
+    context->menu = menu->state;
+    context->open = st->open;
+    context->position = {st->x, st->y};
     // The element needs identity for the press to reach it.
     box->PathClick(id)
-        ->OnMouseDown(ListenTo(menu->state, &PopupMenuState::OnContextDown));
+        ->OnMouseDown(ListenTo(state, &ContextMenuState::OnMouseDown));
     if (st->open) {
         box->Child(
             menu->IntoEl()->Absolute()->Left(st->x)->Top(st->y)->Deferred());
@@ -560,6 +632,18 @@ void AppMenuBarSelect(AppMenuBarState* s, Ctx* cx, int ix) {
     if (!s) {
         return;
     }
+    int previous = s->selected;
+    if (previous < 0 && ix >= 0) {
+        s->previousFocus = WindowFocused(cx->win);
+        if (s->focus.IsValid()) {
+            FocusHandleFocus(cx->win, s->focus);
+        }
+    } else if (previous >= 0 && ix < 0) {
+        if (s->previousFocus.IsValid()) {
+            FocusHandleRestore(cx->win, s->previousFocus);
+        }
+        s->previousFocus = {};
+    }
     s->selected = ix;
     Notify(cx);
 }
@@ -576,6 +660,25 @@ void AppMenuBarState::OnMenuHover(AppMenuBarState* self, Ctx* cx,
         return;
     }
     AppMenuBarSelect(self, cx, (int)ix);
+}
+
+void AppMenuBarState::OnAction(AppMenuBarState* self, Ctx* cx,
+                               const ActionEvent* ev) {
+    if (!self || self->selected < 0) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    if (ev->action == action::Cancel()) {
+        AppMenuBarSelect(self, cx, -1);
+    } else if (ev->action == action::SelectLeft()) {
+        AppMenuBarSelect(self, cx,
+                         AppMenuBarPrevIndex(self->selected, self->count));
+    } else if (ev->action == action::SelectRight()) {
+        AppMenuBarSelect(self, cx,
+                         AppMenuBarNextIndex(self->selected, self->count));
+    } else {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+    }
 }
 
 AppMenuBar* AppMenuBar::New(Ctx* cx, Str id, Entity<AppMenuBarState> state) {
@@ -595,6 +698,13 @@ AppMenuBar* AppMenuBar::Menu(Str title, PopupMenu* menu) {
 El* AppMenuBar::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     AppMenuBarState* s = state.Get(cx);
+    app_menu_bar::init();
+    if (s && !s->focus.IsValid()) {
+        s->focus = FocusHandleNew(cx);
+    }
+    if (s) {
+        s->count = items.len;
+    }
     // The bar carries the name, so a title is `0`, `1`, `2` inside it.
     IdScope scope(cx, id);
     El* bar = Div(a)
@@ -605,6 +715,14 @@ El* AppMenuBar::IntoEl() {
                   ->Gap(2)
                   ->H(28)
                   ->W(kFill);
+    if (s) {
+        Listener actionListener = ListenTo(state, &AppMenuBarState::OnAction);
+        bar->KeyContext(AppMenuBarContext())
+            ->TrackFocus(s->focus)
+            ->OnAction(action::Cancel(), actionListener)
+            ->OnAction(action::SelectLeft(), actionListener)
+            ->OnAction(action::SelectRight(), actionListener);
+    }
     Listener click = ListenTo(state, &AppMenuBarState::OnMenuClick, 0);
     Listener hover = ListenTo(state, &AppMenuBarState::OnMenuHover, 0);
     for (int i = 0; i < items.len; i++) {

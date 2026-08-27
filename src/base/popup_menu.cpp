@@ -251,7 +251,21 @@ void PopupMenuState::OnAction(PopupMenuState* self, Ctx* cx,
         const_cast<ActionEvent*>(ev)->propagate = true;
         return;
     }
-    PopupMenuPerformRows(self, cx, PopupMenuActionOf(ev->action, self->side));
+    PopupMenuAction act = PopupMenuActionOf(ev->action, self->side);
+    bool root = !self->parent.IsValid();
+    bool unhandledOpen =
+        act == PopupMenuAction::OpenSubmenu &&
+        (self->selected < 0 || self->selected >= self->rows.len ||
+         !self->rows[self->selected].submenu);
+    bool unhandledClose = act == PopupMenuAction::CloseSubmenu &&
+                          self->openSubmenu < 0;
+    if (root && (unhandledOpen || unhandledClose)) {
+        // AppMenuBar binds the same horizontal actions on the parent. A root
+        // popup only consumes the arrow when it actually changes a submenu.
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    PopupMenuPerformRows(self, cx, act);
 }
 
 void PopupMenuState::OnItemClick(PopupMenuState* self, Ctx* cx,

@@ -9,11 +9,15 @@ namespace component {
 
 // PopupMenuItem, the enum: a row is a real item, a rule between groups, or a
 // heading that is not clickable.
-enum class MenuItemKind : uint8_t {
+enum class PopupMenuItem : uint8_t {
     Item,
     Separator,
-    Label
+    Label,
+    ElementItem,
+    Submenu
 };
+
+using MenuItemKind = PopupMenuItem;
 
 struct PopupMenu;
 
@@ -119,12 +123,31 @@ struct DropdownMenu {
     El* IntoEl();
 };
 
+// Rust names the concrete wrapper produced by its DropdownMenu trait
+// DropdownMenuPopover. The C++ builder above already accepts any El trigger;
+// this source-named subtype exposes the same storage and behavior.
+struct DropdownMenuPopover : DropdownMenu {
+    static DropdownMenuPopover* New(Ctx* cx, Str id);
+    DropdownMenuPopover* Anchor(gpui::Anchor value);
+};
+
+struct ContextMenuState {
+    Entity<PopupMenuState> menu = {};
+    bool open = false;
+    Point position = {};
+    FocusHandle previousFocus = {};
+
+    static void OnMouseDown(ContextMenuState* self, Ctx* cx,
+                            const MouseDownEvent* ev);
+};
+
 // context_menu.rs: an element whose right press opens a menu where the
 // pointer is.
 struct ContextMenu {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
+    Entity<ContextMenuState> state = {};
     El* child = nullptr;
     PopupMenu* menu = nullptr;
 
@@ -134,10 +157,19 @@ struct ContextMenu {
     El* IntoEl();
 };
 
+// Rust's blanket extension trait becomes one explicit wrapper operation over
+// this tree's common El type. It derives the same stable id from the caller.
+struct ContextMenuExt {
+    static ContextMenu* Wrap(Ctx* cx, Str id, El* child, PopupMenu* menu);
+};
+
 // app_menu_bar.rs: the row of menus across the top of a window. One is open at
 // a time; the arrows walk them and Escape closes.
 struct AppMenuBarState {
     int selected = -1;
+    int count = 0;
+    FocusHandle focus = {};
+    FocusHandle previousFocus = {};
 
     static void OnMenuClick(AppMenuBarState* self, Ctx* cx,
                             const ClickEvent* ev, intptr_t ix);
@@ -145,6 +177,8 @@ struct AppMenuBarState {
     // what a menu bar does everywhere.
     static void OnMenuHover(AppMenuBarState* self, Ctx* cx,
                             const HoverEvent* ev, intptr_t ix);
+    static void OnAction(AppMenuBarState* self, Ctx* cx,
+                         const ActionEvent* ev);
 };
 
 struct AppMenuBarItem {
@@ -170,6 +204,16 @@ struct AppMenuBar {
     AppMenuBar* Menu(Str title, PopupMenu* menu);
     El* IntoEl();
 };
+
+// The two private Rust modules each expose `init`; namespaces retain that
+// source shape while avoiding a collision in the amalgamated translation unit.
+namespace popup_menu {
+void init();
+}
+namespace app_menu_bar {
+void init();
+}
+Str AppMenuBarContext();
 
 } // namespace component
 } // namespace gpui

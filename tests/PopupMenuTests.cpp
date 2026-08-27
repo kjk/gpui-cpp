@@ -11,6 +11,8 @@
 
 #include "Test.h"
 
+using namespace gpui::component;
+
 // The chord, through the keymap, to the thing the menu does about it —
 // which is the whole path a keystroke takes now that the menu binds its keys
 // instead of translating them.
@@ -208,6 +210,122 @@ static void ATriggerTogglesTheMenuAsItWasDrawn() {
     EntityDropAll(&app);
 }
 
+static void SourceMenuItemKindsRemainDistinct() {
+    PopupMenuItem item = PopupMenuItem::Item;
+    PopupMenuItem element = PopupMenuItem::ElementItem;
+    PopupMenuItem submenu = PopupMenuItem::Submenu;
+    PopupMenuItem label = PopupMenuItem::Label;
+    PopupMenuItem separator = PopupMenuItem::Separator;
+    utassert(item != element);
+    utassert(submenu != label);
+    utassert(separator != item);
+}
+
+static void ContextMenuStateOwnsThePointerOpeningContract() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    Entity<PopupMenuState> menu = EntityNewState<PopupMenuState>(&app);
+
+    ContextMenuState state;
+    state.menu = menu;
+    MouseDownEvent ev = {};
+    ev.button = MouseButton::Left;
+    ContextMenuState::OnMouseDown(&state, &cx, &ev);
+    utassert(!state.open && !menu.Get(&app)->open);
+
+    ev.button = MouseButton::Right;
+    ev.x = 42;
+    ev.y = 35;
+    ev.el = {10, 7, 80, 60};
+    ContextMenuState::OnMouseDown(&state, &cx, &ev);
+    utassert(state.open && menu.Get(&app)->open);
+    utassert(state.position.x == 32 && state.position.y == 28);
+    utassert(menu.Get(&app)->x == 32 && menu.Get(&app)->y == 28);
+
+    delete win;
+    EntityDropAll(&app);
+}
+
+static PopupMenuAction AppBarChord(AppMenuBarState* state, Ctx* cx,
+                                   uint32_t actionId) {
+    ActionEvent ev = {};
+    ev.action = actionId;
+    AppMenuBarState::OnAction(state, cx, &ev);
+    return ev.propagate ? PopupMenuAction::None : PopupMenuAction::Confirm;
+}
+
+static void AppMenuBarBindsAndHandlesItsSourceActions() {
+    KeymapClear();
+    app_menu_bar::init();
+    uint32_t context = KeyContextOf(AppMenuBarContext());
+    KeyChord chord = {};
+    utassert(KeyChordParse(StrL("right"), &chord));
+    utassert(KeymapMatch(chord, &context, 1).action == action::SelectRight());
+    utassert(KeyChordParse(StrL("escape"), &chord));
+    utassert(KeymapMatch(chord, &context, 1).action == action::Cancel());
+
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    AppMenuBarState state;
+    state.count = 3;
+    state.selected = 0;
+    utassert(AppBarChord(&state, &cx, action::SelectRight()) ==
+             PopupMenuAction::Confirm);
+    utassert(state.selected == 1);
+    AppBarChord(&state, &cx, action::SelectLeft());
+    utassert(state.selected == 0);
+    AppBarChord(&state, &cx, action::SelectLeft());
+    utassert(state.selected == 2);
+    AppBarChord(&state, &cx, action::Cancel());
+    utassert(state.selected == -1);
+    utassert(AppBarChord(&state, &cx, action::SelectRight()) ==
+             PopupMenuAction::None);
+
+    Arena* a = ArenaNew();
+    cx.a = a;
+    DropdownMenuPopover* dropdown =
+        DropdownMenuPopover::New(&cx, StrL("source-popover"));
+    dropdown->Anchor(Anchor::TopRight);
+    utassert(dropdown->anchorRight);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    KeymapClear();
+}
+
+static void RootPopupPropagatesUnusedHorizontalActionsToTheMenuBar() {
+    PopupMenuState menu;
+    menu.open = true;
+    menu.side = Side::Right;
+    PopupMenuBeginRows(&menu);
+    PopupMenuRow row;
+    row.clickable = true;
+    PopupMenuAddRow(&menu, row);
+    menu.selected = 0;
+
+    ActionEvent left = {};
+    left.action = action::SelectLeft();
+    PopupMenuState::OnAction(&menu, nullptr, &left);
+    utassert(left.propagate);
+    ActionEvent right = {};
+    right.action = action::SelectRight();
+    PopupMenuState::OnAction(&menu, nullptr, &right);
+    utassert(right.propagate);
+
+    menu.rows[0].submenu = true;
+    right.propagate = false;
+    PopupMenuState::OnAction(&menu, nullptr, &right);
+    utassert(!right.propagate && menu.openSubmenu == 0);
+}
+
 void TestPopupMenu() {
     TheBindingsAreTheOnesRustBinds();
     TheWalkStepsOverWhatCannotBeClicked();
@@ -217,4 +335,8 @@ void TestPopupMenu() {
     AnOpenMenuAnswersTheChordItself();
     ATriggerTogglesTheMenuAsItWasDrawn();
     TheMenuBarWrapsBothWays();
+    SourceMenuItemKindsRemainDistinct();
+    ContextMenuStateOwnsThePointerOpeningContract();
+    AppMenuBarBindsAndHandlesItsSourceActions();
+    RootPopupPropagatesUnusedHorizontalActionsToTheMenuBar();
 }

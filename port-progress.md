@@ -8283,3 +8283,37 @@ adapters and 2 exclusions with 231 unresolved partial-module spellings and no
 full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
 20,299 checks; wasm passes its 19,594 applicable checks. The release story
 gallery compiles unchanged.
+
+## UI menu restores source popup, context and menu-bar seams
+
+The menu port already supported popup rows, links, custom content, submenus,
+dropdown triggers, pointer-positioned context menus and the application menu
+bar, but it collapsed five source item variants into three kinds and reused
+`PopupMenuState` for every wrapper. The named `PopupMenuItem`,
+`DropdownMenuPopover`, `ContextMenuState` and `ContextMenuExt` seams were
+absent, and the app-menu-bar key bindings declared upstream were not active.
+
+Popup rows now retain all five source variants: Item, Separator, Label,
+ElementItem and Submenu. Custom elements and submenus therefore remain
+distinct through row construction while sharing the existing POD payload.
+`DropdownMenuPopover` is the concrete source-named specialization of the
+generic-trigger builder and accepts the source corner anchors.
+`ContextMenuState` is now a keyed entity that retains its popup handle,
+opening position and focus context; `ContextMenuExt::Wrap` is the no-trait
+counterpart of Rust's blanket element extension.
+
+The two private `init` functions are preserved in source-named namespaces.
+The popup initializer retains its six bindings, while the app menu bar now
+binds Escape/Left/Right in `AppMenuBar`, retains its focus/action context,
+wraps across titles and restores focus when closed. Root popup menus now
+propagate a horizontal action they could not use, allowing the parent menu
+bar to switch titles exactly as Rust does; a submenu still consumes that
+arrow.
+
+Tests cover item-variant identity, pointer opening and relative placement,
+app-menu key bindings and wrapping, focus-neutral propagation, popover anchor
+selection, and root-versus-submenu horizontal action handling. UI menu is
+full: the audit moves to 108 full, 13 partial, 8 adapters and 2 exclusions
+with 225 unresolved partial-module spellings and no full-module errors. MSVC
+debug/release, clang-cl release and MSVC ASan pass 20,320 checks; wasm passes
+its 19,615 applicable checks. The release story gallery compiles unchanged.
