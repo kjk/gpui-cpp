@@ -3585,6 +3585,9 @@ struct InputState {
     // A field with no provider never shows one.
     InlineCompletionFn inlineCompletionProvider = nullptr;
     void* inlineCompletionData = nullptr;
+    // CompletionProvider::inline_completion_debounce. Rust defaults to 300
+    // ms but a provider may choose another duration.
+    float inlineCompletionDebounceMs = kInlineCompletionDebounceMs;
     InlineCompletion inlineCompletion;
     // The semantic tokens a provider published, and who is asked. Rust
     // debounces the request 100 ms after an edit and diffs the answer; this

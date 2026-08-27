@@ -31,6 +31,7 @@
 #include "base/input.h"
 #include "base/input_core.h"
 #include "base/input_editor.h"
+#include "base/input_lsp.h"
 #include "base/input_rope.h"
 #include "base/input_keys.h"
 #include "base/link.h"

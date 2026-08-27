@@ -2397,6 +2397,118 @@ static void HighlighterContractsAreDependencyFreeAndFunctional() {
     utassert(span.color.r == Rgb(10, 20, 30).r);
 }
 
+static int LspFacadeCompletions(void*, Str, int, Str, CompletionItem* out,
+                                int cap) {
+    if (out && cap > 0) {
+        out[0].label = StrL("value");
+    }
+    return 1;
+}
+
+static CompletionTrigger LspFacadeTrigger(void*, Str, int, Str) {
+    return CompletionTrigger::Continue;
+}
+
+static int LspFacadeActions(void*, Arena*, Str, Selection,
+                            CodeActionItem* out, int cap) {
+    if (out && cap > 0) {
+        out[0].title = StrL("Fix");
+    }
+    return 1;
+}
+
+static Str LspFacadeId(void*) {
+    return StrL("test");
+}
+
+static int LspFacadeSemantic(void*, Str, Selection, SemanticToken*, int) {
+    return 0;
+}
+
+static void LspFacadesInstallCapabilitiesAndExposeOverlayState() {
+    InputState state;
+    state.kind = InputKind::Editor;
+    InputSetValue(&state, StrL("value"));
+    int marker = 42;
+
+    CompletionProvider completion;
+    completion.data = &marker;
+    completion.completions = LspFacadeCompletions;
+    completion.isCompletionTrigger = LspFacadeTrigger;
+    completion.inlineCompletionDebounceMs = 125.f;
+    CodeActionProvider action;
+    action.data = &marker;
+    action.id = LspFacadeId;
+    action.codeActions = LspFacadeActions;
+    DefinitionProvider definition;
+    definition.data = &marker;
+    definition.definitions = DummyDefinitions;
+    Str legend[] = {StrL("keyword")};
+    DocumentRangeSemanticTokensProvider semantic;
+    semantic.data = &marker;
+    semantic.legend = legend;
+    semantic.nLegend = 1;
+    semantic.semanticTokens = LspFacadeSemantic;
+
+    CompletionMenuOptions options;
+    options.maxWidth = 480.f;
+    Lsp lsp;
+    lsp.Completion(completion)
+        .AddCodeAction(action)
+        .Definition(definition)
+        .SemanticTokens(semantic)
+        .CompletionMenu(options);
+    lsp.Install(&state);
+    utassert(state.completionProvider == LspFacadeCompletions);
+    utassert(state.completionData == &marker);
+    utassert(state.completionTrigger == LspFacadeTrigger);
+    utassertnear(state.inlineCompletionDebounceMs, 125.f);
+    utassertnear(state.completionMenuMaxW, 480.f);
+    utassert(state.codeActionProviders.len == 1);
+    utassert(state.definitionProvider == DummyDefinitions);
+    utassert(state.semanticTokensProvider == LspFacadeSemantic);
+    utassert(state.semanticLegend == legend && state.nSemanticLegend == 1);
+
+    CompletionItem item;
+    item.label = StrL("value");
+    InputPresentCompletionItems(&state, 1, StrL("val"), &item, 1);
+    CompletionMenuState completionState = CompletionMenuState::Of(&state);
+    utassert(completionState.open && completionState.nItems == 1);
+    utassert(completionState.triggerStartOffset == 1);
+    utassert(Is(completionState.query, "val"));
+
+    CodeActionItem actionItem;
+    actionItem.title = StrL("Fix");
+    InputPresentCodeActions(&state, &actionItem, 1);
+    CodeActionMenuState actionState = CodeActionMenuState::Of(&state);
+    utassert(actionState.open && actionState.nItems == 1);
+    utassert(actionState.revision > 0);
+
+    InputPresentHover(&state, {0, 5}, StrL("documentation"));
+    HoverPopoverState hoverState = HoverPopoverState::Of(&state);
+    utassert(hoverState.open && hoverState.symbolRange.end == 5);
+    utassert(Is(hoverState.hover, "documentation"));
+
+    state.documentColors.Append({{0, 2}, Rgb(1, 2, 3)});
+    DocumentColor colors[1] = {};
+    utassert(lsp.DocumentColorsForRange({0, 1}, colors, 1) == 1);
+    utassert(colors[0].range.start == 0 && colors[0].range.end == 2);
+
+    state.semanticTokens.Append({0, 0, 2, StrL("keyword")});
+    TextSpan spans[1] = {};
+    HighlightStyleResolver resolver;
+    resolver.style = ResolveKeyword;
+    utassert(lsp.SemanticTokensForRange({0, 2}, resolver, spans, 1) == 1);
+    utassert(spans[0].lo == 0 && spans[0].hi == 2);
+
+    lsp.Reset();
+    utassert(state.documentColors.len == 0);
+    utassert(state.semanticTokens.len == 0);
+    utassert(!CompletionMenuState::Of(&state).open);
+    utassert(!CodeActionMenuState::Of(&state).open);
+    utassert(!HoverPopoverState::Of(&state).open);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2479,4 +2591,5 @@ void TestInputState() {
     DecorationsAreIndependentClippedAndTrackEdits();
     DiagnosticSetOwnsMetadataAndAnswersRanges();
     HighlighterContractsAreDependencyFreeAndFunctional();
+    LspFacadesInstallCapabilitiesAndExposeOverlayState();
 }

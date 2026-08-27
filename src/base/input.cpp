@@ -2698,8 +2698,9 @@ void InputScheduleInlineCompletion(InputState* s) {
     if (!s->inlineCompletionProvider) {
         return;
     }
-    s->inlineCompletion
-        .dueAt = TimeNow() + (double)kInlineCompletionDebounceMs / 1000.0;
+    s->inlineCompletion.dueAt =
+        TimeNow() + (double)std::max(0.f, s->inlineCompletionDebounceMs) /
+                        1000.0;
     s->inlineCompletion.asked = false;
     s->inlineCompletion.at = InputCursor(s);
 }
