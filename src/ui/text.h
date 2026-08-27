@@ -346,6 +346,8 @@ struct TextViewStyle {
     uint32_t codeBlockFields = 0;
     gpui::Style table = {};
     uint32_t tableFields = 0;
+    gpui::Style tableHead = {};
+    uint32_t tableHeadFields = 0;
     gpui::Style tableCell = {};
     uint32_t tableCellFields = 0;
     gpui::Style inlineCode = {};
@@ -358,6 +360,7 @@ struct TextViewStyle {
     TextViewStyle& HeadingFontSize(HeadingFontSizeFn fn, void* data = nullptr);
     TextViewStyle& CodeBlock(const gpui::Style& style, uint32_t fields);
     TextViewStyle& Table(const gpui::Style& style, uint32_t fields);
+    TextViewStyle& TableHead(const gpui::Style& style, uint32_t fields);
     TextViewStyle& TableCell(const gpui::Style& style, uint32_t fields);
     TextViewStyle& InlineCode(const gpui::Style& style, uint32_t fields);
     bool Equals(const TextViewStyle& other) const;

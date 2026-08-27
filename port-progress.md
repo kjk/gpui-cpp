@@ -9315,3 +9315,9 @@ bar padding while restoring their content origins, preserving tab geometry
 and giving the active indicator's shadow horizontal room. The selected chip
 and its moving indicator now use the source's two-layer `raised_shadow`, with
 the CSS blur radii halved for GPUI's gaussian convention.
+
+`26849e06` moves both Markdown table layouts onto the shared table theme:
+the outer frame paints `tokens.table`, inner rules use `tableRowBorder`, and
+the first row paints `tokens.tableHead` with `tableHeadFg` at normal weight.
+`TextViewStyle::TableHead` carries the new header-row refinement and
+participates in style equality.

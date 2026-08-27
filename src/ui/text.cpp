@@ -224,6 +224,13 @@ TextViewStyle& TextViewStyle::Table(const gpui::Style& value, uint32_t fields) {
     return *this;
 }
 
+TextViewStyle& TextViewStyle::TableHead(const gpui::Style& value,
+                                        uint32_t fields) {
+    tableHead = value;
+    tableHeadFields = fields;
+    return *this;
+}
+
 TextViewStyle& TextViewStyle::TableCell(const gpui::Style& value,
                                         uint32_t fields) {
     tableCell = value;
@@ -295,10 +302,12 @@ bool TextViewStyle::Equals(const TextViewStyle& other) const {
         headingBaseFontSize != other.headingBaseFontSize ||
         codeBlockFields != other.codeBlockFields ||
         tableFields != other.tableFields ||
+        tableHeadFields != other.tableHeadFields ||
         tableCellFields != other.tableCellFields ||
         inlineCodeFields != other.inlineCodeFields || isDark != other.isDark ||
         !StyleFieldsEqual(codeBlock, other.codeBlock, codeBlockFields) ||
         !StyleFieldsEqual(table, other.table, tableFields) ||
+        !StyleFieldsEqual(tableHead, other.tableHead, tableHeadFields) ||
         !StyleFieldsEqual(tableCell, other.tableCell, tableCellFields) ||
         !StyleFieldsEqual(inlineCode, other.inlineCode, inlineCodeFields)) {
         return false;
@@ -2005,7 +2014,7 @@ El* TextView::ScrollTable(MdNode* n) {
                 for (MdRun* run = c->runFirst; run; run = run->next) {
                     // Unwrapped, so what comes back is the run's own width.
                     Size sz = MeasureText(paint, run->text, baseFont, 0, false,
-                                          r->head ? 2 : 0);
+                                          0);
                     w += sz.w;
                 }
             } else {
@@ -2038,6 +2047,7 @@ El* TextView::ScrollTable(MdNode* n) {
                     ->FlexCol()
                     ->W(kFill)
                     ->MinW(minTotal)
+                    ->Bg(th.tokens.tableBg)
                     ->Border(1, th.border)
                     ->Radius(th.radius);
     if (textViewStyle.tableFields) {
@@ -2046,7 +2056,14 @@ El* TextView::ScrollTable(MdNode* n) {
     for (MdNode* r = n->first; r; r = r->next) {
         El* row = Div(a)->FlexRow()->W(kFill);
         if (r->next) {
-            row->BorderB(1, th.border);
+            row->BorderB(1, th.tableRowBorder);
+        }
+        if (r->head) {
+            row->Bg(th.tokens.tableHead)->Fg(th.tableHeadFg);
+            if (textViewStyle.tableHeadFields) {
+                row->Refine(textViewStyle.tableHead,
+                            textViewStyle.tableHeadFields);
+            }
         }
         int ix = 0;
         for (MdNode* c = r->first; c; c = c->next, ix++) {
@@ -2066,14 +2083,15 @@ El* TextView::ScrollTable(MdNode* n) {
                                                           .tableCellFields);
             }
             if (c->next) {
-                cell->BorderR(1, th.border);
+                cell->BorderR(1, th.tableRowBorder);
             }
             uint8_t align = c->align;
             if (align == MdAlignDefault) {
                 align = colAlign[col];
             }
             SrcCell(r, c, nCols, colAlign);
-            cell->Child(Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
+            cell->Child(Inline(c, baseFont,
+                               r->head ? kInheritFg : BlockFg(), 0, align));
             row->Child(cell);
         }
         track->Child(row);
@@ -2163,15 +2181,26 @@ El* TextView::Table(MdNode* n) {
         return Div(a);
     }
 
-    El* table =
-        Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Radius(th.radius);
+    El* table = Div(a)
+                    ->FlexCol()
+                    ->W(kFill)
+                    ->Bg(th.tokens.tableBg)
+                    ->Border(1, th.border)
+                    ->Radius(th.radius);
     if (textViewStyle.tableFields) {
         table->Refine(textViewStyle.table, textViewStyle.tableFields);
     }
     for (MdNode* r = n->first; r; r = r->next) {
         El* row = Div(a)->FlexRow()->W(kFill);
         if (r->next) {
-            row->BorderB(1, th.border);
+            row->BorderB(1, th.tableRowBorder);
+        }
+        if (r->head) {
+            row->Bg(th.tokens.tableHead)->Fg(th.tableHeadFg);
+            if (textViewStyle.tableHeadFields) {
+                row->Refine(textViewStyle.tableHead,
+                            textViewStyle.tableHeadFields);
+            }
         }
         int ix = 0;
         for (MdNode* c = r->first; c; c = c->next, ix++) {
@@ -2182,14 +2211,15 @@ El* TextView::Table(MdNode* n) {
                                                           .tableCellFields);
             }
             if (c->next) {
-                cell->BorderR(1, th.border);
+                cell->BorderR(1, th.tableRowBorder);
             }
             uint8_t align = c->align;
             if (align == MdAlignDefault && ix < nCols) {
                 align = colAlign[ix];
             }
             SrcCell(r, c, nCols, colAlign);
-            cell->Child(Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
+            cell->Child(Inline(c, baseFont,
+                               r->head ? kInheritFg : BlockFg(), 0, align));
             row->Child(cell);
         }
         table->Child(row);

@@ -876,6 +876,15 @@ static void TestSourceShapedTextValues(Arena* a) {
     codeB.bg = Rgb(30, 20, 10);
     styledB.CodeBlock(codeB, StyleFieldBg);
     utassert(!styledA.Equals(styledB));
+
+    gpui::Style head;
+    head.color = Rgb(1, 2, 3);
+    styledA = TextViewStyle::Default();
+    styledB = TextViewStyle::Default();
+    styledA.TableHead(head, StyleFieldColor);
+    utassert(!styledA.Equals(styledB));
+    styledB.TableHead(head, StyleFieldColor);
+    utassert(styledA.Equals(styledB));
 }
 
 static void TestHtmlMinifier(Arena* a) {
@@ -925,6 +934,62 @@ static bool FindSelectionOwner(El* element, EntityId owner) {
         if (FindSelectionOwner(child, owner)) return true;
     }
     return false;
+}
+
+static bool SameTextViewColor(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+static El* FindMarkdownTableFrame(El* element, Rgba border) {
+    if (!element) return nullptr;
+    if (element->style.border == 1 &&
+        SameTextViewColor(element->style.borderColor, border)) {
+        return element;
+    }
+    for (El* child = element->first; child; child = child->next) {
+        if (El* found = FindMarkdownTableFrame(child, border)) return found;
+    }
+    return nullptr;
+}
+
+static void TestMarkdownTableThemeTokens() {
+    App app;
+    ThemeSet(&app, ThemeMode::Dark);
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+    const Theme& th = ThemeNow(&app);
+    Str source = StrL("| head | other |\n|---|---|\n| body | value |\n");
+
+    for (int scroll = 0; scroll < 2; scroll++) {
+        El* rendered = TextView::New(&cx, source)
+                           ->TableScroll(scroll != 0)
+                           ->IntoEl();
+        El* table = FindMarkdownTableFrame(rendered, th.border);
+        utassert(table && table->style.hasBg);
+        utassert(table && SameTextViewColor(table->style.bg.color,
+                                            th.tokens.tableBg.color));
+        El* head = table ? table->first : nullptr;
+        utassert(head && head->style.hasBg && head->style.hasColor);
+        utassert(head && SameTextViewColor(head->style.bg.color,
+                                           th.tokens.tableHead.color));
+        utassert(head && SameTextViewColor(head->style.color,
+                                           th.tableHeadFg));
+        utassert(head && head->style.borderB == 1 &&
+                 SameTextViewColor(head->style.borderColor,
+                                   th.tableRowBorder));
+        El* firstCell = head ? head->first : nullptr;
+        utassert(firstCell && firstCell->style.borderR == 1 &&
+                 SameTextViewColor(firstCell->style.borderColor,
+                                   th.tableRowBorder));
+    }
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
 }
 
 static void TestTextViewKeys() {
@@ -1054,6 +1119,7 @@ void TestTextView() {
     TestHtmlMinifier(a);
     TestTextViewKeys();
     TestManagedTextViewAndParseTimePlugins(a);
+    TestMarkdownTableThemeTokens();
 #if GPUI_MARKDOWN_FULL
     TestMarkdownTaskList(a);
 #endif

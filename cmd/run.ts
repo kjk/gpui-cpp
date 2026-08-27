@@ -509,9 +509,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "9e0699261a210d221c66d6a8e77c6df989e26046",
+  sha: "26849e063f53a5d1c18a25d42bc6b34f75720176",
   date: "2026-08-26",
-  subject: "tab: Keep the segmented indicator's shadow inside the clip (#2831)",
+  subject: "markdown: Style tables with the `table_*` theme tokens (#2834)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
