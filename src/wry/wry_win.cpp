@@ -1202,7 +1202,14 @@ static WCHAR* PolicyOverrideDup(const WCHAR* property) {
 
 static WCHAR* LoaderOverrideDup(const WCHAR* environment, const WCHAR* property) {
     WCHAR* result = EnvironmentVariableDup(environment);
-    return result ? result : PolicyOverrideDup(property);
+    if (!result) {
+        result = PolicyOverrideDup(property);
+    }
+    if (result && result[0] == 0) {
+        free(result);
+        result = nullptr;
+    }
+    return result;
 }
 
 static bool StrStartsWith(Str s, Str prefix) {

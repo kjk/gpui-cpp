@@ -9264,3 +9264,9 @@ entry, not only an absent one. An incompatible `pv`, missing client DLL or
 overlong derived path no longer prevents the matching package from satisfying
 that channel; this is the same candidate-by-candidate fallthrough as the
 pinned loader.
+
+Empty WebView2 policy strings are now treated as unset at the shared loader
+override boundary, just like empty environment variables and the pinned
+loader. This prevents an empty managed browser-argument value from appending a
+spurious separator and keeps empty path/channel policies on their normal
+fallback paths.
