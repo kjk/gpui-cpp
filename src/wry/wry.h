@@ -285,6 +285,8 @@ void CookieListFree(Vec<Cookie>* cookies);
     Rust `Option<String>`, a null `Str::s` is `None`; a present empty `Str` is
     `Some("")`. */
 struct WebViewAttributes {
+    static bool AllowDownload(void*, Str, Str*) { return true; }
+
     /** Passed to a custom protocol handler; defaults to the container HWND
         written out, the way Rust defaults it. */
     Str id;
@@ -317,7 +319,8 @@ struct WebViewAttributes {
     bool (*navigationHandler)(void* ctx, Str url) = nullptr;
     void (*documentTitleChangedHandler)(void* ctx, Str title) = nullptr;
     void (*onPageLoadHandler)(void* ctx, PageLoadEvent event, Str url) = nullptr;
-    DownloadStartedHandler downloadStartedHandler = nullptr;
+    /** Wry's default closure accepts every download at its suggested path. */
+    DownloadStartedHandler downloadStartedHandler = AllowDownload;
     DownloadCompletedHandler downloadCompletedHandler = nullptr;
     DragDropHandler dragDropHandler = nullptr;
     /** `window.open`. Null denies every request, which is what wry's

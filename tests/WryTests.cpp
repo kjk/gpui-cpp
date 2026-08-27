@@ -21,7 +21,9 @@ void TestWryUri() {
     utassert(!attrs.hasTrafficLightInset);
     utassert(!attrs.hasBackgroundThrottling);
     utassert(attrs.webviewConfiguration == nullptr);
-    utassert(attrs.downloadStartedHandler == nullptr);
+    utassert(attrs.downloadStartedHandler != nullptr);
+    Str downloadPath = StrL("download.bin");
+    utassert(attrs.downloadStartedHandler(attrs.ctx, Str(), &downloadPath));
     utassert(attrs.downloadCompletedHandler == nullptr);
     utassert(attrs.dragDropHandler == nullptr);
     utassert(attrs.webviewEnvironment == nullptr);

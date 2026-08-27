@@ -9149,3 +9149,10 @@ The Windows cookie-manager helper now propagates `get_CookieManager` failure
 instead of inferring success solely from its output pointer. This matches the
 `?` boundary used by all four Wry cookie operations and releases any invalid
 partial COM result.
+
+`WebViewAttributes` now carries Wry's real default download-start closure,
+which accepts every download at WebView2's suggested path. Consequently the
+Windows backend always registers `DownloadStarting` by default, obtains the
+same versioned interface and marks the default download handled just as the
+pinned closure does; assigning null explicitly still models a public Rust
+attribute record whose handler is `None`.
