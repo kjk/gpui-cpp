@@ -61,8 +61,10 @@ namespace wry {
 
 using base::AllocStrTemp;
 using base::Arena;
+using base::Func0;
 using base::GetTempArena;
 using base::logf;
+using base::MkFunc0;
 using base::Str;
 using base::StrDup;
 using base::StrFree;
@@ -2223,16 +2225,13 @@ static void PumpUntil(const bool* done) {
 }
 
 // `dispatch_handler`: run this on the thread that owns the container window.
-struct DispatchItem {
-    void (*fn)(void* data);
-    void* data;
-};
-
-static bool DispatchToWindow(HWND hwnd, void (*fn)(void*), void* data) {
-    DispatchItem* item = new DispatchItem{fn, data};
-    if (!PostMessageW(hwnd, ExecMsgId(), (WPARAM)item, 0)) {
+// Func0 is the task envelope, as it is for the main-thread executor and
+// SumatraPDF's uitask; it already carries the callback's one captured value.
+static bool DispatchToWindow(HWND hwnd, Func0 task) {
+    Func0* posted = new Func0(task);
+    if (!PostMessageW(hwnd, ExecMsgId(), (WPARAM)posted, 0)) {
         logf("wry: PostMessage failed; is the message queue full?\n");
-        delete item;
+        delete posted;
         return false;
     }
     return true;
@@ -2241,9 +2240,9 @@ static bool DispatchToWindow(HWND hwnd, void (*fn)(void*), void* data) {
 static LRESULT CALLBACK MainThreadDispatcherProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
                                                  UINT_PTR, DWORD_PTR) {
     if (msg == ExecMsgId()) {
-        DispatchItem* item = (DispatchItem*)wp;
-        item->fn(item->data);
-        delete item;
+        Func0* task = (Func0*)wp;
+        task->Call();
+        delete task;
         RedrawWindow(hwnd, nullptr, nullptr, RDW_INTERNALPAINT);
         return 0;
     }
@@ -3261,8 +3260,7 @@ struct PendingResponse {
     Str headers;
 };
 
-static void ApplyResponse(void* data) {
-    PendingResponse* p = (PendingResponse*)data;
+static void ApplyResponse(PendingResponse* p) {
     RequestResponder* r = p->responder;
     ICoreWebView2WebResourceResponse* response =
         MakeResponse(r->env, p->status, p->headers, p->body, p->bodyLen);
@@ -3335,7 +3333,7 @@ void Respond(RequestResponder* responder, const Response* response) {
         ApplyResponse(p);
         return;
     }
-    if (!DispatchToWindow(responder->hwnd, ApplyResponse, p)) {
+    if (!DispatchToWindow(responder->hwnd, MkFunc0(ApplyResponse, p))) {
         DiscardResponse(p);
     }
 }
