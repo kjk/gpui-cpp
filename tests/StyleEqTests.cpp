@@ -255,8 +255,8 @@ static void StyledExtensionsProjectOntoElements() {
     int count = 0;
     const char* const* methods = StyledExtReflectionMethods(&count);
     utassert(methods && count == 21);
-    utassert(base::StrEq(Str(methods[0]), StrL("refine_style")));
-    utassert(base::StrEq(Str(methods[count - 1]), StrL("corner_radii")));
+    utassert(base::StrEq(Str(methods[0]), "refine_style"));
+    utassert(base::StrEq(Str(methods[count - 1]), "corner_radii"));
     ArenaDelete(a);
 }
 

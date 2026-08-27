@@ -39,7 +39,7 @@ static void ExplicitTransactionCollectsMultipleChanges() {
 
     const UndoTransaction* t = UndoPopUndo(&m);
     utassert(t && t->len == 1);
-    utassert(t && StrEq(t->changes[0].newText, StrL("ab")));
+    utassert(t && StrEq(t->changes[0].newText, "ab"));
 }
 
 static void LimitsTheNumberOfRetainedTransactions() {

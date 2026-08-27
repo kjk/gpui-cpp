@@ -6,11 +6,11 @@ static void NamedAndCustomSizesPreserveTheirValues() {
     utassert(UiSize() == UiSize::Medium);
     utassert(UiSize::Custom(15) == UiSize::Custom(15));
     utassert(UiSize::Custom(15) != UiSize::Custom(16));
-    utassert(base::StrEq(UiSizeAsStr(UiSize::XSmall), StrL("xs")));
-    utassert(base::StrEq(UiSizeAsStr(UiSize::Small), StrL("sm")));
-    utassert(base::StrEq(UiSizeAsStr(UiSize::Medium), StrL("md")));
-    utassert(base::StrEq(UiSizeAsStr(UiSize::Large), StrL("lg")));
-    utassert(base::StrEq(UiSizeAsStr(UiSize::Custom(15)), StrL("custom")));
+    utassert(base::StrEq(UiSizeAsStr(UiSize::XSmall), "xs"));
+    utassert(base::StrEq(UiSizeAsStr(UiSize::Small), "sm"));
+    utassert(base::StrEq(UiSizeAsStr(UiSize::Medium), "md"));
+    utassert(base::StrEq(UiSizeAsStr(UiSize::Large), "lg"));
+    utassert(base::StrEq(UiSizeAsStr(UiSize::Custom(15)), "custom"));
 
     utassert(UiSizeFromStr(StrL("xs")) == UiSize::XSmall);
     utassert(UiSizeFromStr(StrL("xsmall")) == UiSize::XSmall);

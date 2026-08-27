@@ -127,7 +127,7 @@ static void ADragAcrossTwoRunsCopiesBoth() {
     // Without a text backend a hit resolves to the start of its run, so what
     // is pinned here is the span and the join, not the glyph the drag ended
     // on: the first run, the newline between them, and into the second.
-    utassert(StrEq(Str(buf, 6), StrL("hello\n")));
+    utassert(StrEq(Str(buf, 6), "hello\n"));
     WindowSelectionFree(&win);
 }
 
@@ -145,15 +145,15 @@ static void TwoClicksTakeTheWordAndThreeTheLine() {
     WindowSelectionPress(&win, 25, 5, 2, false);
     utassert(WindowSelectionHas(&win));
     int n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(StrEq(Str(buf, n), StrL("hello")));
+    utassert(StrEq(Str(buf, n), "hello"));
     // The press ended the gesture, so a drag does not grow it.
     WindowSelectionDrag(&win, 115, 45);
     n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(StrEq(Str(buf, n), StrL("hello")));
+    utassert(StrEq(Str(buf, n), "hello"));
 
     WindowSelectionPress(&win, 25, 5, 3, false);
     n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(StrEq(Str(buf, n), StrL("hello brave world")));
+    utassert(StrEq(Str(buf, n), "hello brave world"));
     // And it stops at the run: the line is this run's, not the document's.
     WindowSelectionFree(&win);
 }
@@ -184,7 +184,7 @@ static void ADragOutOfAScopeStaysInIt() {
     WindowSelectionRelease(&win);
     char buf[64];
     int n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(n == 0 || !StrEq(Str(buf, n), StrL("page")));
+    utassert(n == 0 || !StrEq(Str(buf, n), "page"));
     // And the frame is told which scope the range belongs to, so a run
     // outside it does not paint one.
     WindowSelectionApply(&win);
@@ -378,7 +378,7 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
     char selected[64];
     int selectedLen =
         TextSelection::SelectedText(&win, &app, selected, (int)sizeof(selected));
-    utassert(StrEq(Str(selected, selectedLen), StrL("first\nsecond")));
+    utassert(StrEq(Str(selected, selectedLen), "first\nsecond"));
     utassert(TextSelection::HasSelection(&win, &app));
     WindowSelectionRelease(&win);
     utassert(first.Snapshot(&app, &firstSnapshot) &&
@@ -387,7 +387,7 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
     outside.SetLocalSelection(true, &app);
     selectedLen =
         TextSelection::SelectedText(&win, &app, selected, (int)sizeof(selected));
-    utassert(StrEq(Str(selected, selectedLen), StrL("first\nsecond\ncustom")));
+    utassert(StrEq(Str(selected, selectedLen), "first\nsecond\ncustom"));
     outside.SetLocalSelection(false, &app);
 
     TextSelectionRun run =
@@ -403,7 +403,7 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
 
     El* layer = TextSelectionLayer::New(&cx);
     El* scoped = TextSelectionScope(Div(arena), one);
-    utassert(base::StrEq(layer->id, StrL("window-text-selection")));
+    utassert(base::StrEq(layer->id, "window-text-selection"));
     utassert(scoped->style.trapId == one.RuntimeScope());
 
     WindowSelectionFree(&win);

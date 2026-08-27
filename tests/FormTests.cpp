@@ -23,7 +23,7 @@ static void FieldBuilderAndStandaloneFieldKeepSourceState() {
     utassert(fld.label.kind == FieldBuilderKind::Element);
     utassert(fld.label.element == label);
     utassert(fld.description.kind == FieldBuilderKind::String);
-    utassert(base::StrEq(fld.description.string, StrL("Help")));
+    utassert(base::StrEq(fld.description.string, "Help"));
     utassert(fld.required && !fld.visible && !fld.labelIndent);
     utassert(fld.align == FieldAlign::End);
     utassert(fld.colSpan == 2 && fld.colStart == 1 && fld.colEnd == 3);

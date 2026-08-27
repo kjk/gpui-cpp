@@ -205,7 +205,7 @@ static void TooltipDelayOwnsAndCancelsPendingText() {
     overlay->RequestShow(request, win, &cx);
     utassert(!overlay->hasContent && overlay->hasPending);
     utassert(overlay->showTask != 0);
-    utassert(base::StrEq(overlay->pending.text, StrL("delayed")));
+    utassert(base::StrEq(overlay->pending.text, "delayed"));
     utassert(overlay->pending.text.s != request.text.s);
     overlay->RequestHide(win, &cx);
     utassert(!overlay->hasPending && overlay->showTask == 0);

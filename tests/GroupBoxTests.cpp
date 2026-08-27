@@ -20,11 +20,11 @@ static void VariantsRoundTripPinnedNames() {
     utassert(GroupBoxVariantFromStr(StrL("OutLine")) ==
              GroupBoxVariant::Outline);
     utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Normal),
-                     StrL("normal")));
+                     "normal"));
     utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Fill),
-                     StrL("fill")));
+                     "fill"));
     utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Outline),
-                     StrL("outline")));
+                     "outline"));
 }
 
 static void VariantBuildersAndChildrenMatchTheSourceTree() {
@@ -44,9 +44,9 @@ static void VariantBuildersAndChildrenMatchTheSourceTree() {
     El* root = group->IntoEl();
     El* title = root->first;
     El* content = title ? title->next : nullptr;
-    utassert(base::StrEq(root->id, StrL("group-box")));
+    utassert(base::StrEq(root->id, "group-box"));
     utassert(title != nullptr);
-    utassert(title && title->first && base::StrEq(title->first->text, StrL("Title")));
+    utassert(title && title->first && base::StrEq(title->first->text, "Title"));
     utassertnear(title ? title->style.lineHeight : 0, 1.f);
     utassert(title && title->style.hasColor);
     utassert(title && GroupBoxColorEq(title->style.color, th.mutedFg));
@@ -66,7 +66,7 @@ static void VariantBuildersAndChildrenMatchTheSourceTree() {
                              ->WithVariant(GroupBoxVariant::Outline);
     El* outlinedRoot = outlined->IntoEl();
     El* outlinedContent = outlinedRoot->first;
-    utassert(base::StrEq(outlinedRoot->id, StrL("outlined")));
+    utassert(base::StrEq(outlinedRoot->id, "outlined"));
     utassert(outlinedContent && outlinedContent->style.border == 1);
     utassert(!outlinedContent || !outlinedContent->style.hasBg);
 

@@ -594,17 +594,17 @@ static void TheChordAnActionIsReachedBy() {
     utassert(!KeymapBindingForAction(0, &editor, 1, &c));
 
     // The name a key goes by, which is what spells the chord back out.
-    utassert(base::StrEq(KeyName('S'), StrL("s")));
-    utassert(base::StrEq(KeyName(KeyPageDown), StrL("pagedown")));
-    utassert(base::StrEq(KeyName('7'), StrL("7")));
+    utassert(base::StrEq(KeyName('S'), "s"));
+    utassert(base::StrEq(KeyName(KeyPageDown), "pagedown"));
+    utassert(base::StrEq(KeyName('7'), "7"));
 
     // A function key is spelled the way a binding writes it, both halves of
     // the range: a menu row bound on one has to be able to show it.
-    utassert(base::StrEq(KeyName(112), StrL("f1")));
-    utassert(base::StrEq(KeyName(115), StrL("f4")));
-    utassert(base::StrEq(KeyName(120), StrL("f9")));
-    utassert(base::StrEq(KeyName(121), StrL("f10")));
-    utassert(base::StrEq(KeyName(123), StrL("f12")));
+    utassert(base::StrEq(KeyName(112), "f1"));
+    utassert(base::StrEq(KeyName(115), "f4"));
+    utassert(base::StrEq(KeyName(120), "f9"));
+    utassert(base::StrEq(KeyName(121), "f10"));
+    utassert(base::StrEq(KeyName(123), "f12"));
     // And nothing past it: 124 is F13, which no binding here names.
     utassert(KeyName(124).len == 0);
 

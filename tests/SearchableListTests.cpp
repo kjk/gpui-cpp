@@ -121,7 +121,7 @@ static void SearchableVecRebuildsItsMatchedView() {
     utassert(values->ItemsCount() == 3);
     values->PerformSearch(StrL("app"));
     utassert(values->ItemsCount() == 1);
-    utassert(base::StrEq(values->Item(IndexPathNew(0))->value, StrL("apple")));
+    utassert(base::StrEq(values->Item(IndexPathNew(0))->value, "apple"));
     IndexPath path;
     utassert(!values->Position(StrL("banana"), &path));
 
@@ -182,7 +182,7 @@ static void StateAccessorsUseGroupedIndexPaths() {
     utassert(!s.AddSelectedIndex(IndexPathNew(0).Section(1)));
     Vec<Str> values;
     s.SelectedValues(&values);
-    utassert(values.len == 1 && base::StrEq(values[0], StrL("apple")));
+    utassert(values.len == 1 && base::StrEq(values[0], "apple"));
     utassert(s.RemoveSelectedIndex(IndexPathNew(0).Section(1)));
     utassert(!s.RemoveSelectedIndex(IndexPathNew(0).Section(1)));
 
@@ -191,8 +191,8 @@ static void StateAccessorsUseGroupedIndexPaths() {
     utassert(s.Selection().len == 2);
     s.SelectedValues(&values);
     utassert(values.len == 2);
-    utassert(base::StrEq(values[0], StrL("banana")));
-    utassert(base::StrEq(values[1], StrL("apple")));
+    utassert(base::StrEq(values[0], "banana"));
+    utassert(base::StrEq(values[1], "apple"));
     utassert(!s.IsOpen());
     utassert(s.Focus() == &s.triggerFocus);
     values.Reset();
@@ -206,7 +206,7 @@ struct DelegateHooks {
 };
 
 static bool HookMatches(void*, const SearchableListItem* item, Str) {
-    return base::StrEq(item->value, StrL("banana"));
+    return base::StrEq(item->value, "banana");
 }
 
 static Str HookSectionTitle(void*, int) {
@@ -278,7 +278,7 @@ static void DelegateHooksDriveSearchRenderingAndSelection() {
     utassert(hooks.renderedItems == 1);
     El* rows = box->first;
     utassert(rows != nullptr && rows->first != nullptr);
-    utassert(base::StrEq(rows->first->text, StrL("Custom header")));
+    utassert(base::StrEq(rows->first->text, "Custom header"));
     utassert(rows->first->next != nullptr);
     utassert(rows->first->next->accessibility.selected);
 

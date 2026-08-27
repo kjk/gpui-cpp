@@ -117,7 +117,7 @@ static void CaretKeepsTheSourceSizeScale() {
     Arena* a = ArenaNew();
     Rgba color = Rgba{10, 20, 30, 255};
     El* icon = Caret::New(UiSize::Small).TextColor(color).IntoEl(a);
-    utassert(base::StrEq(icon->iconPath, StrL("icons/chevron-down.svg")));
+    utassert(base::StrEq(icon->iconPath, "icons/chevron-down.svg"));
     utassertnear(icon->style.width, 14.f);
     utassert(icon->style.hasColor);
     utassert(icon->style.color.g == 20);
@@ -161,7 +161,7 @@ static void SelectStateOwnsCommittedSelectionAndEvents() {
     IndexPath selected;
     utassert(s->SelectedIndex(&selected));
     utassert(selected == swift);
-    utassert(base::StrEq(s->SelectedValue(), StrL("swift")));
+    utassert(base::StrEq(s->SelectedValue(), "swift"));
 
     s->SetSelectedValue(StrL("cpp"), &cx);
     utassert(s->SelectedIndex(&selected));
@@ -182,7 +182,7 @@ static void SelectStateOwnsCommittedSelectionAndEvents() {
     SelectEventSink* heard = sink.Get(&app);
     utassert(heard->count == 1);
     utassert(heard->last.hasValue);
-    utassert(base::StrEq(heard->last.value, StrL("cpp")));
+    utassert(base::StrEq(heard->last.value, "cpp"));
 
     s->Clean(&cx);
     utassert(!s->SelectedIndex(nullptr));
@@ -216,7 +216,7 @@ static void SourceSelectBuilderWritesItsOwnState() {
     utassert(s->state.items == items);
     utassert(s->state.nItems == 1);
     utassert(s->icon == IconName::Search);
-    utassert(base::StrEq(s->titlePrefix, StrL("Value: ")));
+    utassert(base::StrEq(s->titlePrefix, "Value: "));
     utassert(!s->focusRingEnabled);
 
     ArenaDelete(a);
@@ -261,8 +261,8 @@ static El* RenderComboboxTrigger(
     probe->disabled = trigger->IsDisabled();
     probe->size = trigger->Size();
     const component::SearchableListItem* item = trigger->SelectionItem(0);
-    utassert(item && base::StrEq(item->value, StrL("vue")));
-    utassert(base::StrEq(trigger->Placeholder(), StrL("Choose")));
+    utassert(item && base::StrEq(item->value, "vue"));
+    utassert(base::StrEq(trigger->Placeholder(), "Choose"));
     return Div(cx->a);
 }
 
@@ -295,7 +295,7 @@ static void ComboboxOwnsStateEventsAndTriggerContext() {
     utassert(s->Query().len == 0);
     utassert(s->state.matches.len == 3);
     utassert(s->Selection().len == 1 && s->Selection()[0] == 1);
-    utassert(base::StrEq(s->SelectedValue(), StrL("vue")));
+    utassert(base::StrEq(s->SelectedValue(), "vue"));
 
     Entity<ComboboxEventSink> sink =
         EntityNewState<ComboboxEventSink>(&app);
@@ -306,7 +306,7 @@ static void ComboboxOwnsStateEventsAndTriggerContext() {
     ComboboxEventSink* heard = sink.Get(&app);
     utassert(heard->changes == 1 && heard->confirms == 0);
     utassert(heard->lastCount == 2);
-    utassert(base::StrEq(heard->first, StrL("vue")));
+    utassert(base::StrEq(heard->first, "vue"));
     utassert(s->state.open);
 
     MouseDownEvent outside = {};
