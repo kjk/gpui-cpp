@@ -2504,17 +2504,30 @@ static bool AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* tok
 
 // ─── the event handlers ──────────────────────────────────────────────────
 
-static Str UrlFromWebView(ICoreWebView2* webview) {
-    LPWSTR uri = nullptr;
-    if (FAILED(webview->get_Source(&uri))) {
-        return {};
+static HRESULT UrlFromWebViewInner(ICoreWebView2* webview, Str* out) {
+    if (!webview || !out) {
+        return E_POINTER;
     }
-    return TakePwstrTemp(uri);
+    LPWSTR uri = nullptr;
+    HRESULT hr = webview->get_Source(&uri);
+    if (FAILED(hr)) {
+        return hr;
+    }
+    *out = TakePwstrTemp(uri);
+    return S_OK;
+}
+
+static Str UrlFromWebView(ICoreWebView2* webview) {
+    Str result;
+    UrlFromWebViewInner(webview, &result);
+    return result;
 }
 
 static HRESULT OnWindowCloseRequested(void* ctx, ICoreWebView2*, IUnknown*) {
-    DestroyWindow((HWND)ctx);
-    return S_OK;
+    if (DestroyWindow((HWND)ctx)) {
+        return S_OK;
+    }
+    return HRESULT_FROM_WIN32(GetLastError());
 }
 
 static HRESULT OnDocumentTitleChanged(void* ctx, ICoreWebView2* sender, IUnknown*) {
@@ -2523,17 +2536,24 @@ static HRESULT OnDocumentTitleChanged(void* ctx, ICoreWebView2* sender, IUnknown
         return S_OK;
     }
     LPWSTR title = nullptr;
-    if (FAILED(sender->get_DocumentTitle(&title))) {
-        return S_OK;
+    HRESULT hr = sender->get_DocumentTitle(&title);
+    if (FAILED(hr)) {
+        return hr;
     }
     wv->documentTitleChangedHandler(wv->ctx, TakePwstrTemp(title));
     return S_OK;
 }
 
-static HRESULT OnContentLoading(void* ctx, ICoreWebView2* sender, ICoreWebView2ContentLoadingEventArgs*) {
+static HRESULT OnContentLoading(void* ctx, ICoreWebView2* sender,
+                                ICoreWebView2ContentLoadingEventArgs*) {
     WebView* wv = (WebView*)ctx;
     if (sender && wv->onPageLoadHandler) {
-        wv->onPageLoadHandler(wv->ctx, PageLoadEvent::Started, UrlFromWebView(sender));
+        Str url;
+        HRESULT hr = UrlFromWebViewInner(sender, &url);
+        if (FAILED(hr)) {
+            return hr;
+        }
+        wv->onPageLoadHandler(wv->ctx, PageLoadEvent::Started, url);
     }
     return S_OK;
 }
@@ -2542,7 +2562,12 @@ static HRESULT OnNavigationCompleted(void* ctx, ICoreWebView2* sender,
                                      ICoreWebView2NavigationCompletedEventArgs*) {
     WebView* wv = (WebView*)ctx;
     if (sender && wv->onPageLoadHandler) {
-        wv->onPageLoadHandler(wv->ctx, PageLoadEvent::Finished, UrlFromWebView(sender));
+        Str url;
+        HRESULT hr = UrlFromWebViewInner(sender, &url);
+        if (FAILED(hr)) {
+            return hr;
+        }
+        wv->onPageLoadHandler(wv->ctx, PageLoadEvent::Finished, url);
     }
     return S_OK;
 }
@@ -2554,12 +2579,12 @@ static HRESULT OnNavigationStarting(void* ctx, ICoreWebView2*,
         return S_OK;
     }
     LPWSTR uri = nullptr;
-    if (FAILED(args->get_Uri(&uri))) {
-        return S_OK;
+    HRESULT hr = args->get_Uri(&uri);
+    if (FAILED(hr)) {
+        return hr;
     }
     bool allow = wv->navigationHandler(wv->ctx, TakePwstrTemp(uri));
-    args->put_Cancel(allow ? FALSE : TRUE);
-    return S_OK;
+    return args->put_Cancel(allow ? FALSE : TRUE);
 }
 
 // mod.rs runs the handler on a thread of its own and holds the request open
@@ -2573,11 +2598,13 @@ static HRESULT OnNewWindowRequested(void* ctx, ICoreWebView2*,
         return S_OK;
     }
     if (!wv->newWindowReqHandler) {
-        args->put_Handled(TRUE);
-        return S_OK;
+        return args->put_Handled(TRUE);
     }
     LPWSTR uri = nullptr;
-    args->get_Uri(&uri);
+    HRESULT hr = args->get_Uri(&uri);
+    if (FAILED(hr)) {
+        return hr;
+    }
     Str url = TakePwstrTemp(uri);
 
     NewWindowFeatures features;
@@ -2615,7 +2642,7 @@ static HRESULT OnNewWindowRequested(void* ctx, ICoreWebView2*,
         return args->put_Handled(FALSE);
     }
     if (response == NewWindowResponse::Create && created && created->webview) {
-        HRESULT hr = args->put_NewWindow(created->webview);
+        hr = args->put_NewWindow(created->webview);
         if (FAILED(hr)) {
             return hr;
         }
@@ -2631,9 +2658,12 @@ static HRESULT OnPermissionRequested(void*, ICoreWebView2*,
         return S_OK;
     }
     COREWEBVIEW2_PERMISSION_KIND kind = 0;
-    args->get_PermissionKind(&kind);
+    HRESULT hr = args->get_PermissionKind(&kind);
+    if (FAILED(hr)) {
+        return hr;
+    }
     if (kind == kPermissionKindClipboardRead) {
-        args->put_State(kPermissionStateAllow);
+        return args->put_State(kPermissionStateAllow);
     }
     return S_OK;
 }
@@ -2701,11 +2731,15 @@ static HRESULT OnWebMessageReceived(void* ctx, ICoreWebView2*,
         return S_OK;
     }
     LPWSTR source = nullptr;
-    args->get_Source(&source);
+    HRESULT hr = args->get_Source(&source);
+    if (FAILED(hr)) {
+        return hr;
+    }
     Str url = TakePwstrTemp(source);
     LPWSTR message = nullptr;
-    if (FAILED(args->TryGetWebMessageAsString(&message))) {
-        return S_OK;
+    hr = args->TryGetWebMessageAsString(&message);
+    if (FAILED(hr)) {
+        return hr;
     }
     wv->ipcHandler(wv->ctx, url, TakePwstrTemp(message));
     return S_OK;

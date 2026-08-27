@@ -9057,3 +9057,9 @@ Windows script evaluation now releases its copied callback state when
 `ExecuteScript` fails synchronously. WebView2 does not retain or invoke the
 completion handler on that path, so the old code leaked one allocation per
 failed evaluation; the successful asynchronous ownership path is unchanged.
+
+The Windows event bridge now preserves Wry's COM error contract. Window
+close, document-title, page-load URL, navigation URI/cancel, new-window URI,
+clipboard permission and IPC source/message failures are returned from the
+event handler instead of being converted to successful empty events. The
+application callbacks and successful results are unchanged.
