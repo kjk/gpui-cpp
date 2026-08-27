@@ -4,6 +4,8 @@ namespace gpui {
 
 struct PolicyShared {
     uint32_t refs = 1;
+    shell::Storage local{true};
+    shell::Storage session{false};
 };
 
 struct Policy {
@@ -73,6 +75,23 @@ void PolicyUpdateDefaultCapabilities(const Capabilities& capabilities) {
     replacement->shared = SharedRetain(current->shared);
     gDefaultPolicy = replacement;
     PolicyRelease(current);
+}
+
+shell::Storage* PolicyStorage(Policy* policy, bool session) {
+    if (!policy || !policy->shared) return nullptr;
+    return session ? &policy->shared->session : &policy->shared->local;
+}
+
+bool PolicySetStoragePath(Policy* policy, Str path, Str* error) {
+    shell::Storage* storage = PolicyStorage(policy, false);
+    return storage && storage->SetPath(path, error);
+}
+
+bool ShellSetStoragePath(Str path, Str* error) {
+    Policy* policy = PolicyDefault();
+    bool ok = PolicySetStoragePath(policy, path, error);
+    PolicyRelease(policy);
+    return ok;
 }
 
 } // namespace gpui

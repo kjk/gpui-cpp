@@ -9493,3 +9493,54 @@ callbacks, notify, create retained state or nest another virtual list. Stable
 keys are checked for duplicates before the batch is materialized. Release
 tests pass 21,154 checks, including snapshot reuse, retained event dispatch,
 owner cleanup and one-call visible-range rendering.
+
+## Shell scheduler, sandbox and bounded host adapters
+
+The QuickJS runtime now has the shell scheduler rather than only a synchronous
+job drain. `cx.spawn`, `cx.sleep`, one-shot and repeating timers retain the
+view, frozen policy and application generation they were created under;
+resumption enters a Task scope, restores the ambient `cx`, and drops work whose
+owning entity has gone stale. Runtime and per-view cleanup cancel timers and
+bounded process work, and a hard 1,024-task ceiling covers synchronous bursts
+of unawaited calls. Dynamic compilation is withheld outside explicit
+development mode, the shared language prototypes are frozen, and browser timer
+globals point authors at the shell scheduler.
+
+The authority-free Standard Runtime subset now provides `buffer`, `console`,
+`os`, `path`, `process` and `url` under their bare module names, with no
+`node:` aliases and no ambient process environment or working-directory APIs.
+Buffer covers UTF-8, hex and base64 conversion plus allocation/concatenation;
+path follows the host separator; URL and URLSearchParams cover the URL forms
+used by shell applications. `crypto` and `zlib` remain for the next pure-module
+checkpoint.
+
+`process.run` is a Promise backed by the repository executor. It checks the
+exact command grant synchronously, resolves a bare executable against the host
+PATH before clearing the child environment, captures stdout and stderr at an
+8 MiB ceiling each, times out after 30 seconds and isolates descendants in a
+POSIX process group or Windows kill-on-close Job Object. Windows creates the
+primary thread suspended and assigns it to the Job before resuming it. Dropping
+the owning view signals cancellation and Promise settlement returns to the
+captured Task scope. `process.exit` remains an explicit host callback behind
+its separate grant.
+
+The seven Promise-only `fs/promises` calls are live: bounded read/write,
+sorted directory listing with optional dirents, existence, unlink, empty
+directory removal and recursive/non-recursive mkdir. Capability selection
+still returns `{root, relative}`, but every operation now consumes it through
+the promised platform opener. POSIX walks with `openat`/`O_NOFOLLOW`; Windows
+walks one component at a time with a root-relative `NtCreateFile`, opens
+reparse points themselves and rejects them before traversal. Final operations
+stay on the returned handle, closing the previous lexical-check/ambient-open
+TOCTOU gap. Reads stop at 64 MiB, writes at 8 MiB, and listings at 10,000 names
+or 1 MiB of name data.
+
+Policies now share Web Storage caches. `sessionStorage` remains memory-only;
+`localStorage` is capability-gated, host-placed, limited to 4,096 string pairs
+and 8 MiB encoded, and replaces its temporary file atomically on each host.
+Persistence is currently synchronous at mutation time, so the next scheduler
+checkpoint still needs upstream's revisioned one-writer queue and true
+`flush()` barrier semantics rather than the present already-settled Promise.
+
+MSVC release tests pass 21,194 checks, including native and JavaScript process
+and filesystem round trips; `hello_world` builds with `/W4 /WX`.

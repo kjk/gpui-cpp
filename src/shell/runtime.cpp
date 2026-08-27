@@ -1,7 +1,9 @@
 #include "shell/runtime.h"
 
 #include "quickjs/quickjs.h"
+#include "shell/filesystem.h"
 #include "shell/materialize.h"
+#include "shell/process.h"
 #include "shell/retained.h"
 #include "shell/scope.h"
 
@@ -13,6 +15,21 @@ namespace gpui {
 
 constexpr uint64_t kMaxModuleBytes = 8ull * 1024ull * 1024ull;
 constexpr int kMaxJobBatch = 1024;
+constexpr int kMaxShellTasks = 1024;
+static bool gShellDevelopmentMode = false;
+static ShellExitHandler gShellExitHandler = nullptr;
+
+void ShellSetDevelopmentMode(bool enabled) {
+    gShellDevelopmentMode = enabled;
+}
+
+bool ShellDevelopmentMode() {
+    return gShellDevelopmentMode;
+}
+
+void ShellOnExitRequest(ShellExitHandler handler) {
+    gShellExitHandler = handler;
+}
 
 struct ShellRuntimeControl {
     uint32_t refs = 1;
@@ -27,6 +44,44 @@ struct AppModule {
 struct ScriptViewRegistration {
     EntityId view = {};
     bool* dirty = nullptr;
+};
+
+enum class ShellTaskKind : uint8_t {
+    Spawn,
+    Sleep,
+    TimerOnce,
+    TimerEvery,
+    Process,
+    Filesystem,
+};
+
+struct ProcessJob;
+struct FsJob;
+
+struct ShellTask {
+    uint32_t id = 0;
+    ShellTaskKind kind = ShellTaskKind::Spawn;
+    JSValue callback = JS_UNDEFINED;
+    JSValue reject = JS_UNDEFINED;
+    EntityId owner = {};
+    Policy* policy = nullptr;
+    AppModule* application = nullptr;
+    App* app = nullptr;
+    Window* window = nullptr;
+    int timer = 0;
+    ProcessJob* processJob = nullptr;
+    FsJob* fsJob = nullptr;
+};
+
+struct ShellTaskDriver {
+    ShellRuntime* runtime = nullptr;
+
+    static void OnTimer(ShellTaskDriver* self, Ctx* cx, const TickEvent*,
+                        intptr_t id) {
+        if (self && self->runtime) {
+            self->runtime->ResumeTask((uint32_t)id, cx);
+        }
+    }
 };
 
 struct CallbackEntry {
@@ -183,6 +238,10 @@ struct ShellRuntimeImpl {
     shell::Metrics metrics;
     Vec<AppModule*> modules;
     Vec<ScriptViewRegistration> views;
+    Vec<ShellTask*> tasks;
+    Entity<ShellTaskDriver> taskDriver = {};
+    App* taskApp = nullptr;
+    uint32_t nextTask = 1;
     uint32_t nextModuleGeneration = 1;
     uint64_t detachedExecution = 0;
     uint64_t interruptIdentity = UINT64_MAX;
@@ -213,6 +272,44 @@ struct ShellRuntimeAccess {
     }
 };
 
+struct ProcessJob {
+    ShellRuntimeControl* control = nullptr;
+    uint32_t task = 0;
+    shell::ProcessCancellation cancellation;
+    Str command;
+    Vec<Str> args;
+    shell::ProcessOutput output;
+    Str error;
+
+    void Free() {
+        for (int i = 0; i < args.len; i++) StrFree(args[i]);
+        args.Reset();
+        StrFree(command);
+        output.Free();
+        StrFree(error);
+    }
+};
+
+struct FsJob {
+    ShellRuntimeControl* control = nullptr;
+    uint32_t task = 0;
+    shell::FsOperation operation = shell::FsOperation::Read;
+    CapabilityPath path;
+    Str input;
+    shell::FsResult result;
+    Str error;
+    bool text = false;
+    bool withFileTypes = false;
+    bool recursive = false;
+
+    void Free() {
+        path.Free();
+        StrFree(input);
+        result.Free();
+        StrFree(error);
+    }
+};
+
 static void ControlRetain(void* state) {
     if (state) ((ShellRuntimeControl*)state)->refs++;
 }
@@ -240,6 +337,283 @@ static SnapshotRuntimeLease SnapshotLease(ShellRuntime* runtime) {
 
 static void SetError(ShellError* error, Str message) {
     ShellErrorSet(error, message);
+}
+
+static bool TaskWindowLive(const ShellTask* task) {
+    if (!task || !task->app || !task->window) return false;
+    for (int i = 0; i < task->app->windows.len; i++) {
+        if (task->app->windows[i] == task->window) return true;
+    }
+    return false;
+}
+
+static ShellTask* FindTask(ShellRuntimeImpl* impl, uint32_t id,
+                           int* index = nullptr) {
+    if (!impl || id == 0) return nullptr;
+    for (int i = 0; i < impl->tasks.len; i++) {
+        if (impl->tasks[i]->id != id) continue;
+        if (index) *index = i;
+        return impl->tasks[i];
+    }
+    return nullptr;
+}
+
+static void DestroyTask(ShellRuntimeImpl* impl, ShellTask* task,
+                        bool cancelTimer) {
+    if (!task) return;
+    if (cancelTimer && task->timer && TaskWindowLive(task)) {
+        WindowCancelTimer(task->window, task->timer);
+    }
+    if (task->processJob) task->processJob->cancellation.Cancel();
+    if (impl && impl->context) JS_FreeValue(impl->context, task->callback);
+    if (impl && impl->context) JS_FreeValue(impl->context, task->reject);
+    PolicyRelease(task->policy);
+    delete task;
+}
+
+static bool ForgetTask(ShellRuntimeImpl* impl, uint32_t id,
+                       bool cancelTimer = true) {
+    int at = -1;
+    ShellTask* task = FindTask(impl, id, &at);
+    if (!task) return false;
+    for (int i = at + 1; i < impl->tasks.len; i++) {
+        impl->tasks[i - 1] = impl->tasks[i];
+    }
+    impl->tasks.len--;
+    DestroyTask(impl, task, cancelTimer);
+    return true;
+}
+
+static Entity<ShellTaskDriver> TaskDriver(ShellRuntimeImpl* impl, App* app) {
+    if (!impl || !app) return {};
+    if (impl->taskDriver.IsValid() && impl->taskApp == app &&
+        impl->taskDriver.Get(app)) {
+        return impl->taskDriver;
+    }
+    if (impl->taskDriver.IsValid()) return {};
+    impl->taskDriver = EntityNewState<ShellTaskDriver>(app);
+    impl->taskApp = app;
+    ShellTaskDriver* driver = impl->taskDriver.Get(app);
+    if (driver) driver->runtime = impl->owner;
+    return driver ? impl->taskDriver : Entity<ShellTaskDriver>{};
+}
+
+static uint32_t NewTask(ShellRuntimeImpl* impl, ShellTaskKind kind,
+                        JSValueConst callback, App* app = nullptr,
+                        Window* window = nullptr, bool ownerless = false,
+                        JSValueConst reject = JS_UNDEFINED) {
+    if (!impl || impl->tasks.len >= kMaxShellTasks || impl->nextTask == 0) {
+        return 0;
+    }
+    ShellTask* task = new ShellTask();
+    task->id = impl->nextTask++;
+    task->kind = kind;
+    task->callback = JS_DupValue(impl->context, callback);
+    task->reject = JS_DupValue(impl->context, reject);
+    task->owner = ownerless ? EntityId{} : shell::ScopeCurrentView();
+    Policy* policy = shell::ScopeCurrentPolicy();
+    task->policy = policy ? PolicyRetain(policy) : PolicyDefault();
+    task->application = (AppModule*)shell::ScopeCurrentApplication();
+    task->app = app;
+    task->window = window;
+    impl->tasks.Append(task);
+    return task->id;
+}
+
+static void BeginExecution(ShellRuntimeImpl* impl);
+static Str ExceptionText(Arena* arena, JSContext* ctx);
+
+static void ProcessJobWork(ProcessJob* job) {
+    shell::ProcessRunBounded(job->command, job->args.els, job->args.len,
+                             &job->cancellation, &job->output, &job->error);
+}
+
+static void ProcessJobDone(ProcessJob* job) {
+    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
+    if (task && task->kind == ShellTaskKind::Process &&
+        TaskWindowLive(task) &&
+        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
+        Window* window = task->window;
+        App* app = task->app;
+        EntityId owner = task->owner;
+        Policy* policy = PolicyRetain(task->policy);
+        AppModule* application = task->application;
+        JSValue settle = JS_DupValue(impl->context,
+                                     job->error ? task->reject
+                                                : task->callback);
+        task->processJob = nullptr;
+        ForgetTask(impl, task->id, false);
+
+        shell::CallScopeGuard scope = shell::ScopeEnter(
+            window, app, ScopePhase::Task, owner, policy, runtime,
+            application);
+        PolicyRelease(policy);
+        BeginExecution(impl);
+        JSValue value = JS_UNDEFINED;
+        if (job->error) {
+            value = JS_NewError(impl->context);
+            JS_SetPropertyStr(
+                impl->context, value, "message",
+                JS_NewStringLen(impl->context, job->error.s,
+                                (size_t)job->error.len));
+        } else {
+            value = JS_NewObject(impl->context);
+            JS_SetPropertyStr(impl->context, value, "code",
+                              JS_NewInt32(impl->context, job->output.code));
+            JS_SetPropertyStr(
+                impl->context, value, "stdout",
+                JS_NewStringLen(impl->context,
+                                job->output.out.s ? job->output.out.s : "",
+                                (size_t)job->output.out.len));
+            JS_SetPropertyStr(
+                impl->context, value, "stderr",
+                JS_NewStringLen(impl->context,
+                                job->output.err.s ? job->output.err.s : "",
+                                (size_t)job->output.err.len));
+        }
+        JSValue settled = JS_Call(impl->context, settle, JS_UNDEFINED, 1,
+                                  &value);
+        JS_FreeValue(impl->context, value);
+        JS_FreeValue(impl->context, settle);
+        if (JS_IsException(settled)) {
+            Arena* arena = ArenaNew();
+            log(ExceptionText(arena, impl->context));
+            ArenaDelete(arena);
+        } else {
+            JS_FreeValue(impl->context, settled);
+            ShellError error = {};
+            runtime->DrainJobs(kMaxJobBatch, &error);
+            if (error.IsSet()) {
+                log(error.message);
+                ShellErrorClear(&error);
+            }
+        }
+    } else if (task) {
+        task->processJob = nullptr;
+        ForgetTask(impl, task->id, false);
+    }
+    job->Free();
+    ControlRelease(job->control);
+    delete job;
+}
+
+static void FsJobWork(FsJob* job) {
+    shell::FsRun(job->operation, job->path.root, job->path.relative,
+                 job->input, job->recursive, &job->result, &job->error);
+}
+
+static JSValue FsJobValue(JSContext* context, FsJob* job) {
+    if (job->operation == shell::FsOperation::Read) {
+        if (job->text) {
+            return JS_NewStringLen(context,
+                                   job->result.bytes.s
+                                       ? job->result.bytes.s
+                                       : "",
+                                   (size_t)job->result.bytes.len);
+        }
+        return JS_NewUint8ArrayCopy(
+            context, (const uint8_t*)(job->result.bytes.s
+                                          ? job->result.bytes.s
+                                          : ""),
+            (size_t)job->result.bytes.len);
+    }
+    if (job->operation == shell::FsOperation::Exists) {
+        return JS_NewBool(context, job->result.exists);
+    }
+    if (job->operation != shell::FsOperation::ReadDirectory) {
+        return JS_UNDEFINED;
+    }
+    JSValue array = JS_NewArray(context);
+    JSValue global = JS_GetGlobalObject(context);
+    JSValue make = job->withFileTypes
+                       ? JS_GetPropertyStr(context, global,
+                                           "__shell_fs_dirent")
+                       : JS_UNDEFINED;
+    for (int i = 0; i < job->result.entries.len; i++) {
+        const shell::FsEntry& entry = job->result.entries[i];
+        JSValue name = JS_NewStringLen(context, entry.name.s,
+                                       (size_t)entry.name.len);
+        JSValue value = name;
+        if (job->withFileTypes) {
+            JSValue args[2] = {name,
+                               JS_NewBool(context, entry.isDirectory)};
+            value = JS_Call(context, make, JS_UNDEFINED, 2, args);
+            JS_FreeValue(context, args[0]);
+            JS_FreeValue(context, args[1]);
+        }
+        if (JS_IsException(value) ||
+            JS_SetPropertyUint32(context, array, (uint32_t)i, value) < 0) {
+            JS_FreeValue(context, array);
+            array = JS_EXCEPTION;
+            break;
+        }
+    }
+    JS_FreeValue(context, make);
+    JS_FreeValue(context, global);
+    return array;
+}
+
+static void FsJobDone(FsJob* job) {
+    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
+    if (task && task->kind == ShellTaskKind::Filesystem &&
+        TaskWindowLive(task) &&
+        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
+        Window* window = task->window;
+        App* app = task->app;
+        EntityId owner = task->owner;
+        Policy* policy = PolicyRetain(task->policy);
+        AppModule* application = task->application;
+        JSValue settle = JS_DupValue(impl->context,
+                                     job->error ? task->reject
+                                                : task->callback);
+        task->fsJob = nullptr;
+        ForgetTask(impl, task->id, false);
+
+        shell::CallScopeGuard scope = shell::ScopeEnter(
+            window, app, ScopePhase::Task, owner, policy, runtime,
+            application);
+        PolicyRelease(policy);
+        BeginExecution(impl);
+        JSValue value = JS_UNDEFINED;
+        if (job->error) {
+            value = JS_NewError(impl->context);
+            JS_SetPropertyStr(
+                impl->context, value, "message",
+                JS_NewStringLen(impl->context, job->error.s,
+                                (size_t)job->error.len));
+        } else {
+            value = FsJobValue(impl->context, job);
+        }
+        JSValue settled = JS_IsException(value)
+                              ? JS_EXCEPTION
+                              : JS_Call(impl->context, settle, JS_UNDEFINED,
+                                        1, &value);
+        JS_FreeValue(impl->context, value);
+        JS_FreeValue(impl->context, settle);
+        if (JS_IsException(settled)) {
+            Arena* arena = ArenaNew();
+            log(ExceptionText(arena, impl->context));
+            ArenaDelete(arena);
+        } else {
+            JS_FreeValue(impl->context, settled);
+            ShellError error = {};
+            runtime->DrainJobs(kMaxJobBatch, &error);
+            if (error.IsSet()) {
+                log(error.message);
+                ShellErrorClear(&error);
+            }
+        }
+    } else if (task) {
+        task->fsJob = nullptr;
+        ForgetTask(impl, task->id, false);
+    }
+    job->Free();
+    ControlRelease(job->control);
+    delete job;
 }
 
 static void BeginExecution(ShellRuntimeImpl* impl) {
@@ -383,11 +757,16 @@ static bool ReadFileBounded(Str path, Str* source, ShellError* error) {
 
 static bool IsBuiltin(const char* name) {
     return strcmp(name, "gpui") == 0 || strcmp(name, "gpui-base") == 0 ||
-           strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0;
+           strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0 ||
+           strcmp(name, "buffer") == 0 || strcmp(name, "console") == 0 ||
+           strcmp(name, "fs/promises") == 0 || strcmp(name, "os") == 0 ||
+           strcmp(name, "path") == 0 || strcmp(name, "process") == 0 ||
+           strcmp(name, "url") == 0;
 }
 
 static const char* const kGpuiExports[] = {
-    "View", "div", "svg", "image", "PathBuilder", "Background"};
+    "View", "div", "svg", "image", "PathBuilder", "Background",
+    "with_cx"};
 static const char* const kBaseExports[] = {
     "h_flex", "v_flex", "Button", "Link", "Checkbox", "Switch",
     "Tabs", "Tab", "Progress", "ProgressTrack", "ProgressIndicator",
@@ -400,6 +779,20 @@ static const char* const kBaseExports[] = {
     "Textarea", "TextareaState", "SliderState", "Slider", "SliderTrack",
     "SliderIndicator", "SliderThumb", "OtpState", "OtpInput", "set_theme"};
 static const char* const kFpsExports[] = {"fps_monitor"};
+static const char* const kBufferExports[] = {"default", "Buffer"};
+static const char* const kConsoleExports[] = {"default"};
+static const char* const kFsExports[] = {"default", "readFile", "writeFile",
+                                         "readdir", "exists", "unlink",
+                                         "rmdir", "mkdir"};
+static const char* const kOsExports[] = {"default", "platform", "arch", "EOL"};
+static const char* const kPathExports[] = {
+    "default", "sep", "delimiter", "basename", "dirname", "extname",
+    "isAbsolute", "join", "normalize", "relative", "resolve", "parse",
+    "format"};
+static const char* const kProcessExports[] = {"default", "run", "nextTick",
+                                              "exit", "platform", "arch"};
+static const char* const kUrlExports[] = {"default", "URL", "URLSearchParams",
+                                          "fileURLToPath", "pathToFileURL"};
 
 static void ModuleExports(const char* name, const char* const** values,
                           int* count) {
@@ -414,7 +807,42 @@ static void ModuleExports(const char* name, const char* const** values,
     } else if (strcmp(name, "gpui-fps") == 0) {
         *values = kFpsExports;
         *count = (int)(sizeof(kFpsExports) / sizeof(kFpsExports[0]));
+    } else if (strcmp(name, "buffer") == 0) {
+        *values = kBufferExports;
+        *count = (int)(sizeof(kBufferExports) / sizeof(kBufferExports[0]));
+    } else if (strcmp(name, "console") == 0) {
+        *values = kConsoleExports;
+        *count = (int)(sizeof(kConsoleExports) / sizeof(kConsoleExports[0]));
+    } else if (strcmp(name, "fs/promises") == 0) {
+        *values = kFsExports;
+        *count = (int)(sizeof(kFsExports) / sizeof(kFsExports[0]));
+    } else if (strcmp(name, "os") == 0) {
+        *values = kOsExports;
+        *count = (int)(sizeof(kOsExports) / sizeof(kOsExports[0]));
+    } else if (strcmp(name, "path") == 0) {
+        *values = kPathExports;
+        *count = (int)(sizeof(kPathExports) / sizeof(kPathExports[0]));
+    } else if (strcmp(name, "process") == 0) {
+        *values = kProcessExports;
+        *count = (int)(sizeof(kProcessExports) / sizeof(kProcessExports[0]));
+    } else if (strcmp(name, "url") == 0) {
+        *values = kUrlExports;
+        *count = (int)(sizeof(kUrlExports) / sizeof(kUrlExports[0]));
     }
+}
+
+static const char* BuiltinObject(const char* name) {
+    if (strcmp(name, "gpui") == 0 || strcmp(name, "gpui-base") == 0 ||
+        strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0)
+        return "__gpui";
+    if (strcmp(name, "buffer") == 0) return "__shell_buffer";
+    if (strcmp(name, "console") == 0) return "console";
+    if (strcmp(name, "fs/promises") == 0) return "__shell_fs";
+    if (strcmp(name, "os") == 0) return "__shell_os";
+    if (strcmp(name, "path") == 0) return "__shell_path";
+    if (strcmp(name, "process") == 0) return "process";
+    if (strcmp(name, "url") == 0) return "__shell_url";
+    return "__gpui";
 }
 
 static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
@@ -424,10 +852,13 @@ static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
     int count = 0;
     ModuleExports(name ? name : "", &exports, &count);
     JSValue global = JS_GetGlobalObject(ctx);
-    JSValue api = JS_GetPropertyStr(ctx, global, "__gpui");
+    JSValue api = JS_GetPropertyStr(ctx, global,
+                                    BuiltinObject(name ? name : ""));
     int result = 0;
     for (int i = 0; i < count; i++) {
-        JSValue value = JS_GetPropertyStr(ctx, api, exports[i]);
+        JSValue value = strcmp(exports[i], "default") == 0
+                            ? JS_DupValue(ctx, api)
+                            : JS_GetPropertyStr(ctx, api, exports[i]);
         if (JS_IsException(value) ||
             JS_SetModuleExport(ctx, module, exports[i], value) < 0) {
             if (!JS_IsException(value)) JS_FreeValue(ctx, value);
@@ -1679,6 +2110,723 @@ static JSValue NativeNotify(JSContext* ctx, JSValueConst, int argc,
     return JS_UNDEFINED;
 }
 
+static JSValue NativeNotifyCurrent(JSContext* ctx, JSValueConst, int,
+                                   JSValueConst*) {
+    uint64_t current = shell::ScopeCurrentGeneration();
+    if (current == 0) {
+        return JS_ThrowTypeError(ctx, "cx.notify() was called with no host call in progress");
+    }
+    JSValue generation = JS_NewInt64(ctx, (int64_t)current);
+    JSValue result = NativeNotify(ctx, JS_UNDEFINED, 1, &generation);
+    JS_FreeValue(ctx, generation);
+    return result;
+}
+
+static bool TaskOwnerless(JSContext* ctx, int argc, JSValueConst* argv,
+                          int at, bool* ownerless) {
+    *ownerless = false;
+    if (argc <= at || JS_IsUndefined(argv[at]) || JS_IsNull(argv[at])) {
+        *ownerless = argc > at && JS_IsNull(argv[at]);
+        return true;
+    }
+    if (!JS_IsObject(argv[at])) {
+        JS_ThrowTypeError(ctx, "task options must be an object");
+        return false;
+    }
+    JSValue owner = JS_GetPropertyStr(ctx, argv[at], "owner");
+    if (JS_IsException(owner)) return false;
+    if (JS_IsNull(owner)) {
+        *ownerless = true;
+    } else if (!JS_IsUndefined(owner) && !JS_IsObject(owner)) {
+        JS_FreeValue(ctx, owner);
+        JS_ThrowTypeError(ctx, "opts.owner must be the current view or null");
+        return false;
+    }
+    JS_FreeValue(ctx, owner);
+    return true;
+}
+
+static bool TaskDelay(JSContext* ctx, JSValueConst value, int* ms) {
+    double number = 0;
+    if (JS_ToFloat64(ctx, &number, value) < 0 || !isfinite(number) ||
+        number < 0 || number > 2147483647.0) {
+        JS_ThrowTypeError(ctx, "timer expects a finite non-negative number of milliseconds");
+        return false;
+    }
+    *ms = number < 1 ? 1 : (int)number;
+    return true;
+}
+
+static JSValue NativeTaskNew(JSContext* ctx, JSValueConst, int argc,
+                             JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    bool ownerless = false;
+    if (!impl || !TaskOwnerless(ctx, argc, argv, 0, &ownerless)) {
+        return JS_EXCEPTION;
+    }
+    uint32_t id = NewTask(impl, ShellTaskKind::Spawn, JS_UNDEFINED, nullptr,
+                          nullptr, ownerless);
+    if (!id) return JS_ThrowRangeError(ctx, "the runtime reached its 1024 outstanding task limit");
+    return JS_NewUint32(ctx, id);
+}
+
+static JSValue NativeTaskFinish(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    uint32_t id = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &id, argv[0]) < 0) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    return JS_NewBool(ctx, ForgetTask(impl, id));
+}
+
+static JSValue NativeTaskReject(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    uint32_t id = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &id, argv[0]) < 0) return JS_EXCEPTION;
+    if (argc > 1) {
+        size_t n = 0;
+        const char* message = JS_ToCStringLen(ctx, &n, argv[1]);
+        if (message) {
+            log(fmt("unhandled rejection in cx.spawn: %s",
+                    Str(message, (int)n)));
+            JS_FreeCString(ctx, message);
+        }
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    ForgetTask(impl, id);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeTaskCancel(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    uint32_t id = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &id, argv[0]) < 0) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    return JS_NewBool(ctx, ForgetTask(impl, id));
+}
+
+static JSValue NativeTaskIsDone(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    uint32_t id = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &id, argv[0]) < 0) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    return JS_NewBool(ctx, FindTask(impl, id) == nullptr);
+}
+
+static JSValue NativeSleep(JSContext* ctx, JSValueConst, int argc,
+                           JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    int ms = 1;
+    if (!impl || argc < 1 || !TaskDelay(ctx, argv[0], &ms)) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        return JS_ThrowTypeError(ctx, "cx.sleep(ms) was called with no host call in progress");
+    }
+    Entity<ShellTaskDriver> driver = TaskDriver(impl, host.GetApp());
+    if (!driver.IsValid()) return JS_ThrowInternalError(ctx, "creating the shell task driver failed");
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (JS_IsException(promise)) return promise;
+    uint32_t id = NewTask(impl, ShellTaskKind::Sleep, resolving[0],
+                          host.GetApp(), host.GetWindow());
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    if (!id) {
+        JS_FreeValue(ctx, promise);
+        return JS_ThrowRangeError(ctx, "the runtime reached its 1024 outstanding task limit");
+    }
+    ShellTask* task = FindTask(impl, id);
+    task->timer = WindowSetTimeout(
+        host.GetWindow(), ms,
+        ListenTo(driver, &ShellTaskDriver::OnTimer, (intptr_t)id));
+    if (!task->timer) {
+        ForgetTask(impl, id, false);
+        JS_FreeValue(ctx, promise);
+        return JS_ThrowInternalError(ctx, "arming cx.sleep(ms) failed");
+    }
+    return promise;
+}
+
+static JSValue NativeTimer(JSContext* ctx, JSValueConst, int argc,
+                           JSValueConst* argv, int magic) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    int ms = 1;
+    bool ownerless = false;
+    if (!impl || argc < 2 || !TaskDelay(ctx, argv[0], &ms) ||
+        !JS_IsFunction(ctx, argv[1]) ||
+        !TaskOwnerless(ctx, argc, argv, 2, &ownerless)) {
+        if (!JS_HasException(ctx)) JS_ThrowTypeError(ctx, "timer needs a delay and callback function");
+        return JS_EXCEPTION;
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        return JS_ThrowTypeError(ctx, "cx.timer needs a live host call");
+    }
+    Entity<ShellTaskDriver> driver = TaskDriver(impl, host.GetApp());
+    if (!driver.IsValid()) return JS_ThrowInternalError(ctx, "creating the shell task driver failed");
+    ShellTaskKind kind = magic ? ShellTaskKind::TimerEvery
+                               : ShellTaskKind::TimerOnce;
+    uint32_t id = NewTask(impl, kind, argv[1], host.GetApp(),
+                          host.GetWindow(), ownerless);
+    if (!id) return JS_ThrowRangeError(ctx, "the runtime reached its 1024 outstanding task limit");
+    ShellTask* task = FindTask(impl, id);
+    Listener listener = ListenTo(driver, &ShellTaskDriver::OnTimer,
+                                 (intptr_t)id);
+    task->timer = magic ? WindowSetInterval(host.GetWindow(), ms, listener)
+                        : WindowSetTimeout(host.GetWindow(), ms, listener);
+    if (!task->timer) {
+        ForgetTask(impl, id, false);
+        return JS_ThrowInternalError(ctx, "arming the shell timer failed");
+    }
+    return JS_NewUint32(ctx, id);
+}
+
+static Policy* CurrentPolicy(bool* release) {
+    Policy* policy = shell::ScopeCurrentPolicy();
+    *release = policy == nullptr;
+    return policy ? policy : PolicyDefault();
+}
+
+static shell::Storage* AllowedStorage(JSContext* ctx, bool session,
+                                      Policy** held) {
+    bool release = false;
+    Policy* policy = CurrentPolicy(&release);
+    if (!session && !PolicyCapabilities(policy).HasStorage()) {
+        if (release) PolicyRelease(policy);
+        JS_ThrowTypeError(ctx, "storage is not granted; set capabilities.storage to true");
+        return nullptr;
+    }
+    *held = release ? policy : nullptr;
+    shell::Storage* storage = PolicyStorage(policy, session);
+    if (!storage || (!session && !storage->HasPath())) {
+        if (release) PolicyRelease(policy);
+        *held = nullptr;
+        JS_ThrowTypeError(ctx, "localStorage has no backing file; call ShellSetStoragePath before loading the application");
+        return nullptr;
+    }
+    return storage;
+}
+
+static JSValue NativeStorageGet(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = argc > 1 && JS_ToBool(ctx, argv[1]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str key;
+    bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &key);
+    Str value = ok ? storage->Get(key) : Str{};
+    JSValue result = !ok ? JS_EXCEPTION
+                         : value ? JS_NewStringLen(ctx, value.s, (size_t)value.len)
+                                 : JS_NULL;
+    ArenaDelete(arena);
+    PolicyRelease(held);
+    return result;
+}
+
+static JSValue NativeStorageSet(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = argc > 2 && JS_ToBool(ctx, argv[2]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str key, value, error;
+    bool ok = argc >= 2 && JsString(ctx, argv[0], arena, &key) &&
+              JsString(ctx, argv[1], arena, &value) &&
+              storage->Set(key, value, &error) && storage->Flush(&error);
+    JSValue result = ok ? JS_UNDEFINED
+                        : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
+                                : JS_EXCEPTION;
+    StrFree(error);
+    ArenaDelete(arena);
+    PolicyRelease(held);
+    return result;
+}
+
+static JSValue NativeStorageRemove(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = argc > 1 && JS_ToBool(ctx, argv[1]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str key, error;
+    bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &key) &&
+              storage->Remove(key, &error) && storage->Flush(&error);
+    JSValue result = ok ? JS_UNDEFINED
+                        : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
+                                : JS_EXCEPTION;
+    StrFree(error);
+    ArenaDelete(arena);
+    PolicyRelease(held);
+    return result;
+}
+
+static JSValue NativeStorageClear(JSContext* ctx, JSValueConst, int,
+                                  JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = JS_ToBool(ctx, argv[0]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    Str error;
+    bool ok = storage->Clear(&error) && storage->Flush(&error);
+    JSValue result = ok ? JS_UNDEFINED
+                        : JS_ThrowInternalError(ctx, "%.*s", error.len, error.s);
+    StrFree(error);
+    PolicyRelease(held);
+    return result;
+}
+
+static JSValue NativeStorageLength(JSContext* ctx, JSValueConst, int,
+                                   JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = JS_ToBool(ctx, argv[0]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    JSValue result = JS_NewInt32(ctx, storage->Len());
+    PolicyRelease(held);
+    return result;
+}
+
+static JSValue NativeStorageKey(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = argc > 1 && JS_ToBool(ctx, argv[1]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    int32_t index = -1;
+    bool ok = argc >= 1 && JS_ToInt32(ctx, &index, argv[0]) == 0;
+    Str key = ok ? storage->Key(index) : Str{};
+    JSValue result = !ok ? JS_EXCEPTION
+                         : key ? JS_NewStringLen(ctx, key.s, (size_t)key.len)
+                               : JS_NULL;
+    PolicyRelease(held);
+    return result;
+}
+
+static JSValue ResolvedPromise(JSContext* ctx) {
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (!JS_IsException(promise)) {
+        JSValue settled = JS_Call(ctx, resolving[0], JS_UNDEFINED, 0, nullptr);
+        JS_FreeValue(ctx, settled);
+    }
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    return promise;
+}
+
+static JSValue NativeStorageFlush(JSContext* ctx, JSValueConst, int,
+                                  JSValueConst* argv) {
+    Policy* held = nullptr;
+    bool session = JS_ToBool(ctx, argv[0]) != 0;
+    shell::Storage* storage = AllowedStorage(ctx, session, &held);
+    if (!storage) return JS_EXCEPTION;
+    Str error;
+    bool ok = storage->Flush(&error);
+    PolicyRelease(held);
+    if (!ok) {
+        JSValue result = JS_ThrowInternalError(ctx, "%.*s", error.len, error.s);
+        StrFree(error);
+        return result;
+    }
+    return ResolvedPromise(ctx);
+}
+
+static JSValue NativeClipboard(JSContext* ctx, JSValueConst, int argc,
+                               JSValueConst* argv, int magic) {
+    bool release = false;
+    Policy* policy = CurrentPolicy(&release);
+    const Capabilities& capabilities = PolicyCapabilities(policy);
+    bool allowed = magic == 0 ? capabilities.IsClipboardReadable()
+                              : capabilities.IsClipboardWritable();
+    if (!allowed) {
+        if (release) PolicyRelease(policy);
+        return JS_ThrowTypeError(
+            ctx, magic == 0
+                     ? "reading the clipboard is not granted; declare capabilities.clipboard.read"
+                     : "writing the clipboard is not granted; declare capabilities.clipboard.write");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        if (release) PolicyRelease(policy);
+        return JS_ThrowTypeError(ctx, "clipboard access needs a live host call");
+    }
+    JSValue result = JS_UNDEFINED;
+    if (magic == 0) {
+        Arena* arena = ArenaNew();
+        Str value = ClipboardGetText(arena, host.GetWindow());
+        result = value ? JS_NewStringLen(ctx, value.s, (size_t)value.len)
+                       : JS_NULL;
+        ArenaDelete(arena);
+    } else {
+        Arena* arena = ArenaNew();
+        Str value;
+        bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &value);
+        if (ok) ClipboardSetText(host.GetWindow(), value);
+        ArenaDelete(arena);
+        if (!ok) result = JS_EXCEPTION;
+    }
+    if (release) PolicyRelease(policy);
+    return result;
+}
+
+static JSValue NativeConsole(JSContext* ctx, JSValueConst, int argc,
+                             JSValueConst* argv, int magic) {
+    StrBuilder out;
+    static const char* levels[] = {"log", "debug", "info", "warn", "error"};
+    out.Append(fmt("[script %s]", Str(levels[magic >= 0 && magic < 5 ? magic : 0])));
+    for (int i = 0; i < argc; i++) {
+        size_t n = 0;
+        const char* value = JS_ToCStringLen(ctx, &n, argv[i]);
+        out.AppendChar(' ');
+        if (value) {
+            out.Append(Str(value, (int)n));
+            JS_FreeCString(ctx, value);
+        } else {
+            out.Append(StrL("<value>"));
+            JSValue exception = JS_GetException(ctx);
+            JS_FreeValue(ctx, exception);
+        }
+    }
+    Str message = out.TakeStr();
+    log(message);
+    StrFree(message);
+    return JS_UNDEFINED;
+}
+
+static bool ObjectOnlyOption(JSContext* ctx, JSValueConst object,
+                             const char* allowed, const char* what) {
+    JSPropertyEnum* properties = nullptr;
+    uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &properties, &count, object,
+                               JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) < 0) {
+        return false;
+    }
+    bool ok = true;
+    for (uint32_t i = 0; i < count; i++) {
+        const char* name = JS_AtomToCString(ctx, properties[i].atom);
+        bool matches = name && strcmp(name, allowed) == 0;
+        if (!matches) {
+            JS_ThrowTypeError(ctx, "unknown option `%s` for %s; expected %s",
+                              name ? name : "<symbol>", what, allowed);
+            ok = false;
+        }
+        if (name) JS_FreeCString(ctx, name);
+        if (!ok) break;
+    }
+    JS_FreePropertyEnum(ctx, properties, count);
+    return ok;
+}
+
+static bool FsReadTextOption(JSContext* ctx, JSValueConst value, Arena* arena,
+                             bool* text) {
+    *text = false;
+    if (JS_IsUndefined(value) || JS_IsNull(value)) return true;
+    JSValue encoding = JS_UNDEFINED;
+    if (JS_IsString(value)) {
+        encoding = JS_DupValue(ctx, value);
+    } else if (JS_IsObject(value)) {
+        if (!ObjectOnlyOption(ctx, value, "encoding", "fs.readFile options"))
+            return false;
+        encoding = JS_GetPropertyStr(ctx, value, "encoding");
+    } else {
+        JS_ThrowTypeError(ctx, "fs.readFile encoding must be \"utf8\" or { encoding: \"utf8\" }");
+        return false;
+    }
+    Str name;
+    bool ok = !JS_IsException(encoding) && JsString(ctx, encoding, arena, &name);
+    JS_FreeValue(ctx, encoding);
+    if (!ok) return false;
+    if (!StrEqI(name, StrL("utf8")) && !StrEqI(name, StrL("utf-8"))) {
+        JS_ThrowTypeError(ctx, "fs.readFile only supports UTF-8 text decoding");
+        return false;
+    }
+    *text = true;
+    return true;
+}
+
+static bool FsBoolOption(JSContext* ctx, JSValueConst value,
+                         const char* key, const char* what, bool* result) {
+    *result = false;
+    if (JS_IsUndefined(value) || JS_IsNull(value)) return true;
+    if (!JS_IsObject(value)) {
+        JS_ThrowTypeError(ctx, "%s expects an options object", what);
+        return false;
+    }
+    if (!ObjectOnlyOption(ctx, value, key, what)) return false;
+    JSValue option = JS_GetPropertyStr(ctx, value, key);
+    if (JS_IsException(option)) return false;
+    if (!JS_IsUndefined(option) && !JS_IsBool(option)) {
+        JS_FreeValue(ctx, option);
+        JS_ThrowTypeError(ctx, "%s.%s must be boolean", what, key);
+        return false;
+    }
+    if (!JS_IsUndefined(option)) *result = JS_ToBool(ctx, option) != 0;
+    JS_FreeValue(ctx, option);
+    return true;
+}
+
+static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
+                        JSValueConst* argv, int magic) {
+    if (magic < 0 || magic > 6) return JS_ThrowInternalError(ctx, "invalid filesystem operation");
+    shell::FsOperation operation = (shell::FsOperation)magic;
+    CapabilityAccess access = operation == shell::FsOperation::Read ||
+                                      operation == shell::FsOperation::ReadDirectory ||
+                                      operation == shell::FsOperation::Exists
+                                  ? CapabilityAccess::Read
+                                  : CapabilityAccess::Write;
+    Arena* arena = ArenaNew();
+    Str requested;
+    bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &requested);
+    if (!ok) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    bool release = false;
+    Policy* policy = CurrentPolicy(&release);
+    CapabilityPath path;
+    CapabilityError capabilityError;
+    ok = PolicyCapabilities(policy).ResolvePath(requested, access, &path,
+                                                 &capabilityError);
+    if (release) PolicyRelease(policy);
+    if (!ok) {
+        Str message = CapabilityErrorMessage(arena, capabilityError);
+        JSValue result = JS_ThrowTypeError(ctx, "%.*s", message.len, message.s);
+        CapabilityErrorFree(&capabilityError);
+        ArenaDelete(arena);
+        return result;
+    }
+
+    FsJob* job = new FsJob();
+    job->operation = operation;
+    job->path = path;
+    if (operation == shell::FsOperation::Read) {
+        ok = FsReadTextOption(ctx, argc > 1 ? argv[1] : JS_UNDEFINED, arena,
+                              &job->text);
+    } else if (operation == shell::FsOperation::ReadDirectory) {
+        ok = FsBoolOption(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
+                          "withFileTypes", "fs.readdir(path, options)",
+                          &job->withFileTypes);
+    } else if (operation == shell::FsOperation::MakeDirectory) {
+        ok = FsBoolOption(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
+                          "recursive", "fs.mkdir(path, options)",
+                          &job->recursive);
+    } else if (operation == shell::FsOperation::Write) {
+        if (argc < 2) {
+            JS_ThrowTypeError(ctx, "fs.writeFile(path, contents) expects a string or Uint8Array");
+            ok = false;
+        } else if (JS_IsString(argv[1])) {
+            Str input;
+            ok = JsString(ctx, argv[1], arena, &input);
+            if (ok) job->input = StrDup(input);
+        } else if (JS_GetTypedArrayType(argv[1]) == JS_TYPED_ARRAY_UINT8) {
+            size_t count = 0;
+            uint8_t* bytes = JS_GetUint8Array(ctx, &count, argv[1]);
+            ok = bytes != nullptr || count == 0;
+            if (ok && count <= (size_t)INT_MAX) {
+                job->input = StrDup(Str((const char*)bytes, (int)count));
+            } else if (ok) {
+                JS_ThrowRangeError(ctx, "fs.writeFile contents are too large");
+                ok = false;
+            }
+        } else {
+            JS_ThrowTypeError(ctx, "fs.writeFile(path, contents) expects a string or Uint8Array");
+            ok = false;
+        }
+        if (ok && job->input.len > shell::kFsMaxWriteBytes) {
+            JS_ThrowRangeError(ctx, "fs.writeFile contents exceed the 8388608-byte write limit");
+            ok = false;
+        }
+        if (ok && !job->input.s && job->input.len != 0) {
+            JS_ThrowOutOfMemory(ctx);
+            ok = false;
+        }
+    }
+    ArenaDelete(arena);
+    if (!ok) {
+        job->Free();
+        delete job;
+        return JS_EXCEPTION;
+    }
+
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        job->Free();
+        delete job;
+        return JS_ThrowTypeError(ctx, "filesystem access needs a live host task");
+    }
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (JS_IsException(promise)) {
+        job->Free();
+        delete job;
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t task = NewTask(impl, ShellTaskKind::Filesystem, resolving[0],
+                            host.GetApp(), host.GetWindow(), false,
+                            resolving[1]);
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    if (!task) {
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowRangeError(ctx, "the runtime reached its outstanding host task limit");
+    }
+    job->control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->control);
+    job->task = task;
+    ShellTask* shellTask = FindTask(impl, task);
+    shellTask->fsJob = job;
+    if (!ExecSpawn(MkFunc0(FsJobWork, job), MkFunc0(FsJobDone, job))) {
+        shellTask->fsJob = nullptr;
+        ForgetTask(impl, task, false);
+        ControlRelease(job->control);
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowInternalError(ctx, "filesystem operation could not start background work");
+    }
+    return promise;
+}
+
+static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    Arena* arena = ArenaNew();
+    Str command;
+    bool converted = argc >= 1 && JsString(ctx, argv[0], arena, &command);
+    bool release = false;
+    Policy* policy = CurrentPolicy(&release);
+    bool allowed = converted && PolicyCapabilities(policy).MayRun(command);
+    if (release) PolicyRelease(policy);
+    if (converted && !allowed) {
+        JSValue result = JS_ThrowTypeError(
+            ctx, "running `%.*s` is not granted; add it to capabilities.fs.execute",
+            command.len, command.s);
+        ArenaDelete(arena);
+        return result;
+    }
+    if (!converted) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx, "process.run() needs a live host task");
+    }
+
+    ProcessJob* job = new ProcessJob();
+    job->command = StrDup(command);
+    bool ok = job->command.s != nullptr;
+    int64_t argCount = 0;
+    if (ok && argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+        if (!JS_IsArray(argv[1]) || JS_GetLength(ctx, argv[1], &argCount) < 0) {
+            JS_ThrowTypeError(ctx, "process.run(command, args) expects args to be an array of strings");
+            ok = false;
+        } else if (argCount < 0 || argCount > 4096) {
+            JS_ThrowRangeError(ctx, "process.run(command, args) accepts at most 4096 arguments");
+            ok = false;
+        }
+    }
+    int totalBytes = 0;
+    for (int64_t i = 0; ok && i < argCount; i++) {
+        JSValue value = JS_GetPropertyUint32(ctx, argv[1], (uint32_t)i);
+        Str argument;
+        bool stringOk = !JS_IsException(value) &&
+                        JsString(ctx, value, arena, &argument);
+        JS_FreeValue(ctx, value);
+        if (!stringOk) {
+            ok = false;
+            break;
+        }
+        if (argument.len > 1024 * 1024 - totalBytes) {
+            JS_ThrowRangeError(ctx, "process.run arguments exceed the 1 MiB limit");
+            ok = false;
+            break;
+        }
+        Str copy = StrDup(argument);
+        if (!copy.s || !job->args.Append(copy)) {
+            StrFree(copy);
+            JS_ThrowOutOfMemory(ctx);
+            ok = false;
+            break;
+        }
+        totalBytes += argument.len;
+    }
+    ArenaDelete(arena);
+    if (!ok) {
+        job->Free();
+        delete job;
+        return JS_EXCEPTION;
+    }
+
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (JS_IsException(promise)) {
+        job->Free();
+        delete job;
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t task = NewTask(impl, ShellTaskKind::Process, resolving[0],
+                            host.GetApp(), host.GetWindow(), false,
+                            resolving[1]);
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    if (!task) {
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowRangeError(ctx, "the runtime reached its outstanding host task limit");
+    }
+    job->control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->control);
+    job->task = task;
+    ShellTask* shellTask = FindTask(impl, task);
+    shellTask->processJob = job;
+    if (!ExecSpawn(MkFunc0(ProcessJobWork, job),
+                   MkFunc0(ProcessJobDone, job))) {
+        shellTask->processJob = nullptr;
+        ForgetTask(impl, task, false);
+        ControlRelease(job->control);
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowInternalError(ctx, "process.run could not start background work");
+    }
+    return promise;
+}
+
+static JSValue NativeProcessExit(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    int32_t code = 0;
+    if (argc > 0 && JS_ToInt32(ctx, &code, argv[0]) < 0) return JS_EXCEPTION;
+    bool release = false;
+    Policy* policy = CurrentPolicy(&release);
+    bool allowed = PolicyCapabilities(policy).MayExit();
+    if (release) PolicyRelease(policy);
+    if (!allowed) {
+        return JS_ThrowTypeError(ctx, "process.exit() is not granted; set capabilities.process.exit to true");
+    }
+    if (!gShellExitHandler) {
+        return JS_ThrowInternalError(ctx, "process.exit() is granted but the host installed no ShellOnExitRequest handler");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "process.exit() needs a live host call");
+    Ctx native = {};
+    native.app = host.GetApp();
+    native.win = host.GetWindow();
+    native.a = host.GetWindow()->frameArena;
+    native.self = shell::ScopeCurrentView();
+    ShellExitRequest request = {code, native.self};
+    gShellExitHandler(request, &native);
+    return JS_UNDEFINED;
+}
+
 static void SetGlobalFunction(JSContext* ctx, JSValueConst global,
                               const char* name, JSCFunction* function,
                               int length) {
@@ -1743,10 +2891,258 @@ globalThis.__gpui = (() => {
   globalThis.__initialize = (instance, cx) => {
     if (typeof instance.init === "function") instance.init(undefined, cx);
   };
+  const taskHandle = (id) => Object.freeze({
+    cancel: () => __task_cancel(id),
+    is_done: () => __task_is_done(id),
+  });
+  let ambientContext;
+  const spawn = (body, options) => {
+    if (typeof body !== "function") throw new TypeError("cx.spawn(fn) expects a function");
+    const id = __task_new(options);
+    let started;
+    try {
+      started = body(ambientContext);
+    } catch (error) {
+      __task_reject(id, error);
+      return taskHandle(id);
+    }
+    Promise.resolve(started).then(
+      () => __task_finish(id),
+      (error) => __task_reject(id, error),
+    );
+    return taskHandle(id);
+  };
+  const timer = Object.freeze({
+    after: (ms, handler, options) => taskHandle(__timer_after(Number(ms), handler, options)),
+    every: (ms, handler, options) => taskHandle(__timer_every(Number(ms), handler, options)),
+  });
+  const storage = (session) => {
+    const object = {
+      key: (index) => Number.isInteger(index) && index >= 0 ? __storage_key(index, session) : null,
+      getItem: (key) => __storage_get(String(key), session),
+      setItem: (key, value) => __storage_set(String(key), String(value), session),
+      removeItem: (key) => __storage_remove(String(key), session),
+      clear: () => __storage_clear(session),
+      flush: () => __storage_flush(session),
+    };
+    Object.defineProperty(object, "length", { get: () => __storage_length(session) });
+    return Object.freeze(object);
+  };
+  const localStorage = storage(false);
+  const sessionStorage = storage(true);
   globalThis.__context = (generation) => Object.freeze({
     notify: () => __cx_notify(generation),
     focus_handle: () => focusHandle(__focus_handle_new()),
+    sleep: (ms = 0) => __sleep(Number(ms)),
+    spawn,
+    timer,
+    read_from_clipboard: () => __clipboard_read_text(),
+    write_to_clipboard: (text) => __clipboard_write_text(String(text)),
   });
+  ambientContext = Object.freeze({
+    notify: () => __cx_notify_current(),
+    focus_handle: () => focusHandle(__focus_handle_new()),
+    sleep: (ms = 0) => __sleep(Number(ms)),
+    spawn,
+    timer,
+    read_from_clipboard: () => __clipboard_read_text(),
+    write_to_clipboard: (text) => __clipboard_write_text(String(text)),
+  });
+  globalThis.__ambient_context = ambientContext;
+  globalThis.window = Object.freeze({ localStorage, sessionStorage });
+  globalThis.localStorage = localStorage;
+  globalThis.sessionStorage = sessionStorage;
+)JS"
+R"JS(
+  globalThis.console = Object.freeze({
+    log: (...args) => __console_log(...args),
+    debug: (...args) => __console_debug(...args),
+    info: (...args) => __console_info(...args),
+    warn: (...args) => __console_warn(...args),
+    error: (...args) => __console_error(...args),
+  });
+  globalThis.__shell_fs_dirent = (name, directory) => Object.freeze({
+    name,
+    isDirectory: () => directory,
+  });
+  globalThis.__shell_fs = Object.freeze({
+    readFile: (path, encoding) => __fs_read(path, encoding),
+    writeFile: (path, contents) => __fs_write(path, contents),
+    readdir: (path, options) => __fs_readdir(path, options),
+    exists: (path) => __fs_exists(path),
+    unlink: (path) => __fs_unlink(path),
+    rmdir: (path) => __fs_rmdir(path),
+    mkdir: (path, options) => __fs_mkdir(path, options),
+  });
+
+  const utf8Encode = (text) => {
+    const encoded = encodeURIComponent(String(text));
+    const bytes = [];
+    for (let i = 0; i < encoded.length; i++) {
+      if (encoded[i] === "%") {
+        bytes.push(parseInt(encoded.slice(i + 1, i + 3), 16));
+        i += 2;
+      } else bytes.push(encoded.charCodeAt(i));
+    }
+    return bytes;
+  };
+  const utf8Decode = (bytes) => {
+    let encoded = "";
+    for (const byte of bytes) encoded += byte < 128 && byte !== 37
+      ? String.fromCharCode(byte)
+      : "%" + byte.toString(16).padStart(2, "0");
+    return decodeURIComponent(encoded);
+  };
+  const b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const base64Encode = (bytes) => {
+    let out = "";
+    for (let i = 0; i < bytes.length; i += 3) {
+      const a = bytes[i], b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+      const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+      out += b64chars[a >> 2] + b64chars[((a & 3) << 4) | (b >> 4)] +
+        (i + 1 < bytes.length ? b64chars[((b & 15) << 2) | (c >> 6)] : "=") +
+        (i + 2 < bytes.length ? b64chars[c & 63] : "=");
+    }
+    return out;
+  };
+  const base64Decode = (text) => {
+    const clean = String(text).replace(/\s/g, "");
+    const out = [];
+    for (let i = 0; i < clean.length; i += 4) {
+      const a = b64chars.indexOf(clean[i]), b = b64chars.indexOf(clean[i + 1]);
+      const c = clean[i + 2] === "=" ? 0 : b64chars.indexOf(clean[i + 2]);
+      const d = clean[i + 3] === "=" ? 0 : b64chars.indexOf(clean[i + 3]);
+      if (a < 0 || b < 0 || c < 0 || d < 0) throw new TypeError("invalid base64");
+      out.push((a << 2) | (b >> 4));
+      if (clean[i + 2] !== "=") out.push(((b & 15) << 4) | (c >> 2));
+      if (clean[i + 3] !== "=") out.push(((c & 3) << 6) | d);
+    }
+    return out;
+  };
+  class Buffer extends Uint8Array {
+    static from(value, encoding = "utf8") {
+      if (typeof value === "string") {
+        const bytes = encoding === "hex"
+          ? (value.match(/../g) ?? []).map(part => parseInt(part, 16))
+          : encoding === "base64" ? base64Decode(value) : utf8Encode(value);
+        return new Buffer(bytes);
+      }
+      return new Buffer(value instanceof ArrayBuffer ? new Uint8Array(value) : value);
+    }
+    static alloc(size, fill = 0) { const out = new Buffer(Number(size)); out.fill(fill); return out; }
+    static allocUnsafe(size) { return new Buffer(Number(size)); }
+    static isBuffer(value) { return value instanceof Buffer; }
+    static byteLength(value, encoding) { return Buffer.from(value, encoding).length; }
+    static concat(values, length) {
+      const size = length == null ? values.reduce((sum, value) => sum + value.length, 0) : Number(length);
+      const out = Buffer.alloc(size); let at = 0;
+      for (const value of values) { out.set(value.subarray(0, size - at), at); at += value.length; if (at >= size) break; }
+      return out;
+    }
+    toString(encoding = "utf8", start = 0, end = this.length) {
+      const bytes = this.subarray(start, end);
+      if (encoding === "hex") return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+      if (encoding === "base64") return base64Encode(bytes);
+      return utf8Decode(bytes);
+    }
+  }
+  globalThis.Buffer = Buffer;
+  globalThis.__shell_buffer = Object.freeze({ Buffer });
+)JS"
+R"JS(
+  const pathSep = __shell_is_windows ? "\\" : "/";
+  const pathDelimiter = __shell_is_windows ? ";" : ":";
+  const pathParts = (value) => String(value).replace(/\\/g, "/").split("/");
+  const pathNormalize = (value) => {
+    value = String(value);
+    const slash = value.replace(/\\/g, "/");
+    const drive = __shell_is_windows && slash.length >= 2 && slash[1] === ":" ? slash.slice(0, 2) : "";
+    const absolute = slash.startsWith("/") || drive !== "";
+    const out = [];
+    for (const part of pathParts(drive ? slash.slice(2) : slash)) {
+      if (!part || part === ".") continue;
+      if (part === "..") { if (out.length && out[out.length - 1] !== "..") out.pop(); else if (!absolute) out.push(part); }
+      else out.push(part);
+    }
+    let result = (drive ? drive + "/" : absolute ? "/" : "") + out.join("/");
+    if (!result) result = absolute ? "/" : ".";
+    return __shell_is_windows ? result.replace(/\//g, "\\") : result;
+  };
+  const pathApi = {
+    sep: pathSep, delimiter: pathDelimiter,
+    normalize: pathNormalize,
+    isAbsolute: (value) => { const text = String(value); return text.startsWith("/") || text.startsWith("\\") || (__shell_is_windows && text.length > 2 && text[1] === ":"); },
+    join: (...values) => pathNormalize(values.filter(value => String(value).length).join(pathSep)),
+    resolve: (...values) => pathNormalize(values.join(pathSep)),
+    basename: (value, suffix = "") => { const parts = pathParts(value).filter(Boolean); let name = parts.pop() ?? ""; suffix = String(suffix); if (suffix && name.endsWith(suffix)) name = name.slice(0, -suffix.length); return name; },
+    dirname: (value) => { const text = pathNormalize(value); const at = Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\")); return at < 0 ? "." : at === 0 ? pathSep : text.slice(0, at); },
+    extname: (value) => { const name = pathApi.basename(value); const at = name.lastIndexOf("."); return at <= 0 ? "" : name.slice(at); },
+    relative: (from, to) => {
+      const a = pathParts(pathNormalize(from)).filter(Boolean), b = pathParts(pathNormalize(to)).filter(Boolean);
+      let same = 0; while (same < a.length && same < b.length && a[same].toLowerCase() === b[same].toLowerCase()) same++;
+      return [...a.slice(same).map(() => ".."), ...b.slice(same)].join(pathSep) || "";
+    },
+    parse: (value) => { const dir = pathApi.dirname(value), base = pathApi.basename(value), ext = pathApi.extname(value); return { root: pathApi.isAbsolute(value) ? pathSep : "", dir, base, ext, name: ext ? base.slice(0, -ext.length) : base }; },
+    format: (parts) => (parts.dir || parts.root || "") + ((parts.dir || parts.root) ? pathSep : "") + (parts.base || ((parts.name || "") + (parts.ext || ""))),
+  };
+  globalThis.__shell_path = Object.freeze(pathApi);
+)JS"
+R"JS(
+  class URLSearchParams {
+    constructor(value = "") { this.items = []; const text = String(value).replace(/^\?/, ""); if (text) for (const part of text.split("&")) { const at = part.indexOf("="); this.append(decodeURIComponent(at < 0 ? part : part.slice(0, at)), decodeURIComponent(at < 0 ? "" : part.slice(at + 1))); } }
+    append(key, value) { this.items.push([String(key), String(value)]); }
+    get(key) { const found = this.items.find(item => item[0] === String(key)); return found ? found[1] : null; }
+    getAll(key) { return this.items.filter(item => item[0] === String(key)).map(item => item[1]); }
+    has(key) { return this.items.some(item => item[0] === String(key)); }
+    set(key, value) { this.delete(key); this.append(key, value); }
+    delete(key) { key = String(key); this.items = this.items.filter(item => item[0] !== key); }
+    toString() { return this.items.map(item => encodeURIComponent(item[0]) + "=" + encodeURIComponent(item[1])).join("&"); }
+    *entries() { yield* this.items; }
+    [Symbol.iterator]() { return this.entries(); }
+  }
+  class URL {
+    constructor(input, base) {
+      let text = String(input);
+      if (base && !text.includes(":")) text = String(base).replace(/[^/]*$/, "") + text;
+      const scheme = text.indexOf(":");
+      if (scheme <= 0) throw new TypeError("invalid URL");
+      this.protocol = text.slice(0, scheme + 1);
+      let rest = text.slice(scheme + 1), authority = "";
+      if (rest.startsWith("//")) { rest = rest.slice(2); const end = rest.search(/[\/#?]/); authority = end < 0 ? rest : rest.slice(0, end); rest = end < 0 ? "" : rest.slice(end); }
+      const hashAt = rest.indexOf("#"); this.hash = hashAt < 0 ? "" : rest.slice(hashAt); if (hashAt >= 0) rest = rest.slice(0, hashAt);
+      const searchAt = rest.indexOf("?"); this.search = searchAt < 0 ? "" : rest.slice(searchAt); this.pathname = searchAt < 0 ? rest : rest.slice(0, searchAt);
+      this.pathname ||= "/"; this.host = authority; const portAt = authority.lastIndexOf(":"); this.hostname = portAt > 0 ? authority.slice(0, portAt) : authority; this.port = portAt > 0 ? authority.slice(portAt + 1) : "";
+      this.searchParams = new URLSearchParams(this.search);
+    }
+    get origin() { return this.protocol + "//" + this.host; }
+    get href() { const query = this.searchParams.toString(); return this.protocol + (this.host ? "//" + this.host : "") + this.pathname + (query ? "?" + query : "") + this.hash; }
+    set href(value) { const parsed = new URL(value); Object.assign(this, parsed); }
+    toString() { return this.href; }
+    toJSON() { return this.href; }
+  }
+  const urlApi = {
+    URL, URLSearchParams,
+    pathToFileURL: (path) => new URL("file://" + (__shell_is_windows ? "/" : "") + String(path).replace(/\\/g, "/")),
+    fileURLToPath: (url) => { const parsed = url instanceof URL ? url : new URL(url); if (parsed.protocol !== "file:") throw new TypeError("URL is not file:"); const path = decodeURIComponent(parsed.pathname); return __shell_is_windows ? path.replace(/^\//, "").replace(/\//g, "\\") : path; },
+  };
+  globalThis.URL = URL;
+  globalThis.URLSearchParams = URLSearchParams;
+  globalThis.__shell_url = Object.freeze(urlApi);
+
+  globalThis.__shell_os = Object.freeze({
+    platform: () => __shell_platform,
+    arch: () => __shell_arch,
+    EOL: __shell_is_windows ? "\r\n" : "\n",
+  });
+  globalThis.process = Object.freeze({
+    run: (...args) => __process_run(...args),
+    nextTick: (callback, ...args) => Promise.resolve().then(() => callback(...args)),
+    exit: (code = 0) => __process_exit(Number(code)),
+    platform: __shell_platform,
+    arch: __shell_arch,
+  });
+)JS"
+R"JS(
   const component = (kind, text, handle, index) =>
     element(__component(kind, text, handle, index));
   const named = (kind) => ({ new: (id) => component(kind, String(id)) });
@@ -1823,6 +3219,10 @@ globalThis.__gpui = (() => {
     v_flex: () => component("v_flex"),
     svg: (path) => component("svg", String(path)),
     image: (path) => component("image", String(path)),
+    with_cx: (body) => {
+      if (typeof body !== "function") throw new TypeError("with_cx(fn) expects a function");
+      return body(ambientContext);
+    },
     PathBuilder: Object.freeze({}),
     Background: Object.freeze({ solid: (color) => String(color) }),
     Button: named("Button"), Link: named("Link"),
@@ -1861,14 +3261,136 @@ globalThis.__gpui = (() => {
 })();
 )JS";
 
+static const char kSandbox[] = R"JS(
+(() => {
+  const unavailable = (name, hint) => function () {
+    throw new TypeError("`" + name + "` is not available in the shell: " + hint);
+  };
+  for (const [name, hint] of [
+    ["setTimeout", "use cx.timer.after(ms, callback)"],
+    ["setInterval", "use cx.timer.every(ms, callback)"],
+    ["clearTimeout", "cancel the handle returned by cx.timer.after"],
+    ["clearInterval", "cancel the handle returned by cx.timer.every"],
+    ["require", "this runtime uses ES modules; use `import`"],
+  ]) {
+    if (!(name in globalThis)) globalThis[name] = unavailable(name, hint);
+  }
+  const hint = "the shell sandbox withholds dynamic code; enable development mode to allow it";
+  const deny = (label) => function () {
+    throw new TypeError(label + " is disabled: " + hint);
+  };
+  const replaceConstructor = (holder, value) => {
+    Object.defineProperty(Object.getPrototypeOf(holder), "constructor", {
+      value, writable: true, enumerable: false, configurable: true,
+    });
+  };
+  const blocked = deny("the Function constructor");
+  blocked.prototype = Function.prototype;
+  replaceConstructor(function () {}, blocked);
+  replaceConstructor(async function () {}, deny("the AsyncFunction constructor"));
+  replaceConstructor(function* () {}, deny("the GeneratorFunction constructor"));
+  replaceConstructor(async function* () {}, deny("the AsyncGeneratorFunction constructor"));
+  globalThis.Function = blocked;
+  delete globalThis.eval;
+  for (const proto of [Object.prototype, Array.prototype, Function.prototype,
+                       String.prototype, Number.prototype]) Object.freeze(proto);
+})();
+)JS";
+
 static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     JSValue global = JS_GetGlobalObject(impl->context);
+#if GPUI_OS_WINDOWS
+    const char* platform = "windows";
+#elif GPUI_OS_MAC
+    const char* platform = "macos";
+#elif GPUI_OS_WASM
+    const char* platform = "emscripten";
+#else
+    const char* platform = "linux";
+#endif
+#if defined(_M_ARM64) || defined(__aarch64__)
+    const char* architecture = "aarch64";
+#elif defined(__wasm32__)
+    const char* architecture = "wasm32";
+#elif defined(_M_IX86) || defined(__i386__)
+    const char* architecture = "x86";
+#else
+    const char* architecture = "x86_64";
+#endif
+    JS_SetPropertyStr(impl->context, global, "__shell_is_windows",
+                      JS_NewBool(impl->context, GPUI_OS_WINDOWS));
+    JS_SetPropertyStr(impl->context, global, "__shell_platform",
+                      JS_NewString(impl->context, platform));
+    JS_SetPropertyStr(impl->context, global, "__shell_arch",
+                      JS_NewString(impl->context, architecture));
     SetGlobalFunction(impl->context, global, "__component", NativeComponent, 4);
     SetGlobalFunction(impl->context, global, "__attach", NativeAttach, 2);
     SetGlobalFunction(impl->context, global, "__state", NativeState, 2);
     SetGlobalFunction(impl->context, global, "__slot", NativeSlot, 3);
     SetGlobalFunction(impl->context, global, "__apply", NativeApply, 3);
     SetGlobalFunction(impl->context, global, "__cx_notify", NativeNotify, 1);
+    SetGlobalFunction(impl->context, global, "__cx_notify_current",
+                      NativeNotifyCurrent, 0);
+    SetGlobalFunction(impl->context, global, "__task_new", NativeTaskNew, 1);
+    SetGlobalFunction(impl->context, global, "__task_finish",
+                      NativeTaskFinish, 1);
+    SetGlobalFunction(impl->context, global, "__task_reject",
+                      NativeTaskReject, 2);
+    SetGlobalFunction(impl->context, global, "__task_cancel",
+                      NativeTaskCancel, 1);
+    SetGlobalFunction(impl->context, global, "__task_is_done",
+                      NativeTaskIsDone, 1);
+    SetGlobalFunction(impl->context, global, "__sleep", NativeSleep, 1);
+    SetGlobalMagicFunction(impl->context, global, "__timer_after",
+                           NativeTimer, 3, 0);
+    SetGlobalMagicFunction(impl->context, global, "__timer_every",
+                           NativeTimer, 3, 1);
+    SetGlobalFunction(impl->context, global, "__storage_get",
+                      NativeStorageGet, 2);
+    SetGlobalFunction(impl->context, global, "__storage_set",
+                      NativeStorageSet, 3);
+    SetGlobalFunction(impl->context, global, "__storage_remove",
+                      NativeStorageRemove, 2);
+    SetGlobalFunction(impl->context, global, "__storage_clear",
+                      NativeStorageClear, 1);
+    SetGlobalFunction(impl->context, global, "__storage_length",
+                      NativeStorageLength, 1);
+    SetGlobalFunction(impl->context, global, "__storage_key",
+                      NativeStorageKey, 2);
+    SetGlobalFunction(impl->context, global, "__storage_flush",
+                      NativeStorageFlush, 1);
+    SetGlobalMagicFunction(impl->context, global, "__clipboard_read_text",
+                           NativeClipboard, 0, 0);
+    SetGlobalMagicFunction(impl->context, global, "__clipboard_write_text",
+                           NativeClipboard, 1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__console_log",
+                           NativeConsole, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__console_debug",
+                           NativeConsole, 1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__console_info",
+                           NativeConsole, 1, 2);
+    SetGlobalMagicFunction(impl->context, global, "__console_warn",
+                           NativeConsole, 1, 3);
+    SetGlobalMagicFunction(impl->context, global, "__console_error",
+                           NativeConsole, 1, 4);
+    SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
+                           (int)shell::FsOperation::Read);
+    SetGlobalMagicFunction(impl->context, global, "__fs_write", NativeFs, 2,
+                           (int)shell::FsOperation::Write);
+    SetGlobalMagicFunction(impl->context, global, "__fs_readdir", NativeFs,
+                           2, (int)shell::FsOperation::ReadDirectory);
+    SetGlobalMagicFunction(impl->context, global, "__fs_exists", NativeFs, 1,
+                           (int)shell::FsOperation::Exists);
+    SetGlobalMagicFunction(impl->context, global, "__fs_unlink", NativeFs, 1,
+                           (int)shell::FsOperation::RemoveFile);
+    SetGlobalMagicFunction(impl->context, global, "__fs_rmdir", NativeFs, 1,
+                           (int)shell::FsOperation::RemoveDirectory);
+    SetGlobalMagicFunction(impl->context, global, "__fs_mkdir", NativeFs, 2,
+                           (int)shell::FsOperation::MakeDirectory);
+    SetGlobalFunction(impl->context, global, "__process_run",
+                      NativeProcessRun, 2);
+    SetGlobalFunction(impl->context, global, "__process_exit",
+                      NativeProcessExit, 1);
     SetGlobalFunction(impl->context, global, "__input_state_new",
                       NativeInputStateNew, 2);
     SetGlobalFunction(impl->context, global, "__textarea_state_new",
@@ -1963,6 +3485,13 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                              "<gpui-shell prelude>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) return CaptureException(impl, error);
     JS_FreeValue(impl->context, result);
+    if (!ShellDevelopmentMode()) {
+        BeginExecution(impl);
+        result = JS_Eval(impl->context, kSandbox, sizeof(kSandbox) - 1,
+                         "<gpui-shell sandbox>", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(result)) return CaptureException(impl, error);
+        JS_FreeValue(impl->context, result);
+    }
     return true;
 }
 
@@ -1972,6 +3501,16 @@ ShellRuntime::~ShellRuntime() {
     if (control) control->runtime = nullptr;
     if (impl) {
         if (impl->context) {
+            for (int i = impl->tasks.len - 1; i >= 0; i--) {
+                DestroyTask(impl, impl->tasks[i], true);
+            }
+            impl->tasks.Reset();
+            if (impl->taskDriver.IsValid() && impl->taskApp) {
+                ShellTaskDriver* driver = impl->taskDriver.Get(impl->taskApp);
+                if (driver) driver->runtime = nullptr;
+                EntityDrop(impl->taskApp, impl->taskDriver.id);
+                impl->taskDriver = {};
+            }
             Vec<shell::CallbackId> retired;
             impl->retained.Clear(&retired);
             for (int i = 0; i < retired.len; i++) {
@@ -2042,6 +3581,8 @@ void ShellRuntime::Release() {
 static ViewType* LoadModule(ShellRuntime* runtime, Str name, Str source,
                             AppModule* application, ShellError* error) {
     ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    shell::CallScopeGuard scope = shell::ScopeEnter(
+        nullptr, nullptr, ScopePhase::Task, {}, nullptr, runtime, application);
     BeginExecution(impl);
     JSValue module = JS_Eval(
         impl->context, source.s, (size_t)source.len, name.s,
@@ -2314,6 +3855,8 @@ int ShellRuntime::LiveCallbacks() const { return impl->callbacks.Live(); }
 
 int ShellRuntime::LiveEntities() const { return impl->retained.Len(); }
 
+int ShellRuntime::LiveTasks() const { return impl->tasks.len; }
+
 shell::RetainedEntry* ShellRuntime::Retained(
     shell::EntityHandle handle) const {
     return impl->retained.Find(handle);
@@ -2347,12 +3890,64 @@ void ShellRuntime::InvalidateScriptView(EntityId view) {
 }
 
 void ShellRuntime::ReleaseOwnedEntities(EntityId view) {
+    for (int i = impl->tasks.len - 1; i >= 0; i--) {
+        if (impl->tasks[i]->owner == view) {
+            ForgetTask(impl, impl->tasks[i]->id);
+        }
+    }
     Vec<shell::CallbackId> callbacks;
     impl->retained.ReleaseOwner(view, &callbacks);
     for (int i = 0; i < callbacks.len; i++) {
         impl->callbacks.RetireId(impl->context, callbacks[i]);
     }
     callbacks.Reset();
+}
+
+void ShellRuntime::ResumeTask(uint32_t id, Ctx* cx) {
+    if (!cx || !cx->app || !cx->win) return;
+    ShellTask* task = FindTask(impl, id);
+    if (!task || task->kind == ShellTaskKind::Spawn) return;
+    if (task->owner.IsValid() && !EntityGet(cx->app, task->owner)) {
+        ForgetTask(impl, id, false);
+        return;
+    }
+
+    ShellTaskKind kind = task->kind;
+    EntityId owner = task->owner;
+    Policy* policy = PolicyRetain(task->policy);
+    AppModule* application = task->application;
+    JSValue callback = JS_DupValue(impl->context, task->callback);
+    bool repeating = kind == ShellTaskKind::TimerEvery;
+    if (!repeating) ForgetTask(impl, id, false);
+
+    shell::CallScopeGuard scope = shell::ScopeEnter(
+        cx->win, cx->app, ScopePhase::Task, owner, policy, this, application);
+    PolicyRelease(policy);
+    JSValue result = JS_UNDEFINED;
+    if (kind == ShellTaskKind::Sleep) {
+        result = JS_Call(impl->context, callback, JS_UNDEFINED, 0, nullptr);
+    } else {
+        JSValue global = JS_GetGlobalObject(impl->context);
+        JSValue ambient = JS_GetPropertyStr(impl->context, global,
+                                             "__ambient_context");
+        result = JS_Call(impl->context, callback, JS_UNDEFINED, 1, &ambient);
+        JS_FreeValue(impl->context, ambient);
+        JS_FreeValue(impl->context, global);
+    }
+    JS_FreeValue(impl->context, callback);
+    if (JS_IsException(result)) {
+        Arena* arena = ArenaNew();
+        log(ExceptionText(arena, impl->context));
+        ArenaDelete(arena);
+    } else {
+        JS_FreeValue(impl->context, result);
+    }
+    ShellError error = {};
+    DrainJobs(kMaxJobBatch, &error);
+    if (error.IsSet()) {
+        log(error.message);
+        ShellErrorClear(&error);
+    }
 }
 
 static JSValue ContextObject(ShellRuntimeImpl* impl, uint64_t generation) {

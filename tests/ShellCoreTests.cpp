@@ -4,6 +4,9 @@
 #include "Test.h"
 
 #include <stdio.h>
+#if !GPUI_OS_WINDOWS
+#include <unistd.h>
+#endif
 
 using namespace gpui::shell;
 
@@ -718,6 +721,311 @@ static void VirtualListsRenderOneVisibleBatch() {
     AppGlobalClear(&app);
 }
 
+static void ShellSandboxWithholdsCompilersAndSharedPrototypeWrites() {
+    ShellError error = {};
+    ShellSetDevelopmentMode(false);
+    ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
+    utassert(runtime != nullptr && !error.IsSet());
+    utassert(runtime && runtime->Eval(
+        StrL("if (typeof eval !== 'undefined' || !Object.isFrozen(Object.prototype) || "
+             "typeof std !== 'undefined') throw new Error('sandbox surface is open')"),
+        StrL("sandbox-check.js"), &error));
+    utassert(runtime && !runtime->Eval(
+        StrL("new Function('return 1')()"), StrL("sandbox-function.js"),
+        &error));
+    utassert(error.IsSet() && StrContains(error.message, StrL("disabled")));
+    ShellErrorClear(&error);
+    if (runtime) runtime->Release();
+
+    ShellSetDevelopmentMode(true);
+    runtime = ShellRuntime::New(nullptr, &error);
+    utassert(runtime && runtime->Eval(
+        StrL("if (eval('1 + 1') !== 2 || Function('return 3')() !== 3) "
+             "throw new Error('development compiler missing')"),
+        StrL("development-mode.js"), &error));
+    if (runtime) runtime->Release();
+    ShellSetDevelopmentMode(false);
+    ShellErrorClear(&error);
+}
+
+static void ShellSchedulerResumesPromisesInTaskScope() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "globalThis.taskEvents = 0;\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) {\n"
+        "    this.once = cx.timer.after(1, cx => { taskEvents += 1; cx.notify(); });\n"
+        "    globalThis.every = cx.timer.every(1, () => { taskEvents += 10; });\n"
+        "    cx.sleep(1).then(() => { taskEvents += 100; });\n"
+        "    cx.spawn(async cx => { await cx.sleep(1); taskEvents += 1000; cx.notify(); });\n"
+        "  }\n"
+        "  render(cx) { return div().child(String(taskEvents)); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("scheduler.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(runtime && runtime->LiveTasks() == 5);
+    for (int i = 0; i < window.timers.len; i++) window.timers[i].dueAt = 0;
+    WindowTimerTick(&window);
+    utassert(runtime->Eval(
+        StrL("if (taskEvents !== 1111) throw new Error('task resumptions were not drained')"),
+        StrL("scheduler-result.js"), &error));
+    utassert(runtime->LiveTasks() == 1);
+    utassert(runtime->Eval(StrL("globalThis.every.cancel()"),
+                           StrL("scheduler-cancel.js"), &error));
+    utassert(runtime->LiveTasks() == 0);
+    EntityDrop(&app, view.id);
+    window.timers.Reset();
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void ShellStorageAndAuthorityFreeModulesWork() {
+    const char* storagePath = "shell_storage_test.json";
+    remove(storagePath);
+    Capabilities granted;
+    granted.Storage(true);
+    PolicyUpdateDefaultCapabilities(granted);
+    Str storageError;
+    utassert(ShellSetStoragePath(Str(storagePath), &storageError));
+    utassert(!storageError);
+
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
+    utassert(runtime != nullptr && !error.IsSet());
+    utassert(runtime && runtime->Eval(
+        StrL("sessionStorage.setItem('temporary', 'yes');"
+             "localStorage.setItem('theme', 'dark');"
+             "if (sessionStorage.getItem('temporary') !== 'yes' || "
+             "localStorage.getItem('theme') !== 'dark' || localStorage.length !== 1) "
+             "throw new Error('storage did not round trip')"),
+        StrL("storage.js"), &error));
+
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { Buffer } from 'buffer';\n"
+        "import path from 'path';\n"
+        "import { URL } from 'url';\n"
+        "import os from 'os';\n"
+        "if (Buffer.from('hello').toString('hex') !== '68656c6c6f') throw new Error('buffer');\n"
+        "if (path.basename(path.join('a', 'b.txt')) !== 'b.txt') throw new Error('path');\n"
+        "if (new URL('https://example.com/a?q=1').searchParams.get('q') !== '1') throw new Error('url');\n"
+        "if (typeof os.platform() !== 'string' || !os.EOL) throw new Error('os');\n"
+        "export default class Main extends View { render(cx) { return div().child('standard'); } }\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("standard-modules.js"),
+                                               source, &error)
+                         : nullptr;
+    utassert(type != nullptr && !error.IsSet());
+    ViewTypeRelease(type);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    StrFree(storageError);
+
+    FILE* stored = fopen(storagePath, "rb");
+    utassert(stored != nullptr);
+    if (stored) fclose(stored);
+    remove(storagePath);
+    Capabilities denied;
+    PolicyUpdateDefaultCapabilities(denied);
+}
+
+static void ShellProcessRunIsBoundedAndPromiseBased() {
+#if GPUI_OS_WINDOWS
+    Str args[] = {StrL("/D"), StrL("/C"),
+                  StrL("echo out & echo err 1>&2 & exit /B 7")};
+    ProcessCancellation cancellation;
+    ProcessOutput output;
+    Str processError;
+    utassert(ProcessRunBounded(StrL("cmd.exe"), args, 3, &cancellation,
+                               &output, &processError));
+    utassert(!processError && output.code == 7);
+    utassert(StrEq(StrTrimAscii(output.out), "out") &&
+             StrEq(StrTrimAscii(output.err), "err"));
+    output.Free();
+    StrFree(processError);
+
+    App app;
+    Window window;
+    window.app = &app;
+    app.windows.Append(&window);
+    component::Init(&app);
+    ExecInit();
+    Str commands[] = {StrL("cmd.exe")};
+    ExecuteGrant execute = ExecuteGrant::Allowed(commands, 1);
+    Capabilities granted;
+    granted.SetExecute(execute);
+    PolicyUpdateDefaultCapabilities(granted);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import process from 'process';\n"
+        "globalThis.processResult = 'pending';\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { cx.spawn(async cx => {\n"
+        "    const result = await process.run('cmd.exe', ['/D', '/C', 'echo jsout & echo jserr 1>&2 & exit /B 9']);\n"
+        "    processResult = `${result.code}|${result.stdout.trim()}|${result.stderr.trim()}`; cx.notify();\n"
+        "  }); }\n"
+        "  render(cx) { return div().child(processResult); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("process-run.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(ExecWaitIdle(5000));
+    utassert(runtime && runtime->Eval(
+        StrL("if (processResult !== '9|jsout|jserr') throw new Error(processResult)"),
+        StrL("process-result.js"), &error));
+    utassert(runtime && runtime->LiveTasks() == 0);
+    EntityDrop(&app, view.id);
+    app.windows.len = 0;
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+    Capabilities denied;
+    PolicyUpdateDefaultCapabilities(denied);
+#endif
+}
+
+static void ShellFilesystemUsesGrantedHandleRelativePaths() {
+    const char* rootName = "shell_fs_test_root";
+#if GPUI_OS_WINDOWS
+    RemoveDirectoryA(rootName);
+#else
+    rmdir(rootName);
+#endif
+    FsResult result;
+    Str fsError;
+    utassert(FsRun(FsOperation::MakeDirectory, Str(rootName),
+                   StrL("nested/child"), {}, true, &result, &fsError));
+    utassert(FsRun(FsOperation::Write, Str(rootName),
+                   StrL("nested/child/note.txt"), StrL("hello"), false,
+                   &result, &fsError));
+    utassert(FsRun(FsOperation::Read, Str(rootName),
+                   StrL("nested/child/note.txt"), {}, false, &result,
+                   &fsError));
+    utassert(StrEq(result.bytes, "hello"));
+    utassert(FsRun(FsOperation::ReadDirectory, Str(rootName),
+                   StrL("nested/child"), {}, false, &result, &fsError));
+    utassert(result.entries.len == 1 &&
+             StrEq(result.entries[0].name, "note.txt") &&
+             !result.entries[0].isDirectory);
+    utassert(FsRun(FsOperation::Exists, Str(rootName),
+                   StrL("nested/child/note.txt"), {}, false, &result,
+                   &fsError) && result.exists);
+    utassert(FsRun(FsOperation::RemoveFile, Str(rootName),
+                   StrL("nested/child/note.txt"), {}, false, &result,
+                   &fsError));
+    utassert(FsRun(FsOperation::RemoveDirectory, Str(rootName),
+                   StrL("nested/child"), {}, false, &result, &fsError));
+    utassert(FsRun(FsOperation::RemoveDirectory, Str(rootName), StrL("nested"),
+                   {}, false, &result, &fsError));
+    result.Free();
+    StrFree(fsError);
+#if GPUI_OS_WINDOWS
+    utassert(RemoveDirectoryA(rootName) != 0);
+#else
+    utassert(rmdir(rootName) == 0);
+#endif
+
+    const char* jsRoot = "shell_fs_js_test_root";
+#if GPUI_OS_WINDOWS
+    RemoveDirectoryA(jsRoot);
+#else
+    rmdir(jsRoot);
+#endif
+    Capabilities granted;
+    granted.AddReadRoot(Str(jsRoot)).AddWriteRoot(Str(jsRoot));
+    PolicyUpdateDefaultCapabilities(granted);
+    App app;
+    Window window;
+    window.app = &app;
+    app.windows.Append(&window);
+    component::Init(&app);
+    ExecInit();
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import fs from 'fs/promises';\n"
+        "globalThis.fsResult = 'pending';\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { cx.spawn(async cx => {\n"
+        "    await fs.mkdir('nested', { recursive: true });\n"
+        "    await fs.writeFile('nested/note.txt', 'hello');\n"
+        "    const text = await fs.readFile('nested/note.txt', 'utf8');\n"
+        "    const entries = await fs.readdir('nested', { withFileTypes: true });\n"
+        "    const exists = await fs.exists('nested/note.txt');\n"
+        "    fsResult = `${text}|${entries[0].name}|${entries[0].isDirectory()}|${exists}`;\n"
+        "    await fs.unlink('nested/note.txt'); await fs.rmdir('nested'); cx.notify();\n"
+        "  }); }\n"
+        "  render(cx) { return div().child(fsResult); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("filesystem.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(ExecWaitIdle(10000));
+    utassert(runtime && runtime->Eval(
+        StrL("if (fsResult !== 'hello|note.txt|false|true') throw new Error(fsResult)"),
+        StrL("filesystem-result.js"), &error));
+    utassert(runtime && runtime->LiveTasks() == 0);
+    EntityDrop(&app, view.id);
+    app.windows.len = 0;
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+#if GPUI_OS_WINDOWS
+    utassert(RemoveDirectoryA(jsRoot) != 0);
+#else
+    utassert(rmdir(jsRoot) == 0);
+#endif
+    Capabilities denied;
+    PolicyUpdateDefaultCapabilities(denied);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -736,4 +1044,9 @@ void TestShellCore() {
     ScriptViewsReuseSnapshotsUntilNotified();
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();
     VirtualListsRenderOneVisibleBatch();
+    ShellSandboxWithholdsCompilersAndSharedPrototypeWrites();
+    ShellSchedulerResumesPromisesInTaskScope();
+    ShellStorageAndAuthorityFreeModulesWork();
+    ShellProcessRunIsBoundedAndPromiseBased();
+    ShellFilesystemUsesGrantedHandleRelativePaths();
 }

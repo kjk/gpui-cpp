@@ -2,6 +2,7 @@
 #define GPUI_SHELL_POLICY_H_
 
 #include "shell/capability.h"
+#include "shell/storage.h"
 
 namespace gpui {
 
@@ -18,6 +19,9 @@ const Capabilities& PolicyCapabilities(const Policy* policy);
 Policy* PolicyDefault();
 void PolicySetDefault(Policy* policy);
 void PolicyUpdateDefaultCapabilities(const Capabilities& capabilities);
+shell::Storage* PolicyStorage(Policy* policy, bool session);
+bool PolicySetStoragePath(Policy* policy, Str path, Str* error = nullptr);
+bool ShellSetStoragePath(Str path, Str* error = nullptr);
 
 } // namespace gpui
 #endif // GPUI_SHELL_POLICY_H_

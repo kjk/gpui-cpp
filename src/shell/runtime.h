@@ -13,6 +13,7 @@ struct ViewObject;
 struct ShellRuntimeImpl;
 struct ShellRuntimeControl;
 struct ShellRuntimeAccess;
+struct ShellTaskDriver;
 
 class ShellRuntime {
   public:
@@ -41,6 +42,7 @@ class ShellRuntime {
     void RecordMaterialize(uint64_t nanos);
     int LiveCallbacks() const;
     int LiveEntities() const;
+    int LiveTasks() const;
     shell::RetainedEntry* Retained(shell::EntityHandle handle) const;
 
     // ScriptView registers its dirty bit so cx.notify() can invalidate the
@@ -74,7 +76,9 @@ class ShellRuntime {
 
   private:
     friend struct ShellRuntimeAccess;
+    friend struct ShellTaskDriver;
     friend void ShellRuntimeRetireSnapshot(void*, uint64_t);
+    void ResumeTask(uint32_t id, Ctx* cx);
     ShellRuntime();
     ~ShellRuntime();
 
@@ -87,6 +91,15 @@ ViewType* ViewTypeRetain(ViewType* type);
 void ViewTypeRelease(ViewType* type);
 ViewObject* ViewObjectRetain(ViewObject* object);
 void ViewObjectRelease(ViewObject* object);
+void ShellSetDevelopmentMode(bool enabled);
+bool ShellDevelopmentMode();
+
+struct ShellExitRequest {
+    int code = 0;
+    EntityId view = {};
+};
+using ShellExitHandler = void (*)(const ShellExitRequest&, Ctx*);
+void ShellOnExitRequest(ShellExitHandler handler);
 
 } // namespace gpui
 #endif // GPUI_SHELL_RUNTIME_H_
