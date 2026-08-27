@@ -2018,9 +2018,13 @@ static HWND CreateContainerHwnd(HWND parent, const WebViewAttributes* attrs, boo
              (int)GetLastError());
         return nullptr;
     }
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                 SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER |
-                     SWP_NOSIZE);
+    if (!SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                      SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE |
+                          SWP_NOOWNERZORDER | SWP_NOSIZE)) {
+        logf("wry: positioning the webview container failed, error %d\n", (int)GetLastError());
+        DestroyWindow(hwnd);
+        return nullptr;
+    }
     return hwnd;
 }
 

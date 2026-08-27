@@ -9077,3 +9077,8 @@ failures obtaining the event request or URI propagate through COM. Responses
 also use the pinned `http` crate's canonical reason phrase for every standard
 status code rather than labelling all statuses `OK`; a failed response build
 gets the same 400 fallback.
+
+Windows container creation now includes the initial `SetWindowPos` in its
+result, as Wry does. A positioning failure destroys the just-created HWND and
+fails construction instead of continuing with a container at an unknown
+z-order.
