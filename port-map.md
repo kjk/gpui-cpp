@@ -66,6 +66,7 @@ The important non-mechanical mappings are encoded in the audit:
 | `ui/plot/shape/sankey` | `ui/sankey.h`, `ui/plot*` | canonical UI include over the dependency-free `base/sankey*` layout port |
 | `ui/scroll/*` | `ui/scroll*`, integrated `gpui::ScrollRect` | transparent mask/handle siblings collapse onto the renderer-owned viewport; source-shaped builders retain the distinction |
 | `ui/sidebar/*` | `ui/sidebar*` | `SidebarItem` is a POD render function table; menus, groups and the sidebar compose through the same generic item seam |
+| `ui/time/*` | `ui/time*`, `base/calendar*` | themed `Calendar` and `DatePicker` are facades over retained Base calendar state; date/preset payload enums are tagged POD values |
 | `ui/highlighter/*` | `ui/highlighter*`, `ui/syntax*` | one scanner-backed adapter |
 | `ui/text/format/html` | `ui/text*`, `ui/html*` | one handwritten-parser adapter |
 | serde-backed state | `base/json*` | private support, not a Base public module |
@@ -190,6 +191,12 @@ The important non-mechanical mappings are encoded in the audit:
   The content owns a keyed vertical scroll viewport; icon collapse, offcanvas
   release, active and hover styling, and footer spacing follow the pinned
   implementation.
+- UI Time restores the retained composition used upstream: each
+  `DatePickerState` owns and subscribes to a Base `CalendarState`, completed
+  selections emit typed `DatePickerEvent` values, and presets carry the
+  tagged single/range payload rather than an application click id. Themed
+  Calendar and DatePicker builders accept those entities directly while the
+  earlier controlled overloads remain as compatibility paths.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -220,7 +227,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 326 declaration spellings still reported in partial modules,
+  2. Review the 315 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

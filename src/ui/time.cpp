@@ -13,6 +13,11 @@ Calendar* Calendar::New(Ctx* cx) {
     c->cx = cx;
     return c;
 }
+Calendar* Calendar::New(Ctx* cx, Entity<CalendarState> state) {
+    Calendar* c = New(cx);
+    c->state = state;
+    return c;
+}
 Calendar* Calendar::Year(int y) {
     year = y;
     return this;
@@ -43,6 +48,10 @@ Calendar* Calendar::NumberOfMonths(int count) {
     numberOfMonths = std::max(1, count);
     return this;
 }
+Calendar* Calendar::FirstDayOfWeek(int weekday) {
+    firstDayOfWeek = ((weekday % 7) + 7) % 7;
+    return this;
+}
 Calendar* Calendar::View(CalendarView value) {
     view = value;
     return this;
@@ -59,6 +68,11 @@ Calendar* Calendar::DisabledMatcher(DateMatcher matcher) {
 }
 Calendar* Calendar::Bare() {
     bare = true;
+    return this;
+}
+Calendar* Calendar::Refine(const Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleSet |= fields;
     return this;
 }
 Calendar* Calendar::OnDay(Listener fn) {
@@ -252,6 +266,30 @@ El* Calendar::IntoEl() {
     // and so has none of the padding the panel width above counts in. The
     // three pairs differ by exactly the 12 either side.
     float width = (CalendarWidth(size) - (bare ? 24.f : 0.f)) * numberOfMonths;
+    // The source-shaped path delegates all structure and behavior to Base's
+    // retained calendar. The legacy controlled path below remains for
+    // callers written against the first C++ surface.
+    if (state.IsValid()) {
+        gpui::Calendar* calendar =
+            gpui::Calendar::New(cx, StrL("calendar"), state)
+                ->NumberOfMonths(numberOfMonths)
+                ->FirstDayOfWeek(firstDayOfWeek)
+                // The themed item writes the label. Suppress Base's fallback
+                // text so the facade does not produce two children per slot.
+                ->Label(nullptr)
+                ->Item(&ThemedCalendarItem, this);
+        CalendarState* retained = state.Get(cx);
+        if (retained) {
+            retained->numberOfMonths = numberOfMonths;
+        }
+        El* root = calendar->IntoEl()->W(width);
+        if (!bare) {
+            root->Pad(12)->Border(1, th.border)->Radius(th.radiusLg);
+        }
+        StyleApplyFields(&root->style, style, styleSet);
+        return root;
+    }
+
     // The calendar itself is the base one; what is set here is what it is
     // looking at, and the item function that gives it a look.
     CalendarOpts o;
@@ -265,6 +303,7 @@ El* Calendar::IntoEl() {
     o.rangeEnd = rangeEnd;
     o.today = DateToday();
     o.disabledMatcher = disabledMatcher;
+    o.firstDayOfWeek = firstDayOfWeek;
     o.yearMin = yearMin;
     o.yearMax = yearMax;
     o.yearPageStart = yearPageStart;
@@ -282,7 +321,412 @@ El* Calendar::IntoEl() {
     if (!bare) {
         root->Pad(12)->Border(1, th.border)->Radius(th.radiusLg);
     }
+    StyleApplyFields(&root->style, style, styleSet);
     return root;
+}
+
+static bool UiDateValid(LocalDate date) {
+    return date.year != 0 && date.month != 0 && date.day != 0;
+}
+
+DateRangePresetValue DateRangePresetValue::Single(LocalDate date) {
+    DateRangePresetValue out;
+    out.kind = DateRangePresetValueKind::Single;
+    out.start = date;
+    return out;
+}
+
+DateRangePresetValue DateRangePresetValue::Range(LocalDate start,
+                                                 LocalDate end) {
+    DateRangePresetValue out;
+    out.kind = DateRangePresetValueKind::Range;
+    out.start = start;
+    out.end = end;
+    return out;
+}
+
+Date DateRangePresetValue::IntoDate() const {
+    return kind == DateRangePresetValueKind::Range ? Date::Range(start, end)
+                                                    : Date::Single(start);
+}
+
+DateRangePreset DateRangePreset::Single(Str label, LocalDate date,
+                                        intptr_t arg) {
+    DateRangePreset out;
+    out.label = label;
+    out.value = DateRangePresetValue::Single(date);
+    out.start = date;
+    out.arg = arg;
+    return out;
+}
+
+DateRangePreset DateRangePreset::Range(Str label, LocalDate start,
+                                       LocalDate end, intptr_t arg) {
+    DateRangePreset out;
+    out.label = label;
+    out.value = DateRangePresetValue::Range(start, end);
+    out.start = start;
+    out.end = end;
+    out.arg = arg;
+    return out;
+}
+
+static Date PresetDate(const DateRangePreset& preset) {
+    // Aggregates written against the old fields leave `value` empty. Prefer
+    // them only in that compatibility case; the source-shaped constructors
+    // always fill both views.
+    if (!UiDateValid(preset.value.start) && UiDateValid(preset.start)) {
+        return UiDateValid(preset.end) ? Date::Range(preset.start, preset.end)
+                                       : Date::Single(preset.start);
+    }
+    return preset.value.IntoDate();
+}
+
+static void AppendDateNumber(StrBuilder* out, int value, int digits) {
+    if (digits == 2) {
+        out->Append(fmt("%02d", value));
+    } else if (digits == 3) {
+        out->Append(fmt("%03d", value));
+    } else if (digits == 4) {
+        out->Append(fmt("%04d", value));
+    } else {
+        out->Append(fmt("%d", value));
+    }
+}
+
+static void AppendDateNumeric(StrBuilder* out, int value, int digits,
+                              char defaultPad, char modifier) {
+    char pad = modifier == '-' ? 0 : modifier == '_' ? ' '
+                               : modifier == '0'     ? '0'
+                                                     : defaultPad;
+    if (!pad || digits <= 1) {
+        AppendDateNumber(out, value, 1);
+        return;
+    }
+    char buf[32];
+    int len = pad == '0' ? snprintf(buf, sizeof(buf), "%0*d", digits, value)
+                         : snprintf(buf, sizeof(buf), "%*d", digits, value);
+    if (len > 0) {
+        out->Append(Str(buf, std::min(len, (int)sizeof(buf) - 1)));
+    }
+}
+
+static int DateYearDay(LocalDate date) {
+    int day = date.day;
+    for (int month = 1; month < date.month; month++) {
+        day += CalendarDaysInMonth(date.year, month);
+    }
+    return day;
+}
+
+static void DateIsoWeek(LocalDate date, int* year, int* week) {
+    int weekday = CalendarWeekday(date.year, date.month, date.day);
+    int isoWeekday = weekday ? weekday : 7;
+    LocalDate thursday = DateAddDays(date, 4 - isoWeekday);
+    *year = thursday.year;
+    *week = (DateYearDay(thursday) - 1) / 7 + 1;
+}
+
+Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
+    if (!a || !UiDateValid(date)) {
+        return {};
+    }
+    static const char* shortMonths[] = {
+        "",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    };
+    static const char* longMonths[] = {
+        "",          "January",   "February", "March",    "April",
+        "May",       "June",      "July",     "August",   "September",
+        "October",   "November",  "December",
+    };
+    static const char* shortDays[] = {"Sun", "Mon", "Tue", "Wed",
+                                      "Thu", "Fri", "Sat"};
+    static const char* longDays[] = {"Sunday",   "Monday", "Tuesday",
+                                     "Wednesday", "Thursday", "Friday",
+                                     "Saturday"};
+    StrBuilder out;
+    out.a = a;
+    int weekday = CalendarWeekday(date.year, date.month, date.day);
+    int yearDay = DateYearDay(date);
+    int isoYear = 0, isoWeek = 0;
+    DateIsoWeek(date, &isoYear, &isoWeek);
+    for (int i = 0; i < pattern.len; i++) {
+        char ch = pattern.s[i];
+        if (ch != '%' || i + 1 >= pattern.len) {
+            out.AppendChar(ch);
+            continue;
+        }
+        char directive = pattern.s[++i];
+        char modifier = 0;
+        if ((directive == '-' || directive == '_' || directive == '0') &&
+            i + 1 < pattern.len) {
+            modifier = directive;
+            directive = pattern.s[++i];
+        }
+        switch (directive) {
+            case '%': out.AppendChar('%'); break;
+            case 'Y':
+                AppendDateNumeric(&out, date.year, 4, '0', modifier);
+                break;
+            case 'y':
+                AppendDateNumeric(&out, date.year % 100, 2, '0', modifier);
+                break;
+            case 'C':
+                AppendDateNumeric(&out, date.year / 100, 2, '0', modifier);
+                break;
+            case 'q':
+                AppendDateNumeric(&out, (date.month - 1) / 3 + 1, 1, 0,
+                                  modifier);
+                break;
+            case 'm':
+                AppendDateNumeric(&out, date.month, 2, '0', modifier);
+                break;
+            case 'b':
+            case 'h': out.Append(Str(shortMonths[date.month])); break;
+            case 'B': out.Append(Str(longMonths[date.month])); break;
+            case 'd':
+                AppendDateNumeric(&out, date.day, 2, '0', modifier);
+                break;
+            case 'e':
+                AppendDateNumeric(&out, date.day, 2, ' ', modifier);
+                break;
+            case 'j':
+                AppendDateNumeric(&out, yearDay, 3, '0', modifier);
+                break;
+            case 'a': out.Append(Str(shortDays[weekday])); break;
+            case 'A': out.Append(Str(longDays[weekday])); break;
+            case 'w':
+                AppendDateNumeric(&out, weekday, 1, 0, modifier);
+                break;
+            case 'u':
+                AppendDateNumeric(&out, weekday ? weekday : 7, 1, 0,
+                                  modifier);
+                break;
+            case 'U':
+                AppendDateNumeric(&out, (yearDay - 1 + 7 - weekday) / 7, 2,
+                                  '0', modifier);
+                break;
+            case 'W': {
+                int mondayWeekday = (weekday + 6) % 7;
+                AppendDateNumeric(
+                    &out, (yearDay - 1 + 7 - mondayWeekday) / 7, 2, '0',
+                    modifier);
+                break;
+            }
+            case 'G':
+                AppendDateNumeric(&out, isoYear, 4, '0', modifier);
+                break;
+            case 'g':
+                AppendDateNumeric(&out, isoYear % 100, 2, '0', modifier);
+                break;
+            case 'V':
+                AppendDateNumeric(&out, isoWeek, 2, '0', modifier);
+                break;
+            case 'F':
+                out.Append(fmt("%04d-%02d-%02d", date.year, date.month,
+                               date.day));
+                break;
+            case 'D':
+            case 'x':
+                out.Append(fmt("%02d/%02d/%02d", date.month, date.day,
+                               date.year % 100));
+                break;
+            case 'v':
+                AppendDateNumeric(&out, date.day, 2, ' ', modifier);
+                out.AppendChar('-');
+                out.Append(Str(shortMonths[date.month]));
+                out.AppendChar('-');
+                AppendDateNumeric(&out, date.year, 4, '0', modifier);
+                break;
+            case 't': out.AppendChar('\t'); break;
+            case 'n': out.AppendChar('\n'); break;
+            default:
+                // Keep an unsupported chrono directive visible and stable.
+                out.AppendChar('%');
+                out.AppendChar(directive);
+                break;
+        }
+    }
+    return out.TakeStr();
+}
+
+Str DatePickerFormatValue(Arena* a, Str pattern, Date date) {
+    if (!date.IsComplete()) {
+        return {};
+    }
+    Str start = DatePickerFormatDate(a, pattern, date.start);
+    if (date.kind == DateKind::Single) {
+        return start;
+    }
+    Str end = DatePickerFormatDate(a, pattern, date.end);
+    return StrDup(a, fmt("%s - %s", start, end));
+}
+
+DatePickerState::~DatePickerState() {
+    StrFree(dateFormat);
+}
+
+static void NotifyDatePicker(DatePickerState* state, Ctx* cx) {
+    if (state && cx && state->self.IsValid()) {
+        NotifyEntity(cx->app, state->self, cx->win);
+    }
+}
+
+Entity<DatePickerState> DatePickerStateNew(Ctx* cx, bool range) {
+    if (!cx || !cx->app) {
+        return {};
+    }
+    Entity<DatePickerState> out = EntityNewState<DatePickerState>(cx->app);
+    DatePickerState* state = out.Get(cx);
+    if (!state) {
+        return {};
+    }
+    state->self = out.id;
+    state->focus = FocusHandleNew(cx);
+    state->date = range ? Date::Range() : Date::Single();
+    state->dateFormat = StrDup(StrL("%Y/%m/%d"));
+    state->calendar = CalendarStateNew(cx, state->date);
+    state->calendarSubscription = SubscribeTo(
+        cx->app, state->calendar, out, &DatePickerState::OnCalendar);
+    return out;
+}
+
+void DatePickerStateSetDate(DatePickerState* state, Date date, Ctx* cx,
+                            bool emit) {
+    if (!state) {
+        return;
+    }
+    state->date = date;
+    if (cx) {
+        if (CalendarState* calendar = state->calendar.Get(cx)) {
+            CalendarStateSetDate(calendar, date, nullptr, false);
+        }
+    }
+    state->open = false;
+    if (emit && cx && state->self.IsValid()) {
+        DatePickerEvent event = {DatePickerEventKind::Change, date};
+        EntityEmit(cx->app, cx->win, state->self, &event);
+    }
+    NotifyDatePicker(state, cx);
+}
+
+void DatePickerStateSetDateFormat(DatePickerState* state, Str format,
+                                  Ctx* cx) {
+    if (!state) {
+        return;
+    }
+    Str copy = StrDup(format.s ? format : StrL("%Y/%m/%d"));
+    StrFree(state->dateFormat);
+    state->dateFormat = copy;
+    NotifyDatePicker(state, cx);
+}
+
+void DatePickerStateSetNumberOfMonths(DatePickerState* state, int count,
+                                      Ctx* cx) {
+    if (!state) {
+        return;
+    }
+    state->numberOfMonths = std::max(1, count);
+    if (cx) {
+        if (CalendarState* calendar = state->calendar.Get(cx)) {
+            calendar->numberOfMonths = state->numberOfMonths;
+        }
+    }
+    NotifyDatePicker(state, cx);
+}
+
+void DatePickerStateSetFirstDayOfWeek(DatePickerState* state, int weekday,
+                                      Ctx* cx) {
+    if (!state) {
+        return;
+    }
+    state->firstDayOfWeek = ((weekday % 7) + 7) % 7;
+    NotifyDatePicker(state, cx);
+}
+
+void DatePickerStateSetDisabledMatcher(DatePickerState* state,
+                                       Matcher matcher, Ctx* cx) {
+    if (!state) {
+        return;
+    }
+    state->disabledMatcher = matcher;
+    if (cx) {
+        if (CalendarState* calendar = state->calendar.Get(cx)) {
+            CalendarStateSetDisabledMatcher(calendar, matcher);
+        }
+    }
+    NotifyDatePicker(state, cx);
+}
+
+void DatePickerStateSetYearRange(DatePickerState* state, int minYear,
+                                 int maxYear, Ctx* cx) {
+    if (!state) {
+        return;
+    }
+    if (cx) {
+        if (CalendarState* calendar = state->calendar.Get(cx)) {
+            CalendarStateSetYearRange(calendar, minYear, maxYear);
+        }
+    }
+    NotifyDatePicker(state, cx);
+}
+
+void DatePickerStateSelectPreset(DatePickerState* state,
+                                 const DateRangePreset& preset, Ctx* cx,
+                                 bool emit) {
+    DatePickerStateSetDate(state, PresetDate(preset), cx, emit);
+}
+
+void DatePickerState::OnCalendar(DatePickerState* self, Ctx* cx,
+                                 const CalendarEvent* ev) {
+    if (!self || !ev || ev->kind != CalendarEventKind::Selected) {
+        return;
+    }
+    // CalendarState already owns this value; update the facade, close, emit,
+    // and return focus to the input exactly once.
+    self->date = ev->date;
+    self->open = false;
+    DatePickerEvent event = {DatePickerEventKind::Change, ev->date};
+    EntityEmit(cx->app, cx->win, self->self, &event);
+    FocusHandleFocus(cx->win, self->focus);
+    Notify(cx);
+}
+
+void DatePickerState::OnToggle(DatePickerState* self, Ctx* cx,
+                               const ClickEvent*) {
+    self->open = !self->open;
+    Notify(cx);
+}
+
+void DatePickerState::OnOpenChange(DatePickerState* self, Ctx* cx,
+                                   const ClickEvent*, intptr_t open) {
+    if (!open && self->open &&
+        FocusHandleContainsFocused(cx->win, self->focus)) {
+        FocusHandleFocus(cx->win, self->focus);
+    }
+    self->open = open != 0;
+    Notify(cx);
+}
+
+void DatePickerState::OnDismiss(DatePickerState* self, Ctx* cx,
+                                const MouseUpEvent*) {
+    if (!self->open) {
+        return;
+    }
+    if (FocusHandleContainsFocused(cx->win, self->focus)) {
+        FocusHandleFocus(cx->win, self->focus);
+    }
+    self->open = false;
+    Notify(cx);
+}
+
+void DatePickerState::OnClear(DatePickerState* self, Ctx* cx,
+                              const ClickEvent*) {
+    WindowStopPropagation(cx);
+    Date empty = self->date.kind == DateKind::Range ? Date::Range()
+                                                     : Date::Single();
+    DatePickerStateSetDate(self, empty, cx, true);
 }
 
 DatePicker* DatePicker::New(Ctx* cx) {
@@ -291,6 +735,16 @@ DatePicker* DatePicker::New(Ctx* cx) {
     d->a = a;
     d->cx = cx;
     d->id = StrL("date-picker");
+    return d;
+}
+DatePicker* DatePicker::New(Ctx* cx, Entity<DatePickerState> state) {
+    DatePicker* d = New(cx);
+    d->state = state;
+    d->id = StrDup(cx->a, fmt("date-picker-%d-%u", state.id.index,
+                              state.id.gen));
+    if (DatePickerState* retained = state.Get(cx)) {
+        d->numberOfMonths = retained->numberOfMonths;
+    }
     return d;
 }
 DatePicker* DatePicker::Id(Str value) {
@@ -342,6 +796,11 @@ DatePicker* DatePicker::Appearance(bool v) {
 }
 DatePicker* DatePicker::FocusRing(bool v) {
     focusRing = v;
+    return this;
+}
+DatePicker* DatePicker::Refine(const Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleSet |= fields;
     return this;
 }
 DatePicker* DatePicker::Disabled(bool v) {
@@ -431,7 +890,189 @@ static Str FormatDate(Arena* a, DateFormat f, int y, int m, int d) {
     return StrDup(a, fmt("%d%s%02d%s%02d", y, Str(sep), m, Str(sep), d));
 }
 
+struct DatePresetAction {
+    Entity<DatePickerState> picker = {};
+    Date value = {};
+
+    static void OnClick(DatePresetAction* self, Ctx* cx,
+                        const ClickEvent*) {
+        if (!self) {
+            return;
+        }
+        if (DatePickerState* picker = self->picker.Get(cx)) {
+            DatePickerStateSetDate(picker, self->value, cx, true);
+        }
+    }
+};
+
+static El* RetainedDatePickerIntoEl(DatePicker* self) {
+    Ctx* cx = self->cx;
+    Arena* a = self->a;
+    DatePickerState* state = self->state.Get(cx);
+    if (!state) {
+        return Div(a)->Id(self->id);
+    }
+    const Theme& th = ThemeNow(cx->app);
+    if (CalendarState* calendarState = state->calendar.Get(cx)) {
+        // Rust synchronizes this Option<Rc<Matcher>> at render time. This is
+        // a POD value here, so assignment is the entire shared update.
+        calendarState->disabledMatcher = state->disabledMatcher;
+    }
+
+    bool hasDate = state->date.IsSome();
+    bool complete = state->date.IsComplete();
+    Str title = DatePickerFormatValue(a, state->dateFormat, state->date);
+    if (!title.s) {
+        title = self->placeholder.s ? self->placeholder
+                                    : Tr("DatePicker.placeholder");
+    }
+    Listener toggle = ListenTo(self->state, &DatePickerState::OnToggle);
+    Listener setOpen = ListenTo(self->state,
+                                &DatePickerState::OnOpenChange);
+    Listener clear = ListenTo(self->state, &DatePickerState::OnClear);
+
+    float height = 32, padX = 10, font = 14;
+    if (self->size == UiSize::Large) {
+        height = 44;
+        padX = 12;
+        font = 16;
+    } else if (self->size == UiSize::Small) {
+        height = 24;
+        padX = 8;
+    } else if (self->size == UiSize::XSmall) {
+        height = 20;
+        padX = 4;
+        font = 12;
+    }
+
+    bool focused = FocusHandleContainsFocused(cx->win, state->focus);
+    El* trigger = Div(a)
+                      ->FlexRow()
+                      ->W(kFill)
+                      ->H(height)
+                      ->PadX(padX)
+                      ->Gap(4)
+                      ->ItemsCenter()
+                      ->JustifyBetween();
+    if (self->appearance) {
+        trigger->Radius(th.radius)
+            ->Bg(th.inputBg)
+            ->Border(1, focused ? th.ring : th.inputBorder);
+        if (self->disabled) {
+            trigger->Opacity(0.5f);
+        }
+    }
+    if (focused && self->appearance && !self->disabled) {
+        trigger->FocusRing(self->focusRing);
+    } else {
+        trigger->FocusRing(false);
+    }
+
+    El* text = TextEl(a, title)
+                   ->Font(font)
+                   ->Fg(complete ? th.foreground : th.mutedFg)
+                   ->Flex1()
+                   ->MinW(0)
+                   ->Truncate();
+    El* triggerRow = Div(a)
+                         ->FlexRow()
+                         ->W(kFill)
+                         ->MinW(0)
+                         ->Gap(4)
+                         ->ItemsCenter()
+                         ->JustifyBetween()
+                         ->Child(text);
+    if (!self->disabled) {
+        if (self->cleanable && hasDate) {
+            triggerRow->Child(Button::New(cx, StrL("clean"))
+                                  ->Text()
+                                  ->WithSize(UiSize::XSmall)
+                                  ->Icon(IconName::X)
+                                  ->OnClick(clear)
+                                  ->IntoEl()
+                                  ->StopClick());
+        } else {
+            triggerRow->Child(
+                IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
+        }
+    }
+    trigger->Child(triggerRow);
+    if (!state->open && !self->disabled) {
+        BindClick(trigger, StrL("date-picker-input"), toggle);
+    } else {
+        trigger->Id(StrL("date-picker-input"));
+    }
+    // BindClick names its path-derived default focus. The retained handle is
+    // the explicit source value, so apply it after the id just as
+    // BaseDatePicker::new(id, &focus_handle) does.
+    trigger->TrackFocus(state->focus);
+
+    El* popup = nullptr;
+    if (state->open) {
+        El* content = Div(a)->FlexRow()->Gap(12)->ItemsStart();
+        if (self->presets && self->presetsCount > 0) {
+            El* list = Div(a)->FlexCol()->Gap(8)->PadY(4)->JustifyEnd();
+            for (int i = 0; i < self->presetsCount; i++) {
+                const DateRangePreset& preset = self->presets[i];
+                uint32_t key =
+                    (uint32_t)(self->state.id.index + 1) * 2654435761u;
+                key ^= self->state.id.gen * 2246822519u;
+                key ^= (uint32_t)(i + 1) * 3266489917u;
+                Entity<DatePresetAction> action = KeyedEntity<DatePresetAction>(
+                    cx, KeyedKey(key, HashClickId(StrL("DatePresetAction"))));
+                if (DatePresetAction* astate = action.Get(cx)) {
+                    astate->picker = self->state;
+                    astate->value = PresetDate(preset);
+                }
+                list->Child(Button::New(
+                                cx, StrDup(a, fmt("date-preset-%d", i)))
+                                ->WithSize(UiSize::Small)
+                                ->Ghost()
+                                ->TabStop(false)
+                                ->Label(preset.label)
+                                ->OnClick(
+                                    ListenTo(action, &DatePresetAction::OnClick))
+                                ->IntoEl());
+            }
+            content->Child(list);
+        }
+        Calendar* calendar =
+            Calendar::New(cx, state->calendar)
+                ->WithSize(self->size)
+                ->NumberOfMonths(self->numberOfMonths)
+                ->FirstDayOfWeek(state->firstDayOfWeek)
+                ->Bare();
+        content->Child(calendar->IntoEl());
+        popup = Div(a)
+                    ->Pad(12)
+                    ->Border(1, th.border)
+                    ->Radius(std::min(th.radius * 2.f, 8.f))
+                    ->Bg(th.tokens.background)
+                    ->Fg(th.foreground)
+                    ->OnMouseUpOut(
+                        ListenTo(self->state, &DatePickerState::OnDismiss))
+                    ->Child(content);
+    }
+
+    El* root = gpui::DatePicker::New(cx, self->id, self->disabled,
+                                     state->open, setOpen)
+                   ->TrackFocus(state->focus)
+                   ->TabStop(!self->disabled)
+                   ->FlexNone()
+                   ->W(self->width)
+                   ->Child(Popup::New(cx, StrL("pop"), trigger)
+                               ->Content(DropdownPlaceContent(popup))
+                               ->IntoEl());
+    StyleApplyFields(&root->style, self->style, self->styleSet);
+    DatePickerBindKeys(cx, root, self->id, toggle, clear, state->open,
+                       self->disabled);
+    return root;
+}
+
 El* DatePicker::IntoEl() {
+    if (state.IsValid()) {
+        return RetainedDatePickerIntoEl(this);
+    }
     const Theme& th = ThemeNow(cx->app);
     bool hasDate = day > 0;
     bool rangeMode = range || year2 > 0;
@@ -555,6 +1196,7 @@ El* DatePicker::IntoEl() {
                    ->Child(Popup::New(cx, StrL("pop"), trigger)
                                ->Content(DropdownPlaceContent(popup))
                                ->IntoEl());
+    StyleApplyFields(&root->style, style, styleSet);
     // date_picker.rs::init binds enter, escape and the two delete keys in the
     // picker's context; the toggle and the clear the caller gave are what
     // they run, which is what Rust's on_action handlers reach for too.

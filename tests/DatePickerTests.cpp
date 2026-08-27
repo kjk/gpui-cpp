@@ -52,6 +52,10 @@ static LocalDate D(int year, int month, int day) {
     return {year, month, day};
 }
 
+static bool SameDate(LocalDate a, LocalDate b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
 static bool FirstFiveDays(LocalDate date) {
     return date.day <= 5;
 }
@@ -97,6 +101,127 @@ static void RangeSelectionRestartsAndCompletes() {
     DateMatcher disabled = DateMatcherRange(D(2025, 2, 1), D(2025, 2, 28));
     utassert(DatePickerSelectDate(false, D(2025, 2, 15), &start, &end,
                                   disabled) == DateSelectionResult::Rejected);
+}
+
+static El* FindNamedDp(El* root, const char* name);
+
+struct DatePickerSink {
+    int changes = 0;
+    Date last = {};
+
+    static void OnChange(DatePickerSink* self, Ctx*,
+                         const component::DatePickerEvent* ev) {
+        self->changes++;
+        self->last = ev->date;
+    }
+};
+
+static void RetainedStateOwnsAndForwardsCalendar() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    Entity<component::DatePickerState> picker =
+        component::DatePickerStateNew(&cx, true);
+    component::DatePickerState* state = picker.Get(&app);
+    utassert(state && state->date.kind == DateKind::Range);
+    utassert(state && state->calendar.IsValid());
+    utassert(state && state->dateFormat.s &&
+             StrEqI(state->dateFormat, StrL("%Y/%m/%d")));
+
+    Entity<DatePickerSink> sink = EntityNewState<DatePickerSink>(&app);
+    SubscribeTo(&app, picker, sink, &DatePickerSink::OnChange);
+    CalendarState* calendar = state ? state->calendar.Get(&app) : nullptr;
+    if (calendar) {
+        cx.self = state->calendar.id;
+        utassert(!CalendarStateSelectDate(calendar, D(2025, 2, 10), &cx));
+        utassert(state->date.kind == DateKind::Range &&
+                 state->date.start.day == 0);
+        utassert(CalendarStateSelectDate(calendar, D(2025, 2, 12), &cx));
+    }
+    DatePickerSink* received = sink.Get(&app);
+    utassert(received && received->changes == 1);
+    utassert(received && SameDate(received->last.start, D(2025, 2, 10)));
+    utassert(received && SameDate(received->last.end, D(2025, 2, 12)));
+    utassert(state && SameDate(state->date.start, D(2025, 2, 10)));
+    utassert(state && SameDate(state->date.end, D(2025, 2, 12)));
+    utassert(state && !state->open);
+
+    cx.self = picker.id;
+    component::DatePickerStateSetDateFormat(state, StrL("%A, %B %e, %Y"),
+                                            &cx);
+    Str formatted = component::DatePickerFormatValue(
+        a, state->dateFormat, Date::Single(D(2025, 2, 10)));
+    utassert(StrEqI(formatted, StrL("Monday, February 10, 2025")));
+    formatted = component::DatePickerFormatDate(
+        a, StrL("%G-W%V %U %W %-j %_m %q %v"), D(2021, 1, 1));
+    utassert(StrEqI(formatted,
+                    StrL("2020-W53 00 00 1  1 1  1-Jan-2021")));
+    component::DatePickerStateSetFirstDayOfWeek(state, 1, &cx);
+    component::DatePickerStateSetDisabledMatcher(
+        state, DateMatcherWeekdays(1u << 0), &cx);
+    component::DatePickerStateSetYearRange(state, 1980, 2030, &cx);
+    utassert(state->firstDayOfWeek == 1);
+    utassert(calendar && calendar->disabledMatcher.weekdayMask == 1u);
+    utassert(calendar && calendar->yearMin == 1980 &&
+             calendar->yearMax == 2030);
+
+    component::DateRangePreset preset = component::DateRangePreset::Range(
+        StrL("week"), D(2025, 3, 1), D(2025, 3, 7));
+    component::DatePickerStateSelectPreset(state, preset, &cx);
+    utassert(SameDate(state->date.start, D(2025, 3, 1)));
+    utassert(SameDate(state->date.end, D(2025, 3, 7)));
+    utassert(received && received->changes == 2);
+
+    EntityDropAll(&app);
+    ArenaDelete(a);
+    delete win;
+}
+
+static void RetainedFacadeUsesTheStateIdentity() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+    Entity<component::DatePickerState> picker =
+        component::DatePickerStateNew(&cx);
+    component::DatePickerState* state = picker.Get(&app);
+    component::DatePickerStateSetDate(state, Date::Single(D(2025, 8, 3)),
+                                      &cx);
+    state->open = true;
+    component::DateRangePreset preset = component::DateRangePreset::Single(
+        StrL("Tomorrow"), D(2025, 8, 4));
+    El* root = component::DatePicker::New(&cx, picker)
+                   ->Cleanable()
+                   ->NumberOfMonths(2)
+                   ->Presets(&preset, 1)
+                   ->IntoEl();
+    utassert(root && root->style.focusId == state->focus.id);
+    utassert(root && root->accessibility.role == AccessibilityRole::ComboBox);
+    utassert(FindNamedDp(root, "clean") != nullptr);
+    // Popup captures its trigger on the first frame and mounts deferred
+    // content on the second, as the upstream Positioner does.
+    root = component::DatePicker::New(&cx, picker)
+               ->Cleanable()
+               ->NumberOfMonths(2)
+               ->Presets(&preset, 1)
+               ->IntoEl();
+    utassert(FindNamedDp(root, "date-preset-0") != nullptr);
+    utassert(FindNamedDp(root, "calendar") != nullptr);
+
+    WindowKeyedFree(win);
+    EntityDropAll(&app);
+    ArenaDelete(a);
+    delete win;
 }
 
 static El* FindNamedDp(El* root, const char* name) {
@@ -177,5 +302,7 @@ void TestDatePicker() {
     OtherKeysAreNotThePickers();
     MatchersKeepTheirRustSemantics();
     RangeSelectionRestartsAndCompletes();
+    RetainedStateOwnsAndForwardsCalendar();
+    RetainedFacadeUsesTheStateIdentity();
     TwoPickersHaveTwoTriggers();
 }

@@ -7443,3 +7443,46 @@ full: the audit moves to 82 full, 39 partial, 8 adapters and 2 exclusions with
 318 unresolved partial-module spellings. MSVC and clang-cl release plus MSVC
 ASan pass 19,756 checks; wasm passes its 19,051 applicable checks; and the
 release story build passes.
+
+## UI Time becomes a retained facade over Base Calendar
+
+The themed time module still duplicated the state machine that Base Calendar
+now owns. `component::DatePicker` was a controlled frame builder with seventeen
+listeners, the story kept separate open/focus/view/date arrays, and presets
+encoded a page-specific integer for that parallel state. The three upstream
+public declarations that express the real ownership — `DatePickerEvent`,
+`DateRangePresetValue` and `DatePickerState` — were absent.
+
+`DatePickerState` is now an entity-backed state with its own focus handle,
+tagged `Date`, open state, owned format string, disabled matcher and a retained
+Base `CalendarState`. It subscribes to `CalendarEvent`, closes and returns
+focus after a complete selection, then forwards the typed value as
+`DatePickerEvent::Change`. Programmatic dates, matcher/year/weekday settings,
+Delete/Backspace clearing, Enter/Escape, outside dismissal and preset selection
+all run through that one owner. `DateRangePresetValue` is the tagged POD
+projection of the Rust payload enum; the old start/end/arg fields remain only
+as a compatibility view for controlled callers.
+
+The dependency-free date formatter covers Chrono's date vocabulary used by a
+`NaiveDate`: calendar/ISO years and weeks, quarters, numeric and named
+month/day/weekday forms, ordinal days, compound date forms, padding modifiers
+and literals. Time and timezone directives have no value on this tree's
+`LocalDate` and unsupported directives remain visible rather than acquiring a
+platform locale dependency.
+
+The themed `Calendar` and `DatePicker` now accept their retained entities and
+delegate all selection/navigation structure to Base, adding only labels,
+icons, source sizes and theme styles. Their earlier controlled overloads stay
+available. The story now declares the same eight picker entities and three
+subscriptions as Rust instead of manually routing click ids. A direct pinned
+Rust/C++ light-theme comparison is structurally aligned; remaining visible
+differences are text rasterization and one-pixel backend placement.
+
+Tests cover retained ownership, range completion and event forwarding,
+formatting (including an ISO year boundary and padding), matcher/year/weekday
+propagation, presets, focus/accessibility identity and the deferred popup's
+calendar/preset structure. UI Time is full: the audit moves to 83 full, 38
+partial, 8 adapters and 2 exclusions with 315 unresolved partial-module
+spellings. MSVC release, clang-cl release and MSVC ASan pass 19,781 checks;
+wasm passes its 19,076 applicable checks; the release story build and pinned
+DatePicker story comparison pass.

@@ -86,7 +86,6 @@ const partialUi = new Set([
   "table",
   "text",
   "theme",
-  "time",
   "window_border",
 ]);
 const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
