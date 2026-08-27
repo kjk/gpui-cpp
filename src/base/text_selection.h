@@ -157,7 +157,7 @@ using TextSelectionContentKeyFn = bool (*)(
 struct TextSelectionParticipantState;
 
 struct TextSelectionHandle {
-    Entity<TextSelectionParticipantState> state = {};
+    gpui::Entity<TextSelectionParticipantState> state = {};
 
     static TextSelectionHandle New(Str fallbackCopyText, App* app);
     EntityId Entity() const { return state.id; }

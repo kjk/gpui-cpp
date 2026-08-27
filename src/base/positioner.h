@@ -26,7 +26,7 @@ using PopupAlign = Align; // compatibility with the earlier C++ spelling
 // corner positioning, which has no notion of a side.
 struct ResolvedPosition {
     Bounds bounds;
-    Placement placement = Placement::Top;
+    gpui::Placement placement = gpui::Placement::Top;
     bool hasPlacement = false;
 };
 using Positioned = ResolvedPosition; // compatibility with the earlier port
@@ -48,7 +48,7 @@ struct Positioner {
     Bounds trigger = {};
     Anchor anchor = Anchor::TopLeft;
     Point point = {};
-    Placement placement = Placement::Top;
+    gpui::Placement placement = gpui::Placement::Top;
     bool hasPlacement = false;
     gpui::Align align = gpui::Align::Center;
     float offset = 0;

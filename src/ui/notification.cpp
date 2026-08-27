@@ -476,7 +476,7 @@ static void NotificationRemoveAt(NotificationListState* s, int ix) {
         s->items[i] = s->items[i + 1];
     }
     if (s->items.len > 0) {
-        memset(&s->items[s->items.len - 1], 0, sizeof(Notification));
+        s->items[s->items.len - 1] = Notification{};
     }
     s->items.len--;
 }

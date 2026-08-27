@@ -11,7 +11,7 @@ static void ResizableVecRemove(Vec<T>* values, int ix) {
                 (size_t)(values->len - ix - 1) * sizeof(T));
     }
     values->len--;
-    memset(values->els + values->len, 0, sizeof(T));
+    values->els[values->len] = T{};
 }
 
 static float PanelMin(const float* mins, int ix) {

@@ -310,14 +310,14 @@ enum PathCmd : uint8_t {
     kPathClose
 };
 
-struct PathOp {
+struct CairoPathOp {
     PathCmd cmd = kPathMove;
     bool clockwise = false;
     float a = 0, b = 0, c = 0, d = 0, e = 0, f = 0;
 };
 
 struct Path {
-    Vec<PathOp> ops;
+    Vec<CairoPathOp> ops;
     bool winding = true;
     bool fig = false;
 };
@@ -335,7 +335,7 @@ void PathFree(Path* p) {
     delete p;
 }
 
-static void Push(Path* p, const PathOp& op) {
+static void Push(Path* p, const CairoPathOp& op) {
     if (p) {
         p->ops.Append(op);
     }
@@ -345,7 +345,7 @@ void PathMoveTo(Path* p, float x, float y) {
     if (!p) {
         return;
     }
-    PathOp op;
+    CairoPathOp op;
     op.cmd = kPathMove;
     op.a = x;
     op.b = y;
@@ -361,7 +361,7 @@ void PathLineTo(Path* p, float x, float y) {
         PathMoveTo(p, x, y);
         return;
     }
-    PathOp op;
+    CairoPathOp op;
     op.cmd = kPathLine;
     op.a = x;
     op.b = y;
@@ -377,7 +377,7 @@ void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
         PathMoveTo(p, x, y);
         return;
     }
-    PathOp op;
+    CairoPathOp op;
     op.cmd = kPathCubic;
     op.a = x1;
     op.b = y1;
@@ -393,7 +393,7 @@ void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
     if (!p) {
         return;
     }
-    PathOp op;
+    CairoPathOp op;
     op.cmd = kPathArc;
     op.clockwise = clockwise;
     op.a = cx;
@@ -411,7 +411,7 @@ void PathClose(Path* p) {
     if (!p || !p->fig) {
         return;
     }
-    PathOp op;
+    CairoPathOp op;
     op.cmd = kPathClose;
     Push(p, op);
     p->fig = false;
@@ -425,7 +425,7 @@ static bool Replay(cairo_t* cr, Path* p) {
     cairo_set_fill_rule(
         cr, p->winding ? CAIRO_FILL_RULE_WINDING : CAIRO_FILL_RULE_EVEN_ODD);
     for (int i = 0; i < p->ops.len; i++) {
-        const PathOp& o = p->ops[i];
+        const CairoPathOp& o = p->ops[i];
         switch (o.cmd) {
             case kPathMove:
                 cairo_move_to(cr, o.a, o.b);

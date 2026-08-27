@@ -1281,7 +1281,9 @@ static T* TextArenaArray(Arena* a, int count) {
     }
     T* out = (T*)Alloc(a, count * (int)sizeof(T));
     if (out) {
-        memset(out, 0, (size_t)count * sizeof(T));
+        for (int i = 0; i < count; i++) {
+            new (out + i) T();
+        }
     }
     return out;
 }

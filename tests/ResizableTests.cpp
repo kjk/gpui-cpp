@@ -148,8 +148,14 @@ static void SourceConstructorsAndHandleAppearanceRemainConcrete() {
     ResizablePanelGroup* horizontal =
         h_resizable(&cx, StrL("source-horizontal"))->Child(first)->Child(second);
     utassert(horizontal->state.Get(&cx)->axis == Axis::Horizontal);
-    utassert(horizontal->panels.len == 2 && horizontal->grows[0] == false &&
-             horizontal->grows[1] == true);
+    bool growth[2] = {};
+    int growthCount = 0;
+    for (bool value : horizontal->grows) {
+        if (growthCount < 2) growth[growthCount] = value;
+        growthCount++;
+    }
+    utassert(horizontal->panels.len == 2 && growthCount == 2 &&
+             growth[0] == false && growth[1] == true);
     El* root = horizontal->IntoEl();
     utassert(root && root->style.dir == FlexDir::Row);
 
