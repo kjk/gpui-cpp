@@ -23,7 +23,10 @@ struct OtpEvent {
 // an ASCII digit, so `len` counts characters and bytes alike.
 struct OtpState {
     EntityId self = {};
-    char value[16] = {};
+    // Shell exposes the upstream retained-state limit of 64 cells. Keep the
+    // terminating byte in the state so the native and script paths share one
+    // bound instead of silently truncating after the old story-only limit.
+    char value[65] = {};
     int len = 0;
     int length = 6;
     bool masked = false;
@@ -32,6 +35,10 @@ struct OtpState {
     // The caret's clock, the way InputState has one. Rust gives OtpState its
     // own Entity<BlinkCursor> for the same reason.
     EntityId blink = {};
+    // Shell-retained state is not necessarily subscribed through a native
+    // Entity owner. This mirrors InputState/SliderState's direct event seam;
+    // EntityEmit remains in place for ordinary GPUI subscribers.
+    Listener onChange = {};
     // otp_input.rs's `focus_handle`. The row is focusable *as* this, so
     // whether the field has focus is asked of the handle rather than by
     // hashing the element's name a second time and comparing.

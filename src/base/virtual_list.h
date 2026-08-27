@@ -152,6 +152,11 @@ struct VirtualListFrameState {
 // back the rows; this asks for one row at a time and carries the user pointer
 // an element that holds no closures needs.
 using VirtualRowFn = El* (*)(void* user, Ctx* cx, int ix);
+// The source constructor renders a visible range in one callback. Supplying
+// this keeps script-backed lists to one VM crossing per viewport; `out` has
+// exactly `end - first` slots and null entries are skipped.
+using VirtualRangeFn = void (*)(void* user, Ctx* cx, int first, int end,
+                                El** out);
 
 // What the list is: how many items, how long each is, how much of it shows,
 // and where it has scrolled to. `sizes` null is the uniform list, which is
@@ -191,6 +196,7 @@ struct VirtualListOpts {
     // taller.
     float pad = 0;
     VirtualRowFn row = nullptr;
+    VirtualRangeFn range = nullptr;
     void* user = nullptr;
 };
 

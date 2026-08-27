@@ -1368,6 +1368,7 @@ struct Style {
     // the parent's width, added to the pixel one. A stepper's connector needs
     // it to reach from the middle of one step to the middle of the next.
     float absLeftRel = 0, absRightRel = 0;
+    float absTopRel = 0, absBottomRel = 0;
     Background hoverBg = {};
     bool hasHoverBg = false;
     // hover(|style| style.text_color(..)): what the subtree under a hovered
@@ -2158,6 +2159,8 @@ struct El {
     El* Right(float v);
     El* LeftRel(float frac);
     El* RightRel(float frac);
+    El* TopRel(float frac);
+    El* BottomRel(float frac);
     El* HoverBg(Background c);
     El* HoverFg(Rgba c);
     // .active(|style| style.bg(..)): the fill while the box is held down. It

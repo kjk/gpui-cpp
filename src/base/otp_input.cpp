@@ -8,6 +8,7 @@ static void OtpEmit(OtpState* s, App* app, Window* win, OtpEventKind kind) {
     }
     OtpEvent ev = {kind};
     EntityEmit(app, win, s->self, &ev);
+    if (s->onChange.IsValid()) ListenerCall(app, win, s->onChange, &ev);
 }
 
 char OtpDigitChar(uint32_t c) {

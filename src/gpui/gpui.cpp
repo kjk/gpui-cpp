@@ -1878,6 +1878,14 @@ El* El::RightRel(float frac) {
     style.absRightRel = frac;
     return this;
 }
+El* El::TopRel(float frac) {
+    style.absTopRel = frac;
+    return this;
+}
+El* El::BottomRel(float frac) {
+    style.absBottomRel = frac;
+    return this;
+}
 El* El::Left(float v) {
     style.absLeft = v;
     return this;
@@ -2969,8 +2977,9 @@ static taffy::Style ToTaffyStyle(const El* e) {
     if (s.absolute || s.fixed) {
         t.position = taffy::Position::Absolute;
         t.inset = {ToInset(s.absLeft, s.absLeftRel),
-                   ToInset(s.absRight, s.absRightRel), ToInset(s.absTop, 0),
-                   ToInset(s.absBottom, 0)};
+                   ToInset(s.absRight, s.absRightRel),
+                   ToInset(s.absTop, s.absTopRel),
+                   ToInset(s.absBottom, s.absBottomRel)};
     }
     return t;
 }

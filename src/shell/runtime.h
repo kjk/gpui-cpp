@@ -2,6 +2,8 @@
 #define GPUI_SHELL_RUNTIME_H_
 
 #include "shell/metrics.h"
+#include "shell/policy.h"
+#include "shell/retained.h"
 #include "shell/snapshot.h"
 
 namespace gpui {
@@ -23,7 +25,8 @@ class ShellRuntime {
                       ShellError* error = nullptr);
     ViewObject* Instantiate(ViewType* type, Window* window, App* app,
                             Policy* policy = nullptr,
-                            ShellError* error = nullptr);
+                            ShellError* error = nullptr,
+                            EntityId view = {});
     RenderSnapshot* BuildSnapshot(ViewObject* object, Window* window, App* app,
                                   EntityId view = {}, Policy* policy = nullptr,
                                   ShellError* error = nullptr);
@@ -35,15 +38,39 @@ class ShellRuntime {
               ShellError* error = nullptr);
     bool DrainJobs(int limit = 1024, ShellError* error = nullptr);
     RuntimeMetrics ReadMetrics() const;
+    void RecordMaterialize(uint64_t nanos);
     int LiveCallbacks() const;
+    int LiveEntities() const;
+    shell::RetainedEntry* Retained(shell::EntityHandle handle) const;
+
+    // ScriptView registers its dirty bit so cx.notify() can invalidate the
+    // JavaScript description as well as the native window. Ordinary repaint
+    // causes then replay the published snapshot without entering QuickJS.
+    void RegisterScriptView(EntityId view, bool* dirty);
+    void UnregisterScriptView(EntityId view, bool* dirty);
+    void InvalidateScriptView(EntityId view);
+    void ReleaseOwnedEntities(EntityId view);
 
     void DispatchClick(shell::CallbackId callback, const ClickEvent& event,
                        Window* window, App* app);
+    void DispatchMouseMove(shell::CallbackId callback,
+                           const MouseMoveEvent& event, Window* window,
+                           App* app);
     void DispatchChange(shell::CallbackId callback, bool value, Window* window,
                         App* app);
     void DispatchIndex(shell::CallbackId callback, uint32_t value, Window* window,
                        App* app);
     void DispatchSignal(shell::CallbackId callback, Window* window, App* app);
+    void DispatchInputEvent(shell::EntityHandle handle,
+                            const InputEvent& event, Window* window, App* app);
+    void DispatchSliderEvent(shell::EntityHandle handle,
+                             const SliderEvent& event, Window* window,
+                             App* app);
+    void DispatchOtpEvent(shell::EntityHandle handle, const OtpEvent& event,
+                          Window* window, App* app);
+    void RenderVirtualItems(shell::CallbackId render,
+                            shell::CallbackId getKey, int first, int end,
+                            Ctx* cx, El** out);
 
   private:
     friend struct ShellRuntimeAccess;

@@ -261,8 +261,20 @@ El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
         }
         list->Child(spacer);
     }
+    int visibleCount = frame.visible.end - frame.visible.first;
+    El** rangeRows = nullptr;
+    if (o.range && visibleCount > 0) {
+        rangeRows = (El**)Alloc(a, (int)(sizeof(El*) * (size_t)visibleCount));
+        if (rangeRows) {
+            memset(rangeRows, 0, sizeof(El*) * (size_t)visibleCount);
+            o.range(o.user, cx, frame.visible.first, frame.visible.end,
+                    rangeRows);
+        }
+    }
     for (int ix = frame.visible.first; ix < frame.visible.end; ix++) {
-        if (El* built = o.row ? o.row(o.user, cx, ix) : nullptr) {
+        El* made = rangeRows ? rangeRows[ix - frame.visible.first]
+                             : (o.row ? o.row(o.user, cx, ix) : nullptr);
+        if (El* built = made) {
             if (o.gap != 0 && ix + 1 < o.count) {
                 El* allocation = Div(a);
                 if (o.layoutAxis == Axis::Horizontal) {

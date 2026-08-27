@@ -1,6 +1,8 @@
 #include "shell/runtime.h"
 
 #include "quickjs/quickjs.h"
+#include "shell/materialize.h"
+#include "shell/retained.h"
 #include "shell/scope.h"
 
 #include <math.h>
@@ -22,12 +24,18 @@ struct AppModule {
     uint32_t generation = 0;
 };
 
+struct ScriptViewRegistration {
+    EntityId view = {};
+    bool* dirty = nullptr;
+};
+
 struct CallbackEntry {
     shell::CallbackId id = 0;
     uint64_t generation = 0;
     JSValue function = JS_UNDEFINED;
     EntityId view = {};
     Policy* policy = nullptr;
+    AppModule* application = nullptr;
     uint64_t registeredIn = 0;
     bool committed = false;
 };
@@ -35,7 +43,9 @@ struct CallbackEntry {
 struct CallbackArena {
     Vec<CallbackEntry*> entries;
     uint64_t nextGeneration = 0;
-    shell::CallbackId nextCallback = 0;
+    // Zero is the element runtime's "no click" sentinel. Callback ids are
+    // also used as explicit click ids for controls that supply a bool value.
+    shell::CallbackId nextCallback = 1;
     uint64_t buildingGeneration = 0;
     int buildingStart = 0;
     bool building = false;
@@ -50,7 +60,8 @@ struct CallbackArena {
 
     shell::CallbackId Push(JSContext* ctx, JSValueConst function,
                            EntityId view, Policy* policy,
-                           uint64_t registeredIn) {
+                           uint64_t registeredIn,
+                           AppModule* application) {
         if (!building || nextCallback == UINT64_MAX) return UINT64_MAX;
         CallbackEntry* entry = new CallbackEntry();
         entry->id = nextCallback++;
@@ -58,7 +69,25 @@ struct CallbackArena {
         entry->function = JS_DupValue(ctx, function);
         entry->view = view;
         entry->policy = PolicyRetain(policy);
+        entry->application = application;
         entry->registeredIn = registeredIn;
+        entries.Append(entry);
+        return entry->id;
+    }
+
+    shell::CallbackId PushPersistent(JSContext* ctx, JSValueConst function,
+                                     EntityId view, Policy* policy,
+                                     AppModule* application) {
+        if (nextCallback == UINT64_MAX) return UINT64_MAX;
+        CallbackEntry* entry = new CallbackEntry();
+        entry->id = nextCallback++;
+        entry->generation = UINT64_MAX;
+        entry->function = JS_DupValue(ctx, function);
+        entry->view = view;
+        entry->policy = PolicyRetain(policy);
+        entry->application = application;
+        entry->registeredIn = shell::ScopeCurrentGeneration();
+        entry->committed = true;
         entries.Append(entry);
         return entry->id;
     }
@@ -107,6 +136,22 @@ struct CallbackArena {
         if (buildingStart > out) buildingStart = out;
     }
 
+    void RetireId(JSContext* ctx, shell::CallbackId id) {
+        for (int i = 0; i < entries.len; i++) {
+            CallbackEntry* entry = entries[i];
+            if (entry->id != id) continue;
+            JS_FreeValue(ctx, entry->function);
+            PolicyRelease(entry->policy);
+            delete entry;
+            for (int j = i + 1; j < entries.len; j++) {
+                entries[j - 1] = entries[j];
+            }
+            entries.len--;
+            if (buildingStart > i) buildingStart--;
+            return;
+        }
+    }
+
     void Clear(JSContext* ctx) {
         for (int i = 0; i < entries.len; i++) {
             CallbackEntry* entry = entries[i];
@@ -134,8 +179,10 @@ struct ShellRuntimeImpl {
     JSContext* context = nullptr;
     shell::SpecArena* scratch = nullptr;
     CallbackArena callbacks;
+    shell::RetainedStore retained;
     shell::Metrics metrics;
     Vec<AppModule*> modules;
+    Vec<ScriptViewRegistration> views;
     uint32_t nextModuleGeneration = 1;
     uint64_t detachedExecution = 0;
     uint64_t interruptIdentity = UINT64_MAX;
@@ -834,7 +881,8 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
         }
         shell::CallbackId callback = impl->callbacks.Push(
             ctx, handler, shell::ScopeCurrentView(),
-            shell::ScopeCurrentPolicy(), shell::ScopeCurrentGeneration());
+            shell::ScopeCurrentPolicy(), shell::ScopeCurrentGeneration(),
+            (AppModule*)shell::ScopeCurrentApplication());
         JS_FreeValue(ctx, handler);
         if (callback == UINT64_MAX) {
             ArenaDelete(arena);
@@ -872,6 +920,737 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
     return JS_UNDEFINED;
 }
 
+static bool JsHandle(JSContext* ctx, JSValueConst value,
+                     shell::EntityHandle* out) {
+    uint64_t handle = 0;
+    if (JS_ToIndex(ctx, &handle, value) < 0) return false;
+    *out = handle;
+    return true;
+}
+
+static shell::RetainedEntry* LiveRetained(JSContext* ctx,
+                                           shell::EntityHandle handle,
+                                           shell::RetainedKind kind,
+                                           const char* what) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry || entry->kind != kind) {
+        JS_ThrowTypeError(ctx, "this %s state has been released", what);
+        return nullptr;
+    }
+    return entry;
+}
+
+static bool RefuseRetainedCreation(JSContext* ctx, const char* what) {
+    if (shell::ScopeHasCurrent() &&
+        (shell::ScopeCurrentPhase() == ScopePhase::Render ||
+         shell::ScopeCurrentPhase() == ScopePhase::Layout)) {
+        JS_ThrowTypeError(ctx,
+                          "%s cannot run during render; create retained state "
+                          "in init() or an event handler",
+                          what);
+        return true;
+    }
+    return false;
+}
+
+static bool RefuseRetainedMutation(JSContext* ctx, const char* what) {
+    if (shell::ScopeHasCurrent() &&
+        (shell::ScopeCurrentPhase() == ScopePhase::Render ||
+         shell::ScopeCurrentPhase() == ScopePhase::Layout)) {
+        JS_ThrowTypeError(ctx,
+                          "%s cannot run during render or layout; mutate "
+                          "retained state from an event handler or task",
+                          what);
+        return true;
+    }
+    return false;
+}
+
+static bool OptionalJsString(JSContext* ctx, JSValueConst value, Arena* arena,
+                             Str* out) {
+    *out = {};
+    return JS_IsUndefined(value) || JS_IsNull(value) ||
+           JsString(ctx, value, arena, out);
+}
+
+static JSValue NativeInputStateNew(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    if (RefuseRetainedCreation(ctx, "InputState.new(...)")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
+        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "InputState.new(...) needs a live host call");
+    Arena* arena = ArenaNew();
+    Str placeholder, value;
+    bool ok = OptionalJsString(ctx, argc > 0 ? argv[0] : JS_UNDEFINED,
+                               arena, &placeholder) &&
+              OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
+                               arena, &value);
+    shell::EntityHandle handle =
+        ok ? impl->retained.CreateInput(
+                 false, placeholder, value, 0, host.GetApp(),
+                 shell::ScopeCurrentView(), shell::ScopeCurrentApplication())
+           : 0;
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    if (!handle) return JS_ThrowInternalError(ctx, "creating input state failed");
+    return JS_NewInt64(ctx, (int64_t)handle);
+}
+
+static JSValue NativeTextareaStateNew(JSContext* ctx, JSValueConst, int argc,
+                                      JSValueConst* argv) {
+    if (RefuseRetainedCreation(ctx, "TextareaState.new(...)")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
+        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "TextareaState.new(...) needs a live host call");
+    Arena* arena = ArenaNew();
+    Str placeholder, value;
+    int32_t rows = 0;
+    bool ok = OptionalJsString(ctx, argc > 0 ? argv[0] : JS_UNDEFINED,
+                               arena, &placeholder) &&
+              OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
+                               arena, &value);
+    if (ok && argc > 2 && !JS_IsNull(argv[2]) && !JS_IsUndefined(argv[2])) {
+        ok = JS_ToInt32(ctx, &rows, argv[2]) == 0 && rows > 0;
+        if (!ok) JS_ThrowTypeError(ctx, "TextareaState.new rows must be a positive whole number");
+    }
+    shell::EntityHandle handle =
+        ok ? impl->retained.CreateInput(
+                 true, placeholder, value, rows, host.GetApp(),
+                 shell::ScopeCurrentView(), shell::ScopeCurrentApplication())
+           : 0;
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    if (!handle) return JS_ThrowInternalError(ctx, "creating textarea state failed");
+    return JS_NewInt64(ctx, (int64_t)handle);
+}
+
+static JSValue NativeInputValue(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry || (entry->kind != shell::RetainedKind::Input &&
+                   entry->kind != shell::RetainedKind::Textarea)) {
+        return JS_ThrowTypeError(ctx, "this text state has been released");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "value() needs a live host call");
+    Str value = InputValue(entry->input);
+    return JS_NewStringLen(ctx, value.s ? value.s : "", (size_t)value.len);
+}
+
+static JSValue NativeInputSetValue(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    if (RefuseRetainedMutation(ctx, "set_value()")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry || (entry->kind != shell::RetainedKind::Input &&
+                   entry->kind != shell::RetainedKind::Textarea)) {
+        return JS_ThrowTypeError(ctx, "this text state has been released");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
+    Arena* arena = ArenaNew();
+    Str value;
+    bool ok = JsString(ctx, argv[1], arena, &value);
+    if (ok) InputSetValue(entry->input, value);
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    AppInvalidate(host.GetWindow());
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeInputNumberOption(JSContext* ctx, JSValueConst,
+                                       int argc, JSValueConst* argv,
+                                       int magic) {
+    if (RefuseRetainedMutation(ctx, "numeric input setter")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Input, "input");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "numeric input setter needs a live host call");
+    bool set = !JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1]);
+    double value = 0;
+    if (set && (JS_ToFloat64(ctx, &value, argv[1]) < 0 || !isfinite(value))) {
+        return JS_ThrowTypeError(ctx, "numeric input option must be finite or null");
+    }
+    if (magic == 0) {
+        entry->number.hasStep = set;
+        entry->number.step = value;
+    } else if (magic == 1) {
+        entry->number.hasMin = set;
+        entry->number.min = value;
+    } else {
+        entry->number.hasMax = set;
+        entry->number.max = value;
+    }
+    AppInvalidate(host.GetWindow());
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeInputFlag(JSContext* ctx, JSValueConst, int argc,
+                               JSValueConst* argv, int magic) {
+    if (RefuseRetainedMutation(ctx, "input setter")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Input, "input");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "input setter needs a live host call");
+    bool value = JS_ToBool(ctx, argv[1]) != 0;
+    if (magic == 0) entry->input->masked = value;
+    else entry->input->loading = value;
+    AppInvalidate(host.GetWindow());
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeTextareaRows(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv, int magic) {
+    if (RefuseRetainedMutation(ctx, "textarea setter")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Textarea, "textarea");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "textarea setter needs a live host call");
+    if (magic == 2) {
+        entry->input->softWrap = JS_ToBool(ctx, argv[1]) != 0;
+    } else {
+        int32_t first = 0, second = 0;
+        if (JS_ToInt32(ctx, &first, argv[1]) < 0 || first <= 0) {
+            return JS_ThrowTypeError(ctx, "textarea rows must be positive");
+        }
+        if (magic == 0) {
+            entry->input->mode.kind = LayoutModeKind::PlainText;
+            LayoutModeSetRows(&entry->input->mode, first);
+        } else {
+            if (argc < 3 || JS_ToInt32(ctx, &second, argv[2]) < 0 ||
+                second < first) {
+                return JS_ThrowTypeError(ctx, "auto-grow max rows must not be below min rows");
+            }
+            entry->input->mode.kind = LayoutModeKind::AutoGrow;
+            entry->input->mode.minRows = first;
+            entry->input->mode.maxRows = second;
+            LayoutModeSetRows(&entry->input->mode, first);
+        }
+    }
+    AppInvalidate(host.GetWindow());
+    return JS_UNDEFINED;
+}
+
+static bool ReadSliderValue(JSContext* ctx, JSValueConst value,
+                            SliderValue* out) {
+    int64_t count = 0;
+    if (JS_GetLength(ctx, value, &count) < 0 || (count != 1 && count != 2)) {
+        JS_ThrowTypeError(ctx, "slider value must contain one number or a [start, end] pair");
+        return false;
+    }
+    double values[2] = {};
+    for (int i = 0; i < (int)count; i++) {
+        JSValue item = JS_GetPropertyUint32(ctx, value, (uint32_t)i);
+        bool ok = !JS_IsException(item) &&
+                  JS_ToFloat64(ctx, &values[i], item) == 0 &&
+                  isfinite(values[i]);
+        JS_FreeValue(ctx, item);
+        if (!ok) {
+            JS_ThrowTypeError(ctx, "slider values must be finite numbers");
+            return false;
+        }
+    }
+    *out = count == 1 ? SliderSingle((float)values[0])
+                      : SliderRange((float)values[0], (float)values[1]);
+    return true;
+}
+
+static JSValue SliderValueJs(JSContext* ctx, SliderValue value) {
+    JSValue out = JS_NewArray(ctx);
+    if (value.range) {
+        JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, value.lo));
+        JS_SetPropertyUint32(ctx, out, 1, JS_NewFloat64(ctx, value.hi));
+    } else {
+        JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, value.hi));
+    }
+    return out;
+}
+
+static JSValue NativeSliderStateNew(JSContext* ctx, JSValueConst, int argc,
+                                    JSValueConst* argv) {
+    if (RefuseRetainedCreation(ctx, "SliderState.new(...)")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
+        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+    }
+    double min = 0, max = 0, step = 0;
+    Arena* arena = ArenaNew();
+    Str scale;
+    SliderValue value = {};
+    bool ok = argc >= 5 && JS_ToFloat64(ctx, &min, argv[0]) == 0 &&
+              JS_ToFloat64(ctx, &max, argv[1]) == 0 &&
+              JS_ToFloat64(ctx, &step, argv[2]) == 0 &&
+              JsString(ctx, argv[3], arena, &scale) &&
+              ReadSliderValue(ctx, argv[4], &value);
+    SliderScale nativeScale = StrEq(scale, "logarithmic")
+                                  ? SliderScale::Logarithmic
+                                  : SliderScale::Linear;
+    ok = ok && isfinite(min) && isfinite(max) && isfinite(step) && max > min &&
+         step > 0 && (nativeScale == SliderScale::Linear || min > 0) &&
+         (StrEq(scale, "linear") || StrEq(scale, "logarithmic"));
+    if (!ok && !JS_HasException(ctx)) {
+        JS_ThrowTypeError(ctx, "SliderState.new needs a finite min below max, a positive step and a valid scale");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    shell::EntityHandle handle =
+        ok && host.IsSet()
+            ? impl->retained.CreateSlider(
+                  (float)min, (float)max, (float)step, nativeScale, value,
+                  host.GetApp(), shell::ScopeCurrentView(),
+                  shell::ScopeCurrentApplication())
+            : 0;
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "SliderState.new(...) needs a live host call");
+    if (!handle) return JS_ThrowInternalError(ctx, "creating slider state failed");
+    return JS_NewInt64(ctx, (int64_t)handle);
+}
+
+static JSValue NativeSliderValue(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Slider, "slider");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "value() needs a live host call");
+    return SliderValueJs(ctx, entry->slider->value);
+}
+
+static JSValue NativeSliderSetValue(JSContext* ctx, JSValueConst, int argc,
+                                    JSValueConst* argv) {
+    if (RefuseRetainedMutation(ctx, "SliderState.set_value()")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    SliderValue value = {};
+    if (argc < 2 || !JsHandle(ctx, argv[0], &handle) ||
+        !ReadSliderValue(ctx, argv[1], &value)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Slider, "slider");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
+    SliderSetValue(entry->slider, SliderValueClamp(
+                                      value, entry->slider->min,
+                                      entry->slider->max));
+    AppInvalidate(host.GetWindow());
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeSliderBounds(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Slider, "slider");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "min_value() needs a live host call");
+    JSValue out = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, entry->slider->min));
+    JS_SetPropertyUint32(ctx, out, 1, JS_NewFloat64(ctx, entry->slider->max));
+    JS_SetPropertyUint32(ctx, out, 2, JS_NewFloat64(ctx, entry->slider->step));
+    return out;
+}
+
+static JSValue NativeOtpStateNew(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    if (RefuseRetainedCreation(ctx, "OtpState.new(...)")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
+        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+    }
+    int32_t length = 0;
+    if (argc < 1 || JS_ToInt32(ctx, &length, argv[0]) < 0 || length < 1 ||
+        length > 64) {
+        return JS_ThrowTypeError(ctx, "OtpState.new(length) expects a whole number between 1 and 64");
+    }
+    Arena* arena = ArenaNew();
+    Str value;
+    bool ok = OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
+                               arena, &value);
+    bool masked = argc > 2 && JS_ToBool(ctx, argv[2]) != 0;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    shell::EntityHandle handle =
+        ok && host.IsSet()
+            ? impl->retained.CreateOtp(
+                  length, value, masked, host.GetApp(),
+                  shell::ScopeCurrentView(), shell::ScopeCurrentApplication())
+            : 0;
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "OtpState.new(...) needs a live host call");
+    if (!handle) return JS_ThrowInternalError(ctx, "creating OTP state failed");
+    return JS_NewInt64(ctx, (int64_t)handle);
+}
+
+static JSValue NativeOtpValue(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry || entry->kind != shell::RetainedKind::Otp) {
+        return JS_ThrowTypeError(ctx, "this OTP state has been released");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "value() needs a live host call");
+    OtpState* state = entry->otp.Get(entry->app);
+    if (!state) return JS_ThrowTypeError(ctx, "this OTP state has been released");
+    return JS_NewStringLen(ctx, state->value, (size_t)state->len);
+}
+
+static JSValue NativeOtpSetValue(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    if (RefuseRetainedMutation(ctx, "OtpState.set_value()")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry || entry->kind != shell::RetainedKind::Otp) {
+        return JS_ThrowTypeError(ctx, "this OTP state has been released");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
+    OtpState* state = entry->otp.Get(entry->app);
+    Arena* arena = ArenaNew();
+    Str value;
+    bool ok = state && JsString(ctx, argv[1], arena, &value);
+    if (ok) {
+        int n = value.len;
+        if (n > (int)sizeof(state->value) - 1) n = (int)sizeof(state->value) - 1;
+        if (n > 0) memcpy(state->value, value.s, (size_t)n);
+        state->len = n;
+        state->value[n] = 0;
+    }
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    AppInvalidate(host.GetWindow());
+    if (entry->owner.IsValid()) impl->owner->InvalidateScriptView(entry->owner);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeOtpProperty(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv, int magic) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    OtpState* state = entry && entry->kind == shell::RetainedKind::Otp
+                          ? entry->otp.Get(entry->app)
+                          : nullptr;
+    if (!state) return JS_ThrowTypeError(ctx, "this OTP state has been released");
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "OTP state access needs a live host call");
+    if (magic == 0) return JS_NewInt32(ctx, state->length);
+    if (magic == 1) return JS_NewBool(ctx, state->masked);
+    if (magic == 2) {
+        if (RefuseRetainedMutation(ctx, "OtpState.set_masked()")) return JS_EXCEPTION;
+        if (argc < 2) return JS_ThrowTypeError(ctx, "set_masked expects a boolean");
+        state->masked = JS_ToBool(ctx, argv[1]) != 0;
+        AppInvalidate(host.GetWindow());
+        if (entry->owner.IsValid()) impl->owner->InvalidateScriptView(entry->owner);
+        return JS_UNDEFINED;
+    }
+    if (RefuseRetainedMutation(ctx, "OtpState.focus()")) return JS_EXCEPTION;
+    OtpFocus(state, host.GetApp(), host.GetWindow());
+    FocusHandleFocus(host.GetWindow(), state->focus);
+    AppInvalidate(host.GetWindow());
+    return JS_UNDEFINED;
+}
+
+static bool RetainedEventOf(shell::RetainedKind kind, Str name,
+                            shell::RetainedEvent* event, bool* replace) {
+    *replace = false;
+    if (kind == shell::RetainedKind::Input ||
+        kind == shell::RetainedKind::Textarea) {
+        if (StrEq(name, "change")) *event = shell::RetainedEvent::InputChange;
+        else if (StrEq(name, "submit")) *event = shell::RetainedEvent::InputSubmit;
+        else if (StrEq(name, "focus")) *event = shell::RetainedEvent::InputFocus;
+        else if (StrEq(name, "blur")) *event = shell::RetainedEvent::InputBlur;
+        else return false;
+        return true;
+    }
+    if (kind == shell::RetainedKind::Slider) {
+        if (StrEq(name, "change")) *event = shell::RetainedEvent::SliderChange;
+        else if (StrEq(name, "release")) *event = shell::RetainedEvent::SliderRelease;
+        else return false;
+        return true;
+    }
+    if (kind == shell::RetainedKind::Otp) {
+        *replace = true;
+        if (StrEq(name, "change")) *event = shell::RetainedEvent::OtpChange;
+        else if (StrEq(name, "complete")) *event = shell::RetainedEvent::OtpComplete;
+        else if (StrEq(name, "focus")) *event = shell::RetainedEvent::OtpFocus;
+        else if (StrEq(name, "blur")) *event = shell::RetainedEvent::OtpBlur;
+        else return false;
+        return true;
+    }
+    return false;
+}
+
+static JSValue NativeRetainedOn(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    if (RefuseRetainedMutation(ctx, "state.on()")) return JS_EXCEPTION;
+    shell::EntityHandle handle = 0;
+    if (argc < 3 || !JsHandle(ctx, argv[0], &handle) ||
+        !JS_IsFunction(ctx, argv[2])) {
+        return JS_ThrowTypeError(ctx, "state.on(event, handler) expects a function");
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry) return JS_ThrowTypeError(ctx, "this retained state has been released");
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        return JS_ThrowTypeError(ctx, "on(...) needs a live host call; subscribe from init() or an event handler");
+    }
+    Arena* arena = ArenaNew();
+    Str name;
+    bool converted = JsString(ctx, argv[1], arena, &name);
+    shell::RetainedEvent event = {};
+    bool replace = false;
+    bool known = converted && RetainedEventOf(entry->kind, name, &event, &replace);
+    ArenaDelete(arena);
+    if (!converted) return JS_EXCEPTION;
+    if (!known) return JS_ThrowTypeError(ctx, "unknown retained-state event name");
+    shell::CallbackId callback = impl->callbacks.PushPersistent(
+        ctx, argv[2], entry->owner, shell::ScopeCurrentPolicy(),
+        (AppModule*)entry->application);
+    if (callback == UINT64_MAX) return JS_ThrowInternalError(ctx, "callback id space is exhausted");
+    shell::CallbackId replaced = 0;
+    if (!impl->retained.AddCallback(handle, event, callback, replace,
+                                    &replaced)) {
+        impl->callbacks.RetireId(ctx, callback);
+        return JS_ThrowTypeError(ctx, "this retained state has been released");
+    }
+    if (replaced) impl->callbacks.RetireId(ctx, replaced);
+    return JS_TRUE;
+}
+
+static JSValue NativeRetainedRelease(JSContext* ctx, JSValueConst, int argc,
+                                     JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    Vec<shell::CallbackId> callbacks;
+    bool released = impl && impl->retained.Release(handle, &callbacks);
+    for (int i = 0; impl && i < callbacks.len; i++) {
+        impl->callbacks.RetireId(ctx, callbacks[i]);
+    }
+    callbacks.Reset();
+    return JS_NewBool(ctx, released);
+}
+
+static JSValue NativeRetainedComponent(JSContext* ctx, JSValueConst,
+                                       int argc, JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    if (argc < 2 || !JsHandle(ctx, argv[1], &handle)) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str name;
+    bool converted = JsString(ctx, argv[0], arena, &name);
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    shell::Component component = {};
+    component.kind = ComponentKindOf(name);
+    component.handle = handle;
+    shell::RetainedKind expected = shell::RetainedKind::Input;
+    if (component.kind == shell::ComponentKind::Textarea) expected = shell::RetainedKind::Textarea;
+    else if (component.kind == shell::ComponentKind::Slider ||
+             component.kind == shell::ComponentKind::SliderTrack ||
+             component.kind == shell::ComponentKind::SliderIndicator ||
+             component.kind == shell::ComponentKind::SliderThumb) expected = shell::RetainedKind::Slider;
+    else if (component.kind == shell::ComponentKind::OtpInput) expected = shell::RetainedKind::Otp;
+    bool valid = converted && entry && entry->kind == expected;
+    ArenaDelete(arena);
+    if (!converted) return JS_EXCEPTION;
+    if (!valid) return JS_ThrowTypeError(ctx, "this retained state has been released or has the wrong type");
+    return JS_NewUint32(ctx, impl->scratch->Push(component));
+}
+
+static JSValue NativeFocusNew(JSContext* ctx, JSValueConst, int,
+                              JSValueConst*) {
+    if (RefuseRetainedCreation(ctx, "cx.focus_handle()")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!impl || !host.IsSet()) return JS_ThrowTypeError(ctx, "cx.focus_handle() needs a live host call");
+    if (impl->retained.Len() >= shell::kMaxLiveEntities) {
+        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+    }
+    shell::EntityHandle handle = impl->retained.CreateFocus(
+        host.GetApp(), shell::ScopeCurrentView(), shell::ScopeCurrentApplication());
+    return handle ? JS_NewInt64(ctx, (int64_t)handle)
+                  : JS_ThrowInternalError(ctx, "creating focus handle failed");
+}
+
+static JSValue NativeFocusOp(JSContext* ctx, JSValueConst, int argc,
+                             JSValueConst* argv, int magic) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::Focus, "focus handle");
+    if (!entry) return JS_EXCEPTION;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "focus operation needs a live host call");
+    if (magic == 0) {
+        if (RefuseRetainedMutation(ctx, "FocusHandle.focus()")) return JS_EXCEPTION;
+        FocusHandleFocus(host.GetWindow(), entry->focus);
+        AppInvalidate(host.GetWindow());
+        return JS_UNDEFINED;
+    }
+    return JS_NewBool(ctx, FocusHandleIsFocused(host.GetWindow(), entry->focus));
+}
+
+static JSValue NativeVirtualScrollNew(JSContext* ctx, JSValueConst, int,
+                                      JSValueConst*) {
+    if (RefuseRetainedCreation(ctx, "VirtualListScrollHandle.new()")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!impl || !host.IsSet()) return JS_ThrowTypeError(ctx, "VirtualListScrollHandle.new() needs a live host call");
+    if (impl->retained.Len() >= shell::kMaxLiveEntities) {
+        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+    }
+    shell::EntityHandle handle = impl->retained.CreateVirtualScroll(
+        host.GetApp(), shell::ScopeCurrentView(), shell::ScopeCurrentApplication());
+    return handle ? JS_NewInt64(ctx, (int64_t)handle)
+                  : JS_ThrowInternalError(ctx, "creating virtual scroll handle failed");
+}
+
+static JSValue NativeVirtualScrollOp(JSContext* ctx, JSValueConst, int argc,
+                                     JSValueConst* argv, int magic) {
+    shell::EntityHandle handle = 0;
+    if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
+    shell::RetainedEntry* entry = LiveRetained(
+        ctx, handle, shell::RetainedKind::VirtualScroll, "scroll handle");
+    if (!entry) return JS_EXCEPTION;
+    if (magic == 1) {
+        VirtualListScrollToBottomDeferred(&entry->scroll);
+        return JS_UNDEFINED;
+    }
+    int32_t index = 0;
+    if (argc < 2 || JS_ToInt32(ctx, &index, argv[1]) < 0 || index < 0) {
+        return JS_ThrowTypeError(ctx, "scroll_to_item index must be non-negative");
+    }
+    Arena* arena = ArenaNew();
+    Str strategy;
+    bool ok = OptionalJsString(ctx, argc > 2 ? argv[2] : JS_UNDEFINED,
+                               arena, &strategy);
+    ScrollStrategy native = StrEq(strategy, "center") ? ScrollStrategy::Center
+                                                       : ScrollStrategy::Top;
+    if (strategy && !StrEq(strategy, "top") && !StrEq(strategy, "center")) {
+        ok = false;
+        JS_ThrowTypeError(ctx, "scroll strategy must be top or center");
+    }
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    VirtualListScrollToItemDeferred(&entry->scroll, index, native);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv, int magic) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || argc < 5 || shell::ScopeCurrentPhase() == ScopePhase::Layout) {
+        return JS_ThrowTypeError(ctx, "a virtual list cannot be built from inside another list's item renderer");
+    }
+    Arena* arena = ArenaNew();
+    Str id;
+    int64_t count64 = 0;
+    bool ok = JsString(ctx, argv[0], arena, &id) &&
+              JS_ToInt64(ctx, &count64, argv[1]) == 0 && count64 >= 0 &&
+              count64 <= 1000000 && JS_IsFunction(ctx, argv[3]) &&
+              JS_IsFunction(ctx, argv[4]);
+    if (!ok) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx, "virtual list needs an id, a count up to 1000000, item sizes, get_key and render functions");
+    }
+    int count = (int)count64;
+    if (!impl->scratch->ClaimVirtualItems((uint64_t)count, 1000000)) {
+        ArenaDelete(arena);
+        return JS_ThrowRangeError(ctx, "the virtual lists in one render may describe at most 1000000 items in total");
+    }
+    Size* sizes = count > 0 ? (Size*)Alloc(
+                                  arena, (int)(sizeof(Size) * (size_t)count))
+                            : nullptr;
+    if (count > 0 && !sizes) {
+        ArenaDelete(arena);
+        return JS_ThrowOutOfMemory(ctx);
+    }
+    bool horizontal = magic != 0;
+    if (JS_IsArray(argv[2])) {
+        int64_t n = 0;
+        ok = JS_GetLength(ctx, argv[2], &n) == 0 && n == count;
+        for (int i = 0; ok && i < count; i++) {
+            JSValue item = JS_GetPropertyUint32(ctx, argv[2], (uint32_t)i);
+            double extent = 0;
+            ok = !JS_IsException(item) &&
+                 JS_ToFloat64(ctx, &extent, item) == 0 && isfinite(extent) &&
+                 extent >= 0;
+            JS_FreeValue(ctx, item);
+            if (ok) sizes[i] = horizontal ? Size{(float)extent, 0}
+                                          : Size{0, (float)extent};
+        }
+    } else {
+        double extent = 0;
+        ok = JS_ToFloat64(ctx, &extent, argv[2]) == 0 && isfinite(extent) &&
+             extent >= 0;
+        for (int i = 0; ok && i < count; i++) {
+            sizes[i] = horizontal ? Size{(float)extent, 0}
+                                  : Size{0, (float)extent};
+        }
+    }
+    if (!ok) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx, "virtual-list item sizes must be one finite non-negative number or one per item");
+    }
+    shell::CallbackId getKey = impl->callbacks.Push(
+        ctx, argv[3], shell::ScopeCurrentView(), shell::ScopeCurrentPolicy(),
+        shell::ScopeCurrentGeneration(),
+        (AppModule*)shell::ScopeCurrentApplication());
+    shell::CallbackId render = impl->callbacks.Push(
+        ctx, argv[4], shell::ScopeCurrentView(), shell::ScopeCurrentPolicy(),
+        shell::ScopeCurrentGeneration(),
+        (AppModule*)shell::ScopeCurrentApplication());
+    if (getKey == UINT64_MAX || render == UINT64_MAX) {
+        ArenaDelete(arena);
+        return JS_ThrowInternalError(ctx, "virtual-list callbacks were registered outside a snapshot build");
+    }
+    shell::VirtualListSpec list = {};
+    list.id = id;
+    list.axis = horizontal ? Axis::Horizontal : Axis::Vertical;
+    list.sizes = sizes;
+    list.sizeCount = count;
+    list.getKey = getKey;
+    list.renderItems = render;
+    shell::Component component = {};
+    component.kind = horizontal ? shell::ComponentKind::HVirtualList
+                                : shell::ComponentKind::VVirtualList;
+    component.virtualList = &list;
+    shell::SpecId result = impl->scratch->Push(component);
+    ArenaDelete(arena);
+    return JS_NewUint32(ctx, result);
+}
+
 static JSValue NativeNotify(JSContext* ctx, JSValueConst, int argc,
                             JSValueConst* argv) {
     uint64_t generation = 0;
@@ -894,6 +1673,8 @@ static JSValue NativeNotify(JSContext* ctx, JSValueConst, int argc,
     if (!view.IsValid()) {
         return JS_ThrowTypeError(ctx, "cx.notify() needs a current script view");
     }
+    ShellRuntime* runtime = shell::ScopeCurrentRuntime();
+    if (runtime) runtime->InvalidateScriptView(view);
     NotifyEntity(host.GetApp(), view, host.GetWindow());
     return JS_UNDEFINED;
 }
@@ -903,6 +1684,15 @@ static void SetGlobalFunction(JSContext* ctx, JSValueConst global,
                               int length) {
     JS_SetPropertyStr(ctx, global, name,
                       JS_NewCFunction(ctx, function, name, length));
+}
+
+static void SetGlobalMagicFunction(JSContext* ctx, JSValueConst global,
+                                   const char* name,
+                                   JSCFunctionMagic* function, int length,
+                                   int magic) {
+    JS_SetPropertyStr(ctx, global, name,
+                      JS_NewCFunctionMagic(ctx, function, name, length,
+                                           JS_CFUNC_generic_magic, magic));
 }
 
 static const char kPrelude[] = R"JS(
@@ -933,6 +1723,11 @@ globalThis.__gpui = (() => {
     for (const child of children) __attach(this.__id, childId(child));
     return this;
   };
+  explicit.track_scroll = function (handle) {
+    if (typeof handle?.__handle !== "number") throw new TypeError("track_scroll(handle) expects a VirtualListScrollHandle");
+    __apply(this.__id, "track_scroll", [handle.__handle]);
+    return this;
+  };
   for (const name of ["content", "trigger", "input", "decrement_button", "increment_button"]) {
     explicit[name] = function (value) { __slot(this.__id, name, childId(value)); return this; };
   }
@@ -950,15 +1745,77 @@ globalThis.__gpui = (() => {
   };
   globalThis.__context = (generation) => Object.freeze({
     notify: () => __cx_notify(generation),
+    focus_handle: () => focusHandle(__focus_handle_new()),
   });
   const component = (kind, text, handle, index) =>
     element(__component(kind, text, handle, index));
   const named = (kind) => ({ new: (id) => component(kind, String(id)) });
   const plain = (kind) => ({ new: () => component(kind) });
-  const retained = (kind) => ({ new: (state) => component(kind, undefined, state?.__handle) });
-  const unsupportedState = (name) => ({
-    new: () => { throw new Error(name + " retained state is not installed yet"); },
+  const retained = (kind) => ({
+    new: (state) => element(__retained_component(kind, state?.__handle)),
   });
+  const inputState = (handle) => ({
+    __handle: handle,
+    value: () => __input_value(handle),
+    set_value: (value) => __input_set_value(handle, String(value ?? "")),
+    set_step: (value) => __input_set_step(handle, value == null ? null : Number(value)),
+    set_min: (value) => __input_set_min(handle, value == null ? null : Number(value)),
+    set_max: (value) => __input_set_max(handle, value == null ? null : Number(value)),
+    set_masked: (value) => __input_set_masked(handle, Boolean(value)),
+    set_loading: (value) => __input_set_loading(handle, Boolean(value)),
+    on: (event, handler) => __input_on(handle, String(event), handler),
+    release: () => __input_release(handle),
+  });
+  const textareaState = (handle) => ({
+    __handle: handle,
+    value: () => __textarea_value(handle),
+    set_value: (value) => __textarea_set_value(handle, String(value ?? "")),
+    set_rows: (rows) => __textarea_set_rows(handle, Number(rows)),
+    set_auto_grow: (min, max) => __textarea_set_auto_grow(handle, Number(min), Number(max)),
+    set_soft_wrap: (value) => __textarea_set_soft_wrap(handle, Boolean(value)),
+    on: (event, handler) => __textarea_on(handle, String(event), handler),
+    release: () => __textarea_release(handle),
+  });
+  const sliderValues = (value) => Array.isArray(value) ? value : [value];
+  const sliderState = (handle) => ({
+    __handle: handle,
+    value: () => { const values = __slider_value(handle); return values.length === 1 ? values[0] : values; },
+    set_value: (value) => __slider_set_value(handle, sliderValues(value)),
+    min_value: () => __slider_bounds(handle)[0],
+    max_value: () => __slider_bounds(handle)[1],
+    step_value: () => __slider_bounds(handle)[2],
+    on: (event, handler) => __slider_on(handle, String(event), handler),
+    release: () => __slider_release(handle),
+  });
+  const otpState = (handle) => ({
+    __handle: handle,
+    value: () => __otp_value(handle),
+    set_value: (value) => __otp_set_value(handle, String(value ?? "")),
+    len: () => __otp_len(handle),
+    is_masked: () => __otp_is_masked(handle),
+    set_masked: (value) => __otp_set_masked(handle, Boolean(value)),
+    focus: () => __otp_focus(handle),
+    on: (event, handler) => __otp_on(handle, String(event), handler),
+    release: () => __otp_release(handle),
+  });
+  const focusHandle = (handle) => ({
+    __handle: handle,
+    focus: () => __focus_focus(handle),
+    is_focused: () => __focus_is_focused(handle),
+    release: () => __focus_release(handle),
+  });
+  const virtualScrollHandle = (handle) => ({
+    __handle: handle,
+    scroll_to_item: (index, strategy = "top") => __virtual_scroll_to_item(handle, Number(index), String(strategy)),
+    scroll_to_bottom: () => __virtual_scroll_to_bottom(handle),
+    release: () => __virtual_scroll_release(handle),
+  });
+  const virtualList = (build, name) => (id, count, sizes, getKey, render) => {
+    if (!Number.isInteger(count) || count < 0) throw new TypeError(name + " item_count must be a non-negative whole number");
+    if (typeof getKey !== "function" || typeof render !== "function") throw new TypeError(name + " needs get_key and render functions");
+    if (Array.isArray(sizes) && sizes.length !== count) throw new TypeError(name + " needs one size per item");
+    return element(build(String(id), count, sizes, getKey, render));
+  };
   const api = {
     View,
     div: () => component("div"),
@@ -987,16 +1844,16 @@ globalThis.__gpui = (() => {
     Select: named("Select"), Combobox: named("Combobox"),
     DatePicker: { new: (id, focus) => component("DatePicker", String(id), focus?.__handle) },
     Scrollbar: named("Scrollbar"),
-    v_virtual_list: () => { throw new Error("v_virtual_list is not installed yet"); },
-    h_virtual_list: () => { throw new Error("h_virtual_list is not installed yet"); },
-    VirtualListScrollHandle: unsupportedState("VirtualListScrollHandle"),
-    InputState: unsupportedState("InputState"), Input: retained("Input"),
+    v_virtual_list: virtualList(__v_virtual_list, "v_virtual_list"),
+    h_virtual_list: virtualList(__h_virtual_list, "h_virtual_list"),
+    VirtualListScrollHandle: { new: () => virtualScrollHandle(__virtual_scroll_new()) },
+    InputState: { new: (options = {}) => inputState(__input_state_new(options.placeholder ?? null, options.value ?? null)) }, Input: retained("Input"),
     NumberInput: retained("NumberInput"),
-    TextareaState: unsupportedState("TextareaState"), Textarea: retained("Textarea"),
-    SliderState: unsupportedState("SliderState"), Slider: retained("Slider"),
+    TextareaState: { new: (options = {}) => textareaState(__textarea_state_new(options.placeholder ?? null, options.value ?? null, options.rows ?? null)) }, Textarea: retained("Textarea"),
+    SliderState: { new: (options = {}) => sliderState(__slider_state_new(options.min ?? 0, options.max ?? 100, options.step ?? 1, String(options.scale ?? "linear"), sliderValues(options.value ?? options.min ?? 0))) }, Slider: retained("Slider"),
     SliderTrack: retained("SliderTrack"), SliderIndicator: retained("SliderIndicator"),
     SliderThumb: retained("SliderThumb"),
-    OtpState: unsupportedState("OtpState"), OtpInput: retained("OtpInput"),
+    OtpState: { new: (length, options = {}) => otpState(__otp_state_new(Number(length), options.value ?? null, Boolean(options.masked))) }, OtpInput: retained("OtpInput"),
     fps_monitor: () => component("FpsMonitor"),
     set_theme: () => { throw new Error("set_theme is not installed yet"); },
   };
@@ -1012,6 +1869,94 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     SetGlobalFunction(impl->context, global, "__slot", NativeSlot, 3);
     SetGlobalFunction(impl->context, global, "__apply", NativeApply, 3);
     SetGlobalFunction(impl->context, global, "__cx_notify", NativeNotify, 1);
+    SetGlobalFunction(impl->context, global, "__input_state_new",
+                      NativeInputStateNew, 2);
+    SetGlobalFunction(impl->context, global, "__textarea_state_new",
+                      NativeTextareaStateNew, 3);
+    SetGlobalFunction(impl->context, global, "__input_value", NativeInputValue,
+                      1);
+    SetGlobalFunction(impl->context, global, "__textarea_value",
+                      NativeInputValue, 1);
+    SetGlobalFunction(impl->context, global, "__input_set_value",
+                      NativeInputSetValue, 2);
+    SetGlobalFunction(impl->context, global, "__textarea_set_value",
+                      NativeInputSetValue, 2);
+    SetGlobalMagicFunction(impl->context, global, "__input_set_step",
+                           NativeInputNumberOption, 2, 0);
+    SetGlobalMagicFunction(impl->context, global, "__input_set_min",
+                           NativeInputNumberOption, 2, 1);
+    SetGlobalMagicFunction(impl->context, global, "__input_set_max",
+                           NativeInputNumberOption, 2, 2);
+    SetGlobalMagicFunction(impl->context, global, "__input_set_masked",
+                           NativeInputFlag, 2, 0);
+    SetGlobalMagicFunction(impl->context, global, "__input_set_loading",
+                           NativeInputFlag, 2, 1);
+    SetGlobalMagicFunction(impl->context, global, "__textarea_set_rows",
+                           NativeTextareaRows, 2, 0);
+    SetGlobalMagicFunction(impl->context, global, "__textarea_set_auto_grow",
+                           NativeTextareaRows, 3, 1);
+    SetGlobalMagicFunction(impl->context, global, "__textarea_set_soft_wrap",
+                           NativeTextareaRows, 2, 2);
+    SetGlobalFunction(impl->context, global, "__slider_state_new",
+                      NativeSliderStateNew, 5);
+    SetGlobalFunction(impl->context, global, "__slider_value",
+                      NativeSliderValue, 1);
+    SetGlobalFunction(impl->context, global, "__slider_set_value",
+                      NativeSliderSetValue, 2);
+    SetGlobalFunction(impl->context, global, "__slider_bounds",
+                      NativeSliderBounds, 1);
+    SetGlobalFunction(impl->context, global, "__otp_state_new",
+                      NativeOtpStateNew, 3);
+    SetGlobalFunction(impl->context, global, "__otp_value", NativeOtpValue, 1);
+    SetGlobalFunction(impl->context, global, "__otp_set_value",
+                      NativeOtpSetValue, 2);
+    SetGlobalMagicFunction(impl->context, global, "__otp_len",
+                           NativeOtpProperty, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__otp_is_masked",
+                           NativeOtpProperty, 1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__otp_set_masked",
+                           NativeOtpProperty, 2, 2);
+    SetGlobalMagicFunction(impl->context, global, "__otp_focus",
+                           NativeOtpProperty, 1, 3);
+    SetGlobalFunction(impl->context, global, "__input_on", NativeRetainedOn,
+                      3);
+    SetGlobalFunction(impl->context, global, "__textarea_on", NativeRetainedOn,
+                      3);
+    SetGlobalFunction(impl->context, global, "__slider_on", NativeRetainedOn,
+                      3);
+    SetGlobalFunction(impl->context, global, "__otp_on", NativeRetainedOn, 3);
+    SetGlobalFunction(impl->context, global, "__input_release",
+                      NativeRetainedRelease, 1);
+    SetGlobalFunction(impl->context, global, "__textarea_release",
+                      NativeRetainedRelease, 1);
+    SetGlobalFunction(impl->context, global, "__slider_release",
+                      NativeRetainedRelease, 1);
+    SetGlobalFunction(impl->context, global, "__otp_release",
+                      NativeRetainedRelease, 1);
+    SetGlobalFunction(impl->context, global, "__retained_component",
+                      NativeRetainedComponent, 2);
+    SetGlobalFunction(impl->context, global, "__focus_handle_new",
+                      NativeFocusNew, 0);
+    SetGlobalMagicFunction(impl->context, global, "__focus_focus",
+                           NativeFocusOp, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__focus_is_focused",
+                           NativeFocusOp, 1, 1);
+    SetGlobalFunction(impl->context, global, "__focus_release",
+                      NativeRetainedRelease, 1);
+    SetGlobalFunction(impl->context, global, "__virtual_scroll_new",
+                      NativeVirtualScrollNew, 0);
+    SetGlobalMagicFunction(impl->context, global,
+                           "__virtual_scroll_to_item", NativeVirtualScrollOp,
+                           3, 0);
+    SetGlobalMagicFunction(impl->context, global,
+                           "__virtual_scroll_to_bottom", NativeVirtualScrollOp,
+                           1, 1);
+    SetGlobalFunction(impl->context, global, "__virtual_scroll_release",
+                      NativeRetainedRelease, 1);
+    SetGlobalMagicFunction(impl->context, global, "__v_virtual_list",
+                           NativeVirtualList, 5, 0);
+    SetGlobalMagicFunction(impl->context, global, "__h_virtual_list",
+                           NativeVirtualList, 5, 1);
     JS_FreeValue(impl->context, global);
     BeginExecution(impl);
     JSValue result = JS_Eval(impl->context, kPrelude, sizeof(kPrelude) - 1,
@@ -1026,13 +1971,22 @@ ShellRuntime::ShellRuntime() = default;
 ShellRuntime::~ShellRuntime() {
     if (control) control->runtime = nullptr;
     if (impl) {
-        if (impl->context) impl->callbacks.Clear(impl->context);
+        if (impl->context) {
+            Vec<shell::CallbackId> retired;
+            impl->retained.Clear(&retired);
+            for (int i = 0; i < retired.len; i++) {
+                impl->callbacks.RetireId(impl->context, retired[i]);
+            }
+            retired.Reset();
+            impl->callbacks.Clear(impl->context);
+        }
         delete impl->scratch;
         for (int i = 0; i < impl->modules.len; i++) {
             StrFree(impl->modules[i]->root);
             delete impl->modules[i];
         }
         impl->modules.Reset();
+        impl->views.Reset();
         if (impl->context) {
             JS_SetContextOpaque(impl->context, nullptr);
             JS_FreeContext(impl->context);
@@ -1181,19 +2135,27 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, ShellError* error) {
 }
 
 ViewObject* ShellRuntime::Instantiate(ViewType* type, Window* window, App* app,
-                                      Policy* policy, ShellError* error) {
+                                      Policy* policy, ShellError* error,
+                                      EntityId view) {
     ShellErrorClear(error);
     if (!type || type->runtime != this || !window || !app) {
         SetError(error, StrL("instantiate needs a view type from this runtime and a live Window/App"));
         return nullptr;
     }
     shell::CallScopeGuard scope =
-        shell::ScopeEnter(window, app, ScopePhase::Event, {}, policy, this,
+        shell::ScopeEnter(window, app, ScopePhase::Event, view, policy, this,
                           type->application);
+    uint32_t retainedCheckpoint = impl->retained.Checkpoint();
     BeginExecution(impl);
     JSValue object =
         JS_CallConstructor(impl->context, type->value, 0, nullptr);
     if (JS_IsException(object)) {
+        Vec<shell::CallbackId> retired;
+        impl->retained.Rollback(retainedCheckpoint, &retired);
+        for (int i = 0; i < retired.len; i++) {
+            impl->callbacks.RetireId(impl->context, retired[i]);
+        }
+        retired.Reset();
         CaptureException(impl, error);
         return nullptr;
     }
@@ -1211,6 +2173,12 @@ ViewObject* ShellRuntime::Instantiate(ViewType* type, Window* window, App* app,
     JS_FreeValue(impl->context, global);
     if (JS_IsException(initialized)) {
         JS_FreeValue(impl->context, object);
+        Vec<shell::CallbackId> retired;
+        impl->retained.Rollback(retainedCheckpoint, &retired);
+        for (int i = 0; i < retired.len; i++) {
+            impl->callbacks.RetireId(impl->context, retired[i]);
+        }
+        retired.Reset();
         CaptureException(impl, error);
         return nullptr;
     }
@@ -1337,7 +2305,55 @@ RuntimeMetrics ShellRuntime::ReadMetrics() const {
     return shell::MetricsRead(&impl->metrics);
 }
 
+void ShellRuntime::RecordMaterialize(uint64_t nanos) {
+    shell::MetricsAdd(&impl->metrics, shell::MetricsTimerKind::Materialize,
+                      nanos);
+}
+
 int ShellRuntime::LiveCallbacks() const { return impl->callbacks.Live(); }
+
+int ShellRuntime::LiveEntities() const { return impl->retained.Len(); }
+
+shell::RetainedEntry* ShellRuntime::Retained(
+    shell::EntityHandle handle) const {
+    return impl->retained.Find(handle);
+}
+
+void ShellRuntime::RegisterScriptView(EntityId view, bool* dirty) {
+    if (!view.IsValid() || !dirty) return;
+    for (int i = 0; i < impl->views.len; i++) {
+        if (impl->views[i].view == view && impl->views[i].dirty == dirty) return;
+    }
+    impl->views.Append({view, dirty});
+}
+
+void ShellRuntime::UnregisterScriptView(EntityId view, bool* dirty) {
+    for (int i = 0; i < impl->views.len; i++) {
+        if (impl->views[i].view != view || impl->views[i].dirty != dirty) continue;
+        for (int j = i + 1; j < impl->views.len; j++) {
+            impl->views[j - 1] = impl->views[j];
+        }
+        impl->views.len--;
+        return;
+    }
+}
+
+void ShellRuntime::InvalidateScriptView(EntityId view) {
+    for (int i = 0; i < impl->views.len; i++) {
+        if (impl->views[i].view == view && impl->views[i].dirty) {
+            *impl->views[i].dirty = true;
+        }
+    }
+}
+
+void ShellRuntime::ReleaseOwnedEntities(EntityId view) {
+    Vec<shell::CallbackId> callbacks;
+    impl->retained.ReleaseOwner(view, &callbacks);
+    for (int i = 0; i < callbacks.len; i++) {
+        impl->callbacks.RetireId(impl->context, callbacks[i]);
+    }
+    callbacks.Reset();
+}
 
 static JSValue ContextObject(ShellRuntimeImpl* impl, uint64_t generation) {
     JSValue global = JS_GetGlobalObject(impl->context);
@@ -1363,7 +2379,8 @@ static void Dispatch(ShellRuntime* runtime, shell::CallbackId id,
         return;
     }
     shell::CallScopeGuard scope = shell::ScopeEnter(
-        window, app, ScopePhase::Event, entry->view, entry->policy, runtime);
+        window, app, ScopePhase::Event, entry->view, entry->policy, runtime,
+        entry->application);
     BeginExecution(impl);
     JSValue cx = ContextObject(impl, scope.Generation());
     JSValue args[2] = {payload, cx};
@@ -1403,6 +2420,27 @@ void ShellRuntime::DispatchClick(shell::CallbackId callback,
     Dispatch(this, callback, payload, window, app);
 }
 
+void ShellRuntime::DispatchMouseMove(shell::CallbackId callback,
+                                     const MouseMoveEvent& event,
+                                     Window* window, App* app) {
+    JSValue payload = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, payload, "x",
+                      JS_NewFloat64(impl->context, event.x));
+    JS_SetPropertyStr(impl->context, payload, "y",
+                      JS_NewFloat64(impl->context, event.y));
+    JS_SetPropertyStr(impl->context, payload, "dragging",
+                      JS_NewBool(impl->context, event.Dragging()));
+    JSValue modifiers = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, modifiers, "shift",
+                      JS_NewBool(impl->context, event.modifiers.shift));
+    JS_SetPropertyStr(impl->context, modifiers, "control",
+                      JS_NewBool(impl->context, event.modifiers.control));
+    JS_SetPropertyStr(impl->context, modifiers, "alt",
+                      JS_NewBool(impl->context, event.modifiers.alt));
+    JS_SetPropertyStr(impl->context, payload, "modifiers", modifiers);
+    Dispatch(this, callback, payload, window, app);
+}
+
 void ShellRuntime::DispatchChange(shell::CallbackId callback, bool value,
                                   Window* window, App* app) {
     Dispatch(this, callback, JS_NewBool(impl->context, value), window, app);
@@ -1416,6 +2454,193 @@ void ShellRuntime::DispatchIndex(shell::CallbackId callback, uint32_t value,
 void ShellRuntime::DispatchSignal(shell::CallbackId callback, Window* window,
                                   App* app) {
     Dispatch(this, callback, JS_NewObject(impl->context), window, app);
+}
+
+static void RetainedCallbackIds(const shell::RetainedEntry* entry,
+                                shell::RetainedEvent event,
+                                Vec<shell::CallbackId>* out) {
+    if (!entry) return;
+    for (int i = 0; i < entry->callbacks.len; i++) {
+        if (entry->callbacks[i].event == event) {
+            out->Append(entry->callbacks[i].callback);
+        }
+    }
+}
+
+static shell::RetainedEntry* EventRetained(ShellRuntimeImpl* impl,
+                                            shell::EntityHandle handle) {
+    return (handle >> 32) == 0
+               ? impl->retained.FindLocal((uint32_t)handle)
+               : impl->retained.Find(handle);
+}
+
+void ShellRuntime::DispatchInputEvent(shell::EntityHandle handle,
+                                      const InputEvent& event, Window* window,
+                                      App* app) {
+    shell::RetainedEvent wanted = shell::RetainedEvent::InputChange;
+    if (event.kind == InputEventKind::PressEnter) {
+        wanted = shell::RetainedEvent::InputSubmit;
+    } else if (event.kind == InputEventKind::Focus) {
+        wanted = shell::RetainedEvent::InputFocus;
+    } else if (event.kind == InputEventKind::Blur) {
+        wanted = shell::RetainedEvent::InputBlur;
+    }
+    Vec<shell::CallbackId> callbacks;
+    RetainedCallbackIds(EventRetained(impl, handle), wanted, &callbacks);
+    for (int i = 0; i < callbacks.len; i++) {
+        JSValue payload = JS_NewObject(impl->context);
+        if (event.kind == InputEventKind::PressEnter) {
+            JS_SetPropertyStr(impl->context, payload, "secondary",
+                              JS_NewBool(impl->context, event.secondary));
+            JS_SetPropertyStr(impl->context, payload, "shift",
+                              JS_NewBool(impl->context, event.shift));
+        }
+        Dispatch(this, callbacks[i], payload, window, app);
+    }
+    callbacks.Reset();
+}
+
+void ShellRuntime::DispatchSliderEvent(shell::EntityHandle handle,
+                                       const SliderEvent& event,
+                                       Window* window, App* app) {
+    shell::RetainedEvent wanted =
+        event.kind == SliderEventKind::Release
+            ? shell::RetainedEvent::SliderRelease
+            : shell::RetainedEvent::SliderChange;
+    Vec<shell::CallbackId> callbacks;
+    RetainedCallbackIds(EventRetained(impl, handle), wanted, &callbacks);
+    for (int i = 0; i < callbacks.len; i++) {
+        JSValue payload = event.value.range
+                              ? SliderValueJs(impl->context, event.value)
+                              : JS_NewFloat64(impl->context, event.value.hi);
+        Dispatch(this, callbacks[i], payload, window, app);
+    }
+    callbacks.Reset();
+}
+
+void ShellRuntime::DispatchOtpEvent(shell::EntityHandle handle,
+                                    const OtpEvent& event, Window* window,
+                                    App* app) {
+    shell::RetainedEvent wanted = shell::RetainedEvent::OtpChange;
+    if (event.kind == OtpEventKind::Complete) {
+        wanted = shell::RetainedEvent::OtpComplete;
+    } else if (event.kind == OtpEventKind::Focus) {
+        wanted = shell::RetainedEvent::OtpFocus;
+    } else if (event.kind == OtpEventKind::Blur) {
+        wanted = shell::RetainedEvent::OtpBlur;
+    }
+    Vec<shell::CallbackId> callbacks;
+    RetainedCallbackIds(EventRetained(impl, handle), wanted, &callbacks);
+    for (int i = 0; i < callbacks.len; i++) {
+        Dispatch(this, callbacks[i], JS_NewObject(impl->context), window, app);
+    }
+    callbacks.Reset();
+}
+
+void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
+                                      shell::CallbackId keyId, int first,
+                                      int end, Ctx* cx, El** out) {
+    if (!cx || !out || end <= first) return;
+    for (int i = 0; i < end - first; i++) out[i] = nullptr;
+    CallbackEntry* render = impl->callbacks.Get(renderId);
+    CallbackEntry* key = impl->callbacks.Get(keyId);
+    if (!render || !key || !cx->win || !cx->app) return;
+    if (render->view.IsValid() && !EntityGet(cx->app, render->view)) return;
+
+    double started = TimeNow();
+    shell::SpecArena* outer = impl->scratch;
+    shell::SpecArena* batch = new shell::SpecArena();
+    impl->scratch = batch;
+    Vec<shell::SpecId> roots;
+    bool succeeded = true;
+    {
+        shell::CallScopeGuard scope = shell::ScopeEnter(
+            cx->win, cx->app, ScopePhase::Layout, render->view,
+            render->policy, this, render->application);
+        shell::ScopeAdopt(render->registeredIn);
+        BeginExecution(impl);
+        JSValue payload = JS_NewObject(impl->context);
+        JS_SetPropertyStr(impl->context, payload, "start",
+                          JS_NewInt32(impl->context, first));
+        JS_SetPropertyStr(impl->context, payload, "end",
+                          JS_NewInt32(impl->context, end));
+        JSValue context = ContextObject(impl, scope.Generation());
+        JSValue args[2] = {payload, context};
+        JSValue produced = JS_Call(impl->context, render->function,
+                                   JS_UNDEFINED, 2, args);
+        JS_FreeValue(impl->context, context);
+        JS_FreeValue(impl->context, payload);
+        if (JS_IsException(produced) || !JS_IsArray(produced)) {
+            if (!JS_IsException(produced)) {
+                JS_ThrowTypeError(impl->context,
+                                  "a virtual-list item renderer must return an array of elements");
+            }
+            succeeded = false;
+        } else {
+            int64_t count = 0;
+            if (JS_GetLength(impl->context, produced, &count) < 0 ||
+                count != end - first) {
+                if (!JS_HasException(impl->context)) {
+                    JS_ThrowTypeError(impl->context,
+                                      "a virtual-list item renderer must return one element per item");
+                }
+                succeeded = false;
+            }
+            for (int i = 0; succeeded && i < (int)count; i++) {
+                JSValue item = JS_GetPropertyUint32(
+                    impl->context, produced, (uint32_t)i);
+                shell::SpecId root = 0;
+                succeeded = !JS_IsException(item) &&
+                            ElementId(impl->context, item, &root);
+                JS_FreeValue(impl->context, item);
+                if (succeeded) roots.Append(root);
+            }
+        }
+        JS_FreeValue(impl->context, produced);
+
+        Arena* keys = ArenaNew();
+        Vec<Str> seen;
+        for (int index = first; succeeded && index < end; index++) {
+            JSValue value = JS_NewInt32(impl->context, index);
+            JSValue result = JS_Call(impl->context, key->function,
+                                     JS_UNDEFINED, 1, &value);
+            JS_FreeValue(impl->context, value);
+            Str text;
+            succeeded = !JS_IsException(result) &&
+                        JsString(impl->context, result, keys, &text);
+            JS_FreeValue(impl->context, result);
+            for (int i = 0; succeeded && i < seen.len; i++) {
+                if (StrEq(seen[i], text)) {
+                    JS_ThrowTypeError(impl->context,
+                                      "virtual-list get_key returned a duplicate key");
+                    succeeded = false;
+                }
+            }
+            if (succeeded) seen.Append(text);
+        }
+        seen.Reset();
+        ArenaDelete(keys);
+    }
+    impl->scratch = outer;
+    if (!succeeded) {
+        Arena* arena = ArenaNew();
+        log(ExceptionText(arena, impl->context));
+        ArenaDelete(arena);
+    } else {
+        ShellError error = {};
+        for (int i = 0; i < roots.len; i++) {
+            out[i] = ShellMaterializeSpec(cx, this, batch, roots[i], &error);
+            if (error.IsSet()) {
+                log(error.message);
+                ShellErrorClear(&error);
+            }
+        }
+    }
+    roots.Reset();
+    delete batch;
+    double elapsed = TimeNow() - started;
+    shell::MetricsAdd(&impl->metrics, shell::MetricsTimerKind::VirtualItems,
+                      elapsed <= 0 ? 0 : (uint64_t)(elapsed * 1e9));
 }
 
 ViewType* ViewTypeRetain(ViewType* type) {

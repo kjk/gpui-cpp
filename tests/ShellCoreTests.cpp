@@ -506,6 +506,218 @@ static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
     remove(outsideName);
 }
 
+static void PublishedSnapshotsMaterializeToNativeElements() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View } from 'gpui';\n"
+        "import { v_flex, Button } from 'gpui-base';\n"
+        "export default class Main extends View { render(cx) {\n"
+        "  return v_flex().w(320).h(80).gap_2().p(12).bg('#123456').rounded(8)\n"
+        "    .child('native')\n"
+        "    .child(Button.new('disabled').disabled(true).child('No'));\n"
+        "} }\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("materialize.js"), source,
+                                               &error)
+                         : nullptr;
+    ViewObject* object = type
+                             ? runtime->Instantiate(type, &window, &app,
+                                                    nullptr, &error)
+                             : nullptr;
+    RenderSnapshot* snapshot = object
+                                   ? runtime->BuildSnapshot(object, &window,
+                                                            &app, {}, nullptr,
+                                                            &error)
+                                   : nullptr;
+    Arena* frame = ArenaNew();
+    Ctx cx = {&app, &window, frame, {}};
+    El* root = snapshot
+                   ? ShellMaterialize(&cx, runtime, snapshot, &error)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    if (root) {
+        utassert(root->style.display == Display::Flex);
+        utassert(root->style.dir == FlexDir::Col);
+        utassertnear(root->style.width, 320);
+        utassertnear(root->style.height, 80);
+        utassertnear(root->style.gapX, 8);
+        utassertnear(root->style.gapY, 8);
+        utassertnear(root->style.pad.top, 12);
+        utassertnear(root->style.radius, 8);
+        utassert(root->style.hasBg);
+        utassert(abs((int)root->style.bg.color.r - 0x12) <= 1);
+        utassert(abs((int)root->style.bg.color.g - 0x34) <= 1);
+        utassert(abs((int)root->style.bg.color.b - 0x56) <= 1);
+        utassert(root->first && root->first->kind == ElKind::Text);
+        utassert(StrEq(root->first->text, "native"));
+        utassert(root->first->next != nullptr);
+        utassert(root->first->next->accessibility.disabled);
+    }
+    ArenaDelete(frame);
+    delete snapshot;
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void ScriptViewsReuseSnapshotsUntilNotified() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "globalThis.scriptRenderCount = 0;\n"
+        "export default class Main extends View { render(cx) {\n"
+        "  globalThis.scriptRenderCount += 1;\n"
+        "  return div().child(String(globalThis.scriptRenderCount));\n"
+        "} }\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("cached-view.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    El* first = EntityRender(&app, &window, frame, view.id);
+    utassert(first != nullptr);
+    frame->Reset();
+    El* second = EntityRender(&app, &window, frame, view.id);
+    utassert(second != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.scriptRenderCount !== 1) throw new Error('snapshot was rebuilt')"),
+        StrL("cached-check.js"), &error));
+    runtime->InvalidateScriptView(view.id);
+    frame->Reset();
+    El* third = EntityRender(&app, &window, frame, view.id);
+    utassert(third != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.scriptRenderCount !== 2) throw new Error('dirty view was not rebuilt')"),
+        StrL("dirty-check.js"), &error));
+    EntityDrop(&app, view.id);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View } from 'gpui';\n"
+        "import { v_flex, InputState, Input, SliderState, Slider, OtpState, OtpInput } from 'gpui-base';\n"
+        "globalThis.retainedEvents = 0;\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) {\n"
+        "    this.input = InputState.new({ value: 'first', placeholder: 'type' });\n"
+        "    this.slider = SliderState.new({ min: 0, max: 10, step: 1, value: 3 });\n"
+        "    this.otp = OtpState.new(6, { value: '12' });\n"
+        "    this.input.on('change', () => { globalThis.retainedEvents += 1; this.input.set_value('second'); });\n"
+        "    this.slider.on('release', () => { globalThis.retainedEvents += 10; });\n"
+        "    this.otp.on('complete', () => { globalThis.retainedEvents += 100; });\n"
+        "    globalThis.retainedInput = this.input;\n"
+        "  }\n"
+        "  render(cx) { return v_flex().children([\n"
+        "    Input.new(this.input), Slider.new(this.slider), OtpInput.new(this.otp)\n"
+        "  ]); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("retained-state.js"),
+                                               source, &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(runtime && runtime->LiveEntities() == 3);
+    InputState* input = root && root->first ? root->first->input : nullptr;
+    utassert(input != nullptr && StrEq(InputValue(input), "first"));
+    utassert(input && input->onChange.IsValid());
+    if (input) {
+        InputEvent changed = {InputEventKind::Change};
+        ListenerCall(&app, &window, input->onChange, &changed);
+    }
+    utassert(runtime->Eval(
+        StrL("if (globalThis.retainedEvents !== 1) throw new Error('retained event was not dispatched')"),
+        StrL("retained-event-check.js"), &error));
+    utassert(input && StrEq(InputValue(input), "second"));
+    utassert(runtime->Eval(StrL("globalThis.retainedInput.release()"),
+                           StrL("retained-release.js"), &error));
+    utassert(runtime->LiveEntities() == 2);
+    EntityDrop(&app, view.id);
+    utassert(runtime->LiveEntities() == 0);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void VirtualListsRenderOneVisibleBatch() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { v_virtual_list, VirtualListScrollHandle } from 'gpui-base';\n"
+        "globalThis.virtualBatches = 0;\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { this.scroll = VirtualListScrollHandle.new(); }\n"
+        "  render(cx) { return v_virtual_list('rows', 20, 24,\n"
+        "    index => 'row-' + index,\n"
+        "    range => { globalThis.virtualBatches += 1; const out = [];\n"
+        "      for (let i = range.start; i < range.end; i++) out.push(div().child('row ' + i));\n"
+        "      return out;\n"
+        "    }).track_scroll(this.scroll); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("virtual-list.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(runtime->Eval(
+        StrL("if (globalThis.virtualBatches !== 1) throw new Error('virtual list did not render one range')"),
+        StrL("virtual-list-check.js"), &error));
+    utassert(runtime->LiveEntities() == 1);
+    EntityDrop(&app, view.id);
+    utassert(runtime->LiveEntities() == 0);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -520,4 +732,8 @@ void TestShellCore() {
     RuntimeLoadsRendersAndRetiresCallbacks();
     RuntimeAbortsFailedSnapshotTransactions();
     RuntimeLoadsOnlyModulesInsideTheApplicationRoot();
+    PublishedSnapshotsMaterializeToNativeElements();
+    ScriptViewsReuseSnapshotsUntilNotified();
+    RetainedScriptStateSurvivesFramesAndDispatchesEvents();
+    VirtualListsRenderOneVisibleBatch();
 }

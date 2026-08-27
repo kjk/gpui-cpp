@@ -9464,3 +9464,32 @@ This is the VM/spec boundary, not the completed shell: retained entity handles,
 spec materialization, the scheduler, standard capability APIs, hot reload,
 plugins, dock/root integration, typings, CLI and examples follow in later
 checkpoints.
+
+## Shell retained state and native materialization
+
+Script views now publish immutable snapshots that are replayed into native
+Base controls without entering QuickJS on ordinary repaints. The materializer
+projects the common style and behavior surface and constructs the native
+controls whose shell-specific behavior has been ported so far, including
+inputs, sliders, OTP fields and virtual lists; the remaining component-specific
+materializers follow in the shell UI checkpoint. Percentage insets are
+represented on all four edges in the native style so script-positioned slider
+parts and ordinary elements do not lose vertical percentages.
+
+One runtime-local retained store owns JavaScript-safe handles for input,
+textarea, slider, OTP, focus and virtual-scroll state, with the upstream
+10,000-live-record limit. Creation during render/layout and mutation during
+layout are rejected. Failed initialization rolls newly created records back;
+dropping a ScriptView releases everything it owns. Long-lived input, slider
+and OTP subscriptions preserve their policy/application/view owner, retire
+their persistent QuickJS functions with the state, and dispatch from native
+widget events without rebuilding the snapshot. OTP storage now matches the
+shell API's 64-cell bound.
+
+Virtual lists retain their scroll handle, cap aggregate described items at one
+million per render, and invoke JavaScript once for the visible range. The
+range gets an isolated spec arena under the Layout scope and cannot register
+callbacks, notify, create retained state or nest another virtual list. Stable
+keys are checked for duplicates before the batch is materialized. Release
+tests pass 21,154 checks, including snapshot reuse, retained event dispatch,
+owner cleanup and one-call visible-range rendering.
