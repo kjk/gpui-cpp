@@ -51,6 +51,23 @@ static void TheRangeClampsAndWidens() {
     utassert(NumberStepValue(StrL("1"), StepAction::Decrement, 5, true, 0.25,
                              false, 0, out, (int)sizeof(out)));
     utassert(StrEqI(Str(out), StrL("0.25")));
+
+    // With no current value the range is entered immediately, in either
+    // direction. A value already outside the range may only move in the
+    // pressed direction — clamping it across itself is not a decrement.
+    utassert(NumberStepValue(Str{}, StepAction::Increment, 1, true, 10,
+                             false, 0, out, (int)sizeof(out)));
+    utassert(StrEqI(Str(out), StrL("10")));
+    utassert(NumberStepValue(Str{}, StepAction::Decrement, 1, true, 10,
+                             false, 0, out, (int)sizeof(out)));
+    utassert(StrEqI(Str(out), StrL("10")));
+    utassert(!NumberStepValue(StrL("5"), StepAction::Decrement, 1, true, 10,
+                              false, 0, out, (int)sizeof(out)));
+    utassert(!NumberStepValue(StrL("1000"), StepAction::Increment, 1, false,
+                              0, true, 100, out, (int)sizeof(out)));
+    utassert(NumberStepValue(StrL("1000"), StepAction::Decrement, 1, false,
+                             0, true, 100, out, (int)sizeof(out)));
+    utassert(StrEqI(Str(out), StrL("100")));
 }
 
 static void AStepThatDoesNotMoveIsNoStep() {
@@ -63,6 +80,77 @@ static void AStepThatDoesNotMoveIsNoStep() {
     // A zero step moves nothing in either direction.
     utassert(!NumberStepValue(StrL("3"), StepAction::Increment, 0, false, 0,
                               false, 0, out, (int)sizeof(out)));
+}
+
+static double BoundaryStep(double current, StepAction action, App*,
+                           intptr_t scale) {
+    double fineStep = (double)scale / 100.0;
+    if (action == StepAction::Increment) {
+        return current < 1 ? fineStep : 0.5;
+    }
+    return current <= 1 ? fineStep : 0.5;
+}
+
+static void FixedAndValueDependentStrategiesMatchRustsEnum() {
+    NumberStep fixed = NumberStep::Fixed(2.5);
+    utassert(fixed.kind == NumberStepKind::Fixed);
+    utassert(fixed.Value(100, StepAction::Decrement, nullptr) == 2.5);
+
+    NumberStep dynamic = NumberStep::ByValue(&BoundaryStep, 10);
+    utassert(dynamic.kind == NumberStepKind::ByValue);
+    utassert(dynamic.Value(0.5, StepAction::Increment, nullptr) == 0.1);
+    utassert(dynamic.Value(1.0, StepAction::Increment, nullptr) == 0.5);
+    utassert(dynamic.Value(1.0, StepAction::Decrement, nullptr) == 0.1);
+}
+
+struct NumberEventSink {
+    int count = 0;
+    StepAction last = StepAction::Increment;
+
+    static void OnStep(NumberEventSink* self, Ctx*,
+                       const NumberInputEvent* ev) {
+        self->count++;
+        self->last = ev->action;
+    }
+
+    static El* Render(NumberEventSink*, Ctx* cx) { return Div(cx->a); }
+};
+
+static bool RejectFour(Str value, intptr_t) {
+    return !StrEqI(value, StrL("4"));
+}
+
+static void ApplyStepValidatesAndFallsBackToTheStepEvent() {
+    App app;
+    InputState state;
+    InputSetValue(&state, StrL("3"));
+    NumberStep one = NumberStep::Fixed(1);
+    Entity<NumberEventSink> sink = EntityNew<NumberEventSink>(&app);
+    Listener onStep = ListenTo(sink, &NumberEventSink::OnStep);
+
+    state.validate = &RejectFour;
+    utassert(NumberInputApplyStep(&state, &app, nullptr,
+                                  StepAction::Increment, &one, false, 0,
+                                  false, 0, false, onStep));
+    utassert(StrEqI(InputValue(&state), StrL("3")));
+    utassert(sink.Get(&app)->count == 1);
+    utassert(sink.Get(&app)->last == StepAction::Increment);
+
+    state.validate = nullptr;
+    utassert(NumberInputApplyStep(&state, &app, nullptr,
+                                  StepAction::Decrement, &one, true, 0,
+                                  false, 0, false, onStep));
+    utassert(StrEqI(InputValue(&state), StrL("2")));
+    utassert(sink.Get(&app)->count == 1);
+    utassert(state.maskPattern.kind == MaskKind::Number);
+    utassert(!state.maskPatternSet);
+
+    state.disabled = true;
+    utassert(!NumberInputApplyStep(&state, &app, nullptr,
+                                   StepAction::Increment, &one, false, 0,
+                                   false, 0, false, onStep));
+    utassert(StrEqI(InputValue(&state), StrL("2")));
+    EntityDropAll(&app);
 }
 
 static El* FindNamed(El* root, const char* name) {
@@ -78,6 +166,81 @@ static El* FindNamed(El* root, const char* name) {
         }
     }
     return nullptr;
+}
+
+static void ThemedDefaultUsesOneSharedSemanticStep() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    win->frameArena = a;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    InputState state;
+    InputSetValue(&state, StrL("3.5"));
+    El* root = component::NumberInput::New(&cx, StrL("quantity"), &state)
+                   ->Step(0.5)
+                   ->Max(4)
+                   ->IntoEl();
+    El* inc = FindNamed(root, "increment");
+    El* dec = FindNamed(root, "decrement");
+    El* semantic = root->first;
+    utassert(inc && inc->onClick.IsValid());
+    utassert(dec && dec->onClick.IsValid());
+    utassert(semantic &&
+             semantic->accessibilityIncrementDirect.IsValid());
+    utassert(semantic->accessibilityDecrementDirect.IsValid());
+
+    inc->onClick.Call();
+    utassert(StrEqI(InputValue(&state), StrL("4.0")));
+    utassert(state.focused && win->input == &state);
+    // At the bound the operation is still the spinbutton's, but its text is
+    // not rewritten to a differently formatted copy of the same value.
+    semantic->accessibilityIncrementDirect.Call();
+    utassert(StrEqI(InputValue(&state), StrL("4.0")));
+    dec->onClick.Call();
+    utassert(StrEqI(InputValue(&state), StrL("3.5")));
+
+    IdsCollect(root);
+    FocusCollect(win, root);
+    int editorFocus = 0;
+    for (int i = 0; i < win->focusEls.len; i++) {
+        if (win->focusEls[i].accessibilityIncrementDirect.IsValid()) {
+            editorFocus = win->focusEls[i].id;
+            break;
+        }
+    }
+    utassert(editorFocus != 0);
+    WindowSetFocusId(win, editorFocus);
+    WindowKeyDown(win, KeyUp, false, false, false, false);
+    utassert(StrEqI(InputValue(&state), StrL("4.0")));
+
+    NumberInputText* text = NumberInputText::New(&cx);
+    El* child = Div(a);
+    El* region = text->Child(child)->IntoEl();
+    utassert(region->style.minW == 0);
+    utassert(region->style.flexGrow == 1);
+    utassert(region->first == child);
+
+    El* rightDec = Div(a);
+    El* rightInput = Div(a);
+    El* rightInc = Div(a);
+    El* stacked = gpui::NumberInput::Compose(
+        &cx, StrL("stacked"), &state, false, rightDec, rightInput, rightInc,
+        true);
+    utassert(stacked->first && stacked->first->first == rightInput);
+    El* controls = stacked->first->next;
+    utassert(controls && controls->first == rightInc);
+    utassert(controls->first->next == rightDec);
+    utassert(rightInc->style.flexGrow == 1 && rightDec->style.flexGrow == 1);
+
+    InputBlur(&state, &app, win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
 }
 
 // `InputBase::new(("number-input", state.entity_id()))` wrapping
@@ -125,4 +288,7 @@ void TestNumberInput() {
     TextThatIsNotANumberStepsFromZero();
     TheRangeClampsAndWidens();
     AStepThatDoesNotMoveIsNoStep();
+    FixedAndValueDependentStrategiesMatchRustsEnum();
+    ApplyStepValidatesAndFallsBackToTheStepEvent();
+    ThemedDefaultUsesOneSharedSemanticStep();
 }

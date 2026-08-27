@@ -7648,3 +7648,43 @@ partial-module spellings and no full-module errors. MSVC debug passes 19,867
 checks. MSVC release, clang-cl release and MSVC ASan pass the same 19,867;
 wasm passes its 19,162 applicable checks. The release story build and pinned
 light-theme Switch comparison pass.
+
+## Base NumberInput owns stepping and composition
+
+NumberInput had the pure `step_value` arithmetic and a themed three-part row,
+but the source's `NumberStep`, `NumberInputEvent` and `NumberInputText` types
+were absent. Every story supplied its own click arithmetic, a NumberInput with
+no callbacks did nothing, and the UI layer made the Base spinbutton root double
+as its decorated frame. Value-dependent steps, validator fallback, the default
+numeric mask, the right-stacked control layout and the source's one semantic
+step shared by pointer, keyboard and accessibility were therefore missing.
+
+`NumberStep` is now the POD tagged projection of Rust's data-carrying enum:
+fixed or a retained `ByValue` function of current value and direction. The
+default themed policy is the source's fixed 1; `Step`, `StepBy`, `NoStep`,
+`Min`, `Max` and `OnStep` expose the complete policy, while the older
+directional listeners remain caller-controlled overrides. Applying a policy
+focuses the editor, unmasks and parses its text, preserves decimal precision,
+clamps directionally, checks both the caller validator and the numeric mask,
+writes silently on success, and emits `NumberInputEvent::Step` only where the
+source does. A NumberInput installs the ungrouped numeric mask only until the
+caller explicitly chooses another.
+
+Base now owns `NumberInputText` (`min_w_0().flex_1()`) and the semantic
+composition. The normal order is decrement, text, increment; `controlsRight`
+puts increment above decrement in a full-height right column. UI decorates
+that result from an outer visual frame. Frame-local semantic callbacks are
+retained in accessibility nodes and inherited by the editor's focus record,
+so Up/Down, assistive increment/decrement and both buttons invoke the same
+operation without binding state to the rendering view.
+
+Tests cover the two strategy variants, boundary-sensitive dynamic amounts,
+precision and every directional range edge from upstream, validator fallback,
+event payloads, disabled behavior, lazy masks, the default themed callbacks,
+focus preservation, inherited Up handling, the text-region contract and both
+Base child orders. The audit records `NumberStepValue` as the exact C++
+spelling of the module's free `step_value` and moves to 89 full, 32 partial, 8
+adapters and 2 exclusions with 293 unresolved partial-module spellings and no
+full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
+19,909 checks; wasm passes its 19,204 applicable checks. The release story
+build and pinned light-theme NumberInput comparison pass.

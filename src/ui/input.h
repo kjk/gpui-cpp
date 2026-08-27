@@ -186,6 +186,13 @@ struct NumberInput {
     bool hasBg = false;
     Rgba textColor = {};
     bool hasTextColor = false;
+    NumberStep numberStep = {};
+    bool hasNumberStep = true;
+    bool hasMin = false;
+    double min = 0;
+    bool hasMax = false;
+    double max = 0;
+    Listener onStep;
     Listener onInc;
     Listener onDec;
     Listener onFocus;
@@ -202,6 +209,14 @@ struct NumberInput {
     NumberInput* Suffix(El* el);
     NumberInput* Bg(Background c);
     NumberInput* TextColor(Rgba c);
+    // InputState::step / step_by / set_step and its directional bounds.
+    NumberInput* Step(double value);
+    NumberInput* StepBy(NumberStepByValueFn fn, intptr_t arg = 0);
+    NumberInput* NoStep();
+    NumberInput* Min(double value);
+    NumberInput* Max(double value);
+    // NumberInput::on_step, receiving NumberInputEvent.
+    NumberInput* OnStep(Listener fn);
     NumberInput* OnFocus(Listener fn);
     NumberInput* OnInc(Listener fn);
     NumberInput* OnDec(Listener fn);

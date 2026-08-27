@@ -1608,6 +1608,11 @@ struct El {
     Listener accessibilityDefault;
     Listener accessibilityIncrement;
     Listener accessibilityDecrement;
+    // The same semantic operations for a frame-local, non-entity callback.
+    // Composed controls use this when the behavior belongs to their retained
+    // InputState rather than to the view that happened to render them.
+    Func0 accessibilityIncrementDirect;
+    Func0 accessibilityDecrementDirect;
     // El::OnClickAction — dispatched from the release, beside onClick.
     uint32_t clickAction = 0;
     intptr_t clickActionArg = 0;
@@ -1930,6 +1935,8 @@ struct El {
     El* OnAccessibilityDefault(Listener fn);
     El* OnAccessibilityIncrement(Listener fn);
     El* OnAccessibilityDecrement(Listener fn);
+    El* OnAccessibilityIncrement(Func0 fn);
+    El* OnAccessibilityDecrement(Func0 fn);
     // `div().id(name)` — the whole of it. The element is named, and the id it
     // is found by is that name folded with its ancestors'. This is what a
     // widget should reach for: two `Button::New(cx, StrL("save"))` under
@@ -2164,6 +2171,8 @@ struct AccessibilityNode {
     Listener accessibilityDefault = {};
     Listener accessibilityIncrement = {};
     Listener accessibilityDecrement = {};
+    Func0 accessibilityIncrementDirect = {};
+    Func0 accessibilityDecrementDirect = {};
     uint32_t clickAction = 0;
     intptr_t clickActionArg = 0;
     SliderState* slider = nullptr;
@@ -2460,6 +2469,12 @@ struct FocusRect {
     // there — see DispatchNode.
     int dispatchIx = 0;
     Bounds bounds = {};
+    // Increment/decrement semantics inherited from the nearest ancestor.
+    // A spinbutton puts them on its frame while its editor owns focus.
+    Listener accessibilityIncrement = {};
+    Listener accessibilityDecrement = {};
+    Func0 accessibilityIncrementDirect = {};
+    Func0 accessibilityDecrementDirect = {};
 };
 
 // One key context or one action handler, recorded in tree order. `subtreeEnd`

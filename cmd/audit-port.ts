@@ -51,7 +51,6 @@ const partialBase = new Set([
   "input",
   "macos_accessibility",
   "motion",
-  "number_input",
   "resizable",
   "scrollbar",
   "styled",
@@ -321,6 +320,9 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   },
   "base/lib.rs::fn init": { spellings: ["BaseInit"] },
   "base/dialog.rs::fn init": { spellings: ["DialogInitKeys"] },
+  "base/number_input.rs::fn step_value": {
+    spellings: ["NumberStepValue"],
+  },
   "base/geometry.rs::struct Edges": {
     spellings: ["Edges"],
     targets: ["src/gpui/gpui.h", "src/base/geometry.h"],

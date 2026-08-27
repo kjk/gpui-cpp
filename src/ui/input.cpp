@@ -453,6 +453,34 @@ NumberInput* NumberInput::TextColor(Rgba c) {
     hasTextColor = true;
     return this;
 }
+NumberInput* NumberInput::Step(double value) {
+    numberStep = NumberStep::Fixed(value);
+    hasNumberStep = true;
+    return this;
+}
+NumberInput* NumberInput::StepBy(NumberStepByValueFn fn, intptr_t arg) {
+    numberStep = NumberStep::ByValue(fn, arg);
+    hasNumberStep = true;
+    return this;
+}
+NumberInput* NumberInput::NoStep() {
+    hasNumberStep = false;
+    return this;
+}
+NumberInput* NumberInput::Min(double value) {
+    min = value;
+    hasMin = true;
+    return this;
+}
+NumberInput* NumberInput::Max(double value) {
+    max = value;
+    hasMax = true;
+    return this;
+}
+NumberInput* NumberInput::OnStep(Listener fn) {
+    onStep = fn;
+    return this;
+}
 NumberInput* NumberInput::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
@@ -490,21 +518,16 @@ El* NumberInput::IntoEl() {
     // is the only thing that can say the editor has the keyboard.
     bool focused = state && state->focused && !disabled;
     Str base = id.s ? id : StrL("number");
-    El* frame = gpui::NumberInput::New(cx, base)
-                    ->AriaDisabled(disabled)
-                    ->OnAccessibilityIncrement(onInc)
-                    ->OnAccessibilityDecrement(onDec)
-                    ->FlexRow()
-                    ->W(width)
-                    ->H(h);
-    if (state) {
-        Str inputValue = InputValue(state);
-        frame->AriaValue(inputValue);
-        double numeric = 0;
-        if (NumberParseValue(inputValue, &numeric)) {
-            frame->AriaNumericValue((float)numeric);
-        }
-    }
+    const NumberStep* policy = hasNumberStep ? &numberStep : nullptr;
+    Func0 decDirect = NumberInputStepCallback(
+        cx, state, StepAction::Decrement, policy, hasMin, min, hasMax, max,
+        disabled, onStep);
+    Func0 incDirect = NumberInputStepCallback(
+        cx, state, StepAction::Increment, policy, hasMin, min, hasMax, max,
+        disabled, onStep);
+    // The visual frame is the UI layer; BaseNumberInput below owns the
+    // spinbutton semantics and fixed three-part structure.
+    El* frame = Div(a)->FlexRow()->W(width)->H(h);
     if (appearance) {
         frame->Radius(th.radius)
             ->Bg(hasBg ? bg
@@ -549,11 +572,16 @@ El* NumberInput::IntoEl() {
                   ->ItemsCenter()
                   ->JustifyCenter()
                   ->Child(IconEl(a, IconName::Plus, font)->Fg(stepFg));
+    if (!disabled && !onDec.IsValid()) {
+        dec->OnClick(decDirect);
+    }
+    if (!disabled && !onInc.IsValid()) {
+        inc->OnClick(incDirect);
+    }
     if (!disabled) {
         dec->HoverBg(RgbaOpacity(th.inputBorder, 0.4f));
         inc->HoverBg(RgbaOpacity(th.inputBorder, 0.4f));
     }
-    frame->Child(dec);
     // The editor sits between them, centered and without its own frame.
     Input* editor = Input::New(cx, StrL("input"), state)
                         ->WithSize(size)
@@ -567,8 +595,28 @@ El* NumberInput::IntoEl() {
     if (suffix) {
         editor->Suffix(suffix);
     }
-    frame->Child(Div(a)->Flex1()->H(kFill)->Child(editor->IntoEl()));
-    frame->Child(inc);
+    El* content = gpui::NumberInput::Compose(
+        cx, base, state, disabled, dec,
+        Div(a)->H(kFill)->Child(editor->IntoEl()), inc);
+    if (onInc.IsValid()) {
+        content->OnAccessibilityIncrement(onInc);
+    } else {
+        content->OnAccessibilityIncrement(incDirect);
+    }
+    if (onDec.IsValid()) {
+        content->OnAccessibilityDecrement(onDec);
+    } else {
+        content->OnAccessibilityDecrement(decDirect);
+    }
+    if (state) {
+        Str inputValue = InputValue(state);
+        content->AriaValue(inputValue);
+        double numeric = 0;
+        if (NumberParseValue(inputValue, &numeric)) {
+            content->AriaNumericValue((float)numeric);
+        }
+    }
+    frame->Child(content);
     return frame;
 }
 

@@ -1344,6 +1344,14 @@ El* El::OnAccessibilityDecrement(Listener fn) {
     accessibilityDecrement = fn;
     return this;
 }
+El* El::OnAccessibilityIncrement(Func0 fn) {
+    accessibilityIncrementDirect = fn;
+    return this;
+}
+El* El::OnAccessibilityDecrement(Func0 fn) {
+    accessibilityDecrementDirect = fn;
+    return this;
+}
 El* El::PathId(Str name) {
     id = name;
     clickFromPath = true;
@@ -5930,12 +5938,26 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
 // focus handle the dialog tracks, so it reaches every focusable below it. The
 // resolved id is written back onto the element: the focus ring paints from it,
 // and nothing else has the tree to work it out again.
-static void CollectFocus(El* e, Window* win, int trap) {
+static void CollectFocus(El* e, Window* win, int trap, Listener increment,
+                         Listener decrement, Func0 incrementDirect,
+                         Func0 decrementDirect) {
     if (!e) {
         return;
     }
     if (e->style.trapId) {
         trap = e->style.trapId;
+    }
+    if (e->accessibilityIncrement.IsValid()) {
+        increment = e->accessibilityIncrement;
+    }
+    if (e->accessibilityDecrement.IsValid()) {
+        decrement = e->accessibilityDecrement;
+    }
+    if (e->accessibilityIncrementDirect.IsValid()) {
+        incrementDirect = e->accessibilityIncrementDirect;
+    }
+    if (e->accessibilityDecrementDirect.IsValid()) {
+        decrementDirect = e->accessibilityDecrementDirect;
     }
     // The context comes before this element's own handlers, so a walk out
     // from here finds the handlers first and then the context they sit in,
@@ -5968,10 +5990,15 @@ static void CollectFocus(El* e, Window* win, int trap) {
         fr.dispatchIx = win->dispatch.len;
         win->dispatch.Append(marker);
         fr.bounds = e->Bounds();
+        fr.accessibilityIncrement = increment;
+        fr.accessibilityDecrement = decrement;
+        fr.accessibilityIncrementDirect = incrementDirect;
+        fr.accessibilityDecrementDirect = decrementDirect;
         win->focusEls.Append(fr);
     }
     for (El* c = e->first; c; c = c->next) {
-        CollectFocus(c, win, trap);
+        CollectFocus(c, win, trap, increment, decrement, incrementDirect,
+                     decrementDirect);
     }
     // The subtree is closed: everything from here down was written between
     // `first` and now, so anything focused in it sits inside this span.
@@ -6498,6 +6525,8 @@ static void AccessibilityCollectNode(El* e, Vec<AccessibilityNode>* out,
         node.accessibilityDefault = e->accessibilityDefault;
         node.accessibilityIncrement = e->accessibilityIncrement;
         node.accessibilityDecrement = e->accessibilityDecrement;
+        node.accessibilityIncrementDirect = e->accessibilityIncrementDirect;
+        node.accessibilityDecrementDirect = e->accessibilityDecrementDirect;
         node.clickAction = e->clickAction;
         node.clickActionArg = e->clickActionArg;
         node.slider = e->slider;
@@ -6523,11 +6552,13 @@ static void AccessibilityCollectNode(El* e, Vec<AccessibilityNode>* out,
             node.actions |= AccessibilityActionDefault;
         }
         if (!node.info.disabled &&
-            (node.slider || node.accessibilityIncrement.IsValid())) {
+            (node.slider || node.accessibilityIncrement.IsValid() ||
+             node.accessibilityIncrementDirect.IsValid())) {
             node.actions |= AccessibilityActionIncrement;
         }
         if (!node.info.disabled &&
-            (node.slider || node.accessibilityDecrement.IsValid())) {
+            (node.slider || node.accessibilityDecrement.IsValid() ||
+             node.accessibilityDecrementDirect.IsValid())) {
             node.actions |= AccessibilityActionDecrement;
         }
         if (!node.info.disabled && node.focusId) {
@@ -6557,7 +6588,7 @@ void AccessibilityCollect(El* root, Vec<AccessibilityNode>* out) {
 void FocusCollect(Window* win, El* root) {
     win->focusEls.Clear();
     win->dispatch.Clear();
-    CollectFocus(root, win, 0);
+    CollectFocus(root, win, 0, {}, {}, {}, {});
     // The traversal order is the tab index first and the paint order within
     // it, so the sort has to be a stable one: an insertion sort over a list
     // this size, where almost every element is already index zero and nothing

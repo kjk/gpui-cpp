@@ -693,6 +693,7 @@ static void SetMouseDown(Window* win, bool down) {
 }
 
 static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt);
+static bool SemanticKeyStep(Window* win, int key, bool ctrl, bool alt);
 
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
                    bool platform) {
@@ -755,6 +756,13 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     // The focused slider's arrows, before anything else looks at them: an
     // element bound to a SliderState is a slider whatever else it is.
     if (!held && !eaten && SliderKeyStep(win, key, ctrl, alt)) {
+        win->eatChar = true;
+        return;
+    }
+    // A spinbutton's focused editor inherits the semantic operations from
+    // its frame. Up/down invoke the same operation as assistive technology
+    // and the two step buttons; horizontal arrows remain editor movement.
+    if (!held && !eaten && SemanticKeyStep(win, key, ctrl, alt)) {
         win->eatChar = true;
         return;
     }
@@ -973,8 +981,13 @@ bool WindowAccessibilityPerform(Window* win, uint32_t nodeId,
         Listener fn = action == AccessibilityAction::Increment
                           ? node.accessibilityIncrement
                           : node.accessibilityDecrement;
+        Func0 direct = action == AccessibilityAction::Increment
+                           ? node.accessibilityIncrementDirect
+                           : node.accessibilityDecrementDirect;
         if (fn.IsValid()) {
             ListenerCall(win->app, win, fn, &ev);
+        } else if (direct.IsValid()) {
+            direct.Call();
         } else {
             int dir = action == AccessibilityAction::Increment ? 1 : -1;
             if (!SliderStepBy(node.slider, dir, false)) {
@@ -1296,6 +1309,40 @@ static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt) {
         }
         // The keystroke was the slider's whether or not it could move: an
         // arrow on a slider at its limit is not also a walk of the focus.
+        AppInvalidate(win);
+        return true;
+    }
+    return false;
+}
+
+static bool SemanticKeyStep(Window* win, int key, bool ctrl, bool alt) {
+    if (ctrl || alt || !win->focusId ||
+        (key != KeyUp && key != KeyDown)) {
+        return false;
+    }
+    for (int i = 0; i < win->focusEls.len; i++) {
+        const FocusRect& fr = win->focusEls[i];
+        if (fr.id != win->focusId) {
+            continue;
+        }
+        Listener fn = key == KeyUp ? fr.accessibilityIncrement
+                                   : fr.accessibilityDecrement;
+        Func0 direct = key == KeyUp ? fr.accessibilityIncrementDirect
+                                    : fr.accessibilityDecrementDirect;
+        if (!fn.IsValid() && !direct.IsValid()) {
+            return false;
+        }
+        ClickEvent ev = {};
+        ev.x = fr.bounds.CenterX();
+        ev.y = fr.bounds.CenterY();
+        ev.el = fr.bounds;
+        ev.keyboard = true;
+        ev.keyboardKey = key;
+        if (fn.IsValid()) {
+            ListenerCall(win->app, win, fn, &ev);
+        } else {
+            direct.Call();
+        }
         AppInvalidate(win);
         return true;
     }
