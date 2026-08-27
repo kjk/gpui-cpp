@@ -9007,3 +9007,15 @@ converted from screen to the target child. GPUI initializes COM but not OLE,
 so the controller explicitly balances the `OleInitialize` required by
 `RegisterDragDrop`; Wry normally receives that initialization from its window
 runtime.
+
+Windows new-window creation now has the environment invariant Wry requires.
+`WebViewAttributes` can borrow an existing WebView2 environment (which the
+new view immediately AddRefs), the three `WebViewExtWindows` objects have
+borrowed raw accessors, and `NewWindowFeatures` identifies its opener. A
+handler may return `Create` with a completed C++ `WebView`; the backend passes
+that view's `ICoreWebView2` to `SetNewWindow` and handles the request. The same
+portable response also closes the already-built macOS arm: Darwin features
+carry WebKit's target configuration so a compatible WKWebView can be returned.
+MSVC release passes 20,819 checks, the release webview example builds with
+both MSVC and clang-cl, and the same example compiles and links on the remote
+Mac with Objective-C++ ARC and WebKit.

@@ -1673,7 +1673,8 @@ struct WebView {
     DragDropController* dragDropController = nullptr;
     bool oleInitialized = false;
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,
-                                             const NewWindowFeatures* features) = nullptr;
+                                             const NewWindowFeatures* features,
+                                             WebView** createdWebView) = nullptr;
 
     Vec<ProtocolCopy> protocols;
     // "http" or "https", the scheme custom protocols are tunnelled over.
@@ -2453,6 +2454,7 @@ static HRESULT OnNewWindowRequested(void* ctx, ICoreWebView2*,
     Str url = TakePwstrTemp(uri);
 
     NewWindowFeatures features;
+    features.opener = wv;
     ICoreWebView2WindowFeatures* f = nullptr;
     if (SUCCEEDED(args->get_WindowFeatures(&f)) && f) {
         BOOL has = FALSE;
@@ -2480,9 +2482,20 @@ static HRESULT OnNewWindowRequested(void* ctx, ICoreWebView2*,
         Rel(&f);
     }
 
-    NewWindowResponse response = wv->newWindowReqHandler(wv->ctx, url, &features);
-    args->put_Handled(response == NewWindowResponse::Deny ? TRUE : FALSE);
-    return S_OK;
+    WebView* created = nullptr;
+    NewWindowResponse response = wv->newWindowReqHandler(wv->ctx, url, &features, &created);
+    if (response == NewWindowResponse::Allow) {
+        return args->put_Handled(FALSE);
+    }
+    if (response == NewWindowResponse::Create && created && created->webview) {
+        HRESULT hr = args->put_NewWindow(created->webview);
+        if (FAILED(hr)) {
+            return hr;
+        }
+    } else if (response == NewWindowResponse::Create) {
+        logf("wry: NewWindowResponse::Create requires a target WebView\n");
+    }
+    return args->put_Handled(TRUE);
 }
 
 static HRESULT OnPermissionRequested(void*, ICoreWebView2*,
@@ -2769,7 +2782,12 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         return nullptr;
     }
 
-    ICoreWebView2Environment* env = CreateEnvironment(attrs);
+    ICoreWebView2Environment* env = (ICoreWebView2Environment*)attrs->webviewEnvironment;
+    if (env) {
+        env->AddRef();
+    } else {
+        env = CreateEnvironment(attrs);
+    }
     if (!env) {
         DestroyWindow(hwnd);
         return nullptr;
@@ -3157,6 +3175,18 @@ void WebViewCloseDevtools(WebView*) {}
 
 bool WebViewIsDevtoolsOpen(WebView*) {
     return false;
+}
+
+void* WebViewControllerRaw(WebView* wv) {
+    return wv ? wv->controller : nullptr;
+}
+
+void* WebViewEnvironmentRaw(WebView* wv) {
+    return wv ? wv->env : nullptr;
+}
+
+void* WebViewNativeRaw(WebView* wv) {
+    return wv ? wv->webview : nullptr;
 }
 
 }  // namespace wry

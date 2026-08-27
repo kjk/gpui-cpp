@@ -82,7 +82,8 @@ struct WebView {
     void (*documentTitleChangedHandler)(void* ctx, Str title) = nullptr;
     void (*onPageLoadHandler)(void* ctx, PageLoadEvent event, Str url) = nullptr;
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,
-                                             const NewWindowFeatures* features) = nullptr;
+                                             const NewWindowFeatures* features,
+                                             WebView** createdWebView) = nullptr;
 
     Vec<ProtocolCopy> protocols;
 
@@ -408,6 +409,8 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task);
     }
     NSURL* url = action.request.URL;
     wry::NewWindowFeatures features;
+    features.opener = wv;
+    features.targetConfiguration = (__bridge void*)configuration;
     if (windowFeatures.x && windowFeatures.y) {
         features.hasPosition = true;
         features.x = windowFeatures.x.doubleValue;
@@ -419,10 +422,14 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task);
         features.height = windowFeatures.height.doubleValue;
     }
 
+    wry::WebView* created = nullptr;
     wry::NewWindowResponse response = wv->newWindowReqHandler(
-        wv->ctx, url ? wry::FromNSTemp(url.absoluteString) : wry::Str(), &features);
+        wv->ctx, url ? wry::FromNSTemp(url.absoluteString) : wry::Str(), &features, &created);
     if (response == wry::NewWindowResponse::Deny) {
         return nil;
+    }
+    if (response == wry::NewWindowResponse::Create) {
+        return created ? created->webview : nil;
     }
 
     // Allow: open the window ourselves and hand WebKit the view inside it,

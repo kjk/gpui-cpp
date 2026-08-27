@@ -151,6 +151,15 @@ drag/drop feature is also present: an `IDropTarget` replaces WebView2's on
 each composition child and reports Enter, Over, Drop and Leave with UTF-8
 paths and child-relative coordinates.
 
+Windows' remaining linked builder seam is present as opaque borrowed ABI
+handles: an existing `ICoreWebView2Environment` can be supplied to
+construction, and controller, environment and native webview accessors mirror
+`WebViewExtWindows`. The environment input is AddRef'd immediately, so the
+source webview may then be released. New-window features name their opener;
+the callback can build a target with that environment and return the target
+through `NewWindowResponse::Create`, after which the backend supplies its
+native webview to `SetNewWindow`.
+
 The macOS backend has all of that except what the platform does not have: the
 custom protocol work-around is Windows' alone (WKWebView takes a scheme
 handler for the real scheme), the browser arguments and their neighbours are
@@ -168,9 +177,6 @@ Not ported, each for a reason:
 - **Drag and drop on macOS**. The default-enabled Windows `IDropTarget`
   implementation is ported; the `WryWebView` dragging-destination overrides
   are not yet.
-- **`NewWindowResponse::Create`**, the arm that hands back a webview to open
-  the request in. It needs the opener's `ICoreWebView2` and environment in the
-  public API, which would put a COM type in the portable header.
 - **The `_async` constructors**, which exist for callers with an async
   runtime. There is none here; `WebViewNew` is the blocking one, and it
   blocks the way Rust's does.
@@ -190,6 +196,10 @@ Each is also stated in a comment where it applies.
 - **A closure is a function pointer and a `void*`.** Every handler group
   shares the one `ctx` on the attributes, which is what a Rust closure would
   have captured.
+- **Platform objects are opaque pointers.** The Windows environment and raw
+  accessors, and macOS's target configuration for a created new window, keep
+  COM and Objective-C types out of the portable header. The pointers are
+  borrowed where documented; construction retains the ones it stores.
 - **An init script is registered without waiting for it.** Rust blocks on
   `AddScriptToExecuteOnDocumentCreatedCompletedHandler`; the registration and
   the navigation after it are queued on the browser thread in order, so the

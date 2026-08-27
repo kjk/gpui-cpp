@@ -189,14 +189,19 @@ struct CustomProtocol {
                     RequestResponder* responder) = nullptr;
 };
 
-/** `wry::NewWindowResponse`, minus the `Create` arm — see readme.md. */
+struct WebView;
+
+/** `wry::NewWindowResponse`. For Create, the handler writes the target
+    WebView through its final out-parameter. */
 enum class NewWindowResponse {
     Allow,
+    Create,
     Deny,
 };
 
-/** `wry::NewWindowFeatures`, minus the opener: the `Create` arm is what
-    needed it. `hasPosition` / `hasSize` are Rust's `Option`. */
+/** `wry::NewWindowFeatures`. `opener` supplies the source WebView and its
+    environment through `WebViewEnvironmentRaw`; `hasPosition` / `hasSize`
+    are Rust's `Option`. */
 struct NewWindowFeatures {
     bool hasPosition = false;
     double x = 0;
@@ -204,6 +209,10 @@ struct NewWindowFeatures {
     bool hasSize = false;
     double width = 0;
     double height = 0;
+    WebView* opener = nullptr;
+    /** macOS `NewWindowOpener::target_configuration`, borrowed during the
+        callback and accepted by `webviewConfiguration`. Null on Windows. */
+    void* targetConfiguration = nullptr;
 };
 
 /** `with_download_started_handler`. `path` starts as WebView2's suggested
@@ -283,7 +292,8 @@ struct WebViewAttributes {
     /** `window.open`. Null denies every request, which is what wry's
         `NewWindowRequested` handler does when no closure is set. */
     NewWindowResponse (*newWindowReqHandler)(void* ctx, Str url,
-                                             const NewWindowFeatures* features) = nullptr;
+                                             const NewWindowFeatures* features,
+                                             WebView** createdWebView) = nullptr;
 
     bool clipboard = false;
 #if defined(DEBUG) || defined(_DEBUG)
@@ -334,11 +344,12 @@ struct WebViewAttributes {
     ScrollBarStyle scrollBarStyle = ScrollBarStyle::Default;
     bool browserExtensionsEnabled = false;
     Str extensionPath;
+    /** Optional borrowed `ICoreWebView2Environment*`, normally obtained from
+        `WebViewEnvironmentRaw`. Windows AddRefs it during construction. */
+    void* webviewEnvironment = nullptr;
 };
 
 // ─── the webview ─────────────────────────────────────────────────────────
-
-struct WebView;
 
 /** `WebViewBuilder::build` (asChild false) / `build_as_child` (asChild true).
     `parentWindow` is the platform window handle: an `HWND` on Windows.
@@ -403,6 +414,15 @@ bool WebViewClearAllBrowsingData(WebView* webview);
 void WebViewOpenDevtools(WebView* webview);
 void WebViewCloseDevtools(WebView* webview);
 bool WebViewIsDevtoolsOpen(WebView* webview);
+
+#if GPUI_OS_WINDOWS
+/** Borrowed WebView2 objects corresponding to `WebViewExtWindows`. They stay
+    valid until `WebViewFree`; an environment passed back in attributes is
+    AddRef'd by `WebViewNew`. */
+void* WebViewControllerRaw(WebView* webview);
+void* WebViewEnvironmentRaw(WebView* webview);
+void* WebViewNativeRaw(WebView* webview);
+#endif
 
 // ─── the custom protocol work-around ─────────────────────────────────────
 //

@@ -24,6 +24,7 @@ void TestWryUri() {
     utassert(attrs.downloadStartedHandler == nullptr);
     utassert(attrs.downloadCompletedHandler == nullptr);
     utassert(attrs.dragDropHandler == nullptr);
+    utassert(attrs.webviewEnvironment == nullptr);
 
     // The crate's own case, verbatim.
     Str scheme = StrL("http");
