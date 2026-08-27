@@ -66,6 +66,16 @@ struct Scrollbar {
     static El* New(Ctx* cx, Str id, float scrollY, float scrollX,
                    Listener onScroll, ScrollAxis axis, ScrollbarMode mode);
 
+    // The renderer-backed form of ScrollableElement::scrollbar: preserve the
+    // caller's element as the viewport and attach the integrated scroll
+    // handle/bar behavior to it. New(...) is Apply(...) with a fresh Div.
+    static El* Apply(Ctx* cx, El* element, Str id, float scrollY,
+                     float scrollX, Listener onScroll,
+                     ScrollAxis axis = ScrollAxis::Vertical);
+    static El* Apply(Ctx* cx, El* element, Str id, float scrollY,
+                     float scrollX, Listener onScroll, ScrollAxis axis,
+                     ScrollbarMode mode);
+
     // The vertical case, which is most of them.
     static El* Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll);
     static El* Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll,

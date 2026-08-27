@@ -66,6 +66,205 @@ static void NothingToScrollMeansNoOffset() {
     utassertnear(ScrollbarOffsetForTrackPress(200, 0, 400, 400, 800, 800), 0.f);
 }
 
+static void PreciseGesturesKeepTheirAxisUntilAStrongTurn() {
+    OngoingScroll scroll;
+    Point first = {-40, -10};
+    scroll.Filter(&first, TouchPhase::Started);
+    utassertnear(first.x, -40);
+    utassertnear(first.y, 0);
+
+    // A little mid-gesture wobble remains horizontal.
+    Point wobble = {-10, -15};
+    scroll.Filter(&wobble, TouchPhase::Moved);
+    utassertnear(wobble.x, -10);
+    utassertnear(wobble.y, 0);
+
+    // Twice as much motion on the other axis releases the lock.
+    Point turn = {-10, -25};
+    scroll.Filter(&turn, TouchPhase::Moved);
+    utassertnear(turn.x, 0);
+    utassertnear(turn.y, -25);
+    scroll.Filter(&turn, TouchPhase::Ended);
+    utassert(!scroll.active);
+}
+
+static void ScrollableElementPreservesTheSourceElementAndMask() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    El* source = Div(a)->W(123)->Child(Div(a));
+    El* result = component::ScrollableElement::OverflowYScrollbar(&cx, source)
+                     ->Id(StrL("source-scroll"))
+                     ->ScrollY(17)
+                     ->OnScroll({})
+                     ->IntoEl();
+    utassert(result == source);
+    utassert(result->style.overflowY == Overflow::Scroll);
+    utassert(result->style.overflowX == Overflow::Hidden);
+    utassertnear(result->scrollY, 17);
+    utassertnear(result->style.width, 123);
+    utassert(result->first != nullptr);
+
+    El* direct = component::ScrollableElement::HorizontalScrollbar(
+        &cx, Div(a), StrL("direct-horizontal"), 9, {});
+    utassert(direct->style.overflowX == Overflow::Scroll);
+    utassert(direct->style.overflowY == Overflow::Hidden);
+    utassertnear(direct->scrollX, 9);
+
+    El* masked = component::ScrollableMask::New(
+                     &cx, Axis::Horizontal, result)
+                     ->Id(StrL("horizontal-mask"))
+                     ->IntoEl();
+    utassert(masked == result);
+    utassert((masked->scrollMaskAxes & 1) != 0);
+    utassert(masked->scrollFromPath);
+
+    AppGlobalClear(&app);
+    ArenaDelete(a);
+}
+
+namespace {
+struct ScrollRecorder {
+    float innerX = 0;
+    float innerY = 0;
+    float outerY = 0;
+    int innerCalls = 0;
+    int outerCalls = 0;
+
+    static void Inner(ScrollRecorder* self, Ctx*, const ScrollEvent* ev) {
+        self->innerX = ev->offsetX;
+        self->innerY = ev->offsetY;
+        self->innerCalls++;
+    }
+    static void Outer(ScrollRecorder* self, Ctx*, const ScrollEvent* ev) {
+        self->outerY = ev->offsetY;
+        self->outerCalls++;
+    }
+};
+} // namespace
+
+static ScrollRect TestScrollRect(int id, Bounds bounds, float contentW,
+                                 float contentH, uint8_t masks, int maskHit,
+                                 Listener listener) {
+    ScrollRect s = {};
+    s.id = id;
+    s.bounds = bounds;
+    s.contentW = contentW;
+    s.contentH = contentH;
+    s.maskAxes = masks;
+    s.maskHit = maskHit;
+    s.onScroll = listener;
+    return s;
+}
+
+static void DispatchWheel(Window* win, float dx, float dy,
+                          bool precise = false,
+                          TouchPhase phase = TouchPhase::Moved) {
+    PlatformInput input =
+        InputScrollWheel(10, 10, dx, dy, precise, {}, phase);
+    WindowDispatchInput(win, &input);
+}
+
+static void ScrollableMasksChainAndTrapLikeTheSource() {
+    App app = {};
+    Window* win = new Window();
+    win->app = &app;
+    Entity<ScrollRecorder> entity = EntityNewState<ScrollRecorder>(&app);
+    ScrollRecorder* state = entity.Get(&app);
+
+    // The inner hit is below the outer hit in the same chain, just as nested
+    // transparent ScrollableMask elements are in GPUI.
+    HitRect outerHit = {};
+    outerHit.bounds = {0, 0, 100, 100};
+    win->paint.hits.Append(outerHit);
+    HitRect innerHit = {};
+    innerHit.bounds = {0, 0, 100, 60};
+    innerHit.parent = 0;
+    win->paint.hits.Append(innerHit);
+
+    ScrollRect outer = TestScrollRect(
+        1, {0, 0, 100, 100}, 100, 500, 2, 0,
+        ListenTo(entity, &ScrollRecorder::Outer));
+    ScrollRect inner = TestScrollRect(
+        2, {0, 0, 100, 60}, 100, 300, 2, 1,
+        ListenTo(entity, &ScrollRecorder::Inner));
+    win->paint.scrolls.Append(outer);
+    win->paint.scrolls.Append(inner);
+
+    DispatchWheel(win, 0, -40);
+    utassertnear(state->innerY, 40);
+    utassertnear(state->outerY, 0);
+
+    // At the inner bottom the vertical mask hands off. Updating the retained
+    // ScrollRect on emit makes two events accumulate even before a repaint.
+    win->paint.scrolls[0].scrollY = 0;
+    win->paint.scrolls[1].scrollY = 240;
+    state->outerY = 0;
+    state->outerCalls = 0;
+    DispatchWheel(win, 0, -40);
+    DispatchWheel(win, 0, -40);
+    utassertnear(state->outerY, 80);
+    utassert(state->outerCalls == 2);
+
+    // A horizontal-dominant gesture is trapped by the horizontal mask,
+    // including at its edge; vertical-dominant input reaches the parent.
+    win->paint.scrolls[0].scrollY = 0;
+    win->paint.scrolls[1] = TestScrollRect(
+        3, {0, 0, 100, 60}, 300, 60, 1, 1,
+        ListenTo(entity, &ScrollRecorder::Inner));
+    state->innerX = 0;
+    state->outerY = 0;
+    state->outerCalls = 0;
+    DispatchWheel(win, -40, -10);
+    utassertnear(state->innerX, 40);
+    utassertnear(state->outerY, 0);
+    win->paint.scrolls[1].scrollX = 200;
+    DispatchWheel(win, -40, -10);
+    utassertnear(state->outerY, 0);
+    DispatchWheel(win, -10, -40);
+    utassertnear(state->outerY, 40);
+
+    // Precise deltas retain the horizontal axis across a wobble.
+    win->paint.scrolls[0].scrollY = 0;
+    win->paint.scrolls[1].id = 4;
+    win->paint.scrolls[1].scrollX = 0;
+    state->innerX = 0;
+    DispatchWheel(win, -40, -10, true, TouchPhase::Started);
+    DispatchWheel(win, -10, -15, true, TouchPhase::Moved);
+#if GPUI_OS_WASM
+    // gpui-base's OngoingScrollExt deliberately does not lock on wasm: GPUI's
+    // clock-backed filter is unimplemented there. This event is vertical-
+    // dominant on its own, so the horizontal viewport remains at 40.
+    utassertnear(state->innerX, 40);
+#else
+    utassertnear(state->innerX, 50);
+#endif
+    DispatchWheel(win, -10, -25, true, TouchPhase::Moved);
+#if GPUI_OS_WASM
+    utassertnear(state->innerX, 40);
+#else
+    utassertnear(state->innerX, 50);
+#endif
+
+    // A later sibling hit is an overlay, so neither masked viewport under it
+    // receives the wheel.
+    HitRect overlay = {};
+    overlay.bounds = {0, 0, 100, 100};
+    win->paint.hits.Append(overlay);
+    int calls = state->innerCalls + state->outerCalls;
+    DispatchWheel(win, -40, 0);
+    utassert(state->innerCalls + state->outerCalls == calls);
+
+    win->paint.hits.Reset();
+    win->paint.scrolls.Reset();
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestScrollbar() {
     TestSuite("scrollbar");
     TheThumbShrinksWithWhatIsVisible();
@@ -73,6 +272,9 @@ void TestScrollbar() {
     ATrackPressCentresTheThumbOnIt();
     ADragKeepsTheGrabPoint();
     NothingToScrollMeansNoOffset();
+    PreciseGesturesKeepTheirAxisUntilAStrongTurn();
+    ScrollableElementPreservesTheSourceElementAndMask();
+    ScrollableMasksChainAndTrapLikeTheSource();
 }
 
 // The timing a styled layer projects, which is what these assert against.

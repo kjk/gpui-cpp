@@ -63,6 +63,7 @@ The important non-mechanical mappings are encoded in the audit:
 | `ui/list/*` | `ui/list*` | themed UI surface over shared `base/list*` behavior |
 | `ui/menu/popup_menu` | `ui/popup_menu.h`, `ui/menu*` | canonical UI include over shared `base/popup_menu*` behavior |
 | `ui/plot/shape/sankey` | `ui/sankey.h`, `ui/plot*` | canonical UI include over the dependency-free `base/sankey*` layout port |
+| `ui/scroll/*` | `ui/scroll*`, integrated `gpui::ScrollRect` | transparent mask/handle siblings collapse onto the renderer-owned viewport; source-shaped builders retain the distinction |
 | `ui/highlighter/*` | `ui/highlighter*`, `ui/syntax*` | one scanner-backed adapter |
 | `ui/text/format/html` | `ui/text*`, `ui/html*` | one handwritten-parser adapter |
 | serde-backed state | `base/json*` | private support, not a Base public module |
@@ -80,6 +81,9 @@ The important non-mechanical mappings are encoded in the audit:
   resizable colors into Base, and Base primitives consume that projection.
 - Rust `Vec`-backed public builders and toast/notification storage no longer
   silently truncate at C++-only fixed capacities.
+- UI scroll viewports retain the source element, and `ScrollableMask` carries
+  capture-phase axis dominance, precise-gesture locking, vertical edge
+  chaining, horizontal edge trapping and overlay occlusion into the runtime.
 - Base input collection providers report their total result count and are
   retried into growing buffers. Completions, code actions, definitions,
   semantic tokens and edit lists no longer stop at port-only limits; document

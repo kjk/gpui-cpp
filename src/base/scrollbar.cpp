@@ -113,7 +113,22 @@ El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
 
 El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
                    Listener onScroll, ScrollAxis axis, ScrollbarMode mode) {
-    El* box = ApplyScrollbarTheme(cx, Div(cx->a))->ScrollMode(mode);
+    return Apply(cx, Div(cx->a), id, scrollY, scrollX, onScroll, axis, mode);
+}
+
+El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY,
+                     float scrollX, Listener onScroll, ScrollAxis axis) {
+    const BaseTheme* theme = BaseThemeGlobal(cx->app);
+    ScrollbarMode mode =
+        theme ? theme->scrollbar.mode : ScrollbarMode::Scrolling;
+    return Apply(cx, element, id, scrollY, scrollX, onScroll, axis, mode);
+}
+
+El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY,
+                     float scrollX, Listener onScroll, ScrollAxis axis,
+                     ScrollbarMode mode) {
+    El* box = ApplyScrollbarTheme(cx, element ? element : Div(cx->a))
+                  ->ScrollMode(mode);
     // Each axis is asked for on its own: a box that only scrolls down still
     // clips what runs off its side.
     box->ClipY();

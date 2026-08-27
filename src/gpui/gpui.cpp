@@ -1206,6 +1206,11 @@ El* El::HideScrollbarY() {
     return this;
 }
 
+El* El::ScrollMask(Axis axis) {
+    scrollMaskAxes |= axis == Axis::Horizontal ? 1 : 2;
+    return this;
+}
+
 El* El::Opacity(float f) {
     style.opacity = f < 0 ? 0 : (f > 1 ? 1 : f);
     return this;
@@ -4914,7 +4919,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->onMouseDownOut.IsValid() || e->onMouseUpOut.IsValid() ||
         e->drag.IsValid() || e->onDrop.IsValid() ||
         e->cursor != CursorKind::Arrow || e->slider || e->stopMouseDown ||
-        e->suppressTextSelection) {
+        e->suppressTextSelection || e->scrollMaskAxes) {
         HitRect hr;
         hr.id = e->clickId;
         hr.focusId = e->style.focusId;
@@ -4960,6 +4965,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.mode = ElScrollMode(e, ctx->app);
         sr.barX = !e->noScrollbar && !e->noScrollbarX;
         sr.barY = !e->noScrollbar && !e->noScrollbarY;
+        sr.maskAxes = e->scrollMaskAxes;
+        sr.maskHit = e->scrollMaskAxes ? ctx->hitParent : -1;
         sr.onScroll = e->onScroll;
         sr.input = e->input;
         ctx->scrolls.Append(sr);

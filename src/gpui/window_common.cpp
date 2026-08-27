@@ -19,6 +19,30 @@
 
 namespace gpui {
 
+void OngoingScroll::Filter(Point* delta, TouchPhase phase) {
+    if (!delta) {
+        return;
+    }
+    float ax = delta->x < 0 ? -delta->x : delta->x;
+    float ay = delta->y < 0 ? -delta->y : delta->y;
+    if (!active || phase == TouchPhase::Started) {
+        axis = ax > ay ? Axis::Horizontal : Axis::Vertical;
+        active = true;
+    } else if (axis == Axis::Horizontal && ay > ax * 2.f) {
+        axis = Axis::Vertical;
+    } else if (axis == Axis::Vertical && ax > ay * 2.f) {
+        axis = Axis::Horizontal;
+    }
+    if (axis == Axis::Horizontal) {
+        delta->y = 0;
+    } else {
+        delta->x = 0;
+    }
+    if (phase == TouchPhase::Ended || phase == TouchPhase::Cancelled) {
+        active = false;
+    }
+}
+
 int WindowCollectFrames(Window* win, uint64_t* cursor, FrameTiming* out,
                         int max) {
     if (!win || !cursor || !out || max <= 0) {
@@ -1114,8 +1138,8 @@ static float ClampScroll(float off, float content, float viewport) {
 
 // The scrolled box whose scrollbar band the pointer is in, or null, and which
 // of its two bars. Innermost first, the way the hit test reads its rects.
-static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
-                                     bool* horizontal) {
+static ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
+                               bool* horizontal) {
     for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
         const ScrollRect& s = ctx->scrolls[i];
         if (!s.onScroll.IsValid() && !s.input) {
@@ -1142,16 +1166,22 @@ static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
     return nullptr;
 }
 
-static void ScrollbarEmit(Window* win, const ScrollRect* s, float offsetX,
+static void ScrollbarEmit(Window* win, ScrollRect* s, float offsetX,
                           float offsetY) {
     // A text field owns its own offset — Rust's editor scrollbar reaches the
     // state's scroll handle the same way, rather than telling a view about it.
     if (s->input) {
         s->input->scrollX = ClampScroll(offsetX, s->contentW, s->bounds.w);
         s->input->scrollY = ClampScroll(offsetY, s->contentH, s->bounds.h);
+        s->scrollX = s->input->scrollX;
+        s->scrollY = s->input->scrollY;
         AppInvalidate(win);
         return;
     }
+    offsetX = ClampScroll(offsetX, s->contentW, s->bounds.w);
+    offsetY = ClampScroll(offsetY, s->contentH, s->bounds.h);
+    s->scrollX = offsetX;
+    s->scrollY = offsetY;
     ScrollEvent ev = {s->id, offsetY, offsetX};
     ListenerCall(win->app, win, s->onScroll, &ev);
     AppInvalidate(win);
@@ -1161,7 +1191,7 @@ static void ScrollbarEmit(Window* win, const ScrollRect* s, float offsetX,
 // anywhere else on the track the thumb jumps its centre to the press, which
 // is Rust's two branches on `thumb_bounds.contains`. Both bars go through
 // this once, along whichever axis they are.
-static void ScrollbarPress(Window* win, const ScrollRect* s, float x, float y,
+static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
                            bool horizontal) {
     float track = horizontal ? s->bounds.w : s->bounds.h;
     float content = horizontal ? s->contentW : s->contentH;
@@ -1188,7 +1218,7 @@ static void ScrollbarPress(Window* win, const ScrollRect* s, float x, float y,
 }
 
 // The scroll rect of an id, from the frame on screen.
-static const ScrollRect* ScrollRectById(Window* win, int id) {
+static ScrollRect* ScrollRectById(Window* win, int id) {
     for (int i = win->paint.scrolls.len - 1; i >= 0; i--) {
         if (win->paint.scrolls[i].id == id) {
             return &win->paint.scrolls[i];
@@ -1198,7 +1228,7 @@ static const ScrollRect* ScrollRectById(Window* win, int id) {
 }
 
 static void ScrollbarDrag(Window* win, float x, float y) {
-    const ScrollRect* s = ScrollRectById(win, win->scrollDragId);
+    ScrollRect* s = ScrollRectById(win, win->scrollDragId);
     if (!s || (!s->onScroll.IsValid() && !s->input)) {
         return;
     }
@@ -1568,7 +1598,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         return;
     }
     bool barHorizontal = false;
-    const ScrollRect* bar = ScrollbarAt(&win->paint, x, y, &barHorizontal);
+    ScrollRect* bar = ScrollbarAt(&win->paint, x, y, &barHorizontal);
     if (bar) {
         SetMouseDown(win, true);
         ScrollbarPress(win, bar, x, y, barHorizontal);
@@ -1840,6 +1870,76 @@ static void DispatchMouseExited(Window* win, const MouseExitEvent& in) {
     AppInvalidate(win);
 }
 
+static bool HitDescendsFrom(const PaintCtx& paint, int leaf, int ancestor) {
+    for (int i = leaf; i >= 0; i = paint.hits[i].parent) {
+        if (i == ancestor) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The mask is a hitbox upstream. Here its scroll element records a hit-chain
+// node, which gives the same occlusion answer without painting a transparent
+// sibling: the topmost hit under the pointer must be the mask or one of its
+// descendants.
+static bool ScrollMaskIsTopmost(Window* win, const ScrollRect& s, float x,
+                                float y) {
+    if (s.maskHit < 0) {
+        return true;
+    }
+    int leaf = -1;
+    for (int i = win->paint.hits.len - 1; i >= 0; i--) {
+        if (win->paint.hits[i].bounds.Contains({x, y})) {
+            leaf = i;
+            break;
+        }
+    }
+    return leaf >= 0 && HitDescendsFrom(win->paint, leaf, s.maskHit);
+}
+
+#if !GPUI_OS_WASM
+static OngoingScroll* ScrollLockFor(Window* win, int id, Axis maskAxis) {
+    int* slotId = maskAxis == Axis::Horizontal
+                      ? &win->scrollLockHorizontalId
+                      : &win->scrollLockVerticalId;
+    OngoingScroll* slot = maskAxis == Axis::Horizontal
+                              ? &win->scrollLockHorizontal
+                              : &win->scrollLockVertical;
+    if (*slotId != id) {
+        *slotId = id;
+        *slot = {};
+    }
+    return slot;
+}
+#endif
+
+// ScrollableMask's capture-phase axis choice. Line-wheel deltas are compared
+// independently; precise deltas keep the OngoingScroll lock for the gesture.
+static Point ScrollMaskDelta(Window* win, const ScrollRect& s,
+                             const ScrollWheelEvent& in, Axis maskAxis) {
+    Point delta = {in.deltaX, in.deltaY};
+#if GPUI_OS_WASM
+    (void)win;
+    (void)s;
+    (void)maskAxis;
+#else
+    if (in.precise) {
+        ScrollLockFor(win, s.id, maskAxis)->Filter(&delta, in.phase);
+    }
+#endif
+    if (delta.x != 0 && delta.y != 0) {
+        float ax = delta.x < 0 ? -delta.x : delta.x;
+        float ay = delta.y < 0 ? -delta.y : delta.y;
+        if (ax > ay) {
+            delta.y = 0;
+        } else {
+            delta.x = 0;
+        }
+    }
+    return delta;
+}
+
 static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
     // A multi-line field takes the wheel before anything around it, the way
     // the editor's own scroll handle does in Rust.
@@ -1875,8 +1975,63 @@ static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
     // Only a box that asked for the event gets it; anything else falls
     // through to the window subscription, as it did before there were any.
     for (int i = win->paint.scrolls.len - 1; i >= 0; i--) {
-        const ScrollRect& s = win->paint.scrolls[i];
+        ScrollRect& s = win->paint.scrolls[i];
         if (!s.onScroll.IsValid() || !s.bounds.Contains({in.x, in.y})) {
+            continue;
+        }
+        if (s.maskAxes) {
+            // A dialog/menu above the mask blocks the whole gesture; letting
+            // the search continue would scroll the ancestor underneath the
+            // same overlay instead.
+            if (!ScrollMaskIsTopmost(win, s, in.x, in.y)) {
+                AppInvalidate(win);
+                return;
+            }
+            Point horizontal = {};
+            Point vertical = {};
+            if (s.maskAxes & 1) {
+                horizontal =
+                    ScrollMaskDelta(win, s, in, Axis::Horizontal);
+            }
+            if (s.maskAxes & 2) {
+                vertical = ScrollMaskDelta(win, s, in, Axis::Vertical);
+            }
+
+            // Both masks see the same gesture upstream. They agree on the
+            // dominant axis; the raw comparison only resolves an exact-zero
+            // or equal-delta case without making one axis remap the other.
+            bool takeX = (s.maskAxes & 1) && horizontal.x != 0;
+            bool takeY = (s.maskAxes & 2) && vertical.y != 0;
+            if (takeX && takeY) {
+                float ax = in.deltaX < 0 ? -in.deltaX : in.deltaX;
+                float ay = in.deltaY < 0 ? -in.deltaY : in.deltaY;
+                takeX = ax > ay;
+                takeY = !takeX;
+            }
+            if (takeX) {
+                float offX = ClampScroll(s.scrollX - horizontal.x, s.contentW,
+                                         s.bounds.w);
+                if (offX != s.scrollX) {
+                    ScrollbarEmit(win, &s, offX, s.scrollY);
+                } else {
+                    AppInvalidate(win);
+                }
+                // Horizontal masks trap the gesture even at the edge: GPUI
+                // would otherwise remap it onto a vertical-only ancestor.
+                return;
+            }
+            if (takeY) {
+                float offY = ClampScroll(s.scrollY - vertical.y, s.contentH,
+                                         s.bounds.h);
+                if (offY == s.scrollY) {
+                    // Vertical scroll chaining: the parent gets the wheel at
+                    // the edge or when this viewport has no overflow.
+                    continue;
+                }
+                ScrollbarEmit(win, &s, s.scrollX, offY);
+                return;
+            }
+            // Dominated by an axis this mask does not own.
             continue;
         }
         bool canY = ScrollsY(s);
@@ -1901,9 +2056,7 @@ static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
             AppInvalidate(win);
             return;
         }
-        ScrollEvent ev = {s.id, offY, offX};
-        ListenerCall(win->app, win, s.onScroll, &ev);
-        AppInvalidate(win);
+        ScrollbarEmit(win, &s, offX, offY);
         return;
     }
     if (win->onScrollWheel.IsValid()) {

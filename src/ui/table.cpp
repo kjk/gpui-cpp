@@ -1,5 +1,6 @@
 #include "ui/table.h"
 #include "base/list_settings.h"
+#include "ui/scroll.h"
 #include "ui/skeleton.h"
 
 namespace gpui {
@@ -823,12 +824,18 @@ El* DataTable::BuildEl() {
         bodyFixed->H(h)->ClipY()->ScrollY(s->scrollY)->ScrollFromPath();
         bodyFixed->OnScroll(ListenTo(state, &TableState::OnScroll));
         bodyFixed->noScrollbar = true;
+        ScrollableMask::Apply(bodyFixed, Axis::Vertical);
         bodyScroll->H(h)
             ->ClipY()
             ->ScrollY(s->scrollY)
             ->ScrollX(s->scrollX)
             ->ScrollFromPath()
             ->OnScroll(ListenTo(state, &TableState::OnScrollXY));
+        // The two transparent ScrollableMask siblings in Rust collapse onto
+        // this integrated scroll record. Horizontal gestures stay with the
+        // table even at its edge; vertical ones chain to an outer scroller.
+        ScrollableMask::Apply(bodyScroll, Axis::Horizontal);
+        ScrollableMask::Apply(bodyScroll, Axis::Vertical);
         if (range.first > 0) {
             float pad = (float)range.first * s->rowH;
             bodyFixed->Child(Div(a)->H(pad));

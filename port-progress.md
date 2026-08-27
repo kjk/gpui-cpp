@@ -7334,3 +7334,41 @@ and 2 exclusions with 326 unresolved partial-module spellings. MSVC release,
 MSVC ASan and clang-cl release pass 19,670 checks; MSVC and clang-cl release
 story builds pass, and the default top-right notification was visually
 smoke-tested at the pinned width and Theme margin.
+
+## Scrollable elements and masks preserve gesture routing
+
+The scroll façade had the public `Scrollable` builder, but it still created a
+new generic box around the caller's child and had no counterparts for the
+source's `ScrollableElement` extension trait or `ScrollableMask` element. More
+importantly, the runtime remapped a vertical-only wheel onto every horizontal
+scroller, swallowed vertical wheel input at a nested scroller's edge, and read
+offsets only from the last painted frame. A quick run of two wheel events
+before repaint therefore computed the same offset twice instead of
+accumulating them.
+
+`Scrollbar::Apply` now attaches the renderer-owned bar and handle behavior to
+an existing element. `Scrollable` uses it, so the source element, its child
+list and its size refinements survive unchanged; the public
+`ScrollableElement` projection exposes the three upstream overflow builders.
+`ScrollableMask` is also public. Its transparent sibling collapses onto the
+integrated scroll record in C++, but its axis and hit-chain identity remain
+explicit, and the debug/id builders are retained.
+
+Masked wheel dispatch now matches the pinned source's capture behavior.
+Precise gestures keep their initial dominant axis until a two-to-one turn;
+line-wheel input is compared per event. Horizontal masks ignore
+vertical-dominant input and trap horizontal input even at the edge, while
+vertical masks hand an edge/no-overflow event to the enclosing scroller. The
+mask's retained hit ancestor prevents a dialog or other later overlay from
+scrolling content underneath it. Scroll records update as soon as they emit,
+so wheel input and thumb drags accumulate correctly without waiting for the
+next frame. Data tables install both masks, and markdown table viewports use
+the horizontal mask so vertical scrolling stays with the TextView.
+
+The tests cover the source-shaped builders, precise gesture turns, nested
+vertical consumption and edge handoff, horizontal dominance and edge
+trapping, pre-repaint accumulation and overlay occlusion. UI Scroll is full:
+the audit moves to 80 full, 41 partial, 8 adapters and 2 exclusions with 324
+unresolved partial-module spellings. MSVC debug/release, MSVC ASan and clang-cl
+release pass 19,700 checks; wasm passes its 18,995 applicable checks; and the
+release story build passes.

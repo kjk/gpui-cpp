@@ -382,6 +382,18 @@ enum class TouchPhase : uint8_t {
     Cancelled
 };
 
+// gpui::OngoingScroll. Precise scrolling is a gesture rather than a series of
+// unrelated wheel notches, so the axis chosen by its first delta stays chosen
+// while a trackpad wobbles. A strong turn (twice as much motion on the other
+// axis) releases the lock, matching GPUI's filter used by
+// gpui-base::OngoingScrollExt.
+struct OngoingScroll {
+    Axis axis = Axis::Horizontal;
+    bool active = false;
+
+    void Filter(Point* delta, TouchPhase phase);
+};
+
 // DispatchPhase, from GPUI's `Window::dispatch_event`. A mouse event is
 // offered to the chain of elements under the pointer twice: outside-in in the
 // Capture phase, where an ancestor can pre-empt what is inside it, and then
@@ -1720,6 +1732,11 @@ struct El {
     // pair, and this is how it says which of the two to leave off.
     bool noScrollbarX = false;
     bool noScrollbarY = false;
+    // ScrollableMask axes. The renderer combines GPUI's transparent sibling
+    // mask with the scroll viewport itself, so these bits say which wheel
+    // deltas the viewport captures before an enclosing scroller can take
+    // them. Horizontal is bit 0, vertical bit 1.
+    uint8_t scrollMaskAxes = 0;
     int scrollId = 0;
     // El::ScrollFromPath: the scroll handle's identity is the element's place
     // in the tree rather than a number the caller hashed. An explicit
@@ -1837,6 +1854,9 @@ struct El {
     // round.
     El* HideScrollbarX();
     El* HideScrollbarY();
+    // ScrollableMask::new(axis, handle), collapsed onto the element whose
+    // handle the mask controls. Calling it for both axes accumulates bits.
+    El* ScrollMask(Axis axis);
     // opacity(f): this element and everything under it, faded together.
     // Nested opacities multiply, as GPUI's do.
     El* Opacity(float f);
@@ -2170,6 +2190,11 @@ struct ScrollRect {
     // and its band, and takes no press: `tracks_thumb_hover` and the disabled
     // hitbox in scrollbar.rs say the same thing.
     bool barVisible = true;
+    uint8_t maskAxes = 0;
+    // The hit-chain node made for a masked viewport. A topmost hit that is
+    // not below this node occludes the mask, so wheel input must not reach the
+    // scroller underneath it.
+    int maskHit = -1;
     Listener onScroll;
     // The text field this box scrolls, when it is one. An InputState is not
     // an entity and so cannot be the target of a Listener; the element names
@@ -4352,6 +4377,13 @@ struct Window {
     bool mouseDown = false;
     // cx.stop_propagation(): set by a handler, read by the chain it is in.
     bool stopPropagation = false;
+    // OngoingScroll is keyed by (mask axis, scroll id) upstream. Only one
+    // pointer gesture can be active per axis in a window, so two slots retain
+    // the same state without a map.
+    int scrollLockHorizontalId = 0;
+    int scrollLockVerticalId = 0;
+    OngoingScroll scrollLockHorizontal = {};
+    OngoingScroll scrollLockVertical = {};
     // The multi-click run in progress: when the last press landed, where, and
     // with which button, so WindowClickCount can tell the next press apart
     // from a second click. GPUI keeps the same three in its platform layer.

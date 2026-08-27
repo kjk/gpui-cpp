@@ -5,6 +5,7 @@
 #include "gpui/paint.h"
 #include "markdown/markdown.h"
 #include "ui/html.h"
+#include "ui/scroll.h"
 
 namespace gpui {
 
@@ -1630,6 +1631,9 @@ El* TextView::ScrollTable(MdNode* n) {
                        ->ScrollId((int)key)
                        ->OnScroll(ListenTo(ent, &OnMdTableScroll))
                        ->Child(track);
+    // horizontal_scroll_area: a vertical-dominant trackpad gesture belongs
+    // to the enclosing TextView, not to this table viewport.
+    ScrollableMask::Apply(scroller, Axis::Horizontal);
     El* actions = TableActionsRow(n, nCols, colAlign);
     if (!actions) {
         return scroller;
