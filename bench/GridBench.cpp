@@ -16,7 +16,7 @@
 using namespace taffy;
 
 // Rust's `build_random_leaf`. It takes an rng it never draws from.
-static NodeId BuildRandomLeaf(TaffyTree* tree) {
+static taffy::NodeId BuildRandomLeaf(TaffyTree* tree) {
     taffy::Style s;
     s.size = SizeDim::FromLengths(20.0f, 20.0f);
     return tree->NewLeaf(s);
@@ -73,7 +73,7 @@ struct GridCase {
     TaffyTree tree;
     Arena* arena = nullptr;
     BenchRng rng;
-    NodeId root;
+    taffy::NodeId root;
 
     int trackCount = 0;
     int levels = 0;
@@ -101,7 +101,7 @@ static void FlatSetup(GridCase* c) {
     s.gridTemplateRows = RandomTracks(c->arena, &c->rng, c->trackCount);
 
     int cells = c->trackCount * c->trackCount;
-    Vec<NodeId> children;
+    Vec<taffy::NodeId> children;
     VecReserve(children, cells);
     for (int i = 0; i < cells; i++) {
         children.Append(BuildRandomLeaf(&c->tree));
@@ -110,7 +110,8 @@ static void FlatSetup(GridCase* c) {
 }
 
 // Rust's `build_deep_grid_tree`.
-static void BuildDeepGridTree(GridCase* c, int levels, Vec<NodeId>* out) {
+static void BuildDeepGridTree(GridCase* c, int levels,
+                              Vec<taffy::NodeId>* out) {
     int childCount = c->trackCount * c->trackCount;
     if (levels == 1) {
         for (int i = 0; i < childCount; i++) {
@@ -119,7 +120,7 @@ static void BuildDeepGridTree(GridCase* c, int levels, Vec<NodeId>* out) {
         return;
     }
     for (int i = 0; i < childCount; i++) {
-        Vec<NodeId> children;
+        Vec<taffy::NodeId> children;
         BuildDeepGridTree(c, levels - 1, &children);
         taffy::Style s = RandomNxNGridStyle(c->arena, &c->rng, c->trackCount);
         out->Append(c->tree.NewWithChildren(s, children.els, children.len));
@@ -128,7 +129,7 @@ static void BuildDeepGridTree(GridCase* c, int levels, Vec<NodeId>* out) {
 
 static void DeepSetup(GridCase* c) {
     c->Reset();
-    Vec<NodeId> children;
+    Vec<taffy::NodeId> children;
     BuildDeepGridTree(c, c->levels, &children);
     c->root = c->tree.NewWithChildren(taffy::Style{}, children.els, children.len);
 }

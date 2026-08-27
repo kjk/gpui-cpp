@@ -31,11 +31,11 @@ static void CreationRun(CreationCase* c) {
     c->tree.Init(c->withCapacity ? (int)c->nodeCount : 16);
     c->rng.Seed(kStandardRngSeed);
 
-    Vec<NodeId> children;
+    Vec<taffy::NodeId> children;
     uint32_t nodeCount = 0;
     while (nodeCount < c->nodeCount) {
         int subCount = c->rng.RangeInt(1, 4);
-        Vec<NodeId> sub;
+        Vec<taffy::NodeId> sub;
         for (int i = 0; i < subCount; i++) {
             sub.Append(c->tree.NewLeaf(taffy::Style{}));
         }
@@ -43,7 +43,8 @@ static void CreationRun(CreationCase* c) {
         nodeCount += 1 + (uint32_t)subCount;
     }
 
-    NodeId root = c->tree.NewWithChildren(taffy::Style{}, children.els, children.len);
+    taffy::NodeId root =
+        c->tree.NewWithChildren(taffy::Style{}, children.els, children.len);
     BenchKeep(&c->tree);
     BenchKeep(&root);
 }

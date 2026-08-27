@@ -202,20 +202,21 @@ void TreeBuilder::Free() {
     tree.Free();
 }
 
-NodeId TreeBuilder::CreateLeafNode() {
+taffy::NodeId TreeBuilder::CreateLeafNode() {
     return tree.NewLeaf(gen.leaf(&rng, gen.ud));
 }
 
-NodeId TreeBuilder::CreateContainerNode(const NodeId* children, int n) {
+taffy::NodeId TreeBuilder::CreateContainerNode(const taffy::NodeId* children,
+                                               int n) {
     return tree.NewWithChildren(gen.container(&rng, gen.ud), children, n);
 }
 
-void TreeBuilder::SetRootChildren(const NodeId* children, int n) {
+void TreeBuilder::SetRootChildren(const taffy::NodeId* children, int n) {
     tree.SetChildren(root, children, n);
 }
 
 void TreeBuilder::BuildDeepTree(uint32_t maxNodes, uint32_t branchingFactor,
-                                Vec<NodeId>* out) {
+                                Vec<taffy::NodeId>* out) {
     if (maxNodes <= branchingFactor) {
         for (uint32_t i = 0; i < maxNodes; i++) {
             out->Append(CreateLeafNode());
@@ -227,7 +228,7 @@ void TreeBuilder::BuildDeepTree(uint32_t maxNodes, uint32_t branchingFactor,
     // children of this one.
     for (uint32_t i = 0; i < branchingFactor; i++) {
         uint32_t sub = (maxNodes - branchingFactor) / branchingFactor;
-        Vec<NodeId> children;
+        Vec<taffy::NodeId> children;
         BuildDeepTree(sub, branchingFactor, &children);
         out->Append(CreateContainerNode(children.els, children.len));
     }
@@ -235,16 +236,16 @@ void TreeBuilder::BuildDeepTree(uint32_t maxNodes, uint32_t branchingFactor,
 
 void TreeBuilder::BuildDeepHierarchy(uint32_t nodeCount,
                                      uint32_t branchingFactor) {
-    Vec<NodeId> children;
+    Vec<taffy::NodeId> children;
     BuildDeepTree(nodeCount, branchingFactor, &children);
     SetRootChildren(children.els, children.len);
 }
 
 void TreeBuilder::BuildFlatHierarchy(uint32_t targetNodeCount) {
-    Vec<NodeId> children;
+    Vec<taffy::NodeId> children;
     while ((uint32_t)TotalNodeCount() < targetNodeCount) {
         int count = rng.RangeInt(1, 4);
-        Vec<NodeId> sub;
+        Vec<taffy::NodeId> sub;
         for (int i = 0; i < count; i++) {
             sub.Append(CreateLeafNode());
         }
@@ -255,9 +256,9 @@ void TreeBuilder::BuildFlatHierarchy(uint32_t targetNodeCount) {
 
 void TreeBuilder::BuildSuperDeepHierarchy(uint32_t depth,
                                           uint32_t nodesPerLevel) {
-    Vec<NodeId> children;
+    Vec<taffy::NodeId> children;
     for (uint32_t i = 0; i < depth; i++) {
-        NodeId nodeWithChildren =
+        taffy::NodeId nodeWithChildren =
             CreateContainerNode(children.els, children.len);
         children.len = 0;
         children.Append(nodeWithChildren);
