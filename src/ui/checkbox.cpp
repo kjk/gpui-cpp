@@ -81,7 +81,9 @@ El* Checkbox::IntoEl() {
         mark = RgbaOpacity(mark, 0.5f);
     }
     float radius = th.radius < 4.f ? th.radius : 4.f;
-    El* ind = CheckboxIndicator::New(cx)
+    CheckboxState state =
+        checked ? CheckboxState::Checked : CheckboxState::Unchecked;
+    El* ind = CheckboxIndicator::New(cx, state, disabled)
                   ->W(box)
                   ->H(box)
                   ->Shrink0()
@@ -111,8 +113,6 @@ El* Checkbox::IntoEl() {
     // handler the state the activation produces; the themed checkbox is
     // boolean, and CheckboxState::Unchecked / Checked are 0 and 1, so what
     // the caller reads is the `!checked` Rust passes on.
-    CheckboxState state =
-        checked ? CheckboxState::Checked : CheckboxState::Unchecked;
     // h_flex().gap_2().items_start(): the box lines up with the *first* line
     // of the label, not with the middle of the block. Centring looks the same
     // on a one-line label and drops the box half a description lower on a

@@ -102,6 +102,35 @@ static void SemanticControlStylesFollowTheSharedPriority() {
                              &toggleStyles, &instance);
     utassertnear(toggle->refine.opacity, .8f);
 
+    CheckboxStyles checkboxStyles;
+    checkboxStyles.Checked(StateStyle().Border(1, kSelected))
+        .Indeterminate(StateStyle().Opacity(.7f))
+        .Disabled(StateStyle().Opacity(.5f));
+    El* checkbox = Checkbox::New(&cx, StrL("checkbox"),
+                                 CheckboxState::Checked, true, {},
+                                 &checkboxStyles, &instance);
+    utassertnear(checkbox->refine.opacity, .5f);
+    utassert(checkbox->refineSet & StateFieldBorder);
+    utassert(Same(checkbox->refine.borderColor, kSelected));
+
+    CheckboxIndicatorStyles indicatorStyles;
+    indicatorStyles.Checked(StateStyle().Border(1, kSelected))
+        .Indeterminate(StateStyle().Opacity(.7f))
+        .Disabled(StateStyle().Border(1, kDisabled));
+    El* indicator = CheckboxIndicator::New(
+        &cx, CheckboxState::Checked, true, &indicatorStyles, &instance);
+    utassertnear(indicator->refine.opacity, .9f);
+    utassert(Same(indicator->refine.borderColor, kDisabled));
+
+    FocusHandle supplied = {-77};
+    checkbox = Checkbox::New(
+        &cx, StrL("focused-checkbox"), CheckboxState::Unchecked, false, {},
+        nullptr, nullptr, StrL("Choice"), 4, false, supplied,
+        AccessibilityRole::None);
+    utassert(checkbox->style.focusId == supplied.id);
+    utassert(checkbox->style.tabIndex == 4 && !checkbox->style.tabStop);
+    utassert(checkbox->accessibility.role == AccessibilityRole::None);
+
     TabStyles tabStyles;
     tabStyles.Selected(StateStyle().Opacity(.8f))
         .Disabled(StateStyle().Opacity(.5f));

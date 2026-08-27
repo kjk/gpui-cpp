@@ -7486,3 +7486,30 @@ partial, 8 adapters and 2 exclusions with 315 unresolved partial-module
 spellings. MSVC release, clang-cl release and MSVC ASan pass 19,781 checks;
 wasm passes its 19,076 applicable checks; the release story build and pinned
 DatePicker story comparison pass.
+
+## Base Checkbox restores the source style layers
+
+The unstyled checkbox still reduced the source component to state toggling and
+a bare indicator. The two public style builders were absent, as were the root
+builder's role override, accessible label, tab behavior and caller-supplied
+focus handle. That left themed Checkbox visually useful but made Base Checkbox
+an incomplete primitive and prevented callers from expressing the source's
+semantic-state refinements without rebuilding its interaction contract.
+
+`CheckboxStyles` and `CheckboxIndicatorStyles` now carry checked,
+indeterminate and disabled `StateStyle` refinements. Resolution follows the
+source order: instance style first, the active checked or indeterminate layer
+next, and disabled last. `Checkbox::New` projects the remaining retained
+builder choices while preserving its existing defaults, and a disabled root
+still installs neither focus nor activation. `CheckboxIndicator::New` accepts
+the same controlled state and the themed component now supplies it rather than
+constructing a semantically blank indicator.
+
+Tests pin the three-state activation rule, both refinement priorities,
+explicit focus/tab/role configuration and the accessible label alongside the
+existing controlled-state semantic checks. Base Checkbox is full: the audit
+moves to 84 full, 37 partial, 8 adapters and 2 exclusions with 313 unresolved
+partial-module spellings. MSVC debug/release, clang-cl release and MSVC ASan
+pass 19,793 checks; wasm passes its 19,088 applicable checks. The release story
+build and pinned light-theme Checkbox comparison pass; the themed rendering is
+unchanged apart from the existing backend text and one-pixel layout variance.

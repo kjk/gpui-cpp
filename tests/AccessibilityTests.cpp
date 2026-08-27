@@ -277,8 +277,9 @@ static void InputContentTypesAndSecretsProjectSafely() {
 static void BaseControlsProjectTheirControlledState() {
     AccessibilityFrame f = NewAccessibilityFrame();
     El* root = Div(f.arena)
-                   ->Child(Checkbox::New(&f.cx, StrL("check"),
-                                         CheckboxState::Indeterminate))
+                   ->Child(Checkbox::New(
+                       &f.cx, StrL("check"), CheckboxState::Indeterminate,
+                       false, {}, nullptr, nullptr, StrL("Remember choice")))
                    ->Child(Radio::New(&f.cx, StrL("radio"), true))
                    ->Child(Switch::New(&f.cx, StrL("switch"), true))
                    ->Child(Toggle::New(&f.cx, StrL("toggle"), true))
@@ -303,6 +304,7 @@ static void BaseControlsProjectTheirControlledState() {
     const AccessibilityNode* tab =
         RoleNode(f.win->accessibility, AccessibilityRole::Tab);
     utassert(check && check->info.toggled == AccessibilityToggled::Mixed);
+    utassert(check && SameText(check->info.label, StrL("Remember choice")));
     utassert(radio && radio->info.hasSelected && radio->info.selected);
     utassert(sw && sw->info.toggled == AccessibilityToggled::True);
     utassert(toggle && toggle->info.toggled == AccessibilityToggled::True);

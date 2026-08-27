@@ -197,6 +197,11 @@ The important non-mechanical mappings are encoded in the audit:
   tagged single/range payload rather than an application click id. Themed
   Calendar and DatePicker builders accept those entities directly while the
   earlier controlled overloads remain as compatibility paths.
+- Base Checkbox restores the source `CheckboxStyles` and
+  `CheckboxIndicatorStyles` layers, including instance/state/disabled
+  priority. Its source builder surface now projects role, accessibility
+  label, tab behavior and caller-supplied focus while retaining the compact
+  controlled constructor used by the themed component.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -227,7 +232,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 315 declaration spellings still reported in partial modules,
+  2. Review the 313 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

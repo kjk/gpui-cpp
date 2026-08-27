@@ -1,6 +1,6 @@
 /* Unstyled checkbox — crates/base/src/checkbox.rs */
 
-#include "gpui/gpui.h"
+#include "base/state_style.h"
 
 namespace gpui {
 
@@ -15,6 +15,29 @@ enum class CheckboxState : uint8_t {
 // checked one clears. Rust's CheckboxState::activated.
 CheckboxState CheckboxActivated(CheckboxState state);
 
+// Semantic state refinements are layered after the instance style, with
+// disabled last. These are the POD-friendly projections of Rust's
+// CheckboxStyles and CheckboxIndicatorStyles builders.
+struct CheckboxStyles {
+    StateStyle checked = {};
+    StateStyle indeterminate = {};
+    StateStyle disabled = {};
+
+    CheckboxStyles& Checked(const StateStyle& style);
+    CheckboxStyles& Indeterminate(const StateStyle& style);
+    CheckboxStyles& Disabled(const StateStyle& style);
+};
+
+struct CheckboxIndicatorStyles {
+    StateStyle checked = {};
+    StateStyle indeterminate = {};
+    StateStyle disabled = {};
+
+    CheckboxIndicatorStyles& Checked(const StateStyle& style);
+    CheckboxIndicatorStyles& Indeterminate(const StateStyle& style);
+    CheckboxIndicatorStyles& Disabled(const StateStyle& style);
+};
+
 // Rust's `Checkbox::new(id).state(..).disabled(..).on_change(..)`. The box
 // owns identity, focus and activation; the caller owns every pixel of it.
 // `onChange` is handed the state the activation produces, the way Rust hands
@@ -25,10 +48,19 @@ CheckboxState CheckboxActivated(CheckboxState state);
 struct Checkbox {
     static El* New(Ctx* cx, Str id,
                    CheckboxState state = CheckboxState::Unchecked,
-                   bool disabled = false, Listener onChange = {});
+                   bool disabled = false, Listener onChange = {},
+                   const CheckboxStyles* styles = nullptr,
+                   const StateStyle* instance = nullptr,
+                   Str accessibilityLabel = {}, int tabIndex = 0,
+                   bool tabStop = true, FocusHandle focus = {},
+                   AccessibilityRole role = AccessibilityRole::CheckBox);
 };
 
 struct CheckboxIndicator {
-    static El* New(Ctx* cx);
+    static El* New(Ctx* cx,
+                   CheckboxState state = CheckboxState::Unchecked,
+                   bool disabled = false,
+                   const CheckboxIndicatorStyles* styles = nullptr,
+                   const StateStyle* instance = nullptr);
 };
 } // namespace gpui

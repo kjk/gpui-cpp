@@ -145,6 +145,17 @@ static void AControlCanOwnThePressWithoutACallback() {
     EntityDropAll(&app);
 }
 
+// CheckboxState::activated: mixed follows unchecked rather than cycling
+// through a third value.
+static void CheckboxActivationProducesTheControlledNextState() {
+    utassert(CheckboxActivated(CheckboxState::Unchecked) ==
+             CheckboxState::Checked);
+    utassert(CheckboxActivated(CheckboxState::Indeterminate) ==
+             CheckboxState::Checked);
+    utassert(CheckboxActivated(CheckboxState::Checked) ==
+             CheckboxState::Unchecked);
+}
+
 void TestClick() {
     TestSuite("click");
     AReleaseOnTheElementThatTookThePressIsAClick();
@@ -157,4 +168,5 @@ void TestClick() {
     AModifierMakesItAShortcutRatherThanAnActivation();
     FocusThatMovedBetweenTheHalvesTakesTheClick();
     AControlCanOwnThePressWithoutACallback();
+    CheckboxActivationProducesTheControlledNextState();
 }
