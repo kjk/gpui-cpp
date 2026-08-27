@@ -9130,3 +9130,9 @@ cookie operation completes, the caller drops its reference and the eventual
 handler safely owns the other one; retained COM results are released when that
 handler is finally destroyed. This restores the memory-safety property Wry
 gets from its channels while preserving the same blocking message pump.
+
+Windows evaluation callback state is now owned by its COM completion handler,
+the same way Wry's closure is. It is released after a normal invocation, on a
+synchronous `ExecuteScript` failure, or when WebView2 cancels and releases the
+handler without invoking it; the last path previously leaked the copied
+callback record.
