@@ -26,6 +26,22 @@ void TestWryUri() {
     utassert(attrs.dragDropHandler == nullptr);
     utassert(attrs.webviewEnvironment == nullptr);
 
+    wry::Cookie cookie;
+    utassert(cookie.session);
+    utassert(!cookie.hasExpires);
+    utassert(!cookie.hasMaxAge);
+    utassert(!cookie.hasHttpOnly);
+    utassert(!cookie.hasSecure);
+    utassert(!cookie.hasSameSite);
+    Vec<wry::Cookie> cookies;
+    cookie.name = StrDup(StrL("session"));
+    cookie.value = StrDup(StrL("value"));
+    cookie.domain = StrDup(StrL("example.com"));
+    cookie.path = StrDup(StrL("/"));
+    cookies.Append(cookie);
+    wry::CookieListFree(&cookies);
+    utassert(cookies.len == 0);
+
     // The crate's own case, verbatim.
     Str scheme = StrL("http");
     Str uri = StrL("http://wry.localhost/path/to/page");

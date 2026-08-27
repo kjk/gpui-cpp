@@ -91,6 +91,7 @@ typedef int COREWEBVIEW2_BOUNDS_MODE;
 typedef int COREWEBVIEW2_BROWSING_DATA_KINDS;
 typedef int COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT;
 typedef int COREWEBVIEW2_CONTEXT_MENU_ITEM_KIND;
+typedef int COREWEBVIEW2_COOKIE_SAME_SITE_KIND;
 typedef int COREWEBVIEW2_DEFAULT_DOWNLOAD_DIALOG_CORNER_ALIGNMENT;
 typedef int COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON;
 typedef int COREWEBVIEW2_DOWNLOAD_STATE;
@@ -122,6 +123,8 @@ struct ICoreWebView2ContainsFullScreenElementChangedEventHandler;
 struct ICoreWebView2ContentLoadingEventArgs;
 struct ICoreWebView2ContextMenuItem;
 struct ICoreWebView2ContextMenuRequestedEventHandler;
+struct ICoreWebView2Cookie;
+struct ICoreWebView2CookieList;
 struct ICoreWebView2CookieManager;
 struct ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler;
 struct ICoreWebView2DOMContentLoadedEventHandler;
@@ -136,6 +139,7 @@ struct ICoreWebView2FaviconChangedEventHandler;
 struct ICoreWebView2FocusChangedEventHandler;
 struct ICoreWebView2FrameCreatedEventHandler;
 struct ICoreWebView2GetFaviconCompletedHandler;
+struct ICoreWebView2GetCookiesCompletedHandler;
 struct ICoreWebView2HistoryChangedEventHandler;
 struct ICoreWebView2HttpResponseHeaders;
 struct ICoreWebView2IsDefaultDownloadDialogOpenChangedEventHandler;
@@ -254,6 +258,10 @@ struct DECLSPEC_UUID("3d6b6cf2-afe1-44c7-a995-c65117714336") ICoreWebView2Downlo
 struct DECLSPEC_UUID("e99bbe21-43e9-4544-a732-282764eafa60") ICoreWebView2DownloadStartingEventArgs;
 struct DECLSPEC_UUID("efedc989-c396-41ca-83f7-07f845a55724") ICoreWebView2DownloadStartingEventHandler;
 struct DECLSPEC_UUID("81336594-7ede-4ba9-bf71-acf0a95b58dd") ICoreWebView2StateChangedEventHandler;
+struct DECLSPEC_UUID("ad26d6be-1486-43e6-bf87-a2034006ca21") ICoreWebView2Cookie;
+struct DECLSPEC_UUID("f7f6f714-5d2a-43c6-9503-346ece02d186") ICoreWebView2CookieList;
+struct DECLSPEC_UUID("177cd9e7-b6f5-451a-94a0-5d7a3a4c4141") ICoreWebView2CookieManager;
+struct DECLSPEC_UUID("5a4f5069-5c15-47c3-8646-f4de1c116670") ICoreWebView2GetCookiesCompletedHandler;
 struct DECLSPEC_UUID("2fde08a8-1e9a-4766-8c05-95a9ceb9d1c5") ICoreWebView2EnvironmentOptions;
 struct DECLSPEC_UUID("57d29cc3-c84f-42a0-b0e2-effbd5e179de") ICoreWebView2EnvironmentOptions6;
 struct DECLSPEC_UUID("7c7ecf51-e918-5caf-853c-e9a2bcc27775") ICoreWebView2EnvironmentOptions8;
@@ -700,6 +708,43 @@ struct ICoreWebView2StateChangedEventHandler : IUnknown {
 virtual HRESULT STDMETHODCALLTYPE Invoke( ICoreWebView2DownloadOperation *sender, IUnknown *args) = 0;
 };
 
+struct ICoreWebView2Cookie : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_Name( LPWSTR *name) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Value( LPWSTR *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_Value( LPCWSTR value) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Domain( LPWSTR *domain) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Path( LPWSTR *path) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_Expires( double *expires) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_Expires( double expires) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_IsHttpOnly( BOOL *isHttpOnly) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_IsHttpOnly( BOOL isHttpOnly) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_SameSite( COREWEBVIEW2_COOKIE_SAME_SITE_KIND *sameSite) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_SameSite( COREWEBVIEW2_COOKIE_SAME_SITE_KIND sameSite) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_IsSecure( BOOL *isSecure) = 0;
+virtual HRESULT STDMETHODCALLTYPE put_IsSecure( BOOL isSecure) = 0;
+virtual HRESULT STDMETHODCALLTYPE get_IsSession( BOOL *isSession) = 0;
+};
+
+struct ICoreWebView2CookieList : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE get_Count( UINT32 *value) = 0;
+virtual HRESULT STDMETHODCALLTYPE GetValueAtIndex( UINT32 index, ICoreWebView2Cookie **value) = 0;
+};
+
+struct ICoreWebView2CookieManager : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE CreateCookie( LPCWSTR name, LPCWSTR value, LPCWSTR domain, LPCWSTR path, ICoreWebView2Cookie **cookie) = 0;
+virtual HRESULT STDMETHODCALLTYPE CopyCookie( ICoreWebView2Cookie *cookieParam, ICoreWebView2Cookie **cookie) = 0;
+virtual HRESULT STDMETHODCALLTYPE GetCookies( LPCWSTR uri, ICoreWebView2GetCookiesCompletedHandler *handler) = 0;
+virtual HRESULT STDMETHODCALLTYPE AddOrUpdateCookie( ICoreWebView2Cookie *cookie) = 0;
+virtual HRESULT STDMETHODCALLTYPE DeleteCookie( ICoreWebView2Cookie *cookie) = 0;
+virtual HRESULT STDMETHODCALLTYPE DeleteCookies( LPCWSTR name, LPCWSTR uri) = 0;
+virtual HRESULT STDMETHODCALLTYPE DeleteCookiesWithDomainAndPath( LPCWSTR name, LPCWSTR domain, LPCWSTR path) = 0;
+virtual HRESULT STDMETHODCALLTYPE DeleteAllCookies() = 0;
+};
+
+struct ICoreWebView2GetCookiesCompletedHandler : IUnknown {
+virtual HRESULT STDMETHODCALLTYPE Invoke( HRESULT errorCode, ICoreWebView2CookieList *result) = 0;
+};
+
 struct ICoreWebView2WebMessageReceivedEventArgs : IUnknown {
 virtual HRESULT STDMETHODCALLTYPE get_Source( LPWSTR *value) = 0;
 virtual HRESULT STDMETHODCALLTYPE get_WebMessageAsJson( LPWSTR *value) = 0;
@@ -876,6 +921,9 @@ virtual HRESULT STDMETHODCALLTYPE put_ScrollBarStyle( COREWEBVIEW2_SCROLLBAR_STY
 // The handful of enum values we pass. Spelled out rather than typedef'd as a
 // whole enum, since the ABI only cares that they are ints.
 enum {
+    kCookieSameSiteNone = 0,
+    kCookieSameSiteLax = 1,
+    kCookieSameSiteStrict = 2,
     kDownloadStateInProgress = 0,
     kDownloadStateCompleted = 2,
     kMoveFocusReasonProgrammatic = 0,
@@ -3136,6 +3184,238 @@ bool WebViewSetTrafficLightInset(WebView*, Position) {
 
 bool WebViewPrint(WebView* wv) {
     return WebViewEval(wv, StrL("window.print()"));
+}
+
+static ICoreWebView2CookieManager* CookieManager(WebView* wv) {
+    if (!wv) {
+        return nullptr;
+    }
+    ICoreWebView2_2* webview2 = nullptr;
+    if (FAILED(wv->webview->QueryInterface(__uuidof(ICoreWebView2_2), (void**)&webview2))) {
+        return nullptr;
+    }
+    ICoreWebView2CookieManager* manager = nullptr;
+    webview2->get_CookieManager(&manager);
+    Rel(&webview2);
+    return manager;
+}
+
+static void FreeCookieFields(Cookie* cookie) {
+    StrFree(cookie->name);
+    StrFree(cookie->value);
+    StrFree(cookie->domain);
+    StrFree(cookie->path);
+    *cookie = Cookie{};
+}
+
+static bool CookieFromWebView2(ICoreWebView2Cookie* source, Cookie* out) {
+    if (!source || !out) {
+        return false;
+    }
+    Cookie result;
+    LPWSTR raw = nullptr;
+    if (FAILED(source->get_Name(&raw))) {
+        return false;
+    }
+    result.name = StrDup(TakePwstrTemp(raw));
+    raw = nullptr;
+    if (FAILED(source->get_Value(&raw))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.value = StrDup(TakePwstrTemp(raw));
+    raw = nullptr;
+    if (FAILED(source->get_Domain(&raw))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.domain = StrDup(TakePwstrTemp(raw));
+    raw = nullptr;
+    if (FAILED(source->get_Path(&raw))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.path = StrDup(TakePwstrTemp(raw));
+
+    BOOL flag = FALSE;
+    if (FAILED(source->get_IsHttpOnly(&flag))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.hasHttpOnly = true;
+    result.httpOnly = flag != FALSE;
+    flag = FALSE;
+    if (FAILED(source->get_IsSecure(&flag))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.hasSecure = true;
+    result.secure = flag != FALSE;
+
+    COREWEBVIEW2_COOKIE_SAME_SITE_KIND sameSite = kCookieSameSiteLax;
+    if (FAILED(source->get_SameSite(&sameSite))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.hasSameSite = true;
+    result.sameSite = sameSite == kCookieSameSiteStrict
+                          ? CookieSameSite::Strict
+                          : (sameSite == kCookieSameSiteLax ? CookieSameSite::Lax
+                                                            : CookieSameSite::None);
+
+    BOOL isSession = FALSE;
+    double expires = -1;
+    if (FAILED(source->get_IsSession(&isSession)) || FAILED(source->get_Expires(&expires))) {
+        FreeCookieFields(&result);
+        return false;
+    }
+    result.session = isSession != FALSE || expires == -1;
+    if (!result.session) {
+        result.hasExpires = true;
+        result.expiresUnixSeconds = (int64_t)expires;
+    }
+    *out = result;
+    return true;
+}
+
+struct CookieWait {
+    bool done = false;
+    HRESULT result = E_FAIL;
+    ICoreWebView2CookieList* cookies = nullptr;
+};
+
+static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
+    if (!out) {
+        return false;
+    }
+    CookieListFree(out);
+    ICoreWebView2CookieManager* manager = CookieManager(wv);
+    if (!manager) {
+        return false;
+    }
+    CookieWait wait;
+    auto* handler =
+        MkHandler<Handler2<ICoreWebView2GetCookiesCompletedHandler, HRESULT,
+                           ICoreWebView2CookieList*>>(
+            &wait, [](void* ctx, HRESULT code, ICoreWebView2CookieList* cookies) -> HRESULT {
+                CookieWait* wait = (CookieWait*)ctx;
+                wait->result = code;
+                if (SUCCEEDED(code) && cookies) {
+                    cookies->AddRef();
+                    wait->cookies = cookies;
+                }
+                wait->done = true;
+                return S_OK;
+            });
+    HRESULT hr = manager->GetCookies(uri, handler);
+    handler->Release();
+    Rel(&manager);
+    if (FAILED(hr)) {
+        return false;
+    }
+    PumpUntil(&wait.done);
+    if (!wait.done || FAILED(wait.result)) {
+        Rel(&wait.cookies);
+        return false;
+    }
+    if (!wait.cookies) {
+        return true;
+    }
+
+    UINT32 count = 0;
+    if (FAILED(wait.cookies->get_Count(&count))) {
+        Rel(&wait.cookies);
+        return false;
+    }
+    for (UINT32 i = 0; i < count; i++) {
+        ICoreWebView2Cookie* source = nullptr;
+        if (SUCCEEDED(wait.cookies->GetValueAtIndex(i, &source)) && source) {
+            Cookie cookie;
+            if (CookieFromWebView2(source, &cookie)) {
+                out->Append(cookie);
+            }
+            Rel(&source);
+        }
+    }
+    Rel(&wait.cookies);
+    return true;
+}
+
+bool WebViewCookies(WebView* wv, Vec<Cookie>* out) {
+    return CookiesInner(wv, nullptr, out);
+}
+
+bool WebViewCookiesForUrl(WebView* wv, Str url, Vec<Cookie>* out) {
+    return CookiesInner(wv, ToCWstrTemp(url), out);
+}
+
+static int64_t UnixTimeNow() {
+    FILETIME fileTime;
+    GetSystemTimeAsFileTime(&fileTime);
+    ULARGE_INTEGER ticks;
+    ticks.LowPart = fileTime.dwLowDateTime;
+    ticks.HighPart = fileTime.dwHighDateTime;
+    return (int64_t)(ticks.QuadPart / 10000000ULL) - 11644473600LL;
+}
+
+static ICoreWebView2Cookie* CookieToWebView2(ICoreWebView2CookieManager* manager,
+                                             const Cookie* source) {
+    if (!manager || !source) {
+        return nullptr;
+    }
+    ICoreWebView2Cookie* cookie = nullptr;
+    HRESULT hr = manager->CreateCookie(ToCWstrTemp(source->name), ToCWstrTemp(source->value),
+                                       ToCWstrTemp(source->domain), ToCWstrTemp(source->path),
+                                       &cookie);
+    if (FAILED(hr) || !cookie) {
+        return nullptr;
+    }
+    if (source->hasMaxAge) {
+        hr = cookie->put_Expires((double)(UnixTimeNow() + source->maxAgeSeconds));
+    } else if (source->hasExpires) {
+        hr = cookie->put_Expires((double)source->expiresUnixSeconds);
+    }
+    if (SUCCEEDED(hr) && source->hasHttpOnly) {
+        hr = cookie->put_IsHttpOnly(source->httpOnly ? TRUE : FALSE);
+    }
+    if (SUCCEEDED(hr) && source->hasSameSite) {
+        int sameSite = source->sameSite == CookieSameSite::Strict
+                           ? kCookieSameSiteStrict
+                           : (source->sameSite == CookieSameSite::Lax ? kCookieSameSiteLax
+                                                                      : kCookieSameSiteNone);
+        hr = cookie->put_SameSite(sameSite);
+    }
+    if (SUCCEEDED(hr) && source->hasSecure) {
+        hr = cookie->put_IsSecure(source->secure ? TRUE : FALSE);
+    }
+    if (FAILED(hr)) {
+        Rel(&cookie);
+    }
+    return cookie;
+}
+
+bool WebViewSetCookie(WebView* wv, const Cookie* source) {
+    ICoreWebView2CookieManager* manager = CookieManager(wv);
+    if (!manager) {
+        return false;
+    }
+    ICoreWebView2Cookie* cookie = CookieToWebView2(manager, source);
+    bool ok = cookie && SUCCEEDED(manager->AddOrUpdateCookie(cookie));
+    Rel(&cookie);
+    Rel(&manager);
+    return ok;
+}
+
+bool WebViewDeleteCookie(WebView* wv, const Cookie* source) {
+    ICoreWebView2CookieManager* manager = CookieManager(wv);
+    if (!manager) {
+        return false;
+    }
+    ICoreWebView2Cookie* cookie = CookieToWebView2(manager, source);
+    bool ok = cookie && SUCCEEDED(manager->DeleteCookie(cookie));
+    Rel(&cookie);
+    Rel(&manager);
+    return ok;
 }
 
 bool WebViewClearAllBrowsingData(WebView* wv) {

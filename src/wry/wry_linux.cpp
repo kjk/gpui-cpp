@@ -95,6 +95,20 @@ bool WebViewPrint(WebView*) {
 bool WebViewClearAllBrowsingData(WebView*) {
     return false;
 }
+bool WebViewCookies(WebView*, Vec<Cookie>* out) {
+    CookieListFree(out);
+    return false;
+}
+bool WebViewCookiesForUrl(WebView*, Str, Vec<Cookie>* out) {
+    CookieListFree(out);
+    return false;
+}
+bool WebViewSetCookie(WebView*, const Cookie*) {
+    return false;
+}
+bool WebViewDeleteCookie(WebView*, const Cookie*) {
+    return false;
+}
 void WebViewOpenDevtools(WebView*) {}
 void WebViewCloseDevtools(WebView*) {}
 bool WebViewIsDevtoolsOpen(WebView*) {

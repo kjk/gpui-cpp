@@ -9019,3 +9019,15 @@ carry WebKit's target configuration so a compatible WKWebView can be returned.
 MSVC release passes 20,819 checks, the release webview example builds with
 both MSVC and clang-cl, and the same example compiles and links on the remote
 Mac with Objective-C++ ARC and WebKit.
+
+The Windows cookie surface is no longer excluded with its Rust dependency.
+An owned POD preserves the fields the pinned `cookie::Cookie` conversion uses:
+name, value, domain, path, optional HttpOnly/Secure/SameSite, session or Unix
+expiry and optional max-age. `cookies` and `cookies_for_url` port WebView2's
+asynchronous manager/list completion into the existing blocking message-pump
+shape and skip only individual cookies whose native conversion fails, as Rust
+does. Set and delete create the native cookie and apply every optional field;
+max-age is resolved against current Unix time. Shared cleanup owns all strings
+without an STL container or a cookie/time dependency. MSVC release passes
+20,826 checks, the release webview example builds with clang-cl, and the
+portable cookie API plus macOS stubs compile and link on the remote Mac.

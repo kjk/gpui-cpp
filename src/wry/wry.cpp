@@ -12,6 +12,20 @@
 
 namespace wry {
 
+void CookieListFree(Vec<Cookie>* cookies) {
+    if (!cookies) {
+        return;
+    }
+    for (int i = 0; i < cookies->len; i++) {
+        Cookie& cookie = cookies->els[i];
+        base::StrFree(cookie.name);
+        base::StrFree(cookie.value);
+        base::StrFree(cookie.domain);
+        base::StrFree(cookie.path);
+    }
+    cookies->Reset();
+}
+
 static bool StrStartsWith(Str s, Str prefix) {
     if (prefix.len > s.len) {
         return false;

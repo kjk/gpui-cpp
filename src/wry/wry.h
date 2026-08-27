@@ -244,6 +244,35 @@ struct DragDropEvent {
 
 using DragDropHandler = bool (*)(void* ctx, const DragDropEvent* event);
 
+/** The `cookie::Cookie` fields WebView exposes, without depending on the Rust
+    cookie/time crates. Strings returned by a query are heap-owned and freed
+    together with the list by `CookieListFree`; input strings are borrowed. */
+enum class CookieSameSite {
+    None,
+    Lax,
+    Strict,
+};
+
+struct Cookie {
+    Str name;
+    Str value;
+    Str domain;
+    Str path;
+    bool hasHttpOnly = false;
+    bool httpOnly = false;
+    bool hasSecure = false;
+    bool secure = false;
+    bool hasSameSite = false;
+    CookieSameSite sameSite = CookieSameSite::Lax;
+    bool session = true;
+    bool hasExpires = false;
+    int64_t expiresUnixSeconds = 0;
+    bool hasMaxAge = false;
+    int64_t maxAgeSeconds = 0;
+};
+
+void CookieListFree(Vec<Cookie>* cookies);
+
 // ─── attributes ──────────────────────────────────────────────────────────
 
 /** `wry::WebViewAttributes` and, below the line, the Windows half of
@@ -410,6 +439,12 @@ bool WebViewSetTrafficLightInset(WebView* webview, Position position);
 bool WebViewPrint(WebView* webview);
 /** `WebView::clear_all_browsing_data`. */
 bool WebViewClearAllBrowsingData(WebView* webview);
+/** `WebView::cookies` and `cookies_for_url`. `out` must be empty or a list
+    previously returned here; it is replaced and owns all returned strings. */
+bool WebViewCookies(WebView* webview, Vec<Cookie>* out);
+bool WebViewCookiesForUrl(WebView* webview, Str url, Vec<Cookie>* out);
+bool WebViewSetCookie(WebView* webview, const Cookie* cookie);
+bool WebViewDeleteCookie(WebView* webview, const Cookie* cookie);
 /** `WebView::open_devtools` / `close_devtools` / `is_devtools_open`. */
 void WebViewOpenDevtools(WebView* webview);
 void WebViewCloseDevtools(WebView* webview);

@@ -160,6 +160,14 @@ the callback can build a target with that environment and return the target
 through `NewWindowResponse::Create`, after which the backend supplies its
 native webview to `SetNewWindow`.
 
+The four Windows cookie methods are also complete. The repository cannot take
+Wry's `cookie` and `time` crate dependencies, so their WebView-visible value is
+the POD `Cookie`: owned UTF-8 name/value/domain/path, optional boolean and
+SameSite settings, session/expiry state, and optional max-age seconds.
+Queries synchronously pump WebView2's completion callback like Rust and return
+an owned `Vec<Cookie>` released by `CookieListFree`; set and delete construct
+the same native cookie and apply max-age against current Unix time.
+
 The macOS backend has all of that except what the platform does not have: the
 custom protocol work-around is Windows' alone (WKWebView takes a scheme
 handler for the real scheme), the browser arguments and their neighbours are
@@ -168,10 +176,8 @@ above answer false.
 
 Not ported, each for a reason:
 
-- **Cookies** (`cookies`, `cookies_for_url`, `set_cookie`, `delete_cookie`).
-  The API is `cookie::Cookie` from the `cookie` crate throughout — a parser,
-  a builder and a `time::OffsetDateTime` — so porting the four calls means
-  porting a cookie crate. Nothing here wants one yet.
+- **Cookies on macOS**. The four WebView2 methods and their value semantics are
+  ported without the external cookie/time crates; WKHTTPCookieStore is not.
 - **Downloads on macOS**. The Windows `DownloadStarting` and per-operation
   `StateChanged` paths are ported; WKWebView's download delegates are not yet.
 - **Drag and drop on macOS**. The default-enabled Windows `IDropTarget`
@@ -200,6 +206,10 @@ Each is also stated in a comment where it applies.
   accessors, and macOS's target configuration for a created new window, keep
   COM and Objective-C types out of the portable header. The pointers are
   borrowed where documented; construction retains the ones it stores.
+- **A cookie is the value WebView sees, not a parser.** Wry's public type comes
+  from the `cookie` crate; this tree's POD preserves every field the Windows
+  conversion reads or writes, but does not add cookie-header parsing or a
+  builder DSL that no webview operation uses.
 - **An init script is registered without waiting for it.** Rust blocks on
   `AddScriptToExecuteOnDocumentCreatedCompletedHandler`; the registration and
   the navigation after it are queued on the browser thread in order, so the

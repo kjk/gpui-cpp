@@ -1266,6 +1266,24 @@ bool WebViewClearAllBrowsingData(WebView* wv) {
     return true;
 }
 
+bool WebViewCookies(WebView*, Vec<Cookie>* out) {
+    CookieListFree(out);
+    return false;
+}
+
+bool WebViewCookiesForUrl(WebView*, Str, Vec<Cookie>* out) {
+    CookieListFree(out);
+    return false;
+}
+
+bool WebViewSetCookie(WebView*, const Cookie*) {
+    return false;
+}
+
+bool WebViewDeleteCookie(WebView*, const Cookie*) {
+    return false;
+}
+
 // The inspector is a private selector on WKWebView, which is what the crate
 // reaches for and the only way to open the devtools without the context
 // menu. Called through NSInvocation because ARC refuses a performSelector
