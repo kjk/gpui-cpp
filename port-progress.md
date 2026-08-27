@@ -8719,6 +8719,7 @@ stamping, view-scoped select-all/copy and TextView key bindings. UI text is
 full: the audit moves to 117 full, 4 partial, 8 adapters and 2 exclusions with
 117 unresolved spellings, all confined to dock and input. Strict Linux g++
 passes its 20,586 applicable checks and the MSVC release story gallery builds.
-The MSVC suite compiles all 20,600 checks; on this host its two source-named
-motion assertions observe the OS reduce-motion setting, a test isolation issue
-to fix independently of text.
+The MSVC suite passes all 20,602 checks. Its source-named motion integration
+now explicitly disables the host accessibility preference while exercising
+the keyed transition path; the pure state test covers reduced motion itself,
+so test results no longer depend on the desktop setting.

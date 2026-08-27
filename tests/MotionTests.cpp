@@ -345,6 +345,9 @@ static void AChannelKeepsTwoValuesOfOneElementApart() {
 }
 
 static void SourceNamedValueTransitionContractIsAvailable() {
+    // This exercises the keyed transition path, not the host accessibility
+    // preference. Reduced motion itself is covered by the pure state test.
+    MotionSetReduced(false);
     motion::Transition linear =
         motion::Transition::New(100).Delay(50).Ease(EaseLinear);
     utassertnear(linear.durationMs, 100.f);
