@@ -9096,3 +9096,9 @@ Wry: a cookie that cannot be converted is skipped, but failure to obtain an
 indexed cookie fails the query. Fatal index or allocation failures also clear
 the partial owned list rather than returning incomplete cookies or leaking the
 last converted value.
+
+`WebViewVersionTemp` now reports fixed-version WebView2 runtimes selected by
+`WEBVIEW2_BROWSER_EXECUTABLE_FOLDER`. EdgeUpdate supplies the evergreen
+version directly, while a fixed runtime now reads the same four-part product
+version from `EmbeddedBrowserWebView.dll` through dynamically resolved
+version.dll entry points; availability behavior is unchanged.

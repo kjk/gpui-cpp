@@ -1138,6 +1138,47 @@ static const WCHAR* ArchFolder() {
 #endif
 }
 
+// A fixed-version runtime is selected by directory rather than by the
+// EdgeUpdate key, so read the version from the client DLL the same runtime
+// loader will use. Resolve version.dll dynamically to keep the backend's
+// existing system-library surface unchanged.
+static bool FileVersion(const WCHAR* path, WCHAR* out, int outChars) {
+    typedef DWORD(WINAPI * GetFileVersionInfoSizeWFn)(LPCWSTR, LPDWORD);
+    typedef BOOL(WINAPI * GetFileVersionInfoWFn)(LPCWSTR, DWORD, DWORD, LPVOID);
+    typedef BOOL(WINAPI * VerQueryValueWFn)(LPCVOID, LPCWSTR, LPVOID*, PUINT);
+
+    HMODULE versionDll = LoadLibraryW(L"version.dll");
+    if (!versionDll) {
+        return false;
+    }
+    auto getSize =
+        (GetFileVersionInfoSizeWFn)GetProcAddress(versionDll, "GetFileVersionInfoSizeW");
+    auto getInfo = (GetFileVersionInfoWFn)GetProcAddress(versionDll, "GetFileVersionInfoW");
+    auto query = (VerQueryValueWFn)GetProcAddress(versionDll, "VerQueryValueW");
+    bool ok = false;
+    if (getSize && getInfo && query) {
+        DWORD ignored = 0;
+        DWORD size = getSize(path, &ignored);
+        uint8_t* data = size > 0 ? new uint8_t[size] : nullptr;
+        if (data && getInfo(path, 0, size, data)) {
+            VS_FIXEDFILEINFO* info = nullptr;
+            UINT infoSize = 0;
+            if (query(data, L"\\", (void**)&info, &infoSize) && info &&
+                infoSize >= sizeof(*info) && info->dwSignature == VS_FFI_SIGNATURE) {
+                int n = swprintf_s(out, (size_t)outChars, L"%u.%u.%u.%u",
+                                   HIWORD(info->dwProductVersionMS),
+                                   LOWORD(info->dwProductVersionMS),
+                                   HIWORD(info->dwProductVersionLS),
+                                   LOWORD(info->dwProductVersionLS));
+                ok = n > 0;
+            }
+        }
+        delete[] data;
+    }
+    FreeLibrary(versionDll);
+    return ok;
+}
+
 // Both places the SDK's loader looks: the per-machine key (which a 64-bit
 // process reaches through the WOW6432 view, since EdgeUpdate is 32-bit) and
 // the per-user one.
@@ -1184,7 +1225,12 @@ static bool FindRuntime(RuntimeInfo* out) {
         out->runtimeType = 1;
         swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
                    ArchFolder());
-        return GetFileAttributesW(out->clientDll) != INVALID_FILE_ATTRIBUTES;
+        if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+            return false;
+        }
+        FileVersion(out->clientDll, out->version,
+                    (int)(sizeof(out->version) / sizeof(out->version[0])));
+        return true;
     }
 
     WCHAR location[MAX_PATH * 2];
