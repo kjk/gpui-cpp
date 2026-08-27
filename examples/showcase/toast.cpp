@@ -32,6 +32,7 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
     if (app->toastOn) {
         box->Child(
             Toast::New(cx, StrL("example-toast"))
+                ->IntoEl()
                 ->Absolute()
                 ->Right(0)
                 ->Bottom(0)

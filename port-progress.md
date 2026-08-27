@@ -8439,6 +8439,7 @@ the audit moves to 111 full, 10 partial, 8 adapters and 2 exclusions with 200
 unresolved partial-module spellings and no full-module errors. MSVC
 debug/release, clang-cl release and MSVC ASan tests pass 20,436 checks; wasm
 builds and passes its 19,731 applicable checks. The release story gallery
-compiles. The complete debug/clang showcase matrix still stops at the existing
-`Toast::Absolute` call whose source builder is absent; the next slice repairs
-that independently.
+compiles. The complete debug all-target matrix and clang-cl showcase compile
+after the showcase toast finalizes through `IntoEl()` before using the fluent
+style methods; that is the documented C++ `Styled` adapter seam, where Rust's
+trait methods live directly on `El`.
