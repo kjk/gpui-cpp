@@ -1090,6 +1090,121 @@ static WCHAR* EnvironmentVariableDup(const WCHAR* name) {
     return value;
 }
 
+static int LoaderOverrideIds(WCHAR appId[256], WCHAR exeName[MAX_PATH],
+                             const WCHAR* ids[3]) {
+    appId[0] = 0;
+    exeName[0] = 0;
+    typedef LONG(WINAPI * GetCurrentApplicationUserModelIdFn)(UINT32*, PWSTR);
+    auto getCurrentApplicationUserModelId = (GetCurrentApplicationUserModelIdFn)GetProcAddress(
+        GetModuleHandleW(L"kernel32.dll"), "GetCurrentApplicationUserModelId");
+    if (getCurrentApplicationUserModelId) {
+        UINT32 len = 256;
+        if (getCurrentApplicationUserModelId(&len, appId) != ERROR_SUCCESS) {
+            appId[0] = 0;
+        }
+    }
+    if (appId[0] == 0) {
+        typedef HRESULT(WINAPI * GetCurrentProcessExplicitAppUserModelIdFn)(PWSTR*);
+        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+        auto getExplicit = shell32 ? (GetCurrentProcessExplicitAppUserModelIdFn)GetProcAddress(
+                                         shell32, "GetCurrentProcessExplicitAppUserModelID")
+                                   : nullptr;
+        PWSTR explicitId = nullptr;
+        if (getExplicit && SUCCEEDED(getExplicit(&explicitId)) && explicitId) {
+            wcscpy_s(appId, 256, explicitId);
+        }
+        CoTaskMemFree(explicitId);
+    }
+
+    WCHAR module[MAX_PATH * 2];
+    DWORD len = GetModuleFileNameW(nullptr, module, (DWORD)(sizeof(module) / sizeof(module[0])));
+    if (len > 0 && len < sizeof(module) / sizeof(module[0])) {
+        const WCHAR* slash = wcsrchr(module, L'\\');
+        wcscpy_s(exeName, MAX_PATH, slash ? slash + 1 : module);
+    }
+
+    int count = 0;
+    if (appId[0] != 0) {
+        ids[count++] = appId;
+    }
+    if (exeName[0] != 0) {
+        ids[count++] = exeName;
+    }
+    ids[count++] = L"*";
+    return count;
+}
+
+static WCHAR* RegistryValueDup(HKEY root, const WCHAR* keyPath, const WCHAR* valueName) {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(root, keyPath, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+        return nullptr;
+    }
+    DWORD type = 0;
+    DWORD bytes = 0;
+    LSTATUS status = RegQueryValueExW(key, valueName, nullptr, &type, nullptr, &bytes);
+    WCHAR* result = nullptr;
+    if (status == ERROR_SUCCESS && type == REG_SZ && bytes >= sizeof(WCHAR)) {
+        result = (WCHAR*)malloc((size_t)bytes + sizeof(WCHAR));
+        if (result && RegQueryValueExW(key, valueName, nullptr, &type, (BYTE*)result, &bytes) ==
+                          ERROR_SUCCESS) {
+            result[bytes / sizeof(WCHAR)] = 0;
+        } else {
+            free(result);
+            result = nullptr;
+        }
+    } else if (status == ERROR_SUCCESS && type == REG_DWORD && bytes == sizeof(DWORD)) {
+        DWORD value = 0;
+        if (RegQueryValueExW(key, valueName, nullptr, &type, (BYTE*)&value, &bytes) ==
+            ERROR_SUCCESS) {
+            result = (WCHAR*)malloc(16 * sizeof(WCHAR));
+            if (result) {
+                swprintf_s(result, 16, L"%u", value);
+            }
+        }
+    }
+    RegCloseKey(key);
+    return result;
+}
+
+// WebView2Loader policy precedence: modern HKLM, modern HKCU, legacy HKLM,
+// legacy HKCU; within each, AUMID, executable name, then the wildcard.
+static WCHAR* PolicyOverrideDup(const WCHAR* property) {
+    WCHAR appId[256];
+    WCHAR exeName[MAX_PATH];
+    const WCHAR* ids[3];
+    int idCount = LoaderOverrideIds(appId, exeName, ids);
+    const HKEY roots[] = {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER};
+
+    for (int r = 0; r < 2; r++) {
+        WCHAR key[MAX_PATH];
+        swprintf_s(key, L"Software\\Policies\\Microsoft\\Edge\\WebView2\\%s", property);
+        for (int i = 0; i < idCount; i++) {
+            WCHAR* result = RegistryValueDup(roots[r], key, ids[i]);
+            if (result) {
+                return result;
+            }
+        }
+    }
+    for (int r = 0; r < 2; r++) {
+        for (int i = 0; i < idCount; i++) {
+            WCHAR key[MAX_PATH];
+            swprintf_s(key,
+                       L"Software\\Policies\\Microsoft\\EmbeddedBrowserWebView\\LoaderOverride\\%s",
+                       ids[i]);
+            WCHAR* result = RegistryValueDup(roots[r], key, property);
+            if (result) {
+                return result;
+            }
+        }
+    }
+    return nullptr;
+}
+
+static WCHAR* LoaderOverrideDup(const WCHAR* environment, const WCHAR* property) {
+    WCHAR* result = EnvironmentVariableDup(environment);
+    return result ? result : PolicyOverrideDup(property);
+}
+
 static bool StrStartsWith(Str s, Str prefix) {
     if (prefix.len > s.len) {
         return false;
@@ -1331,7 +1446,8 @@ static bool FindInstalledRuntime(const RuntimeChannel* channel, RuntimeInfo* out
 }
 
 static int ReleaseChannelsFromEnvironment(int fallback) {
-    WCHAR* value = EnvironmentVariableDup(L"WEBVIEW2_RELEASE_CHANNELS");
+    WCHAR* value =
+        LoaderOverrideDup(L"WEBVIEW2_RELEASE_CHANNELS", L"ReleaseChannels");
     if (!value) {
         return fallback;
     }
@@ -1359,12 +1475,14 @@ static int ReleaseChannelsFromEnvironment(int fallback) {
 }
 
 static bool LeastStableFromEnvironment(bool fallback) {
-    WCHAR* legacy = EnvironmentVariableDup(L"WEBVIEW2_RELEASE_CHANNEL_PREFERENCE");
+    WCHAR* legacy = LoaderOverrideDup(L"WEBVIEW2_RELEASE_CHANNEL_PREFERENCE",
+                                      L"ReleaseChannelPreference");
     if (legacy) {
         fallback = wcstol(legacy, nullptr, 10) == 1;
         free(legacy);
     }
-    WCHAR* value = EnvironmentVariableDup(L"WEBVIEW2_CHANNEL_SEARCH_KIND");
+    WCHAR* value =
+        LoaderOverrideDup(L"WEBVIEW2_CHANNEL_SEARCH_KIND", L"ChannelSearchKind");
     if (value) {
         fallback = wcstol(value, nullptr, 10) == 1;
         free(value);
@@ -1377,21 +1495,23 @@ static bool FindRuntime(RuntimeInfo* out, IUnknown* options = nullptr) {
     out->clientDll[0] = 0;
     out->runtimeType = 0;
 
-    WCHAR folder[MAX_PATH * 2];
-    DWORD n = GetEnvironmentVariableW(L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", folder,
-                                      (DWORD)(sizeof(folder) / sizeof(WCHAR)));
-    if (n > 0 && n < sizeof(folder) / sizeof(WCHAR)) {
+    WCHAR* folder = LoaderOverrideDup(L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
+                                      L"BrowserExecutableFolder");
+    if (folder && folder[0] != 0) {
         // A fixed-version drop: the folder is already the versioned one.
         out->runtimeType = 1;
         swprintf_s(out->clientDll, L"%s\\EBWebView\\%s\\EmbeddedBrowserWebView.dll", folder,
                    ArchFolder());
         if (GetFileAttributesW(out->clientDll) == INVALID_FILE_ATTRIBUTES) {
+            free(folder);
             return false;
         }
         FileVersion(out->clientDll, out->version,
                     (int)(sizeof(out->version) / sizeof(out->version[0])));
+        free(folder);
         return true;
     }
+    free(folder);
 
     int releaseChannels = 15;
     bool leastStable = false;
@@ -1446,7 +1566,8 @@ static void DefaultUserDataFolder(WCHAR* out, int cap) {
 static HRESULT CreateEnvironmentWithOptions(
     PCWSTR userDataFolder, IUnknown* options,
     ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler* handler) {
-    WCHAR* userDataOverride = EnvironmentVariableDup(L"WEBVIEW2_USER_DATA_FOLDER");
+    WCHAR* userDataOverride =
+        LoaderOverrideDup(L"WEBVIEW2_USER_DATA_FOLDER", L"UserDataFolder");
     if (userDataOverride) {
         userDataFolder = userDataOverride;
     }
@@ -2527,8 +2648,8 @@ static ICoreWebView2Environment* CreateEnvironment(const WebViewAttributes* attr
 
     // WebView2Loader appends this override to the options object's own
     // arguments. Preserve an explicit empty builder value while doing so.
-    WCHAR* browserArgumentsOverride =
-        EnvironmentVariableDup(L"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS");
+    WCHAR* browserArgumentsOverride = LoaderOverrideDup(
+        L"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", L"AdditionalBrowserArguments");
     if (browserArgumentsOverride) {
         size_t ownLen = options->additionalBrowserArguments
                             ? wcslen(options->additionalBrowserArguments)

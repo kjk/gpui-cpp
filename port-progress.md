@@ -9193,3 +9193,10 @@ compatibility fallback. Options-7 release masks, most/least-stable ordering,
 the legacy release-channel preference, and the current channel/mask environment
 overrides all participate; reported preview versions carry the same channel
 suffix instead of Stable being the only discoverable runtime.
+
+The loader's environment overrides now fall through to WebView2's policy
+registry in Microsoft order: modern machine, modern user, legacy machine,
+legacy user, each keyed by application id, executable name and finally `*`.
+This applies to browser/runtime folder, user-data folder, appended arguments,
+channel order and release masks, so centrally managed WebView2 deployments no
+longer diverge from Wry merely because this tree writes out the loader.
