@@ -344,6 +344,37 @@ static void AChannelKeepsTwoValuesOfOneElementApart() {
              MotionId(StrL("other"), StrL("fill")));
 }
 
+static void SourceNamedValueTransitionContractIsAvailable() {
+    motion::Transition linear =
+        motion::Transition::New(100).Delay(50).Ease(EaseLinear);
+    utassertnear(linear.durationMs, 100.f);
+    utassertnear(linear.delayMs, 50.f);
+    utassertnear(MotionSample(linear, 0.25f), 0.25f);
+
+    motion::TransitionId fill(StrL("terms"), StrL("fill"));
+    motion::TransitionId mark(StrL("terms"), StrL("mark-opacity"));
+    utassert(fill != mark);
+    utassert(fill == motion::TransitionId(StrL("terms"), StrL("fill")));
+
+    utassertnear(motion::Interpolate<float>::Between(2.f, 10.f, 0.25f),
+                 4.f);
+
+    App app;
+    Window* win = new Window();
+    Arena* arena = ArenaNew();
+    win->app = &app;
+    win->frameNow = 1.0;
+    Ctx cx = {&app, win, arena, {}};
+    motion::TransitionId value(StrL("source-transition"));
+    utassertnear(motion::transition(&cx, value, 0.f, linear), 0.f);
+    utassertnear(motion::transition(&cx, value, 10.f, linear), 0.f);
+    win->frameNow = 1.1;
+    utassertnear(motion::transition(&cx, value, 10.f, linear), 5.f);
+
+    delete win;
+    ArenaDelete(arena);
+}
+
 // Style::opacity, which is what a fade is made of: GPUI multiplies every
 // colour a primitive paints by the opacity in force, and nested opacities
 // multiply, so a subtree fades as one thing rather than each box separately.
@@ -539,6 +570,7 @@ void TestMotion() {
     ReducedMotionTakesTheTargetOutright();
     TheSameRuleCarriesAPointAndAColor();
     AChannelKeepsTwoValuesOfOneElementApart();
+    SourceNamedValueTransitionContractIsAvailable();
     OpacityMultipliesEveryColourItPaints();
     ASpringArrivesAndStops();
     ASpringCarriesItsVelocityThroughAReversal();

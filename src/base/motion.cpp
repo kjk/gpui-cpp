@@ -17,6 +17,11 @@ uint32_t MotionId(Str id, Str channel) {
     return (uint32_t)HashClickId(id) * 31u + (uint32_t)HashClickId(channel);
 }
 
+motion::TransitionId::TransitionId(Str id) : key(MotionId(id)) {}
+
+motion::TransitionId::TransitionId(Str id, Str channel)
+    : key(MotionId(id, channel)) {}
+
 float MotionProgress(const Motion& m, float elapsedMs) {
     if (elapsedMs <= m.delayMs) {
         return 0.f;

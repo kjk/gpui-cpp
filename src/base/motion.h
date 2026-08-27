@@ -16,18 +16,76 @@
 
 namespace gpui {
 
-// motion::Transition: how long, how late, and along which curve. Rust builds
-// it with a chain; the fields are the chain.
-struct Motion {
+// motion.rs has a Transition too. Keep it in the source module's namespace so
+// it can coexist with animation.rs::Transition, rather than renaming one of
+// the two public Rust contracts in the C++ surface.
+namespace motion {
+
+// A value that can be interpolated between two application-owned targets.
+// Rust expresses this as a trait with a blanket implementation for Lerp; the
+// C++ specialization seam has the same shape and the default delegates to the
+// corresponding Lerp overload.
+template <typename T>
+struct Interpolate {
+    static T Between(const T& from, const T& target, float progress) {
+        return Lerp(from, target, progress);
+    }
+};
+
+// CSS-like timing policy: how long, how late, and along which curve. Rust
+// builds it with a consuming chain; this POD returns a copy from the same
+// operations so named policies can be composed without retained ownership.
+struct Transition {
     float durationMs = 0;
     float delayMs = 0;
     EaseFn ease = EaseOutCubic;
+
+    static Transition New(float durationMs) {
+        Transition policy;
+        policy.durationMs = durationMs;
+        return policy;
+    }
+
+    Transition Delay(float ms) const {
+        Transition policy = *this;
+        policy.delayMs = ms;
+        return policy;
+    }
+
+    Transition Ease(EaseFn fn) const {
+        Transition policy = *this;
+        policy.ease = fn;
+        return policy;
+    }
 };
 
+// One independently transitioning value. Upstream wraps ElementId and adds a
+// named child for the retained transition state. The runtime's keyed store is
+// already the folded GlobalElementId, so this wrapper carries that POD key.
+struct TransitionId {
+    uint32_t key = 0;
+
+    TransitionId() = default;
+    explicit TransitionId(uint32_t value) : key(value) {}
+    explicit TransitionId(Str id);
+    TransitionId(Str id, Str channel);
+
+    bool operator==(const TransitionId& other) const {
+        return key == other.key;
+    }
+    bool operator!=(const TransitionId& other) const {
+        return key != other.key;
+    }
+};
+
+} // namespace motion
+
+// Compatibility spelling used by the port before the Rust module namespace
+// was restored. It is the same policy, not an adapter state.
+using Motion = motion::Transition;
+
 inline Motion MotionNew(float durationMs) {
-    Motion m;
-    m.durationMs = durationMs;
-    return m;
+    return motion::Transition::New(durationMs);
 }
 
 // One independently transitioning value. Rust's TransitionId is an ElementId
@@ -112,7 +170,8 @@ MotionStep<T> MotionAdvance(MotionState<T>* st, T target, const Motion& m,
     }
     float elapsedMs = (float)((now - st->startedAt) * 1000.0);
     float progress = MotionProgress(m, elapsedMs);
-    T sampled = Lerp(st->from, st->target, MotionSample(m, progress));
+    T sampled = motion::Interpolate<T>::Between(
+        st->from, st->target, MotionSample(m, progress));
     if (!MotionEq(st->target, target)) {
         // The target moved: carry on from where the last one had got to.
         st->from = sampled;
@@ -269,5 +328,28 @@ T MotionValue(Ctx* cx, uint32_t key, T target, const Motion& m) {
     }
     return step.value;
 }
+
+namespace motion {
+
+// Source-named entry point. Fetching Window separately is unnecessary here:
+// Ctx carries the render window and app together, and MotionValue performs the
+// same keyed-state lookup and animation-frame request as Rust's transition.
+template <typename T>
+T transition(Ctx* cx, TransitionId id, T target, const Transition& policy) {
+    return MotionValue(cx, id.key, target, policy);
+}
+
+// Spring lives at gpui scope for existing callers; make the Rust module path
+// available as well without duplicating policy or state.
+using Spring = gpui::Spring;
+using SpringState = gpui::SpringState;
+using SpringStep = gpui::SpringStep;
+
+inline float spring(Ctx* cx, TransitionId id, float target,
+                    const Spring& policy) {
+    return SpringValue(cx, id.key, target, policy);
+}
+
+} // namespace motion
 
 } // namespace gpui

@@ -7806,3 +7806,30 @@ no full-module errors.
 MSVC debug/release, clang-cl release and MSVC ASan pass 19,973 checks; wasm
 passes its 19,268 applicable checks. The release story build compiles the keyed
 inspector integration.
+
+## Base motion restores the source module contract
+
+The value-transition state machine was already complete, including delayed
+easing, interruption from the current sample, reduced-motion adoption, keyed
+window state, frame requests and the separate velocity-preserving spring. Its
+public duration policy was nevertheless renamed `Motion` because the flat C++
+namespace also contained animation.rs's legacy `Transition`. That hid the four
+source declarations `Interpolate`, `Transition`, `TransitionId` and
+`transition` from an otherwise faithful module.
+
+The source boundary is now explicit as `gpui::motion`. Its POD `Transition`
+has the source-shaped New/Delay/Ease chain, `TransitionId` owns the folded
+element/channel key, the `Interpolate<T>` specialization seam is the Rust trait
+counterpart, and `motion::transition` performs the existing keyed lookup and
+frame request. `motion::Spring` and `motion::spring` expose the same module path
+for the physical policy. The old `Motion` spelling remains a type alias so
+existing port callers share the exact state and behavior rather than going
+through an adapter. animation.rs's deprecated global `Transition` can therefore
+coexist with motion.rs's source-named type.
+
+Tests exercise the public policy chain, source-named IDs, interpolation seam
+and keyed transition entry point in addition to the complete timing and spring
+suite. Base motion is full: the audit moves to 94 full, 27 partial, 8 adapters
+and 2 exclusions with 284 unresolved partial-module spellings and no
+full-module errors. MSVC debug/release, clang-cl release and MSVC ASan pass
+19,982 checks; wasm passes its 19,277 applicable checks.
