@@ -6,6 +6,9 @@ struct PolicyShared {
     uint32_t refs = 1;
     shell::Storage local{true};
     shell::Storage session{false};
+    HostModules* modules = HostModulesNew();
+
+    ~PolicyShared() { HostModulesRelease(modules); }
 };
 
 struct Policy {
@@ -92,6 +95,35 @@ bool ShellSetStoragePath(Str path, Str* error) {
     bool ok = PolicySetStoragePath(policy, path, error);
     PolicyRelease(policy);
     return ok;
+}
+
+HostModules* PolicyHostModules(Policy* policy) {
+    return policy && policy->shared
+               ? HostModulesRetain(policy->shared->modules)
+               : HostModulesNew();
+}
+
+bool PolicyAddHostModule(Policy* policy, HostModule* module,
+                         HostError* error) {
+    if (error) error->Clear();
+    if (!policy || !policy->shared || !module || !module->Validate(error))
+        return false;
+    HostModules* replacement = HostModulesClone(policy->shared->modules);
+    if (!replacement || !HostModulesInsert(replacement, module)) {
+        HostModulesRelease(replacement);
+        if (error) error->Set(StrL("could not add HostModule within memory limits"));
+        return false;
+    }
+    HostModulesRelease(policy->shared->modules);
+    policy->shared->modules = replacement;
+    return true;
+}
+
+void PolicyClearHostModules(Policy* policy) {
+    if (!policy || !policy->shared) return;
+    HostModules* empty = HostModulesNew();
+    HostModulesRelease(policy->shared->modules);
+    policy->shared->modules = empty;
 }
 
 } // namespace gpui

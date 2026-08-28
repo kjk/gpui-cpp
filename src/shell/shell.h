@@ -5,6 +5,7 @@
 #include "shell/error.h"
 #include "shell/fetch.h"
 #include "shell/filesystem.h"
+#include "shell/host_modules.h"
 #include "shell/metrics.h"
 #include "shell/policy.h"
 #include "shell/process.h"

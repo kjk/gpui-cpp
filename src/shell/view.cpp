@@ -74,7 +74,8 @@ bool ScriptView::Reload(ScriptView* self, Ctx* cx, Str directory, Str entry,
         ShellErrorSet(error, StrL("reload needs the live ScriptView context"));
         return false;
     }
-    ViewType* nextType = self->runtime->LoadApp(directory, entry, error);
+    ViewType* nextType =
+        self->runtime->LoadApp(directory, entry, self->policy, error);
     if (!nextType) return false;
     ViewObject* nextObject = self->runtime->Instantiate(
         nextType, cx->win, cx->app, self->policy, error, cx->self);

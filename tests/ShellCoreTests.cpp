@@ -526,6 +526,124 @@ static void ShellSourceWatchReloadsAtomically() {
     remove(notesName);
 }
 
+static void HostIncrement(HostCall* call) {
+    double value = 0;
+    if (!call || !call->arguments ||
+        !call->arguments->Number(0, &value, &call->error))
+        return;
+    call->result.SetNumber(value + 1);
+}
+
+static void HostEcho(HostCall* call) {
+    const HostValue* value = nullptr;
+    if (!call || !call->arguments ||
+        !call->arguments->Value(0, &value, &call->error))
+        return;
+    if (!call->result.CopyFrom(*value))
+        call->error.Set(StrL("copying the host value failed"));
+}
+
+static void HostDouble(HostCall* call) {
+    double value = 0;
+    if (!call || !call->arguments ||
+        !call->arguments->Number(0, &value, &call->error))
+        return;
+    call->result.SetNumber(value * 2);
+}
+
+static void ShellHostModulesBridgePlainDataAndPromises() {
+    ShellClearExportedModules();
+    HostError hostError;
+    HostModule* reserved = HostModule::New(StrL("path"));
+    utassert(!ShellExportModule(reserved, &hostError));
+    utassert(hostError.IsSet());
+    hostError.Clear();
+    reserved->Release();
+
+    HostModule* mismatched =
+        HostModule::New(StrL("bad-types"))
+            ->Function(StrL("actual"), MkFunc1Void(HostIncrement))
+            ->Declarations(StrL("export function declared(): number;"));
+    utassert(!ShellExportModule(mismatched, &hostError));
+    utassert(StrFind(hostError.message, StrL("actual")) >= 0);
+    utassert(StrFind(hostError.message, StrL("declared")) >= 0);
+    hostError.Clear();
+    mismatched->Release();
+
+    HostModule* module =
+        HostModule::New(StrL("calculator"))
+            ->Function(StrL("increment"), MkFunc1Void(HostIncrement))
+            ->Function(StrL("echo"), MkFunc1Void(HostEcho))
+            ->AsyncFunction(StrL("double"), MkFunc1Void(HostDouble))
+            ->Declarations(StrL(
+                "export function increment(value: number): number;\n"
+                "export function echo(value: unknown): unknown;\n"
+                "export function double(value: number): Promise<number>;\n"));
+    utassert(ShellExportModule(module, &hostError));
+    utassert(!hostError.IsSet());
+    module->Release();
+
+    App app;
+    Window window;
+    window.app = &app;
+    app.windows.Append(&window);
+    component::Init(&app);
+    ExecInit();
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { increment, echo, double } from 'calculator';\n"
+        "globalThis.hostAsync = 'pending';\n"
+        "globalThis.hostSync = JSON.stringify(echo({answer:[increment(41), true, 'ok']}));\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { cx.spawn(async cx => { hostAsync = String(await double(21)); cx.notify(); }); }\n"
+        "  render(cx) { let live; try { live = increment(1); } catch (e) { live = 'refused:' + e.message; } return div().child(hostSync + '|' + hostAsync + '|' + live); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("host-module.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    utassert(view.IsValid() &&
+             EntityRender(&app, &window, frame, view.id) != nullptr);
+    utassert(!error.IsSet());
+    utassert(runtime && runtime->Eval(
+        StrL("if (hostSync !== '{\"answer\":[42,true,\"ok\"]}') throw new Error(hostSync)"),
+        StrL("host-sync-check.js"), &error));
+    utassert(ExecWaitIdle(5000));
+    utassert(runtime && runtime->Eval(
+        StrL("if (hostAsync !== '42') throw new Error(hostAsync)"),
+        StrL("host-async-check.js"), &error));
+    utassert(runtime->LiveTasks() == 0);
+
+    ShellClearExportedModules();
+    ScriptView* live = view.Get(&app);
+    Ctx cx = {&app, &window, frame, view.id};
+    ScriptView::Refresh(live, &cx);
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, view.id) != nullptr);
+    Arena* text = ArenaNew();
+    utassert(live && live->snapshot &&
+             StrFind(live->snapshot->DebugTree(text),
+                     StrL("refused:")) >= 0);
+    utassert(StrFind(live->snapshot->DebugTree(text),
+                     StrL("registered none")) >= 0);
+
+    EntityDrop(&app, view.id);
+    app.windows.len = 0;
+    ArenaDelete(text);
+    ArenaDelete(frame);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+    ShellClearExportedModules();
+}
+
 static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
     const char* depName = "shell_runtime_dep.js";
     const char* mainName = "shell_runtime_main.js";
@@ -1452,6 +1570,7 @@ void TestShellCore() {
     RuntimeAbortsFailedSnapshotTransactions();
     RuntimeLoadsOnlyModulesInsideTheApplicationRoot();
     ShellSourceWatchReloadsAtomically();
+    ShellHostModulesBridgePlainDataAndPromises();
     PublishedSnapshotsMaterializeToNativeElements();
     ScriptViewsReuseSnapshotsUntilNotified();
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();

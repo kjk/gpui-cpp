@@ -22,7 +22,11 @@ class ShellRuntime {
     void Release();
 
     ViewType* LoadSource(Str name, Str source, ShellError* error = nullptr);
+    ViewType* LoadSource(Str name, Str source, Policy* policy,
+                         ShellError* error = nullptr);
     ViewType* LoadApp(Str directory, Str entry = StrL("main.js"),
+                      ShellError* error = nullptr);
+    ViewType* LoadApp(Str directory, Str entry, Policy* policy,
                       ShellError* error = nullptr);
     ViewObject* Instantiate(ViewType* type, Window* window, App* app,
                             Policy* policy = nullptr,

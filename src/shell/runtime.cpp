@@ -3,6 +3,7 @@
 #include "quickjs/quickjs.h"
 #include "shell/fetch.h"
 #include "shell/filesystem.h"
+#include "shell/host_modules.h"
 #include "shell/materialize.h"
 #include "shell/process.h"
 #include "shell/retained.h"
@@ -57,12 +58,14 @@ enum class ShellTaskKind : uint8_t {
     Filesystem,
     Fetch,
     StorageFlush,
+    HostAsync,
 };
 
 struct ProcessJob;
 struct FsJob;
 struct ShellFetchJob;
 struct StorageFlushState;
+struct HostAsyncJob;
 
 struct ShellTask {
     uint32_t id = 0;
@@ -364,6 +367,26 @@ struct StorageWriteJob {
         PolicyRelease(policy);
         write.Free();
         StrFree(error);
+    }
+};
+
+struct HostAsyncJob {
+    ShellRuntimeControl* control = nullptr;
+    uint32_t task = 0;
+    HostArguments arguments;
+    Func1<HostCall*> work;
+    Func0 release;
+    HostModules* registry = nullptr;
+    HostValue result;
+    HostError error;
+
+    void Free() {
+        arguments.Free();
+        result.Free();
+        error.Clear();
+        release.Call();
+        HostModulesRelease(registry);
+        registry = nullptr;
     }
 };
 
@@ -1215,6 +1238,27 @@ static char* ModuleNormalize(JSContext* ctx, const char* base,
         if (out) memcpy(out, name, len + 1);
         return out;
     }
+    if (name[0] != '.' && name[0] != '/' && name[0] != '\\') {
+        bool release = false;
+        Policy* policy = shell::ScopeCurrentPolicy();
+        if (!policy) {
+            policy = PolicyDefault();
+            release = true;
+        }
+        HostModules* modules = PolicyHostModules(policy);
+        HostModule* found = HostModulesGet(modules, Str(name));
+        uint64_t generation = HostModulesGeneration(modules);
+        HostModulesRelease(modules);
+        if (release) PolicyRelease(policy);
+        if (found) {
+            int n = snprintf(nullptr, 0, "host:%s?m=%llu", name,
+                             (unsigned long long)generation);
+            char* out = n > 0 ? (char*)js_malloc(ctx, (size_t)n + 1) : nullptr;
+            if (out) snprintf(out, (size_t)n + 1, "host:%s?m=%llu", name,
+                              (unsigned long long)generation);
+            return out;
+        }
+    }
     AppModule* application = ApplicationForBase(impl, base);
     if (!application) {
         JS_ThrowReferenceError(
@@ -1265,6 +1309,105 @@ static char* ModuleNormalize(JSContext* ctx, const char* base,
     return out;
 }
 
+static bool HostModuleTag(const char* tagged, Str* module,
+                          uint64_t* generation) {
+    if (!tagged || strncmp(tagged, "host:", 5) != 0) return false;
+    const char* tag = strrchr(tagged + 5, '?');
+    if (!tag || strncmp(tag, "?m=", 3) != 0 || tag == tagged + 5)
+        return false;
+    uint64_t value = 0;
+    for (const char* at = tag + 3; *at; at++) {
+        if (*at < '0' || *at > '9' ||
+            value > (UINT64_MAX - (uint64_t)(*at - '0')) / 10)
+            return false;
+        value = value * 10 + (uint64_t)(*at - '0');
+    }
+    if (module) *module = Str(tagged + 5, (int)(tag - tagged - 5));
+    if (generation) *generation = value;
+    return true;
+}
+
+static void AppendJsQuoted(StrBuilder* out, Str value) {
+    out->AppendChar('"');
+    static const char hex[] = "0123456789abcdef";
+    for (int i = 0; i < value.len; i++) {
+        uint8_t c = (uint8_t)value.s[i];
+        if (c == '"' || c == '\\') {
+            out->AppendChar('\\');
+            out->AppendChar((char)c);
+        } else if (c == '\n') {
+            out->Append(StrL("\\n"));
+        } else if (c == '\r') {
+            out->Append(StrL("\\r"));
+        } else if (c == '\t') {
+            out->Append(StrL("\\t"));
+        } else if (c < 0x20) {
+            char escaped[] = {'\\', 'u', '0', '0', hex[c >> 4], hex[c & 15]};
+            out->Append(Str(escaped, 6));
+        } else {
+            out->AppendChar((char)c);
+        }
+    }
+    out->AppendChar('"');
+}
+
+static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
+    Str moduleName;
+    uint64_t generation = 0;
+    if (!HostModuleTag(name, &moduleName, &generation)) return nullptr;
+    bool release = false;
+    Policy* policy = shell::ScopeCurrentPolicy();
+    if (!policy) {
+        policy = PolicyDefault();
+        release = true;
+    }
+    HostModules* modules = PolicyHostModules(policy);
+    HostModule* module = HostModulesGet(modules, moduleName);
+    if (!module || HostModulesGeneration(modules) != generation) {
+        HostModulesRelease(modules);
+        if (release) PolicyRelease(policy);
+        JS_ThrowReferenceError(
+            ctx,
+            "the HostModule registry changed while `%.*s` was being imported; export modules before loading an application",
+            moduleName.len, moduleName.s);
+        return nullptr;
+    }
+    StrBuilder source;
+    for (int i = 0; i < module->FunctionCount(); i++) {
+        Str function = module->FunctionName(i);
+        if (!HostIsIdentifier(function)) {
+            HostModulesRelease(modules);
+            if (release) PolicyRelease(policy);
+            JS_ThrowReferenceError(
+                ctx,
+                "HostModule `%.*s` registered `%.*s`, which is not a JavaScript identifier",
+                moduleName.len, moduleName.s, function.len, function.s);
+            return nullptr;
+        }
+        source.Append(StrL("export const "));
+        source.Append(function);
+        source.Append(StrL("=(...args)=>"));
+        source.Append(module->IsAsync(function)
+                          ? StrL("__host_async_call(")
+                          : StrL("__host_call("));
+        AppendJsQuoted(&source, moduleName);
+        source.AppendChar(',');
+        AppendJsQuoted(&source, function);
+        source.Append(StrL(",args);\n"));
+    }
+    HostModulesRelease(modules);
+    if (release) PolicyRelease(policy);
+    Str script = source.TakeStr();
+    JSValue value = JS_Eval(ctx, script.s ? script.s : "",
+                            (size_t)script.len, name,
+                            JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    StrFree(script);
+    if (JS_IsException(value)) return nullptr;
+    JSModuleDef* definition = (JSModuleDef*)JS_VALUE_GET_PTR(value);
+    JS_FreeValue(ctx, value);
+    return definition;
+}
+
 static JSModuleDef* ModuleLoad(JSContext* ctx, const char* name, void*) {
     if (IsBuiltin(name)) {
         JSModuleDef* module = JS_NewCModule(ctx, name, InitBuiltinModule);
@@ -1277,6 +1420,7 @@ static JSModuleDef* ModuleLoad(JSContext* ctx, const char* name, void*) {
         }
         return module;
     }
+    if (strncmp(name, "host:", 5) == 0) return LoadHostModule(ctx, name);
     char path[kMaxPath] = {};
     Untag(name, path, kMaxPath);
     Str source = {};
@@ -2843,6 +2987,422 @@ static JSValue NativeConsole(JSContext* ctx, JSValueConst, int argc,
     return JS_UNDEFINED;
 }
 
+constexpr int kHostBridgeMaxDepth = 16;
+constexpr int kHostBridgeMaxItems = 10000;
+
+static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
+                       HostValue* out) {
+    if (depth > kHostBridgeMaxDepth) {
+        JS_ThrowTypeError(ctx,
+                          "a host argument may not nest more than 16 levels deep");
+        return false;
+    }
+    if (JS_IsNull(value) || JS_IsUndefined(value)) {
+        out->SetNull();
+        return true;
+    }
+    if (JS_IsBool(value)) {
+        out->SetBool(JS_ToBool(ctx, value) != 0);
+        return true;
+    }
+    if (JS_IsNumber(value)) {
+        double number = 0;
+        if (JS_ToFloat64(ctx, &number, value) < 0) return false;
+        out->SetNumber(number);
+        return true;
+    }
+    if (JS_IsString(value)) {
+        size_t len = 0;
+        const char* text = JS_ToCStringLen(ctx, &len, value);
+        if (!text) return false;
+        bool ok = len <= (size_t)INT_MAX &&
+                  out->SetString(Str(text, (int)len));
+        JS_FreeCString(ctx, text);
+        if (!ok) JS_ThrowOutOfMemory(ctx);
+        return ok;
+    }
+    if (JS_IsArray(value)) {
+        int64_t count = 0;
+        if (JS_GetLength(ctx, value, &count) < 0) return false;
+        if (count < 0 || count > kHostBridgeMaxItems) {
+            JS_ThrowRangeError(ctx,
+                               "host arrays accept at most 10000 items");
+            return false;
+        }
+        out->Free();
+        out->kind = HostValueKind::Array;
+        if (!VecReserve(out->array, (int)count)) {
+            JS_ThrowOutOfMemory(ctx);
+            return false;
+        }
+        for (int64_t i = 0; i < count; i++) {
+            JSValue item = JS_GetPropertyUint32(ctx, value, (uint32_t)i);
+            HostValue* converted = new HostValue();
+            bool ok = !JS_IsException(item) &&
+                      HostFromJs(ctx, item, depth + 1, converted) &&
+                      out->array.Append(converted);
+            JS_FreeValue(ctx, item);
+            if (!ok) {
+                converted->Free();
+                delete converted;
+                if (!JS_HasException(ctx)) JS_ThrowOutOfMemory(ctx);
+                return false;
+            }
+        }
+        return true;
+    }
+    if (JS_IsFunction(ctx, value)) {
+        JS_ThrowTypeError(
+            ctx,
+            "a host function cannot be passed a callback; host calls take and return plain data only");
+        return false;
+    }
+    if (JS_IsObject(value)) {
+        JSPropertyEnum* properties = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &properties, &count, value,
+                                   JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) < 0)
+            return false;
+        if (count > kHostBridgeMaxItems) {
+            JS_FreePropertyEnum(ctx, properties, count);
+            JS_ThrowRangeError(ctx,
+                               "host objects accept at most 10000 fields");
+            return false;
+        }
+        out->Free();
+        out->kind = HostValueKind::Object;
+        bool ok = VecReserve(out->object, (int)count) != nullptr;
+        for (uint32_t i = 0; ok && i < count; i++) {
+            const char* name = JS_AtomToCString(ctx, properties[i].atom);
+            JSValue item = JS_GetProperty(ctx, value, properties[i].atom);
+            HostField field;
+            field.name = name ? StrDup(Str(name)) : Str{};
+            field.value = new HostValue();
+            ok = name && !JS_IsException(item) && field.name.s &&
+                 HostFromJs(ctx, item, depth + 1, field.value) &&
+                 out->object.Append(field);
+            if (name) JS_FreeCString(ctx, name);
+            JS_FreeValue(ctx, item);
+            if (!ok) {
+                StrFree(field.name);
+                field.value->Free();
+                delete field.value;
+            }
+        }
+        JS_FreePropertyEnum(ctx, properties, count);
+        if (!ok && !JS_HasException(ctx)) JS_ThrowOutOfMemory(ctx);
+        return ok;
+    }
+    JS_ThrowTypeError(
+        ctx,
+        "unsupported host argument; expected null, a boolean, a number, a string, an array or a plain object");
+    return false;
+}
+
+static bool HostArgumentsFromJs(JSContext* ctx, JSValueConst array,
+                                HostArguments* arguments) {
+    if (!JS_IsArray(array)) {
+        JS_ThrowTypeError(ctx, "host call arguments must be an array");
+        return false;
+    }
+    int64_t count = 0;
+    if (JS_GetLength(ctx, array, &count) < 0) return false;
+    if (count < 0 || count > kHostBridgeMaxItems) {
+        JS_ThrowRangeError(ctx, "host calls accept at most 10000 arguments");
+        return false;
+    }
+    if (!VecReserve(arguments->values, (int)count)) {
+        JS_ThrowOutOfMemory(ctx);
+        return false;
+    }
+    for (int64_t i = 0; i < count; i++) {
+        JSValue item = JS_GetPropertyUint32(ctx, array, (uint32_t)i);
+        HostValue* value = new HostValue();
+        bool ok = !JS_IsException(item) && HostFromJs(ctx, item, 0, value) &&
+                  arguments->values.Append(value);
+        JS_FreeValue(ctx, item);
+        if (!ok) {
+            value->Free();
+            delete value;
+            if (!JS_HasException(ctx)) JS_ThrowOutOfMemory(ctx);
+            return false;
+        }
+    }
+    return true;
+}
+
+static JSValue HostIntoJs(JSContext* ctx, const HostValue& value,
+                          int depth = 0) {
+    if (depth > kHostBridgeMaxDepth)
+        return JS_ThrowRangeError(ctx,
+                                  "a host result may not nest more than 16 levels deep");
+    switch (value.kind) {
+        case HostValueKind::Null: return JS_NULL;
+        case HostValueKind::Bool: return JS_NewBool(ctx, value.boolean);
+        case HostValueKind::Number: return JS_NewFloat64(ctx, value.number);
+        case HostValueKind::String:
+            return JS_NewStringLen(ctx, value.string.s ? value.string.s : "",
+                                   (size_t)value.string.len);
+        case HostValueKind::Array: {
+            if (value.array.len > kHostBridgeMaxItems)
+                return JS_ThrowRangeError(ctx,
+                                          "host result array exceeds 10000 items");
+            JSValue array = JS_NewArray(ctx);
+            for (int i = 0; i < value.array.len; i++) {
+                JSValue item = value.array[i]
+                                   ? HostIntoJs(ctx, *value.array[i], depth + 1)
+                                   : JS_NULL;
+                if (JS_IsException(item) ||
+                    JS_SetPropertyUint32(ctx, array, (uint32_t)i, item) < 0) {
+                    JS_FreeValue(ctx, array);
+                    return JS_EXCEPTION;
+                }
+            }
+            return array;
+        }
+        case HostValueKind::Object: {
+            if (value.object.len > kHostBridgeMaxItems)
+                return JS_ThrowRangeError(ctx,
+                                          "host result object exceeds 10000 fields");
+            JSValue object = JS_NewObject(ctx);
+            for (int i = 0; i < value.object.len; i++) {
+                const HostField& field = value.object[i];
+                JSValue item = field.value
+                                   ? HostIntoJs(ctx, *field.value, depth + 1)
+                                   : JS_NULL;
+                if (JS_IsException(item) ||
+                    JS_SetPropertyStr(ctx, object,
+                                      field.name.s ? field.name.s : "",
+                                      item) < 0) {
+                    JS_FreeValue(ctx, object);
+                    return JS_EXCEPTION;
+                }
+            }
+            return object;
+        }
+    }
+    return JS_NULL;
+}
+
+static bool HostNames(JSContext* ctx, int argc, JSValueConst* argv,
+                      Arena* arena, Str* module, Str* function) {
+    return argc >= 3 && JsString(ctx, argv[0], arena, module) &&
+           JsString(ctx, argv[1], arena, function);
+}
+
+static JSValue NativeHostCall(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    Arena* arena = ArenaNew();
+    Str module;
+    Str function;
+    HostArguments arguments;
+    bool ok = HostNames(ctx, argc, argv, arena, &module, &function) &&
+              HostArgumentsFromJs(ctx, argv[2], &arguments);
+    if (!ok) {
+        arguments.Free();
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    HostCall call;
+    call.arguments = &arguments;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::MetricsTimer timer =
+        shell::MetricsBegin(&impl->metrics, shell::MetricsTimerKind::Native);
+    ok = HostDispatch(module, function, &call);
+    shell::MetricsEnd(&timer);
+    JSValue result = JS_EXCEPTION;
+    if (!ok) {
+        result = JS_ThrowTypeError(ctx, "`%.*s.%.*s`: %.*s", module.len,
+                                   module.s, function.len, function.s,
+                                   call.error.message.len,
+                                   call.error.message.s
+                                       ? call.error.message.s
+                                       : "host call failed");
+    } else {
+        result = HostIntoJs(ctx, call.result);
+    }
+    call.result.Free();
+    call.error.Clear();
+    arguments.Free();
+    ArenaDelete(arena);
+    return result;
+}
+
+static void HostAsyncWork(HostAsyncJob* job) {
+    HostCall call;
+    call.arguments = &job->arguments;
+    job->work.Call(&call);
+    job->result.kind = call.result.kind;
+    job->result.boolean = call.result.boolean;
+    job->result.number = call.result.number;
+    job->result.string = call.result.string;
+    call.result.string = {};
+    job->result.array.els = call.result.array.els;
+    job->result.array.len = call.result.array.len;
+    job->result.array.cap = call.result.array.cap;
+    call.result.array.els = nullptr;
+    call.result.array.len = 0;
+    call.result.array.cap = 0;
+    job->result.object.els = call.result.object.els;
+    job->result.object.len = call.result.object.len;
+    job->result.object.cap = call.result.object.cap;
+    call.result.object.els = nullptr;
+    call.result.object.len = 0;
+    call.result.object.cap = 0;
+    job->error = call.error;
+    call.error = {};
+}
+
+static void HostAsyncDone(HostAsyncJob* job) {
+    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
+    if (task && task->kind == ShellTaskKind::HostAsync &&
+        TaskWindowLive(task) &&
+        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
+        Window* window = task->window;
+        App* app = task->app;
+        EntityId owner = task->owner;
+        Policy* policy = PolicyRetain(task->policy);
+        AppModule* application = task->application;
+        JSValue settle = JS_DupValue(impl->context,
+                                     job->error.IsSet() ? task->reject
+                                                        : task->callback);
+        ForgetTask(impl, task->id, false);
+        shell::CallScopeGuard scope = shell::ScopeEnter(
+            window, app, ScopePhase::Task, owner, policy, runtime,
+            application);
+        PolicyRelease(policy);
+        BeginExecution(impl);
+        JSValue value = JS_UNDEFINED;
+        if (job->error.IsSet()) {
+            value = JS_NewError(impl->context);
+            JS_SetPropertyStr(
+                impl->context, value, "message",
+                JS_NewStringLen(impl->context, job->error.message.s,
+                                (size_t)job->error.message.len));
+        } else {
+            value = HostIntoJs(impl->context, job->result);
+        }
+        JSValue settled = JS_IsException(value)
+                              ? JS_EXCEPTION
+                              : JS_Call(impl->context, settle, JS_UNDEFINED,
+                                        1, &value);
+        JS_FreeValue(impl->context, value);
+        JS_FreeValue(impl->context, settle);
+        if (JS_IsException(settled)) {
+            Arena* text = ArenaNew();
+            log(ExceptionText(text, impl->context));
+            ArenaDelete(text);
+        } else {
+            JS_FreeValue(impl->context, settled);
+            ShellError error = {};
+            runtime->DrainJobs(kMaxJobBatch, &error);
+            if (error.IsSet()) {
+                log(error.message);
+                ShellErrorClear(&error);
+            }
+        }
+    } else if (task) {
+        ForgetTask(impl, task->id, false);
+    }
+    job->Free();
+    ControlRelease(job->control);
+    delete job;
+}
+
+static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    Arena* arena = ArenaNew();
+    Str module;
+    Str function;
+    HostArguments arguments;
+    bool ok = HostNames(ctx, argc, argv, arena, &module, &function) &&
+              HostArgumentsFromJs(ctx, argv[2], &arguments);
+    if (!ok) {
+        arguments.Free();
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    HostAsyncRequest request;
+    request.arguments = &arguments;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::MetricsTimer timer =
+        shell::MetricsBegin(&impl->metrics, shell::MetricsTimerKind::Native);
+    ok = HostDispatchBegin(module, function, &request);
+    shell::MetricsEnd(&timer);
+    if (!ok) {
+        JSValue result = JS_ThrowTypeError(
+            ctx, "`%.*s.%.*s`: %.*s", module.len, module.s, function.len,
+            function.s, request.error.message.len,
+            request.error.message.s ? request.error.message.s
+                                    : "host call failed");
+        request.error.Clear();
+        request.release.Call();
+        HostModulesRelease(request.registry);
+        arguments.Free();
+        ArenaDelete(arena);
+        return result;
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        request.release.Call();
+        HostModulesRelease(request.registry);
+        arguments.Free();
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx,
+                                 "an asynchronous HostModule call needs a live host task");
+    }
+
+    HostAsyncJob* job = new HostAsyncJob();
+    job->arguments.values.els = arguments.values.els;
+    job->arguments.values.len = arguments.values.len;
+    job->arguments.values.cap = arguments.values.cap;
+    arguments.values.els = nullptr;
+    arguments.values.len = 0;
+    arguments.values.cap = 0;
+    job->work = request.work;
+    job->release = request.release;
+    job->registry = request.registry;
+    request.registry = nullptr;
+    request.error.Clear();
+    ArenaDelete(arena);
+
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (JS_IsException(promise)) {
+        job->Free();
+        delete job;
+        return JS_EXCEPTION;
+    }
+    uint32_t task = NewTask(impl, ShellTaskKind::HostAsync, resolving[0],
+                            host.GetApp(), host.GetWindow(), false,
+                            resolving[1]);
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    if (!task) {
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its outstanding host task limit");
+    }
+    job->control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->control);
+    job->task = task;
+    if (!ExecSpawn(MkFunc0(HostAsyncWork, job),
+                   MkFunc0(HostAsyncDone, job))) {
+        ForgetTask(impl, task, false);
+        ControlRelease(job->control);
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowInternalError(
+            ctx, "asynchronous HostModule work could not start");
+    }
+    return promise;
+}
+
 static bool ObjectOnlyOption(JSContext* ctx, JSValueConst object,
                              const char* allowed, const char* what) {
     JSPropertyEnum* properties = nullptr;
@@ -3954,6 +4514,9 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     SetGlobalFunction(impl->context, global, "__state", NativeState, 2);
     SetGlobalFunction(impl->context, global, "__slot", NativeSlot, 3);
     SetGlobalFunction(impl->context, global, "__apply", NativeApply, 3);
+    SetGlobalFunction(impl->context, global, "__host_call", NativeHostCall, 3);
+    SetGlobalFunction(impl->context, global, "__host_async_call",
+                      NativeHostAsyncCall, 3);
     SetGlobalFunction(impl->context, global, "__cx_notify", NativeNotify, 1);
     SetGlobalFunction(impl->context, global, "__cx_notify_current",
                       NativeNotifyCurrent, 0);
@@ -4218,10 +4781,11 @@ void ShellRuntime::Release() {
 }
 
 static ViewType* LoadModule(ShellRuntime* runtime, Str name, Str source,
-                            AppModule* application, ShellError* error) {
+                            AppModule* application, Policy* policy,
+                            ShellError* error) {
     ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
     shell::CallScopeGuard scope = shell::ScopeEnter(
-        nullptr, nullptr, ScopePhase::Task, {}, nullptr, runtime, application);
+        nullptr, nullptr, ScopePhase::Task, {}, policy, runtime, application);
     BeginExecution(impl);
     JSValue module = JS_Eval(
         impl->context, source.s, (size_t)source.len, name.s,
@@ -4265,15 +4829,26 @@ static ViewType* LoadModule(ShellRuntime* runtime, Str name, Str source,
 }
 
 ViewType* ShellRuntime::LoadSource(Str name, Str source, ShellError* error) {
+    return LoadSource(name, source, nullptr, error);
+}
+
+ViewType* ShellRuntime::LoadSource(Str name, Str source, Policy* policy,
+                                   ShellError* error) {
     ShellErrorClear(error);
     if (!name.s || name.len == 0) name = StrL("<module>");
     Str ownedName = StrDup(name);
-    ViewType* result = LoadModule(this, ownedName, source, nullptr, error);
+    ViewType* result =
+        LoadModule(this, ownedName, source, nullptr, policy, error);
     StrFree(ownedName);
     return result;
 }
 
 ViewType* ShellRuntime::LoadApp(Str directory, Str entry, ShellError* error) {
+    return LoadApp(directory, entry, nullptr, error);
+}
+
+ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
+                                ShellError* error) {
     ShellErrorClear(error);
     char dir[kMaxPath] = {};
     if (directory.len <= 0 || directory.len >= kMaxPath) {
@@ -4308,7 +4883,8 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, ShellError* error) {
     Str source = {};
     if (!ReadFileBounded(Str(canonical), &source, error)) return nullptr;
     Str tagged = StrDup(fmt("%s?v=%u", Str(canonical), application->generation));
-    ViewType* result = LoadModule(this, tagged, source, application, error);
+    ViewType* result =
+        LoadModule(this, tagged, source, application, policy, error);
     StrFree(tagged);
     Free(nullptr, source.s);
     return result;

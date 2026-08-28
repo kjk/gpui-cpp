@@ -9638,3 +9638,28 @@ and preserve the last failure for a host error surface.
 Tests cover source filtering, one notification per edit, failed-reload
 atomicity and a successful in-place replacement. MSVC release passes 21,279
 checks.
+
+## Shell host extension modules
+
+Hosts can now register named modules made of synchronous functions or
+executor-backed two-half asynchronous functions. The boundary carries only
+owned null/bool/number/string/array/object values, rejects callbacks and
+structures deeper than 16 levels or wider than 10,000 items, validates a
+module's TypeScript export names, refuses every built-in/Standard Runtime
+specifier, and rejects re-entry from one host call into another.
+
+QuickJS resolves a registered bare specifier ahead of application files and
+tags it with the live registry generation. Generated ES modules expose one
+forwarding stub per function, so import-time names stay fixed while replacing
+or clearing the registry takes effect on the next call through an already
+imported name. Registries live beside storage in the policy's shared live
+configuration: capabilities remain frozen, but revocation reaches views that
+already hold that policy. Explicit-policy `LoadSource` and `LoadApp` overloads
+keep two plugins' registries separate.
+
+Async calls validate and capture work on the UI thread, retain the registry
+while the executor callback is live, and settle their Promise in the captured
+view/policy/application task scope. Dropping or reloading the owner removes
+the continuation without making up a cancellation error. Tests cover reserved
+names, declaration mismatches, nested data round trips, Promise settlement
+and live revocation. MSVC release passes 21,295 checks.
