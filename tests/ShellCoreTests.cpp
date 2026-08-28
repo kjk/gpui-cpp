@@ -551,6 +551,9 @@ static void HostDouble(HostCall* call) {
     call->result.SetNumber(value * 2);
 }
 
+static bool ShellFixtureFs(FsOperation operation, Str root, Str relative,
+                           Str input = {}, bool recursive = false);
+
 static void ShellHostModulesBridgePlainDataAndPromises() {
     ShellClearExportedModules();
     HostError hostError;
@@ -642,6 +645,84 @@ static void ShellHostModulesBridgePlainDataAndPromises() {
     ShellErrorClear(&error);
     AppGlobalClear(&app);
     ShellClearExportedModules();
+}
+
+static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
+    HostModules* modules = HostModulesNew();
+    HostModule* workspace =
+        HostModule::New(StrL("workspace"))
+            ->Function(StrL("open"), MkFunc1Void(HostEcho))
+            ->AsyncFunction(StrL("search"), MkFunc1Void(HostEcho));
+    utassert(HostModulesInsert(modules, workspace));
+    workspace->Release();
+
+    StrBuilder declarations;
+    ShellTypeDeclarations(&declarations, modules);
+    Str text = declarations.TakeStr();
+    utassert(text.len > 600000);
+    utassert(StrContains(text, StrL("declare module \"gpui\"")) &&
+             StrContains(text, StrL("export const Link: ComponentType;")) &&
+             StrContains(text, StrL("declare module \"gpui-base\"")) &&
+             StrContains(text, StrL("declare module \"gpui-shell\"")) &&
+             StrContains(text, StrL("declare module \"gpui-fps\"")));
+    utassert(StrContains(text, StrL("declare module \"workspace\"")) &&
+             StrContains(text, StrL("export function open(...args: HostValue[]): HostValue;")) &&
+             StrContains(text, StrL("export function search(...args: HostValue[]): Promise<HostValue>;")));
+
+    const char* rootName = "shell_types_test_root";
+    remove("shell_types_test_root/gpui.d.ts");
+    remove("shell_types_test_root/nested/gpui.d.ts");
+    remove("shell_types_test_root/nested/main.js");
+#if GPUI_OS_WINDOWS
+    RemoveDirectoryA("shell_types_test_root/nested");
+    RemoveDirectoryA(rootName);
+#else
+    rmdir("shell_types_test_root/nested");
+    rmdir(rootName);
+#endif
+    utassert(ShellFixtureFs(FsOperation::MakeDirectory, Str(rootName),
+                            StrL("nested"), {}, true));
+    utassert(ShellFixtureFs(
+        FsOperation::Write, Str(rootName), StrL("nested/main.js"),
+        StrL("import { div } from 'gpui'; export default div();")));
+
+    ShellError error = {};
+    int written = 0;
+    utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
+                                        &error));
+    utassert(!error.IsSet() && written == 2);
+    FsResult result;
+    Str fsError;
+    utassert(FsRun(FsOperation::Read, Str(rootName), StrL("gpui.d.ts"), {},
+                   false, &result, &fsError));
+    utassert(StrEq(result.bytes, text));
+    result.Free();
+    utassert(FsRun(FsOperation::Read, Str(rootName),
+                   StrL("nested/gpui.d.ts"), {}, false, &result, &fsError));
+    utassert(StrEq(result.bytes, text));
+    result.Free();
+    written = -1;
+    utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
+                                        &error));
+    utassert(written == 0);
+    StrFree(fsError);
+    ShellErrorClear(&error);
+
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
+                            StrL("nested/gpui.d.ts")));
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
+                            StrL("nested/main.js")));
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
+                            StrL("gpui.d.ts")));
+    utassert(ShellFixtureFs(FsOperation::RemoveDirectory, Str(rootName),
+                            StrL("nested")));
+#if GPUI_OS_WINDOWS
+    utassert(RemoveDirectoryA(rootName) != 0);
+#else
+    utassert(rmdir(rootName) == 0);
+#endif
+    StrFree(text);
+    HostModulesRelease(modules);
 }
 
 static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
@@ -2065,7 +2146,7 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
 }
 
 static bool ShellFixtureFs(FsOperation operation, Str root, Str relative,
-                           Str input = {}, bool recursive = false) {
+                           Str input, bool recursive) {
     FsResult result;
     Str error;
     bool ok = FsRun(operation, root, relative, input, recursive, &result,
@@ -2153,10 +2234,18 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     const Str pluginDir = StrL("shell_plugin_container_test/mail");
     const Str brokenDir = StrL("shell_plugin_container_test/broken");
     const Str dataDir = StrL("shell_plugin_data_test");
-    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), container, {},
-                   true);
-    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), dataDir, {},
-                   true);
+    remove("shell_plugin_container_test/mail/main.js");
+    remove("shell_plugin_container_test/mail/gpui-shell.json");
+    remove("shell_plugin_container_test/broken/gpui-shell.json");
+#if GPUI_OS_WINDOWS
+    RemoveDirectoryA("shell_plugin_container_test/mail");
+    RemoveDirectoryA("shell_plugin_container_test/broken");
+    RemoveDirectoryA("shell_plugin_container_test");
+#else
+    rmdir("shell_plugin_container_test/mail");
+    rmdir("shell_plugin_container_test/broken");
+    rmdir("shell_plugin_container_test");
+#endif
     utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), pluginDir,
                             {}, true));
     utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), brokenDir,
@@ -2210,14 +2299,21 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
 
     runtime->Release();
     AppGlobalClear(&app);
-    ShellFixtureFs(FsOperation::RemoveFile, pluginDir,
-                   Str(kShellManifestFile));
-    ShellFixtureFs(FsOperation::RemoveFile, pluginDir, StrL("main.js"));
-    ShellFixtureFs(FsOperation::RemoveFile, brokenDir,
-                   Str(kShellManifestFile));
-    ShellFixtureFs(FsOperation::RemoveDirectory, container, StrL("mail"));
-    ShellFixtureFs(FsOperation::RemoveDirectory, container, StrL("broken"));
-    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), container);
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, pluginDir,
+                            Str(kShellManifestFile)));
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, pluginDir,
+                            StrL("main.js")));
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, brokenDir,
+                            Str(kShellManifestFile)));
+    utassert(ShellFixtureFs(FsOperation::RemoveDirectory, container,
+                            StrL("mail")));
+    utassert(ShellFixtureFs(FsOperation::RemoveDirectory, container,
+                            StrL("broken")));
+#if GPUI_OS_WINDOWS
+    utassert(RemoveDirectoryA(container.s) != 0);
+#else
+    utassert(rmdir(container.s) == 0);
+#endif
     ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
                    StrL("gpui-shell/plugins/com.example.plugin"));
     ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
@@ -2244,6 +2340,7 @@ void TestShellCore() {
     RuntimeLoadsOnlyModulesInsideTheApplicationRoot();
     ShellSourceWatchReloadsAtomically();
     ShellHostModulesBridgePlainDataAndPromises();
+    ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories();
     PublishedSnapshotsMaterializeToNativeElements();
     ShellMaterializesStateTemplatesInputsAndPaths();
     ShellRootHostsDialogsSheetsAndToasts();

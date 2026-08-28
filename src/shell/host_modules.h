@@ -129,6 +129,7 @@ void HostModulesRelease(HostModules* modules);
 HostModules* HostModulesClone(HostModules* modules);
 uint64_t HostModulesGeneration(const HostModules* modules);
 int HostModulesCount(const HostModules* modules);
+HostModule* HostModulesAt(const HostModules* modules, int index);
 HostModule* HostModulesGet(const HostModules* modules, Str name);
 bool HostModulesInsert(HostModules* modules, HostModule* module);
 

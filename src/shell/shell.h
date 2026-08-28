@@ -25,5 +25,6 @@
 #include "shell/standard.h"
 #include "shell/storage.h"
 #include "shell/theme_tokens.h"
+#include "shell/typings.h"
 
 #endif // GPUI_SHELL_H_

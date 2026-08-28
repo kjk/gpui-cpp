@@ -561,6 +561,12 @@ int HostModulesCount(const HostModules* modules) {
     return modules ? modules->modules.len : 0;
 }
 
+HostModule* HostModulesAt(const HostModules* modules, int index) {
+    return modules && index >= 0 && index < modules->modules.len
+               ? modules->modules[index]
+               : nullptr;
+}
+
 HostModule* HostModulesGet(const HostModules* modules, Str name) {
     if (!modules) return nullptr;
     for (int i = 0; i < modules->modules.len; i++) {
