@@ -19,6 +19,8 @@ void HttpRspFree(HttpRsp* r) {
         StrFree(r->contentType);
         r->contentType = {};
     }
+    StrFree(r->redirectUrl);
+    r->redirectUrl = {};
     r->status = 0;
 }
 

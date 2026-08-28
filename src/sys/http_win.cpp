@@ -8,6 +8,8 @@
 
 #include <winhttp.h>
 
+extern "C" HRESULT WINAPI UrlCombineW(PCWSTR, PCWSTR, PWSTR, DWORD*, DWORD);
+
 namespace gpui {
 
 // One WinHTTP handle, closed however the function below leaves. There is no
@@ -69,7 +71,33 @@ static void TrimMediaType(Str* s) {
 
 // Everything after the handles are open. Split out so the closes above it
 // happen once rather than at each of the ways this can stop.
-static bool ReadResponse(HINTERNET req, HttpRsp* out) {
+static void ReadRedirect(HINTERNET req, const wchar_t* base, HttpRsp* out) {
+    DWORD size = 0;
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_LOCATION,
+                        WINHTTP_HEADER_NAME_BY_INDEX, nullptr, &size,
+                        WINHTTP_NO_HEADER_INDEX);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size < sizeof(wchar_t))
+        return;
+    wchar_t* location = (wchar_t*)Alloc(nullptr, (int)size);
+    if (!location) return;
+    if (!WinHttpQueryHeaders(req, WINHTTP_QUERY_LOCATION,
+                             WINHTTP_HEADER_NAME_BY_INDEX, location, &size,
+                             WINHTTP_NO_HEADER_INDEX)) {
+        Free(nullptr, location);
+        return;
+    }
+    DWORD combinedLen = 32768;
+    wchar_t* combined = AllocArray<wchar_t>((int)combinedLen);
+    if (combined && SUCCEEDED(UrlCombineW(base, location, combined,
+                                           &combinedLen, 0))) {
+        out->redirectUrl = FromWide(combined);
+    }
+    Free(nullptr, combined);
+    Free(nullptr, location);
+}
+
+static bool ReadResponse(HINTERNET req, const wchar_t* base,
+                         bool noRedirect, HttpRsp* out) {
     DWORD status = 0;
     DWORD size = sizeof(status);
     if (!WinHttpQueryHeaders(
@@ -79,6 +107,9 @@ static bool ReadResponse(HINTERNET req, HttpRsp* out) {
         return false;
     }
     out->status = (int)status;
+    if (noRedirect && status >= 300 && status < 400) {
+        ReadRedirect(req, base, out);
+    }
 
     wchar_t ctype[128] = {};
     size = sizeof(ctype);
@@ -114,7 +145,7 @@ static bool ReadResponse(HINTERNET req, HttpRsp* out) {
     }
 }
 
-bool HttpGet(Str url, HttpRsp* out) {
+static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
     if (!out || !HttpUrlIsRemote(url)) {
         return false;
     }
@@ -144,9 +175,9 @@ bool HttpGet(Str url, HttpRsp* out) {
     if (cracked && path && pathLen > 0) {
         memcpy(path, uc.lpszUrlPath, (size_t)pathLen * sizeof(wchar_t));
     }
-    Free(nullptr, wurl);
     if (!cracked || !path) {
         Free(nullptr, path);
+        Free(nullptr, wurl);
         return false;
     }
 
@@ -171,20 +202,35 @@ bool HttpGet(Str url, HttpRsp* out) {
                 req.h = WinHttpOpenRequest(
                     conn.h, L"GET", pathLen > 0 ? path : L"/", nullptr,
                     WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
-                if (req.h &&
+                DWORD redirectPolicy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+                bool redirectReady = !noRedirect ||
+                    (req.h && WinHttpSetOption(req.h,
+                                               WINHTTP_OPTION_REDIRECT_POLICY,
+                                               &redirectPolicy,
+                                               sizeof(redirectPolicy)));
+                if (req.h && redirectReady &&
                     WinHttpSendRequest(req.h, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                        WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
                     WinHttpReceiveResponse(req.h, nullptr)) {
-                    ok = ReadResponse(req.h, out);
+                    ok = ReadResponse(req.h, wurl, noRedirect, out);
                 }
             }
         }
     }
     Free(nullptr, path);
+    Free(nullptr, wurl);
     if (!ok) {
         out->body.Reset();
     }
     return ok;
+}
+
+bool HttpGet(Str url, HttpRsp* out) {
+    return HttpGetInternal(url, out, false);
+}
+
+bool HttpGetNoRedirect(Str url, HttpRsp* out) {
+    return HttpGetInternal(url, out, true);
 }
 
 } // namespace gpui

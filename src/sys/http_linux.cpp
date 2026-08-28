@@ -47,7 +47,7 @@ static size_t OnBody(char* data, size_t size, size_t n, void* userp) {
     return want;
 }
 
-bool HttpGet(Str url, HttpRsp* out) {
+static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
     if (!out || !HttpUrlIsRemote(url)) {
         return false;
     }
@@ -65,7 +65,7 @@ bool HttpGet(Str url, HttpRsp* out) {
     u[url.len] = 0;
 
     curl_easy_setopt(c, CURLOPT_URL, u);
-    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, noRedirect ? 0L : 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 5L);
     curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)kHttpTimeoutMs);
     curl_easy_setopt(c, CURLOPT_USERAGENT, "gpui/1.0");
@@ -92,6 +92,14 @@ bool HttpGet(Str url, HttpRsp* out) {
         long status = 0;
         curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
         out->status = (int)status;
+        if (noRedirect && status >= 300 && status < 400) {
+            char* redirect = nullptr;
+            if (curl_easy_getinfo(c, CURLINFO_REDIRECT_URL, &redirect) ==
+                    CURLE_OK &&
+                redirect) {
+                out->redirectUrl = StrDup(Str(redirect));
+            }
+        }
         char* ct = nullptr;
         if (curl_easy_getinfo(c, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK &&
             ct) {
@@ -108,12 +116,26 @@ bool HttpGet(Str url, HttpRsp* out) {
     return ok;
 }
 
+bool HttpGet(Str url, HttpRsp* out) {
+    return HttpGetInternal(url, out, false);
+}
+
+bool HttpGetNoRedirect(Str url, HttpRsp* out) {
+    return HttpGetInternal(url, out, true);
+}
+
 #else
 
 bool HttpGet(Str url, HttpRsp* out) {
     // Built without libcurl: there is no client here to make the request
     // with, so every fetch fails the way a request to an unreachable host
     // would and the picture stays its alt text.
+    (void)url;
+    (void)out;
+    return false;
+}
+
+bool HttpGetNoRedirect(Str url, HttpRsp* out) {
     (void)url;
     (void)out;
     return false;

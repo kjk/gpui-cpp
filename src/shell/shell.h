@@ -3,6 +3,7 @@
 
 #include "shell/capability.h"
 #include "shell/error.h"
+#include "shell/fetch.h"
 #include "shell/filesystem.h"
 #include "shell/metrics.h"
 #include "shell/policy.h"

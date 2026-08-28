@@ -1,6 +1,7 @@
 #include "shell/runtime.h"
 
 #include "quickjs/quickjs.h"
+#include "shell/fetch.h"
 #include "shell/filesystem.h"
 #include "shell/materialize.h"
 #include "shell/process.h"
@@ -54,10 +55,12 @@ enum class ShellTaskKind : uint8_t {
     TimerEvery,
     Process,
     Filesystem,
+    Fetch,
 };
 
 struct ProcessJob;
 struct FsJob;
+struct ShellFetchJob;
 
 struct ShellTask {
     uint32_t id = 0;
@@ -311,6 +314,19 @@ struct FsJob {
     }
 };
 
+struct ShellFetchJob {
+    ShellRuntimeControl* control = nullptr;
+    uint32_t task = 0;
+    Str url;
+    Capabilities capabilities;
+    shell::FetchResult result;
+
+    void Free() {
+        StrFree(url);
+        result.Free();
+    }
+};
+
 static void ControlRetain(void* state) {
     if (state) ((ShellRuntimeControl*)state)->refs++;
 }
@@ -505,6 +521,10 @@ static void FsJobWork(FsJob* job) {
                  job->input, job->recursive, &job->result, &job->error);
 }
 
+static void FetchJobWork(ShellFetchJob* job) {
+    shell::FetchGet(job->url, job->capabilities, &job->result);
+}
+
 static JSValue FsJobValue(JSContext* context, FsJob* job) {
     if (job->operation == shell::FsOperation::Read) {
         if (job->text) {
@@ -610,6 +630,88 @@ static void FsJobDone(FsJob* job) {
         }
     } else if (task) {
         task->fsJob = nullptr;
+        ForgetTask(impl, task->id, false);
+    }
+    job->Free();
+    ControlRelease(job->control);
+    delete job;
+}
+
+static JSValue FetchJobValue(JSContext* context, ShellFetchJob* job) {
+    JSValue global = JS_GetGlobalObject(context);
+    JSValue make = JS_GetPropertyStr(context, global,
+                                     "__shell_fetch_response");
+    JSValue args[3] = {
+        JS_NewInt32(context, job->result.status),
+        JS_NewStringLen(context,
+                        job->result.url.s ? job->result.url.s : "",
+                        (size_t)job->result.url.len),
+        JS_NewStringLen(context,
+                        job->result.body.s ? job->result.body.s : "",
+                        (size_t)job->result.body.len),
+    };
+    JSValue value = JS_IsException(make)
+                        ? JS_EXCEPTION
+                        : JS_Call(context, make, JS_UNDEFINED, 3, args);
+    for (int i = 0; i < 3; i++) JS_FreeValue(context, args[i]);
+    JS_FreeValue(context, make);
+    JS_FreeValue(context, global);
+    return value;
+}
+
+static void FetchJobDone(ShellFetchJob* job) {
+    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
+    if (task && task->kind == ShellTaskKind::Fetch &&
+        TaskWindowLive(task) &&
+        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
+        Window* window = task->window;
+        App* app = task->app;
+        EntityId owner = task->owner;
+        Policy* policy = PolicyRetain(task->policy);
+        AppModule* application = task->application;
+        bool failed = job->result.error.s != nullptr;
+        JSValue settle = JS_DupValue(impl->context,
+                                     failed ? task->reject
+                                            : task->callback);
+        ForgetTask(impl, task->id, false);
+
+        shell::CallScopeGuard scope = shell::ScopeEnter(
+            window, app, ScopePhase::Task, owner, policy, runtime,
+            application);
+        PolicyRelease(policy);
+        BeginExecution(impl);
+        JSValue value = JS_UNDEFINED;
+        if (failed) {
+            value = JS_NewError(impl->context);
+            JS_SetPropertyStr(
+                impl->context, value, "message",
+                JS_NewStringLen(impl->context, job->result.error.s,
+                                (size_t)job->result.error.len));
+        } else {
+            value = FetchJobValue(impl->context, job);
+        }
+        JSValue settled = JS_IsException(value)
+                              ? JS_EXCEPTION
+                              : JS_Call(impl->context, settle, JS_UNDEFINED,
+                                        1, &value);
+        JS_FreeValue(impl->context, value);
+        JS_FreeValue(impl->context, settle);
+        if (JS_IsException(settled)) {
+            Arena* arena = ArenaNew();
+            log(ExceptionText(arena, impl->context));
+            ArenaDelete(arena);
+        } else {
+            JS_FreeValue(impl->context, settled);
+            ShellError error = {};
+            runtime->DrainJobs(kMaxJobBatch, &error);
+            if (error.IsSet()) {
+                log(error.message);
+                ShellErrorClear(&error);
+            }
+        }
+    } else if (task) {
         ForgetTask(impl, task->id, false);
     }
     job->Free();
@@ -2583,6 +2685,84 @@ static bool FsBoolOption(JSContext* ctx, JSValueConst value,
     return true;
 }
 
+static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
+                           JSValueConst* argv) {
+    Arena* arena = ArenaNew();
+    Str url;
+    bool converted = argc >= 1 && JsString(ctx, argv[0], arena, &url);
+    bool release = false;
+    Policy* policy = CurrentPolicy(&release);
+    Str authorizationError;
+    bool allowed = converted && shell::FetchAuthorizeGet(
+                                  url, PolicyCapabilities(policy),
+                                  &authorizationError);
+    if (!allowed) {
+        JSValue result = converted
+                             ? JS_ThrowTypeError(
+                                   ctx, "%.*s", authorizationError.len,
+                                   authorizationError.s
+                                       ? authorizationError.s
+                                       : "fetch URL is not granted")
+                             : JS_EXCEPTION;
+        StrFree(authorizationError);
+        if (release) PolicyRelease(policy);
+        ArenaDelete(arena);
+        return result;
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        if (release) PolicyRelease(policy);
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx, "fetch() needs a live host task");
+    }
+
+    ShellFetchJob* job = new ShellFetchJob();
+    job->url = StrDup(url);
+    job->capabilities = PolicyCapabilities(policy);
+    if (release) PolicyRelease(policy);
+    ArenaDelete(arena);
+    if (!job->url.s) {
+        job->Free();
+        delete job;
+        return JS_ThrowOutOfMemory(ctx);
+    }
+
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (JS_IsException(promise)) {
+        job->Free();
+        delete job;
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t task = NewTask(impl, ShellTaskKind::Fetch, resolving[0],
+                            host.GetApp(), host.GetWindow(), false,
+                            resolving[1]);
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    if (!task) {
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its outstanding host task limit");
+    }
+    job->control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->control);
+    job->task = task;
+    if (!ExecSpawn(MkFunc0(FetchJobWork, job),
+                   MkFunc0(FetchJobDone, job))) {
+        ForgetTask(impl, task, false);
+        ControlRelease(job->control);
+        JS_FreeValue(ctx, promise);
+        job->Free();
+        delete job;
+        return JS_ThrowInternalError(ctx,
+                                     "fetch could not start background work");
+    }
+    return promise;
+}
+
 static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
                         JSValueConst* argv, int magic) {
     if (magic < 0 || magic > 6) return JS_ThrowInternalError(ctx, "invalid filesystem operation");
@@ -3313,6 +3493,38 @@ R"JS(
   globalThis.URLSearchParams = URLSearchParams;
   globalThis.__shell_url = Object.freeze(urlApi);
 
+  globalThis.__shell_fetch_response = (status, url, body) => Object.freeze({
+    status,
+    ok: status >= 200 && status < 300,
+    url,
+    text: () => Promise.resolve(body),
+    json: () => Promise.resolve().then(() => JSON.parse(body)),
+  });
+  globalThis.fetch = (url, options) => {
+    if (options !== undefined && options !== null) {
+      if (typeof options !== "object" || Array.isArray(options)) {
+        throw new TypeError("fetch(url, options) expects an options object");
+      }
+      for (const key of Object.keys(options)) {
+        if (key !== "method" && key !== "headers" && key !== "body") {
+          throw new TypeError("unknown option `" + key + "` for fetch(url, options)");
+        }
+      }
+      const method = options.method === undefined ? "GET" : String(options.method).toUpperCase();
+      if (method !== "GET") {
+        throw new TypeError("this port permits GET only; POST is outside the repository network boundary");
+      }
+      if (options.body !== undefined && options.body !== null) {
+        throw new TypeError("a GET fetch may not carry a request body");
+      }
+      if (options.headers !== undefined && options.headers !== null &&
+          Object.keys(options.headers).length !== 0) {
+        throw new TypeError("custom fetch headers are outside the repository network boundary");
+      }
+    }
+    return __fetch_get(new URL(String(url)).href);
+  };
+
   globalThis.__shell_os = Object.freeze({
     platform: () => __shell_platform,
     arch: () => __shell_arch,
@@ -3569,6 +3781,7 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeZlib, 1, 2);
     SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip",
                            NativeZlib, 1, 3);
+    SetGlobalFunction(impl->context, global, "__fetch_get", NativeFetch, 1);
     SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
                            (int)shell::FsOperation::Read);
     SetGlobalMagicFunction(impl->context, global, "__fs_write", NativeFs, 2,

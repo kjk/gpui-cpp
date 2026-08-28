@@ -1092,12 +1092,15 @@ function quickjsCflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => n
     "-Wno-missing-field-initializers",
     "-Wno-unused-parameter",
     "-Wno-unused-but-set-variable",
+    "-Wno-unused-function",
     "-Wno-unused-result",
-    "-Wno-stringop-truncation",
     "-Wno-array-bounds",
     "-funsigned-char",
     ...(f.debug ? ["-O0", "-DDEBUG", "-g"] : ["-O2", "-DNDEBUG"]),
   ];
+  if (tc.plat === "linux" && !tc.exe.toLowerCase().includes("clang")) {
+    flags.push("-Wno-stringop-truncation");
+  }
   if (tc.plat === "linux") flags.push(...linuxDeps(fail).cflags);
   if (f.asan) flags.push("-fsanitize=address", "-fno-omit-frame-pointer");
   return flags;

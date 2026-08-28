@@ -10,6 +10,23 @@
 
 #import <Foundation/Foundation.h>
 
+@interface GpuiNoRedirectDelegate : NSObject <NSURLSessionTaskDelegate>
+@end
+
+@implementation GpuiNoRedirectDelegate
+- (void)URLSession:(NSURLSession*)session
+              task:(NSURLSessionTask*)task
+willPerformHTTPRedirection:(NSHTTPURLResponse*)response
+        newRequest:(NSURLRequest*)request
+  completionHandler:(void (^)(NSURLRequest*))completionHandler {
+    (void)session;
+    (void)task;
+    (void)response;
+    (void)request;
+    completionHandler(nil);
+}
+@end
+
 namespace gpui {
 
 // "image/png; charset=..." -> "image/png", lowercased where it stands.
@@ -37,7 +54,7 @@ static Str StrFromNS(NSString* s) {
     return StrDup(Str(u));
 }
 
-bool HttpGet(Str url, HttpRsp* out) {
+static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
     if (!out || !HttpUrlIsRemote(url)) {
         return false;
     }
@@ -59,7 +76,17 @@ bool HttpGet(Str url, HttpRsp* out) {
         __block NSData* body = nil;
         __block NSHTTPURLResponse* rsp = nil;
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
-        NSURLSessionDataTask* task = [[NSURLSession sharedSession]
+        GpuiNoRedirectDelegate* delegate =
+            noRedirect ? [[GpuiNoRedirectDelegate alloc] init] : nil;
+        NSURLSession* session = noRedirect
+                                    ? [NSURLSession
+                                          sessionWithConfiguration:
+                                              [NSURLSessionConfiguration
+                                                  defaultSessionConfiguration]
+                                                       delegate:delegate
+                                                  delegateQueue:nil]
+                                    : [NSURLSession sharedSession];
+        NSURLSessionDataTask* task = [session
             dataTaskWithRequest:req
               completionHandler:^(NSData* d, NSURLResponse* r, NSError* e) {
                 if (!e && [r isKindOfClass:[NSHTTPURLResponse class]]) {
@@ -76,12 +103,22 @@ bool HttpGet(Str url, HttpRsp* out) {
                           (int64_t)(kHttpTimeoutMs + 5000) * NSEC_PER_MSEC);
         if (dispatch_semaphore_wait(done, deadline) != 0) {
             [task cancel];
+            if (noRedirect) [session invalidateAndCancel];
             return false;
         }
+        if (noRedirect) [session finishTasksAndInvalidate];
         if (!rsp) {
             return false;
         }
         out->status = (int)[rsp statusCode];
+        if (noRedirect && out->status >= 300 && out->status < 400) {
+            NSString* location = [rsp valueForHTTPHeaderField:@"Location"];
+            NSURL* target = location
+                                ? [NSURL URLWithString:location
+                                       relativeToURL:[rsp URL]]
+                                : nil;
+            out->redirectUrl = StrFromNS([[target absoluteURL] absoluteString]);
+        }
         Str ct = StrFromNS([rsp valueForHTTPHeaderField:@"Content-Type"]);
         TrimMediaType(&ct);
         out->contentType = ct;
@@ -99,6 +136,14 @@ bool HttpGet(Str url, HttpRsp* out) {
         }
         return true;
     }
+}
+
+bool HttpGet(Str url, HttpRsp* out) {
+    return HttpGetInternal(url, out, false);
+}
+
+bool HttpGetNoRedirect(Str url, HttpRsp* out) {
+    return HttpGetInternal(url, out, true);
 }
 
 } // namespace gpui

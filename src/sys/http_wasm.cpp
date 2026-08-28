@@ -29,4 +29,10 @@ bool HttpGet(Str url, HttpRsp* out) {
     return false;
 }
 
+bool HttpGetNoRedirect(Str url, HttpRsp* out) {
+    (void)url;
+    (void)out;
+    return false;
+}
+
 } // namespace gpui

@@ -1088,6 +1088,137 @@ static void ShellCryptoAndCompressionMatchStandardRuntime() {
     ShellErrorClear(&error);
 }
 
+static int gShellFetchCalls = 0;
+static int gShellFetchMode = 0;
+
+static bool ShellFetchFixture(Str url, HttpRsp* out) {
+    gShellFetchCalls++;
+    if (gShellFetchMode == 1 && StrEq(url, "https://api.example.test/start")) {
+        out->status = 302;
+        out->redirectUrl = StrDup(StrL("https://cdn.example.test/result"));
+        return true;
+    }
+    if (gShellFetchMode == 2 && StrEq(url, "https://api.example.test/start")) {
+        out->status = 302;
+        out->redirectUrl = StrDup(StrL("http://api.example.test/result"));
+        return true;
+    }
+    if (StrEq(url, "https://cdn.example.test/result")) {
+        out->status = 201;
+        const char* body = "redirected";
+        memcpy(out->body.AppendBlanks(10), body, 10);
+        return true;
+    }
+    if (StrEq(url, "https://api.example.test/data")) {
+        out->status = 200;
+        const char* body = "{\"answer\":42}";
+        memcpy(out->body.AppendBlanks(13), body, 13);
+        return true;
+    }
+    return false;
+}
+
+static void ShellFetchChecksEveryGetTargetBeforeContact() {
+    HttpRequestGrant exact(StrL("api.example.test"));
+    exact.AddMethod(StrL("GET")).AddPath(StrL("/v1/quote"));
+    Capabilities scoped;
+    scoped.AddHttpRequest(exact);
+    Str fetchError;
+    utassert(FetchAuthorizeGet(
+        StrL("https://api.example.test/v1/quote?currency=usd"), scoped,
+        &fetchError));
+    utassert(!fetchError);
+    utassert(!FetchAuthorizeGet(StrL("https://api.example.test/v1/private"),
+                                scoped, &fetchError));
+    utassert(fetchError);
+    StrFree(fetchError);
+
+    Capabilities both;
+    both.AddNetworkHost(StrL("api.example.test"))
+        .AddNetworkHost(StrL("cdn.example.test"));
+    FetchSetHttpGetForTests(ShellFetchFixture);
+    gShellFetchCalls = 0;
+    gShellFetchMode = 1;
+    FetchResult result;
+    utassert(FetchGet(StrL("https://api.example.test/start"), both, &result));
+    utassert(!result.error && result.status == 201 &&
+             StrEq(result.url, "https://cdn.example.test/result") &&
+             StrEq(result.body, "redirected"));
+    utassert(gShellFetchCalls == 2);
+    result.Free();
+
+    Capabilities initialOnly;
+    initialOnly.AddNetworkHost(StrL("api.example.test"));
+    gShellFetchCalls = 0;
+    gShellFetchMode = 1;
+    utassert(!FetchGet(StrL("https://api.example.test/start"), initialOnly,
+                       &result));
+    utassert(result.error && gShellFetchCalls == 1);
+    result.Free();
+
+    gShellFetchCalls = 0;
+    gShellFetchMode = 2;
+    utassert(!FetchGet(StrL("https://api.example.test/start"), initialOnly,
+                       &result));
+    utassert(result.error &&
+             StrContains(result.error, StrL("HTTPS downgrade")) &&
+             gShellFetchCalls == 1);
+    result.Free();
+
+    App app;
+    Window window;
+    window.app = &app;
+    app.windows.Append(&window);
+    component::Init(&app);
+    ExecInit();
+    PolicyUpdateDefaultCapabilities(initialOnly);
+    gShellFetchMode = 0;
+    gShellFetchCalls = 0;
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "globalThis.fetchResult = 'pending';\n"
+        "let postRefused = false; try { fetch('https://api.example.test/data', { method: 'POST' }); } catch (error) { postRefused = error.message.includes('GET only'); }\n"
+        "if (!postRefused) throw new Error('POST was not refused');\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { cx.spawn(async cx => {\n"
+        "    const response = await fetch('https://api.example.test/data');\n"
+        "    const text = response.text(), json = response.json();\n"
+        "    fetchResult = `${response.status}|${response.ok}|${response.url}|${text instanceof Promise}|${await text}|${(await json).answer}`; cx.notify();\n"
+        "  }); }\n"
+        "  render(cx) { return div().child(fetchResult); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("fetch.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(ExecWaitIdle(5000));
+    utassert(runtime && runtime->Eval(
+        StrL("if (fetchResult !== '200|true|https://api.example.test/data|true|{\"answer\":42}|42') throw new Error(fetchResult)"),
+        StrL("fetch-result.js"), &error));
+    utassert(runtime && runtime->LiveTasks() == 0 && gShellFetchCalls == 1);
+    EntityDrop(&app, view.id);
+    app.windows.len = 0;
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+    FetchSetHttpGetForTests(nullptr);
+    Capabilities denied;
+    PolicyUpdateDefaultCapabilities(denied);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -1112,4 +1243,5 @@ void TestShellCore() {
     ShellProcessRunIsBoundedAndPromiseBased();
     ShellFilesystemUsesGrantedHandleRelativePaths();
     ShellCryptoAndCompressionMatchStandardRuntime();
+    ShellFetchChecksEveryGetTargetBeforeContact();
 }

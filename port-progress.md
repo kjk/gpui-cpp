@@ -9570,3 +9570,26 @@ Tests cover the upstream `"shell"` SHA-256 vector, both native wrapper round
 trips, fixed and dynamic streams produced independently by zlib, checksum
 failure, random values, UUID shape and Web Crypto digest behavior. MSVC
 release passes 21,208 checks.
+
+## Shell capability-gated fetch
+
+The global `fetch` now uses the same executor/task scope as process and
+filesystem work. URL, effective port, method and path are checked against the
+captured policy before any network call. Redirects are disabled in a new
+one-response WinHTTP/libcurl/NSURLSession seam, resolved to an absolute URL,
+and capability-checked again before the next GET; HTTPS downgrades are
+refused. Responses expose the upstream `status`, `ok`, `url`, asynchronous
+`text()` and asynchronous `json()` shape, with an 8 MiB Shell response bound
+inside the existing 16 MiB system GET bound.
+
+This is intentionally GET-only. Upstream Shell added POST bodies and custom
+headers for OAuth, plus raw TCP and WebSockets, but this repository's standing
+network boundary is one system-backed GET and explicitly excludes POST,
+sockets and a larger client. The JS surface rejects those options rather than
+silently changing their request. wasm continues to reject fetch because its
+only HTTP client is asynchronous and the current system seam is blocking.
+
+Tests inject a response transport without touching the network and cover
+exact HTTP grants, query/path separation, authorized redirects, refusal before
+contacting an ungranted redirect target, HTTPS downgrade refusal, GET-only
+options, response promises and JSON. MSVC release passes 21,223 checks.

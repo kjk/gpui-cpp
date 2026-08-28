@@ -3,9 +3,11 @@
 /* A GET, and the OS's own library to make it with.
 
    This is the whole of the network in this tree: fetch the bytes at an
-   http(s) URL, and nothing else — no POST, no cookies, no redirect policy of
-   our own beyond following them, no connection kept. That is what a remote
-   image needs, and a bigger client would need a bigger reason.
+   http(s) URL, and nothing else — no POST, no cookies, no connection kept.
+   The image path follows redirects through the platform client; the shell
+   path exposes each redirect so its capability policy can approve the target
+   first. That is what a remote image and a guarded fetch need, and a bigger
+   client would need a bigger reason.
 
    Each platform brings its own, so there is no library to vendor and no TLS
    stack to carry: WinHTTP on Windows, NSURLSession on macOS, libcurl on
@@ -29,6 +31,9 @@ struct HttpRsp {
     // What the server called it, lowercased and without its parameters
     // ("image/png"). Owned; empty when the server said nothing.
     Str contentType;
+    // With HttpGetNoRedirect, the absolute target named by a 3xx Location
+    // header. Owned and empty for every other response.
+    Str redirectUrl;
 };
 
 void HttpRspFree(HttpRsp* r);
@@ -39,6 +44,11 @@ void HttpRspFree(HttpRsp* r);
 // A body over `kHttpMaxBody` is refused rather than truncated, and the whole
 // thing gives up after `kHttpTimeoutMs`.
 bool HttpGet(Str url, HttpRsp* out);
+
+// One GET without automatic redirects. Shell uses this narrower seam so it
+// can capability-check a Location target before contacting it. HttpGet keeps
+// the platform client's ordinary redirect behavior for remote images.
+bool HttpGetNoRedirect(Str url, HttpRsp* out);
 
 // Big enough for any picture a document sensibly holds, small enough that a
 // URL pointing at a disk image cannot take the process down with it.
