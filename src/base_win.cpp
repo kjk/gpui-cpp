@@ -215,6 +215,12 @@ int PlatListDir(const char* dir, DirEntry* out, int max) {
             continue;
         }
         e.isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        e.isFile = !e.isDir;
+        e.isSymlink =
+            (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+        e.size = ((uint64_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+        e.modified = ((uint64_t)fd.ftLastWriteTime.dwHighDateTime << 32) |
+                     fd.ftLastWriteTime.dwLowDateTime;
         n++;
     } while (n < max && FindNextFileW(h, &fd));
     FindClose(h);

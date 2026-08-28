@@ -203,6 +203,18 @@ void RetainedStore::ReleaseOwner(EntityId owner,
     }
 }
 
+void RetainedStore::ReleaseApplication(void* application,
+                                       Vec<CallbackId>* callbacks) {
+    if (!application) return;
+    for (int i = entries.len - 1; i >= 0; i--) {
+        if (entries[i]->application != application) continue;
+        RetainedEntry* entry = entries[i];
+        for (int j = i + 1; j < entries.len; j++) entries[j - 1] = entries[j];
+        entries.len--;
+        Destroy(entry, callbacks);
+    }
+}
+
 void RetainedStore::Rollback(uint32_t checkpoint,
                              Vec<CallbackId>* callbacks) {
     for (int i = entries.len - 1; i >= 0; i--) {

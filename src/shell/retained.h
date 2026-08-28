@@ -93,6 +93,8 @@ class RetainedStore {
                      CallbackId* replaced = nullptr);
     bool Release(EntityHandle handle, Vec<CallbackId>* callbacks = nullptr);
     void ReleaseOwner(EntityId owner, Vec<CallbackId>* callbacks = nullptr);
+    void ReleaseApplication(void* application,
+                            Vec<CallbackId>* callbacks = nullptr);
     void Rollback(uint32_t checkpoint, Vec<CallbackId>* callbacks = nullptr);
     void Clear(Vec<CallbackId>* callbacks = nullptr);
 

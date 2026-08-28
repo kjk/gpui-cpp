@@ -25,6 +25,8 @@ struct ScriptView {
                                   ViewType* type, Policy* policy = nullptr);
     static El* Render(ScriptView* self, Ctx* cx);
     static void Refresh(ScriptView* self, Ctx* cx);
+    static bool Reload(ScriptView* self, Ctx* cx, Str directory, Str entry,
+                       ShellError* error = nullptr);
 
     static void OnClick(ScriptView* self, Ctx* cx, const ClickEvent* event,
                         intptr_t callback);

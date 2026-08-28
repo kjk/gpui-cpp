@@ -52,6 +52,7 @@ class ShellRuntime {
     void UnregisterScriptView(EntityId view, bool* dirty);
     void InvalidateScriptView(EntityId view);
     void ReleaseOwnedEntities(EntityId view);
+    void ReleaseApplicationState(ViewObject* object);
 
     void DispatchClick(shell::CallbackId callback, const ClickEvent& event,
                        Window* window, App* app);

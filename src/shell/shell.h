@@ -12,6 +12,7 @@
 #include "shell/runtime.h"
 #include "shell/materialize.h"
 #include "shell/view.h"
+#include "shell/watch.h"
 #include "shell/scope.h"
 #include "shell/snapshot.h"
 #include "shell/spec.h"

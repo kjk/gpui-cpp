@@ -122,16 +122,24 @@ int PlatListDir(const char* dir, DirEntry* out, int max) {
         }
         DirEntry& e = out[n];
         StrCopyZ(e.name, (int)sizeof(e.name), ent->d_name);
-        if (ent->d_type == DT_DIR) {
-            e.isDir = true;
-        } else if (ent->d_type == DT_UNKNOWN) {
-            // Some filesystems do not fill d_type; ask the hard way.
-            char full[kMaxPath];
-            snprintf(full, sizeof(full), "%s/%s", dir, ent->d_name);
-            e.isDir = PlatDirExists(full);
-        } else {
-            e.isDir = false;
+        char full[kMaxPath];
+        int fullLen = snprintf(full, sizeof(full), "%s/%s", dir, ent->d_name);
+        struct stat st = {};
+        if (fullLen <= 0 || fullLen >= (int)sizeof(full) ||
+            lstat(full, &st) != 0) {
+            continue;
         }
+        e.isSymlink = S_ISLNK(st.st_mode);
+        e.isDir = S_ISDIR(st.st_mode);
+        e.isFile = S_ISREG(st.st_mode);
+        e.size = e.isFile && st.st_size > 0 ? (uint64_t)st.st_size : 0;
+#if GPUI_OS_MAC
+        e.modified = (uint64_t)st.st_mtimespec.tv_sec * 1000000000ull +
+                     (uint64_t)st.st_mtimespec.tv_nsec;
+#else
+        e.modified = (uint64_t)st.st_mtim.tv_sec * 1000000000ull +
+                     (uint64_t)st.st_mtim.tv_nsec;
+#endif
         n++;
     }
     closedir(d);

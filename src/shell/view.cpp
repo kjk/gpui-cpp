@@ -67,6 +67,38 @@ void ScriptView::Refresh(ScriptView* self, Ctx* cx) {
     Notify(cx);
 }
 
+bool ScriptView::Reload(ScriptView* self, Ctx* cx, Str directory, Str entry,
+                        ShellError* error) {
+    ShellErrorClear(error);
+    if (!self || !self->runtime || !cx || cx->self != self->self) {
+        ShellErrorSet(error, StrL("reload needs the live ScriptView context"));
+        return false;
+    }
+    ViewType* nextType = self->runtime->LoadApp(directory, entry, error);
+    if (!nextType) return false;
+    ViewObject* nextObject = self->runtime->Instantiate(
+        nextType, cx->win, cx->app, self->policy, error, cx->self);
+    if (!nextObject) {
+        ViewTypeRelease(nextType);
+        return false;
+    }
+
+    ViewObject* oldObject = self->object;
+    ViewType* oldType = self->type;
+    RenderSnapshot* oldSnapshot = self->snapshot;
+    self->object = nextObject;
+    self->type = nextType;
+    self->snapshot = nullptr;
+    self->dirty = true;
+    ShellErrorClear(&self->error);
+    if (oldObject) self->runtime->ReleaseApplicationState(oldObject);
+    delete oldSnapshot;
+    ViewObjectRelease(oldObject);
+    ViewTypeRelease(oldType);
+    Notify(cx);
+    return true;
+}
+
 void ScriptView::OnClick(ScriptView* self, Ctx* cx,
                          const ClickEvent* event, intptr_t callback) {
     if (!self || !self->runtime || !event) return;

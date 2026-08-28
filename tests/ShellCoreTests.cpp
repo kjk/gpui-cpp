@@ -453,6 +453,79 @@ static bool WriteTestModule(const char* name, const char* source) {
     return ok;
 }
 
+static void ShellSourceWatchReloadsAtomically() {
+    const char* mainName = "shell_watch_main.js";
+    const char* notesName = "shell_watch_notes.md";
+    remove(mainName);
+    remove(notesName);
+    utassert(WriteTestModule(
+        mainName,
+        "import { View, div } from 'gpui'; export default class Main extends View { render() { return div().child('old'); } }\n"));
+
+    SourceWatcher watcher;
+    ShellError error = {};
+    utassert(watcher.Init(StrL("."), &error, 0));
+    utassert(!error.IsSet());
+    utassert(WriteTestModule(notesName, "not source\n"));
+    bool changed = true;
+    utassert(watcher.PollAt(1, &changed, &error));
+    utassert(!changed);
+    utassert(WriteTestModule(
+        mainName,
+        "import { View, div } from 'gpui'; export default class Main extends View { render() { return div().child('old but changed'); } }\n"));
+    utassert(watcher.PollAt(2, &changed, &error));
+    utassert(changed);
+    utassert(watcher.PollAt(3, &changed, &error));
+    utassert(!changed);
+
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    ViewType* type = runtime ? runtime->LoadApp(StrL("."), Str(mainName), &error)
+                             : nullptr;
+    Entity<ScriptView> entity =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    El* initial = entity.IsValid()
+                      ? EntityRender(&app, &window, frame, entity.id)
+                      : nullptr;
+    utassert(initial != nullptr);
+    ScriptView* view = entity.Get(&app);
+    Arena* text = ArenaNew();
+    utassert(view && view->snapshot);
+    utassert(StrFind(view->snapshot->DebugTree(text), StrL("old but changed")) >= 0);
+
+    utassert(WriteTestModule(mainName, "export default class { render( {\n"));
+    Ctx cx = {&app, &window, frame, entity.id};
+    utassert(!ScriptView::Reload(view, &cx, StrL("."), Str(mainName), &error));
+    utassert(error.IsSet());
+    utassert(view->snapshot != nullptr);
+    text->Reset();
+    utassert(StrFind(view->snapshot->DebugTree(text), StrL("old but changed")) >= 0);
+
+    utassert(WriteTestModule(
+        mainName,
+        "import { View, div } from 'gpui'; export default class Main extends View { render() { return div().child('new live view'); } }\n"));
+    utassert(ScriptView::Reload(view, &cx, StrL("."), Str(mainName), &error));
+    utassert(!error.IsSet());
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, entity.id) != nullptr);
+    text->Reset();
+    utassert(StrFind(view->snapshot->DebugTree(text), StrL("new live view")) >= 0);
+
+    EntityDrop(&app, entity.id);
+    if (runtime) runtime->Release();
+    ArenaDelete(text);
+    ArenaDelete(frame);
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+    remove(mainName);
+    remove(notesName);
+}
+
 static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
     const char* depName = "shell_runtime_dep.js";
     const char* mainName = "shell_runtime_main.js";
@@ -1378,6 +1451,7 @@ void TestShellCore() {
     RuntimeLoadsRendersAndRetiresCallbacks();
     RuntimeAbortsFailedSnapshotTransactions();
     RuntimeLoadsOnlyModulesInsideTheApplicationRoot();
+    ShellSourceWatchReloadsAtomically();
     PublishedSnapshotsMaterializeToNativeElements();
     ScriptViewsReuseSnapshotsUntilNotified();
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();

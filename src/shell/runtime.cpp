@@ -214,6 +214,23 @@ struct CallbackArena {
         }
     }
 
+    void RetireApplication(JSContext* ctx, AppModule* application) {
+        if (!application) return;
+        int out = 0;
+        for (int i = 0; i < entries.len; i++) {
+            CallbackEntry* entry = entries[i];
+            if (entry->application == application) {
+                JS_FreeValue(ctx, entry->function);
+                PolicyRelease(entry->policy);
+                delete entry;
+            } else {
+                entries[out++] = entry;
+            }
+        }
+        entries.len = out;
+        if (buildingStart > out) buildingStart = out;
+    }
+
     void Clear(JSContext* ctx) {
         for (int i = 0; i < entries.len; i++) {
             CallbackEntry* entry = entries[i];
@@ -4523,6 +4540,23 @@ void ShellRuntime::ReleaseOwnedEntities(EntityId view) {
         impl->callbacks.RetireId(impl->context, callbacks[i]);
     }
     callbacks.Reset();
+}
+
+void ShellRuntime::ReleaseApplicationState(ViewObject* object) {
+    if (!object || object->runtime != this || !object->application) return;
+    AppModule* application = object->application;
+    for (int i = impl->tasks.len - 1; i >= 0; i--) {
+        if (impl->tasks[i]->application == application) {
+            ForgetTask(impl, impl->tasks[i]->id);
+        }
+    }
+    Vec<shell::CallbackId> callbacks;
+    impl->retained.ReleaseApplication(application, &callbacks);
+    for (int i = 0; i < callbacks.len; i++) {
+        impl->callbacks.RetireId(impl->context, callbacks[i]);
+    }
+    callbacks.Reset();
+    impl->callbacks.RetireApplication(impl->context, application);
 }
 
 void ShellRuntime::ResumeTask(uint32_t id, Ctx* cx) {

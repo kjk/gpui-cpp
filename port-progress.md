@@ -9616,3 +9616,25 @@ Tests drive old/new snapshots independently to prove that an in-flight write
 cannot lose a later mutation, cover immediate barriers, failed-write
 rejection and explicit retry, and await a JavaScript flush before inspecting
 the file. MSVC release passes 21,255 checks.
+
+## Shell source watching and atomic reload
+
+Shell now polls application `.js` and `.mjs` trees with upstream's 200 ms
+quiet window and 250 ms cadence. Scans skip hidden entries, `node_modules`,
+`target` and symlinks, stop at depth 8 and at 4,096 source files, and run on
+the repository executor so a slow tree does not stall the UI thread. The
+portable directory seam now reports file kind, reparse/symlink status, byte
+size and modification stamp; the three-field source stamp catches edits,
+adds and removals without retaining a file list between polls.
+
+A reload compiles and constructs the replacement beside the live
+`ScriptView`. Only after both succeed does it swap the type and object,
+invalidate the snapshot, and retire the prior application's timers, tasks,
+callbacks and retained controls. A syntax or constructor failure therefore
+leaves the last good snapshot and all of its behavior running. Watch entities
+own and cancel their timer and queued scan, stop when their view disappears,
+and preserve the last failure for a host error surface.
+
+Tests cover source filtering, one notification per edit, failed-reload
+atomicity and a successful in-place replacement. MSVC release passes 21,279
+checks.

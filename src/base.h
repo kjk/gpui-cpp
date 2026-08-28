@@ -168,6 +168,10 @@ void PlatGetExeDir(char* out, int cap);
 struct DirEntry {
     char name[260] = {};
     bool isDir = false;
+    bool isFile = false;
+    bool isSymlink = false;
+    uint64_t size = 0;
+    uint64_t modified = 0;
 };
 
 // Lists `dir`, skipping "." and "..". Returns how many entries were written,
