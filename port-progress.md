@@ -9840,3 +9840,17 @@ raw control opts in with `El::FocusRing()` after giving itself a `FocusId` or
 global geometry switch for controls that opted in; it does not make arbitrary
 focused containers draw a ring. MSVC release passes 21,434 checks and the full
 story target builds.
+
+## Introduction Showcase follows the pinned README and displays its image
+
+`assets/story/README.md` is again byte-for-byte the README at the pinned
+gpui-component checkout, including the revised framework introduction and the
+Longbridge Pro copy under Showcase. The product screenshot exposed a separate
+image-cache bug: because its HTML gives `width="1763"` but no height, TextView
+first asks the vector-image path for an intrinsic aspect ratio. Once the remote
+PNG arrived, that probe cached the bitmap as an empty vector result, preventing
+the platform bitmap decoder from ever receiving it. A non-vector probed without
+a paint backend is now left uncached for `ImageForSrc`, and TextView applies
+Rust's `max_w(relative(1.))` even when HTML supplies a width, so the screenshot
+fits the text column. The MSVC release suite passes 21,437 checks, and a live
+story capture after the asynchronous fetch shows the image.

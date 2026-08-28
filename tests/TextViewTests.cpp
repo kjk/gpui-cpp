@@ -360,6 +360,18 @@ static void TestHtmlImage(Arena* a) {
     utassert(base::StrEq(img->text, "alt"));
     utassert(img->imgW == 60 && img->imgH == 40);
 
+    // The README showcase uses this shape: a remote bitmap with a width and
+    // no height. It remains an image run and lets the decoded aspect supply
+    // the missing dimension.
+    MdNode* widthOnly = HtmlParse(
+        a, StrL("<img width=\"1763\" alt=\"Image\" "
+                "src=\"https://example.com/showcase.png\">"));
+    MdRun* widthRun = ImageRunOf(Child(widthOnly, 0));
+    utassert(widthRun != nullptr);
+    utassert(widthRun->imgW == 1763 && widthRun->imgH == 0);
+    utassert(base::StrEq(widthRun->imgSrc,
+                         "https://example.com/showcase.png"));
+
     MdNode* pct =
         HtmlParse(a, StrL("<img src=\"y.png\" style=\"width: 50%\">"));
     MdRun* r = ImageRunOf(Child(pct, 0));

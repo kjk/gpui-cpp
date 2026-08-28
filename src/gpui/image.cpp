@@ -369,6 +369,15 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
             }
         } else if (pa) {
             img = ImageDecode(pa, bytes, len);
+        } else {
+            // ImageVectorForSrc probes a one-dimension image before layout so
+            // an SVG can supply its aspect ratio. A bitmap is not a failed
+            // vector decode: leave it uncached so ImageForSrc can hand the
+            // same bytes to the platform decoder later in this frame. Caching
+            // the empty answer here made every remote <img width="..."> stay
+            // blank after its fetch completed.
+            owned.Reset();
+            return nullptr;
         }
     }
 

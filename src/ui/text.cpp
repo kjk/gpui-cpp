@@ -1442,12 +1442,10 @@ El* TextView::ImageRun(MdRun* r, float font, Rgba color, bool inFlow) {
     if (h > 0) {
         e->H(h);
     }
-    if (w <= 0) {
-        // `img(..).object_fit(Contain).max_w(relative(1.))`: a picture of its
-        // own is as big as it is, up to the width of what holds it, and the
-        // height follows the aspect from there.
-        e->MaxW(kFill);
-    }
+    // `img(..).object_fit(Contain).max_w(relative(1.))`: the limit is present
+    // even when HTML supplied a width. The README's showcase image says
+    // width=1763, for example, but Rust scales it to the text column.
+    e->MaxW(kFill);
     if ((r->marks & MdLink) && r->href.len > 0) {
         e->Cursor(CursorKind::Pointer);
         if (onLink.IsValid()) {
