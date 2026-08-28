@@ -56,11 +56,13 @@ enum class ShellTaskKind : uint8_t {
     Process,
     Filesystem,
     Fetch,
+    StorageFlush,
 };
 
 struct ProcessJob;
 struct FsJob;
 struct ShellFetchJob;
+struct StorageFlushState;
 
 struct ShellTask {
     uint32_t id = 0;
@@ -75,6 +77,7 @@ struct ShellTask {
     int timer = 0;
     ProcessJob* processJob = nullptr;
     FsJob* fsJob = nullptr;
+    StorageFlushState* storageFlush = nullptr;
 };
 
 struct ShellTaskDriver {
@@ -327,6 +330,26 @@ struct ShellFetchJob {
     }
 };
 
+struct StorageFlushState {
+    ShellRuntimeControl* control = nullptr;
+    uint32_t task = 0;
+    shell::Storage* storage = nullptr;
+    shell::StorageWaiter* waiter = nullptr;
+};
+
+struct StorageWriteJob {
+    Policy* policy = nullptr;
+    shell::StorageWrite write;
+    Str error;
+    bool ok = false;
+
+    void Free() {
+        PolicyRelease(policy);
+        write.Free();
+        StrFree(error);
+    }
+};
+
 static void ControlRetain(void* state) {
     if (state) ((ShellRuntimeControl*)state)->refs++;
 }
@@ -382,6 +405,12 @@ static void DestroyTask(ShellRuntimeImpl* impl, ShellTask* task,
         WindowCancelTimer(task->window, task->timer);
     }
     if (task->processJob) task->processJob->cancellation.Cancel();
+    if (task->storageFlush) {
+        StorageFlushState* state = task->storageFlush;
+        state->storage->CancelWaiter(state->waiter);
+        ControlRelease(state->control);
+        delete state;
+    }
     if (impl && impl->context) JS_FreeValue(impl->context, task->callback);
     if (impl && impl->context) JS_FreeValue(impl->context, task->reject);
     PolicyRelease(task->policy);
@@ -439,6 +468,7 @@ static uint32_t NewTask(ShellRuntimeImpl* impl, ShellTaskKind kind,
 
 static void BeginExecution(ShellRuntimeImpl* impl);
 static Str ExceptionText(Arena* arena, JSContext* ctx);
+static void DriveStorage(Policy* policy);
 
 static void ProcessJobWork(ProcessJob* job) {
     shell::ProcessRunBounded(job->command, job->args.els, job->args.len,
@@ -523,6 +553,10 @@ static void FsJobWork(FsJob* job) {
 
 static void FetchJobWork(ShellFetchJob* job) {
     shell::FetchGet(job->url, job->capabilities, &job->result);
+}
+
+static void StorageWriteWork(StorageWriteJob* job) {
+    job->ok = shell::StoragePersist(job->write, &job->error);
 }
 
 static JSValue FsJobValue(JSContext* context, FsJob* job) {
@@ -717,6 +751,127 @@ static void FetchJobDone(ShellFetchJob* job) {
     job->Free();
     ControlRelease(job->control);
     delete job;
+}
+
+static void StorageFlushDone(StorageFlushState* state,
+                             shell::StorageOutcome outcome) {
+    state->waiter = nullptr;
+    ShellRuntime* runtime = state->control ? state->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, state->task) : nullptr;
+    if (task && task->kind == ShellTaskKind::StorageFlush &&
+        TaskWindowLive(task) &&
+        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
+        Window* window = task->window;
+        App* app = task->app;
+        EntityId owner = task->owner;
+        Policy* policy = PolicyRetain(task->policy);
+        AppModule* application = task->application;
+        JSValue settle = JS_DupValue(impl->context,
+                                     outcome.ok ? task->callback
+                                                : task->reject);
+        task->storageFlush = nullptr;
+        ForgetTask(impl, task->id, false);
+
+        shell::CallScopeGuard scope = shell::ScopeEnter(
+            window, app, ScopePhase::Task, owner, policy, runtime,
+            application);
+        PolicyRelease(policy);
+        BeginExecution(impl);
+        JSValue value = JS_UNDEFINED;
+        int argc = 0;
+        if (!outcome.ok) {
+            const char* fallback = "writing localStorage failed";
+            value = JS_NewError(impl->context);
+            JS_SetPropertyStr(
+                impl->context, value, "message",
+                JS_NewStringLen(impl->context,
+                                outcome.error.s ? outcome.error.s :
+                                                  fallback,
+                                (size_t)(outcome.error.s
+                                             ? outcome.error.len
+                                             : strlen(fallback))));
+            argc = 1;
+        }
+        JSValue settled = JS_Call(impl->context, settle, JS_UNDEFINED,
+                                  argc, argc ? &value : nullptr);
+        JS_FreeValue(impl->context, value);
+        JS_FreeValue(impl->context, settle);
+        if (JS_IsException(settled)) {
+            Arena* arena = ArenaNew();
+            log(ExceptionText(arena, impl->context));
+            ArenaDelete(arena);
+        } else {
+            JS_FreeValue(impl->context, settled);
+            ShellError error = {};
+            runtime->DrainJobs(kMaxJobBatch, &error);
+            if (error.IsSet()) {
+                log(error.message);
+                ShellErrorClear(&error);
+            }
+        }
+    } else if (task) {
+        task->storageFlush = nullptr;
+        ForgetTask(impl, task->id, false);
+    }
+    ControlRelease(state->control);
+    delete state;
+}
+
+static void WakeStorageWaiters(Vec<shell::StorageWaiter*>* ready,
+                               shell::StorageOutcome outcome) {
+    for (int i = 0; i < ready->len; i++) {
+        shell::StorageWaiter* waiter = (*ready)[i];
+        Func1<shell::StorageOutcome> settle = waiter->settle;
+        delete waiter;
+        settle.Call(outcome);
+    }
+    ready->Reset();
+}
+
+static void StorageWriteDone(StorageWriteJob* job) {
+    shell::Storage* storage = PolicyStorage(job->policy, false);
+    Vec<shell::StorageWaiter*> ready;
+    if (storage) {
+        storage->FinishWrite(job->write.revision, job->ok, &ready);
+    }
+    shell::StorageOutcome outcome = {job->ok, job->error};
+    WakeStorageWaiters(&ready, outcome);
+    if (storage) DriveStorage(job->policy);
+    job->Free();
+    delete job;
+}
+
+static void DriveStorage(Policy* policy) {
+    shell::Storage* storage = PolicyStorage(policy, false);
+    if (!storage) return;
+    shell::StorageWrite pending;
+    Str error;
+    bool encoded = storage->BeginWrite(&pending, &error);
+    if (!encoded) {
+        if (pending.revision) {
+            Vec<shell::StorageWaiter*> ready;
+            storage->FinishWrite(pending.revision, false, &ready);
+            shell::StorageOutcome outcome = {false, error};
+            WakeStorageWaiters(&ready, outcome);
+        }
+        if (error) log(error);
+        StrFree(error);
+        pending.Free();
+        return;
+    }
+    StrFree(error);
+    if (!pending.revision) return;
+    StorageWriteJob* job = new StorageWriteJob();
+    job->policy = PolicyRetain(policy);
+    job->write = pending;
+    pending = {};
+    if (!ExecSpawn(MkFunc0(StorageWriteWork, job),
+                   MkFunc0(StorageWriteDone, job))) {
+        storage->AbortWrite(job->write.revision);
+        job->Free();
+        delete job;
+    }
 }
 
 static void BeginExecution(ShellRuntimeImpl* impl) {
@@ -2451,7 +2606,10 @@ static JSValue NativeStorageSet(JSContext* ctx, JSValueConst, int argc,
     Str key, value, error;
     bool ok = argc >= 2 && JsString(ctx, argv[0], arena, &key) &&
               JsString(ctx, argv[1], arena, &value) &&
-              storage->Set(key, value, &error) && storage->Flush(&error);
+              storage->Set(key, value, &error);
+    if (ok && !session) {
+        DriveStorage(held ? held : shell::ScopeCurrentPolicy());
+    }
     JSValue result = ok ? JS_UNDEFINED
                         : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
                                 : JS_EXCEPTION;
@@ -2470,7 +2628,10 @@ static JSValue NativeStorageRemove(JSContext* ctx, JSValueConst, int argc,
     Arena* arena = ArenaNew();
     Str key, error;
     bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &key) &&
-              storage->Remove(key, &error) && storage->Flush(&error);
+              storage->Remove(key, &error);
+    if (ok && !session) {
+        DriveStorage(held ? held : shell::ScopeCurrentPolicy());
+    }
     JSValue result = ok ? JS_UNDEFINED
                         : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
                                 : JS_EXCEPTION;
@@ -2487,7 +2648,10 @@ static JSValue NativeStorageClear(JSContext* ctx, JSValueConst, int,
     shell::Storage* storage = AllowedStorage(ctx, session, &held);
     if (!storage) return JS_EXCEPTION;
     Str error;
-    bool ok = storage->Clear(&error) && storage->Flush(&error);
+    bool ok = storage->Clear(&error);
+    if (ok && !session) {
+        DriveStorage(held ? held : shell::ScopeCurrentPolicy());
+    }
     JSValue result = ok ? JS_UNDEFINED
                         : JS_ThrowInternalError(ctx, "%.*s", error.len, error.s);
     StrFree(error);
@@ -2540,15 +2704,64 @@ static JSValue NativeStorageFlush(JSContext* ctx, JSValueConst, int,
     bool session = JS_ToBool(ctx, argv[0]) != 0;
     shell::Storage* storage = AllowedStorage(ctx, session, &held);
     if (!storage) return JS_EXCEPTION;
+    if (session || (!storage->IsDirty() && !storage->HasWriteInFlight())) {
+        PolicyRelease(held);
+        return ResolvedPromise(ctx);
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        PolicyRelease(held);
+        return JS_ThrowTypeError(ctx,
+                                 "localStorage.flush() needs a live host task");
+    }
+    JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+    if (JS_IsException(promise)) {
+        PolicyRelease(held);
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t taskId = NewTask(impl, ShellTaskKind::StorageFlush,
+                              resolving[0], host.GetApp(), host.GetWindow(),
+                              false, resolving[1]);
+    JS_FreeValue(ctx, resolving[0]);
+    JS_FreeValue(ctx, resolving[1]);
+    if (!taskId) {
+        JS_FreeValue(ctx, promise);
+        PolicyRelease(held);
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its outstanding host task limit");
+    }
+    StorageFlushState* state = new StorageFlushState();
+    state->control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(state->control);
+    state->task = taskId;
+    state->storage = storage;
+    ShellTask* task = FindTask(impl, taskId);
+    task->storageFlush = state;
     Str error;
-    bool ok = storage->Flush(&error);
-    PolicyRelease(held);
+    bool immediate = false;
+    bool ok = storage->Wait(MkFunc1(StorageFlushDone, state),
+                            &state->waiter, &immediate, &error);
     if (!ok) {
+        task->storageFlush = nullptr;
+        ForgetTask(impl, taskId, false);
+        ControlRelease(state->control);
+        delete state;
+        JS_FreeValue(ctx, promise);
         JSValue result = JS_ThrowInternalError(ctx, "%.*s", error.len, error.s);
         StrFree(error);
+        PolicyRelease(held);
         return result;
     }
-    return ResolvedPromise(ctx);
+    StrFree(error);
+    if (immediate) {
+        StorageFlushDone(state, shell::StorageOutcome{true, {}});
+    } else {
+        DriveStorage(held ? held : shell::ScopeCurrentPolicy());
+    }
+    PolicyRelease(held);
+    return promise;
 }
 
 static JSValue NativeClipboard(JSContext* ctx, JSValueConst, int argc,

@@ -808,6 +808,7 @@ static void ShellStorageAndAuthorityFreeModulesWork() {
     Str storageError;
     utassert(ShellSetStoragePath(Str(storagePath), &storageError));
     utassert(!storageError);
+    ExecInit();
 
     ShellError error = {};
     ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
@@ -819,6 +820,7 @@ static void ShellStorageAndAuthorityFreeModulesWork() {
              "localStorage.getItem('theme') !== 'dark' || localStorage.length !== 1) "
              "throw new Error('storage did not round trip')"),
         StrL("storage.js"), &error));
+    utassert(ExecWaitIdle(5000));
 
     Str source = StrL(
         "import { View, div } from 'gpui';\n"
@@ -845,6 +847,149 @@ static void ShellStorageAndAuthorityFreeModulesWork() {
     utassert(stored != nullptr);
     if (stored) fclose(stored);
     remove(storagePath);
+    Capabilities denied;
+    PolicyUpdateDefaultCapabilities(denied);
+}
+
+struct StorageTestSettlement {
+    int calls = 0;
+    bool ok = false;
+};
+
+static void RecordStorageSettlement(StorageTestSettlement* state,
+                                    StorageOutcome outcome) {
+    state->calls++;
+    state->ok = outcome.ok;
+}
+
+static void SettleStorageTestWaiters(Vec<StorageWaiter*>* ready,
+                                     StorageOutcome outcome) {
+    for (int i = 0; i < ready->len; i++) {
+        StorageWaiter* waiter = (*ready)[i];
+        Func1<StorageOutcome> settle = waiter->settle;
+        delete waiter;
+        settle.Call(outcome);
+    }
+    ready->Reset();
+}
+
+static void ShellStorageWritesRevisionsInOrderAndFlushes() {
+    remove("shell_storage_queue_test.json");
+    Storage storage(true);
+    Str storageError;
+    utassert(storage.SetPath(StrL("shell_storage_queue_test.json"),
+                             &storageError));
+    utassert(storage.Set(StrL("revision"), StrL("one"), &storageError));
+    StorageWrite first;
+    utassert(storage.BeginWrite(&first, &storageError));
+    utassert(first.revision == 1 && storage.HasWriteInFlight() &&
+             StrContains(first.body, StrL("one")));
+    utassert(storage.Set(StrL("revision"), StrL("two"), &storageError));
+
+    StorageTestSettlement settlement;
+    StorageWaiter* waiter = nullptr;
+    bool immediate = false;
+    utassert(storage.Wait(MkFunc1(RecordStorageSettlement, &settlement),
+                          &waiter, &immediate, &storageError));
+    utassert(waiter != nullptr && !immediate && settlement.calls == 0);
+    Vec<StorageWaiter*> ready;
+    storage.FinishWrite(first.revision, true, &ready);
+    utassert(ready.len == 0 && storage.IsDirty());
+    first.Free();
+
+    StorageWrite second;
+    utassert(storage.BeginWrite(&second, &storageError));
+    utassert(second.revision == 2 && StrContains(second.body, StrL("two")));
+    storage.FinishWrite(second.revision, true, &ready);
+    SettleStorageTestWaiters(&ready, StorageOutcome{true, {}});
+    utassert(settlement.calls == 1 && settlement.ok && !storage.IsDirty());
+    second.Free();
+
+    StorageWaiter* already = nullptr;
+    immediate = false;
+    utassert(storage.Wait(MkFunc1(RecordStorageSettlement, &settlement),
+                          &already, &immediate, &storageError));
+    utassert(immediate && already == nullptr);
+
+    utassert(storage.Set(StrL("revision"), StrL("three"), &storageError));
+    StorageWrite failed;
+    utassert(storage.BeginWrite(&failed, &storageError));
+    StorageTestSettlement failedSettlement;
+    utassert(storage.Wait(MkFunc1(RecordStorageSettlement, &failedSettlement),
+                          &waiter, &immediate, &storageError));
+    utassert(!immediate && waiter != nullptr);
+    storage.FinishWrite(failed.revision, false, &ready);
+    SettleStorageTestWaiters(&ready,
+                             StorageOutcome{false, StrL("disk full")});
+    utassert(failedSettlement.calls == 1 && !failedSettlement.ok);
+    failed.Free();
+    StorageWrite parked;
+    utassert(storage.BeginWrite(&parked, &storageError));
+    utassert(parked.revision == 0 && storage.IsDirty());
+    StorageTestSettlement retrySettlement;
+    utassert(storage.Wait(MkFunc1(RecordStorageSettlement, &retrySettlement),
+                          &waiter, &immediate, &storageError));
+    utassert(!immediate && waiter != nullptr);
+    utassert(storage.BeginWrite(&parked, &storageError));
+    utassert(parked.revision == 3);
+    storage.FinishWrite(parked.revision, true, &ready);
+    SettleStorageTestWaiters(&ready, StorageOutcome{true, {}});
+    utassert(retrySettlement.calls == 1 && retrySettlement.ok &&
+             !storage.IsDirty());
+    parked.Free();
+    StrFree(storageError);
+
+    const char* path = "shell_storage_flush_test.json";
+    remove(path);
+    Capabilities granted;
+    granted.Storage(true);
+    PolicyUpdateDefaultCapabilities(granted);
+    utassert(ShellSetStoragePath(Str(path), &storageError));
+    App app;
+    Window window;
+    window.app = &app;
+    app.windows.Append(&window);
+    component::Init(&app);
+    ExecInit();
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "globalThis.storageFlush = 'pending';\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { cx.spawn(async cx => { localStorage.setItem('revision', 'final'); await localStorage.flush(); storageFlush = 'flushed'; cx.notify(); }); }\n"
+        "  render(cx) { return div().child(storageFlush); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("storage-flush.js"),
+                                               source, &error)
+                         : nullptr;
+    Entity<ScriptView> view = type
+                                  ? ScriptView::New(&app, runtime, type)
+                                  : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(ExecWaitIdle(5000));
+    utassert(runtime && runtime->Eval(
+        StrL("if (storageFlush !== 'flushed') throw new Error(storageFlush)"),
+        StrL("storage-flush-result.js"), &error));
+    utassert(runtime && runtime->LiveTasks() == 0);
+    FILE* file = fopen(path, "rb");
+    utassert(file != nullptr);
+    if (file) fclose(file);
+    EntityDrop(&app, view.id);
+    app.windows.len = 0;
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+    remove(path);
+    StrFree(storageError);
     Capabilities denied;
     PolicyUpdateDefaultCapabilities(denied);
 }
@@ -1240,6 +1385,7 @@ void TestShellCore() {
     ShellSandboxWithholdsCompilersAndSharedPrototypeWrites();
     ShellSchedulerResumesPromisesInTaskScope();
     ShellStorageAndAuthorityFreeModulesWork();
+    ShellStorageWritesRevisionsInOrderAndFlushes();
     ShellProcessRunIsBoundedAndPromiseBased();
     ShellFilesystemUsesGrantedHandleRelativePaths();
     ShellCryptoAndCompressionMatchStandardRuntime();

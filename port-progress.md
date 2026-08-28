@@ -9593,3 +9593,26 @@ Tests inject a response transport without touching the network and cover
 exact HTTP grants, query/path separation, authorized redirects, refusal before
 contacting an ungranted redirect target, HTTPS downgrade refusal, GET-only
 options, response promises and JSON. MSVC release passes 21,223 checks.
+
+## Shell revisioned Web Storage persistence
+
+`localStorage` no longer writes synchronously from `setItem` or treats
+`flush()` as an already-resolved promise. Every mutation increments the
+in-memory revision. A single executor job owns one encoded snapshot and one
+`<path>.tmp`; its main-thread completion records exactly the revision that
+landed and immediately starts a newer snapshot when the cache changed while
+the first write was in flight. Failed revisions park instead of retrying in a
+tight loop, and a later mutation or explicit flush supplies the new intent to
+retry. Aggregate encoded size is validated before a mutation is committed.
+
+`localStorage.flush()` is now a real barrier. Its Promise is a bounded Shell
+task tied to the calling view, policy and application generation, waits for
+the revision visible at the call, resolves only after that revision reaches
+the atomic replacement, rejects with that write's error, and removes its
+waiter when the view/runtime is dropped. `sessionStorage.flush()` still
+resolves immediately because that store never reaches a disk.
+
+Tests drive old/new snapshots independently to prove that an in-flight write
+cannot lose a later mutation, cover immediate barriers, failed-write
+rejection and explicit retry, and await a JavaScript flush before inspecting
+the file. MSVC release passes 21,255 checks.
