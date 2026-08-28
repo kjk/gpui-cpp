@@ -711,7 +711,7 @@ static void PublishedSnapshotsMaterializeToNativeElements() {
         "import { View } from 'gpui';\n"
         "import { v_flex, Button } from 'gpui-base';\n"
         "export default class Main extends View { render(cx) {\n"
-        "  return v_flex().w(320).h(80).gap_2().p(12).bg('#123456').rounded(8)\n"
+        "  return v_flex().role('list_box').aria_active_descendant().w(320).h(80).gap_2().p(12).bg('#123456').rounded(8)\n"
         "    .child('native')\n"
         "    .child(Button.new('disabled').disabled(true).child('No'));\n"
         "} }\n");
@@ -744,6 +744,8 @@ static void PublishedSnapshotsMaterializeToNativeElements() {
         utassertnear(root->style.pad.top, 12);
         utassertnear(root->style.radius, 8);
         utassert(root->style.hasBg);
+        utassert(root->accessibility.role == AccessibilityRole::ListBox);
+        utassert(root->accessibility.activeDescendant);
         utassert(abs((int)root->style.bg.color.r - 0x12) <= 1);
         utassert(abs((int)root->style.bg.color.g - 0x34) <= 1);
         utassert(abs((int)root->style.bg.color.b - 0x56) <= 1);
@@ -821,6 +823,94 @@ static void ShellMaterializesStateTemplatesInputsAndPaths() {
     utassert(path && path->customPaint != nullptr);
     utassert(path && path->style.width == 100 && path->style.height == 80);
     EntityDrop(&app, view.id);
+    ArenaDelete(frame);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void ShellRootHostsDialogsSheetsAndToasts() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { Button } from 'gpui-base';\n"
+        "export default class Main extends View {\n"
+        "  render() { return div().children([\n"
+        "    Button.new('open-dialog').on_click(() => window.open_dialog(() => div().id('dialog-content').child('Dialog'))),\n"
+        "    Button.new('close-dialog').on_click(() => window.close_dialog()),\n"
+        "    Button.new('open-sheet').on_click(() => window.open_sheet_at('left', () => div().id('sheet-content').child('Sheet'))),\n"
+        "    Button.new('close-sheet').on_click(() => window.close_sheet()),\n"
+        "    Button.new('toast').on_click(() => window.push_toast({ title: 'Saved', description: 'One file', level: 'success', id: 'save', timeout: null })),\n"
+        "    Button.new('remove-toast').on_click(() => window.remove_toast('save')),\n"
+        "  ]); }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("shell-root.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Entity<ShellRoot> shellRoot =
+        view.IsValid() ? ShellRoot::New(&app, view.id) : Entity<ShellRoot>{};
+    window.root = shellRoot.id;
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = shellRoot.IsValid()
+                   ? EntityRender(&app, &window, frame, shellRoot.id)
+                   : nullptr;
+    El* script = root ? root->first : nullptr;
+    El* openDialog = script ? script->first : nullptr;
+    El* closeDialog = openDialog ? openDialog->next : nullptr;
+    El* openSheet = closeDialog ? closeDialog->next : nullptr;
+    El* closeSheet = openSheet ? openSheet->next : nullptr;
+    El* toast = closeSheet ? closeSheet->next : nullptr;
+    El* removeToast = toast ? toast->next : nullptr;
+    utassert(root && ShellRootOf(&window, &app) != nullptr);
+    utassert(openDialog && openDialog->listener.IsValid());
+    ClickEvent click = {};
+    if (openDialog && openDialog->listener.IsValid())
+        ListenerCall(&app, &window, openDialog->listener, &click);
+    Ctx rootCx = {&app, &window, frame, shellRoot.id};
+    utassert(ShellRootHasDialog(&rootCx));
+    utassert(runtime && runtime->LiveNestedViews() == 0);
+    frame->Reset();
+    root = EntityRender(&app, &window, frame, shellRoot.id);
+    utassert(root && root->first && root->first->next);
+    script = root ? root->first : nullptr;
+    openDialog = script ? script->first : nullptr;
+    closeDialog = openDialog ? openDialog->next : nullptr;
+    openSheet = closeDialog ? closeDialog->next : nullptr;
+    closeSheet = openSheet ? openSheet->next : nullptr;
+    toast = closeSheet ? closeSheet->next : nullptr;
+    removeToast = toast ? toast->next : nullptr;
+    if (closeDialog && closeDialog->listener.IsValid())
+        ListenerCall(&app, &window, closeDialog->listener, &click);
+    utassert(!ShellRootHasDialog(&rootCx));
+    if (openSheet && openSheet->listener.IsValid())
+        ListenerCall(&app, &window, openSheet->listener, &click);
+    utassert(ShellRootHasSheet(&rootCx));
+    if (closeSheet && closeSheet->listener.IsValid())
+        ListenerCall(&app, &window, closeSheet->listener, &click);
+    utassert(!ShellRootHasSheet(&rootCx));
+    if (toast && toast->listener.IsValid())
+        ListenerCall(&app, &window, toast->listener, &click);
+    utassert(ShellRootToastCount(&rootCx) == 1);
+    if (removeToast && removeToast->listener.IsValid())
+        ListenerCall(&app, &window, removeToast->listener, &click);
+    component::NotificationListState* notifications =
+        WindowNotifications(&rootCx).Get(&rootCx);
+    utassert(notifications && notifications->items.len == 1 &&
+             notifications->stack.entries.len == 1 &&
+             notifications->stack.entries[0].status ==
+                 ToastTransitionStatus::Ending);
+    ShellRootClearToasts(&rootCx);
+    EntityDrop(&app, shellRoot.id);
     ArenaDelete(frame);
     if (runtime) runtime->Release();
     ShellErrorClear(&error);
@@ -1565,6 +1655,53 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
     PolicyUpdateDefaultCapabilities(denied);
 }
 
+static void ShellAssetsStayInsideTheApplicationRoot() {
+    const char* rootName = "shell_asset_test_root";
+#if GPUI_OS_WINDOWS
+    RemoveDirectoryA(rootName);
+#else
+    rmdir(rootName);
+#endif
+    FsResult fs;
+    Str error;
+    utassert(FsRun(FsOperation::MakeDirectory, Str(rootName), StrL("icons"),
+                   {}, false, &fs, &error));
+    utassert(FsRun(FsOperation::Write, Str(rootName),
+                   StrL("icons/check.svg"), StrL("<svg/>"), false, &fs,
+                   &error));
+    AssetsClear();
+    {
+        AppAssets assets{Str(rootName)};
+        utassert(assets.Install());
+        Vec<uint8_t> bytes;
+        utassert(AssetsLoad(StrL("icons/check.svg"), &bytes));
+        utassert(bytes.len == 6 &&
+                 memcmp(bytes.els, "<svg/>", 6) == 0);
+        bytes.Reset();
+        Str relative;
+        utassert(!assets.Resolve(StrL("../secret.svg"), &relative, &error));
+        StrFree(error);
+        error = {};
+        Vec<Str> names;
+        utassert(assets.List(StrL("icons"), &names, &error));
+        utassert(names.len == 1 && StrEq(names[0], "check.svg"));
+        for (int i = 0; i < names.len; i++) StrFree(names[i]);
+        names.Reset();
+    }
+    utassert(AssetsRootCount() == 0);
+    utassert(FsRun(FsOperation::RemoveFile, Str(rootName),
+                   StrL("icons/check.svg"), {}, false, &fs, &error));
+    utassert(FsRun(FsOperation::RemoveDirectory, Str(rootName), StrL("icons"),
+                   {}, false, &fs, &error));
+    fs.Free();
+    StrFree(error);
+#if GPUI_OS_WINDOWS
+    utassert(RemoveDirectoryA(rootName) != 0);
+#else
+    utassert(rmdir(rootName) == 0);
+#endif
+}
+
 static void ShellCryptoAndCompressionMatchStandardRuntime() {
     static const uint8_t expected[32] = {
         0xce, 0x63, 0x5c, 0x4e, 0xab, 0xff, 0x5e, 0x4f,
@@ -1758,6 +1895,175 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     PolicyUpdateDefaultCapabilities(denied);
 }
 
+static void ShellAccessibilityRolesMirrorUpstream() {
+    utassert(AccessibilityRoleNameCount() == 181);
+    utassert(AccessibilityRoleFromName(StrL("list_box_option")) ==
+             AccessibilityRole::ListBoxOption);
+    utassert(AccessibilityRoleFromName(StrL("combo_box")) ==
+             AccessibilityRole::ComboBox);
+    utassert(AccessibilityRoleFromName(StrL("check_box")) ==
+             AccessibilityRole::CheckBox);
+    utassert(AccessibilityRoleFromName(StrL("doc_acknowledgements")) ==
+             AccessibilityRole::DocAcknowledgements);
+    utassert(AccessibilityRoleFromName(StrL("terminal")) ==
+             AccessibilityRole::Terminal);
+    utassert(AccessibilityRoleFromName(StrL("generic_container")) ==
+             AccessibilityRole::None);
+    utassert(AccessibilityRoleFromName(StrL("listbox")) ==
+             AccessibilityRole::None);
+    utassert(AccessibilityRoleFromName(StrL("Button")) ==
+             AccessibilityRole::None);
+
+}
+
+static ShellRuntime* gDockRuntime = nullptr;
+static ViewType* gDockViewType = nullptr;
+static bool gDockBuildFails = false;
+static Str gDockRestored = {};
+static bool gDockChromeSawLayout = false;
+
+static Entity<ScriptView> BuildDockProbe(Window*, App* app, void*) {
+    return gDockBuildFails
+               ? Entity<ScriptView>{}
+               : ScriptView::New(app, gDockRuntime, gDockViewType);
+}
+
+static bool SerializeDockProbe(Entity<ScriptView>, App*, void*,
+                               StrBuilder* out) {
+    out->Append(StrL("{\"filter\":\"unread\",\"sort\":2}"));
+    return true;
+}
+
+static void DeserializeDockProbe(Entity<ScriptView>, Str json, Window*,
+                                 App*, void*) {
+    StrFree(gDockRestored);
+    gDockRestored = StrDup(json);
+}
+
+static El* RenderDockProbeChrome(Ctx* cx, void*, const DockCtx*,
+                                 El* content) {
+    gDockChromeSawLayout = ScopeHasCurrent() &&
+                           ScopeCurrentPhase() == ScopePhase::Layout;
+    return Div(cx->a)->Child(content);
+}
+
+static const PanelStateNode* FindPanelState(const DockAreaState& state,
+                                            Str name) {
+    for (int i = 0; i < state.nodes.len; i++) {
+        if (StrEq(state.nodes[i].panelName, name)) return &state.nodes[i];
+    }
+    return nullptr;
+}
+
+static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    gDockRuntime = ShellRuntime::New(&app, &error);
+    gDockViewType = gDockRuntime
+                        ? gDockRuntime->LoadSource(
+                              StrL("dock-panel.js"),
+                              StrL("import { View, div } from 'gpui'; export default class Panel extends View { render() { return div().child('panel'); } }"),
+                              &error)
+                        : nullptr;
+    utassert(gDockRuntime && gDockViewType && !error.IsSet());
+
+    Str name = ShellPanelName(StrL("mail"), StrL("inbox"));
+    utassert(StrEq(name, "shell:mail/inbox"));
+    utassert(name.s == ShellPanelName(StrL("mail"), StrL("inbox")).s);
+    utassert(!StrEq(name, ShellPanelName(StrL("chat"), StrL("inbox"))));
+
+    ShellPanelScript script;
+    script.build = BuildDockProbe;
+    script.serialize = SerializeDockProbe;
+    script.deserialize = DeserializeDockProbe;
+    ShellRegisterPanel(&app, StrL("mail"), StrL("inbox"), script);
+
+    Entity<DockState> area = EntityNewState<DockState>(&app);
+    DockState* state = area.Get(&app);
+    Entity<ScriptView> view =
+        ScriptView::New(&app, gDockRuntime, gDockViewType);
+    int panel = DockAddPanelDef(
+        state, ScriptPanelNew(&app, name, view, &script));
+    state->center = DockNewTabs(state);
+    DockTabsAdd(state, state->center, panel);
+    DockAreaState saved;
+    DockDump(state, &saved);
+    const PanelStateNode* leaf = FindPanelState(saved, name);
+    utassert(leaf && leaf->infoIsJson &&
+             StrEq(leaf->info, "{\"filter\":\"unread\",\"sort\":2}"));
+
+    StrBuilder written;
+    DockAreaStateWrite(&saved, &written);
+    Str layout = written.TakeStr();
+    utassert(StrContains(
+        layout, StrL("\"panel\":{\"filter\":\"unread\",\"sort\":2}")));
+
+    Arena* persisted = ArenaNew();
+    DockAreaState parsed;
+    utassert(DockAreaStateParse(persisted, layout, &parsed));
+    Entity<DockState> restoredArea = EntityNewState<DockState>(&app);
+    DockState* restored = restoredArea.Get(&app);
+    StrFree(gDockRestored);
+    utassert(DockLoad(restored, &parsed, persisted, nullptr, &app, &window,
+                      restoredArea));
+    utassert(StrEq(gDockRestored,
+                   "{\"filter\":\"unread\",\"sort\":2}"));
+    utassert(restored->panels.len == 1 && restored->panels[0].closable &&
+             restored->panels[0].canZoom && restored->panels[0].visible);
+
+    gDockBuildFails = true;
+    ShellRegisterPanel(&app, StrL("mail"), StrL("inbox"), script);
+    Entity<DockState> failedArea = EntityNewState<DockState>(&app);
+    DockState* failed = failedArea.Get(&app);
+    utassert(DockLoad(failed, &parsed, persisted, nullptr, &app, &window,
+                      failedArea));
+    DockAreaState failedSaved;
+    DockDump(failed, &failedSaved);
+    const PanelStateNode* failedLeaf = FindPanelState(failedSaved, name);
+    utassert(failedLeaf && failedLeaf->infoIsJson &&
+             StrEq(failedLeaf->info,
+                   "{\"filter\":\"unread\",\"sort\":2}"));
+    gDockBuildFails = false;
+
+    Arena* frame = ArenaNew();
+    Ctx cx = {&app, &window, frame, {}};
+    ShellDockChrome chrome;
+    chrome.dock = RenderDockProbeChrome;
+    ScriptDockSkin skin(chrome);
+    DockCtx dock;
+    dock.cx = &cx;
+    dock.placement = DockPlacement::Left;
+    dock.size = 240;
+    dock.open = true;
+    dock.collapsible = true;
+    gDockChromeSawLayout = false;
+    El* wrapped = skin.Renderer()->dock(
+        &cx, skin.Renderer()->data, &dock, Div(frame));
+    utassert(wrapped && gDockChromeSawLayout);
+    StrBuilder dockData;
+    ShellDockData(&dock, &dockData);
+    Str dockJson = dockData.TakeStr();
+    utassert(StrEq(dockJson,
+                   "{\"placement\":\"left\",\"size\":240,\"open\":true,\"collapsible\":true}"));
+
+    StrFree(dockJson);
+    ArenaDelete(frame);
+    StrFree(layout);
+    StrFree(gDockRestored);
+    gDockRestored = {};
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+    ViewTypeRelease(gDockViewType);
+    gDockViewType = nullptr;
+    gDockRuntime->Release();
+    gDockRuntime = nullptr;
+    ShellErrorClear(&error);
+    ArenaDelete(persisted);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -1776,6 +2082,7 @@ void TestShellCore() {
     ShellHostModulesBridgePlainDataAndPromises();
     PublishedSnapshotsMaterializeToNativeElements();
     ShellMaterializesStateTemplatesInputsAndPaths();
+    ShellRootHostsDialogsSheetsAndToasts();
     ScriptViewsReuseSnapshotsUntilNotified();
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();
     NestedScriptViewsRetainUpdateRollbackAndRelease();
@@ -1786,6 +2093,9 @@ void TestShellCore() {
     ShellStorageWritesRevisionsInOrderAndFlushes();
     ShellProcessRunIsBoundedAndPromiseBased();
     ShellFilesystemUsesGrantedHandleRelativePaths();
+    ShellAssetsStayInsideTheApplicationRoot();
     ShellCryptoAndCompressionMatchStandardRuntime();
     ShellFetchChecksEveryGetTargetBeforeContact();
+    ShellAccessibilityRolesMirrorUpstream();
+    ShellDockPanelsPersistAndChromeRunsInLayoutScope();
 }

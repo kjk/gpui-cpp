@@ -51,6 +51,7 @@ struct PanelStateNode {
     // Panel: whatever the panel itself wrote, kept as it was so a round trip
     // does not lose it. Rust holds a serde_json::Value here.
     Str info = {};
+    bool infoIsJson = false;
 };
 
 using PanelState = PanelStateNode;

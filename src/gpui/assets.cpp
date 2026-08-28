@@ -16,8 +16,20 @@ static const int kMaxRoots = 12;
 static char gRoots[kMaxRoots][kMaxPath];
 static int gRootN = 0;
 
+struct RegisteredAssetSource {
+    int id = 0;
+    void* user = nullptr;
+    AssetLoadFn load = nullptr;
+    AssetExistsFn exists = nullptr;
+};
+
+static RegisteredAssetSource gSources[kMaxRoots];
+static int gSourceN = 0;
+static int gNextSource = 1;
+
 void AssetsClear() {
     gRootN = 0;
+    gSourceN = 0;
 }
 
 static void AddRootRaw(const char* dir) {
@@ -39,7 +51,28 @@ static void AddRootRaw(const char* dir) {
 // How many roots are registered, which is what AppNew asks before it
 // supplies a default.
 int AssetsRootCount() {
-    return gRootN;
+    return gRootN + gSourceN;
+}
+
+int AssetsAddSource(void* user, AssetLoadFn load, AssetExistsFn exists) {
+    if (!user || !load || gSourceN >= kMaxRoots) return 0;
+    int id = gNextSource++;
+    if (id <= 0) {
+        gNextSource = 2;
+        id = 1;
+    }
+    gSources[gSourceN++] = {id, user, load, exists};
+    return id;
+}
+
+void AssetsRemoveSource(int id) {
+    for (int i = 0; i < gSourceN; i++) {
+        if (gSources[i].id != id) continue;
+        for (int j = i + 1; j < gSourceN; j++)
+            gSources[j - 1] = gSources[j];
+        gSourceN--;
+        return;
+    }
 }
 
 void AssetsAddRoot(Str dir) {
@@ -214,6 +247,9 @@ bool AssetsLoad(Str relPath, Vec<uint8_t>* out) {
     if (!relPath.s || relPath.len <= 0 || !out) {
         return false;
     }
+    for (int i = gSourceN - 1; i >= 0; i--)
+        if (gSources[i].load(gSources[i].user, relPath, out)) return true;
+
     char rel[kMaxPath];
     int n = relPath.len < kMaxPath - 1 ? relPath.len : kMaxPath - 1;
     memcpy(rel, relPath.s, (size_t)n);
@@ -252,6 +288,11 @@ bool AssetsExists(Str relPath) {
     if (!relPath.s || relPath.len <= 0) {
         return false;
     }
+    for (int i = gSourceN - 1; i >= 0; i--)
+        if (gSources[i].exists &&
+            gSources[i].exists(gSources[i].user, relPath))
+            return true;
+
     char rel[kMaxPath];
     int n = relPath.len < kMaxPath - 1 ? relPath.len : kMaxPath - 1;
     memcpy(rel, relPath.s, (size_t)n);

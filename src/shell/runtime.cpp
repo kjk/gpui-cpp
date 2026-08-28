@@ -1,12 +1,14 @@
 #include "shell/runtime.h"
 
 #include "quickjs/quickjs.h"
+#include "shell/a11y.h"
 #include "shell/fetch.h"
 #include "shell/filesystem.h"
 #include "shell/host_modules.h"
 #include "shell/materialize.h"
 #include "shell/process.h"
 #include "shell/retained.h"
+#include "shell/root.h"
 #include "shell/scope.h"
 #include "shell/standard.h"
 #include "shell/view.h"
@@ -358,6 +360,22 @@ static void RollbackNestedViews(ShellRuntimeImpl* impl,
         if (found < 0) return;
         DropNestedViewAt(impl, found);
     }
+}
+
+static bool TakeNestedView(ShellRuntimeImpl* impl, uint32_t token,
+                           Entity<ScriptView>* out) {
+    int at = -1;
+    NestedViewEntry* found = FindNestedView(impl, token, &at);
+    if (!NestedViewIsCurrent(found) || !found->app ||
+        !EntityGet(found->app, found->view))
+        return false;
+    NestedViewEntry entry = *found;
+    for (int i = at + 1; i < impl->nestedViews.len; i++)
+        impl->nestedViews[i - 1] = impl->nestedViews[i];
+    impl->nestedViews.len--;
+    PolicyRelease(entry.policy);
+    *out = Entity<ScriptView>{entry.view};
+    return true;
 }
 
 struct ProcessJob {
@@ -1931,6 +1949,28 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
                 }
             }
         }
+        if (StrEq(name, "role")) {
+            if (argCount != 1 || op.args[0].kind != shell::BridgedKind::String) {
+                ArenaDelete(arena);
+                return JS_ThrowTypeError(
+                    ctx, "role(name) expects one snake_case role string");
+            }
+            Str roleName = op.args[0].string;
+            if (StrEq(roleName, "generic_container")) {
+                ArenaDelete(arena);
+                return JS_ThrowRangeError(
+                    ctx,
+                    "role(\"generic_container\") announces nothing because "
+                    "GPUI filters it from the accessibility tree");
+            }
+            if (shell::AccessibilityRoleFromName(roleName) ==
+                AccessibilityRole::None) {
+                ArenaDelete(arena);
+                return JS_ThrowRangeError(
+                    ctx, "unknown accessibility role `%.*s`", roleName.len,
+                    roleName.s);
+            }
+        }
     }
     shell::SpecError failure = {};
     if (!impl->scratch->PushOp(id, op, &failure)) {
@@ -2246,6 +2286,339 @@ static JSValue NativeChildView(JSContext* ctx, JSValueConst, int argc,
         return SpecFailure(ctx, failure);
     }
     return JS_NewUint32(ctx, id);
+}
+
+static bool OverlayMutationAllowed(JSContext* ctx, const char* api) {
+    if (shell::ScopeHasCurrent() &&
+        ScopePhaseAllowsNotify(shell::ScopeCurrentPhase()))
+        return true;
+    JS_ThrowTypeError(
+        ctx,
+        "%s is not allowed during the `%s` phase; overlays may only be "
+        "opened or closed while handling an event or a task",
+        api, shell::ScopeHasCurrent()
+                 ? ScopePhaseName(shell::ScopeCurrentPhase())
+                 : "none");
+    return false;
+}
+
+static bool OverlayHost(JSContext* ctx, const char* api,
+                        ShellRuntimeImpl** outImpl, Ctx* out) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!impl || !host.IsSet()) {
+        JS_ThrowTypeError(
+            ctx,
+            "%s needs a live host call; call it from init(), an event handler "
+            "or a task",
+            api);
+        return false;
+    }
+    if (!ShellRootOf(host.GetWindow(), host.GetApp())) {
+        JS_ThrowTypeError(
+            ctx,
+            "%s needs a ShellRoot as the window's first view; this window "
+            "was opened with another view",
+            api);
+        return false;
+    }
+    *outImpl = impl;
+    out->app = host.GetApp();
+    out->win = host.GetWindow();
+    out->a = host.GetWindow()->frameArena;
+    out->self = shell::ScopeCurrentView();
+    return true;
+}
+
+static bool KnownOptions(JSContext* ctx, JSValueConst object,
+                         const char* const* known, int knownCount,
+                         const char* api) {
+    JSPropertyEnum* properties = nullptr;
+    uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &properties, &count, object,
+                               JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) < 0)
+        return false;
+    bool ok = true;
+    for (uint32_t i = 0; i < count && ok; i++) {
+        const char* name = JS_AtomToCString(ctx, properties[i].atom);
+        bool found = false;
+        for (int j = 0; name && j < knownCount; j++)
+            if (strcmp(name, known[j]) == 0) found = true;
+        if (!found) {
+            JS_ThrowTypeError(ctx, "unknown option `%s` for %s",
+                              name ? name : "<symbol>", api);
+            ok = false;
+        }
+        if (name) JS_FreeCString(ctx, name);
+    }
+    JS_FreePropertyEnum(ctx, properties, count);
+    return ok;
+}
+
+static bool OptionalBoolProperty(JSContext* ctx, JSValueConst object,
+                                 const char* name, bool* value) {
+    JSValue property = JS_GetPropertyStr(ctx, object, name);
+    if (JS_IsException(property)) return false;
+    if (JS_IsUndefined(property) || JS_IsNull(property)) {
+        JS_FreeValue(ctx, property);
+        return true;
+    }
+    if (!JS_IsBool(property)) {
+        JS_FreeValue(ctx, property);
+        JS_ThrowTypeError(ctx, "%s must be boolean", name);
+        return false;
+    }
+    *value = JS_ToBool(ctx, property) != 0;
+    JS_FreeValue(ctx, property);
+    return true;
+}
+
+static bool DialogOptionsFromJs(JSContext* ctx, JSValueConst value,
+                                DialogOptions* out) {
+    if (JS_IsUndefined(value) || JS_IsNull(value)) return true;
+    if (!JS_IsObject(value)) {
+        JS_ThrowTypeError(ctx,
+                          "window.open_dialog(content, options) expects an "
+                          "options object");
+        return false;
+    }
+    static const char* keys[] = {"escape_dismissable",
+                                 "backdrop_dismissable"};
+    return KnownOptions(ctx, value, keys, 2,
+                        "window.open_dialog(content, options)") &&
+           OptionalBoolProperty(ctx, value, keys[0],
+                                &out->escapeDismissable) &&
+           OptionalBoolProperty(ctx, value, keys[1],
+                                &out->backdropDismissable);
+}
+
+static JSValue NativeOpenDialog(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    const char* api = "window.open_dialog(content, options)";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    uint32_t token = 0;
+    DialogOptions options;
+    if (argc < 1 || JS_ToUint32(ctx, &token, argv[0]) < 0 ||
+        !DialogOptionsFromJs(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
+                             &options))
+        return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
+    Entity<ScriptView> content;
+    if (!TakeNestedView(impl, token, &content))
+        return JS_ThrowTypeError(ctx, "dialog content has already been released");
+    int depth = ShellRootOpenDialog(&native, content, options);
+    if (depth <= 0) {
+        EntityDrop(native.app, content.id);
+        return JS_ThrowInternalError(ctx, "could not mount dialog content");
+    }
+    return JS_NewInt32(ctx, depth);
+}
+
+static JSValue NativeCloseDialog(JSContext* ctx, JSValueConst, int,
+                                 JSValueConst*) {
+    const char* api = "window.close_dialog()";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
+    return JS_NewBool(ctx, ShellRootCloseDialog(&native));
+}
+
+static JSValue NativeCloseAllDialogs(JSContext* ctx, JSValueConst, int,
+                                     JSValueConst*) {
+    const char* api = "window.close_all_dialogs()";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
+    return JS_NewInt32(ctx, ShellRootCloseAllDialogs(&native));
+}
+
+static JSValue NativeHasDialog(JSContext* ctx, JSValueConst, int,
+                               JSValueConst*) {
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, "window.has_active_dialog()", &impl, &native))
+        return JS_EXCEPTION;
+    return JS_NewBool(ctx, ShellRootHasDialog(&native));
+}
+
+static bool SheetPlacementFromJs(JSContext* ctx, JSValueConst value,
+                                 component::SheetPlacement* out) {
+    if (JS_IsUndefined(value) || JS_IsNull(value)) {
+        *out = component::SheetPlacement::Right;
+        return true;
+    }
+    Arena* arena = ArenaNew();
+    Str name;
+    bool ok = JsString(ctx, value, arena, &name);
+    if (ok) {
+        if (StrEq(name, "left")) *out = component::SheetPlacement::Left;
+        else if (StrEq(name, "right")) *out = component::SheetPlacement::Right;
+        else if (StrEq(name, "top")) *out = component::SheetPlacement::Top;
+        else if (StrEq(name, "bottom")) *out = component::SheetPlacement::Bottom;
+        else {
+            JS_ThrowTypeError(
+                ctx,
+                "unknown sheet placement `%.*s`; expected left, right, top or bottom",
+                name.len, name.s);
+            ok = false;
+        }
+    }
+    ArenaDelete(arena);
+    return ok;
+}
+
+static JSValue NativeOpenSheet(JSContext* ctx, JSValueConst, int argc,
+                               JSValueConst* argv) {
+    const char* api = JS_IsUndefined(argc > 0 ? argv[0] : JS_UNDEFINED)
+                          ? "window.open_sheet(content)"
+                          : "window.open_sheet_at(placement, content)";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    component::SheetPlacement placement;
+    uint32_t token = 0;
+    if (!SheetPlacementFromJs(ctx, argc > 0 ? argv[0] : JS_UNDEFINED,
+                              &placement) ||
+        argc < 2 || JS_ToUint32(ctx, &token, argv[1]) < 0)
+        return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
+    Entity<ScriptView> content;
+    if (!TakeNestedView(impl, token, &content))
+        return JS_ThrowTypeError(ctx, "sheet content has already been released");
+    if (!ShellRootOpenSheet(&native, content, placement)) {
+        EntityDrop(native.app, content.id);
+        return JS_ThrowInternalError(ctx, "could not mount sheet content");
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeCloseSheet(JSContext* ctx, JSValueConst, int,
+                                JSValueConst*) {
+    const char* api = "window.close_sheet()";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
+    return JS_NewBool(ctx, ShellRootCloseSheet(&native));
+}
+
+static JSValue NativeHasSheet(JSContext* ctx, JSValueConst, int,
+                              JSValueConst*) {
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, "window.has_active_sheet()", &impl, &native))
+        return JS_EXCEPTION;
+    return JS_NewBool(ctx, ShellRootHasSheet(&native));
+}
+
+static bool OptionalStringProperty(JSContext* ctx, JSValueConst object,
+                                   const char* name, Arena* arena, Str* out,
+                                   bool* present) {
+    JSValue property = JS_GetPropertyStr(ctx, object, name);
+    if (JS_IsException(property)) return false;
+    *present = !JS_IsUndefined(property) && !JS_IsNull(property);
+    bool ok = !*present || JsString(ctx, property, arena, out);
+    JS_FreeValue(ctx, property);
+    return ok;
+}
+
+static JSValue NativePushToast(JSContext* ctx, JSValueConst, int argc,
+                               JSValueConst* argv) {
+    const char* api = "window.push_toast(options)";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    if (argc < 1 || !JS_IsObject(argv[0]))
+        return JS_ThrowTypeError(
+            ctx,
+            "%s expects an object, such as { title: \"Saved\" }", api);
+    static const char* keys[] = {"title", "description", "level", "timeout",
+                                 "id"};
+    if (!KnownOptions(ctx, argv[0], keys, 5, api)) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    ToastRequest toast;
+    bool title = false, description = false, level = false;
+    bool ok = OptionalStringProperty(ctx, argv[0], "title", arena,
+                                     &toast.title, &title) &&
+              OptionalStringProperty(ctx, argv[0], "description", arena,
+                                     &toast.description, &description);
+    if (ok && !title) {
+        JS_ThrowTypeError(ctx,
+                          "%s requires a `title`; it is the sentence the user reads",
+                          api);
+        ok = false;
+    }
+    Str levelName;
+    if (ok)
+        ok = OptionalStringProperty(ctx, argv[0], "level", arena,
+                                    &levelName, &level);
+    if (ok && level && !ToastLevelFromName(levelName, &toast.level)) {
+        JS_ThrowTypeError(
+            ctx,
+            "unknown toast level `%.*s`; expected info, success, warning or error",
+            levelName.len, levelName.s);
+        ok = false;
+    }
+    bool id = false;
+    if (ok)
+        ok = OptionalStringProperty(ctx, argv[0], "id", arena, &toast.id,
+                                    &id);
+    toast.hasId = id;
+    if (ok) {
+        JSValue timeout = JS_GetPropertyStr(ctx, argv[0], "timeout");
+        if (JS_IsException(timeout)) ok = false;
+        else if (JS_IsNull(timeout)) toast.timeoutMs = 0;
+        else if (!JS_IsUndefined(timeout)) {
+            double value = 0;
+            if (JS_ToFloat64(ctx, &value, timeout) < 0 || !isfinite(value) ||
+                value < 0 || value > INT32_MAX) {
+                JS_ThrowTypeError(
+                    ctx,
+                    "%s expects `timeout` to be a number of milliseconds, or null to keep the toast until it is dismissed",
+                    api);
+                ok = false;
+            } else {
+                toast.timeoutMs = (int)value;
+            }
+        }
+        JS_FreeValue(ctx, timeout);
+    }
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (ok) ok = OverlayHost(ctx, api, &impl, &native);
+    bool pushed = ok && ShellRootPushToast(&native, toast);
+    ArenaDelete(arena);
+    if (!ok) return JS_EXCEPTION;
+    if (!pushed) return JS_ThrowInternalError(ctx, "could not mount toast");
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeRemoveToast(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    const char* api = "window.remove_toast(id)";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str id;
+    bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &id);
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (ok) ok = OverlayHost(ctx, api, &impl, &native);
+    bool removed = ok && ShellRootRemoveToast(&native, id);
+    ArenaDelete(arena);
+    return ok ? JS_NewBool(ctx, removed) : JS_EXCEPTION;
+}
+
+static JSValue NativeClearToasts(JSContext* ctx, JSValueConst, int,
+                                 JSValueConst*) {
+    const char* api = "window.clear_toasts()";
+    if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
+    ShellRootClearToasts(&native);
+    return JS_UNDEFINED;
 }
 
 static bool OptionalJsString(JSContext* ctx, JSValueConst value, Arena* arena,
@@ -4556,6 +4929,23 @@ globalThis.__gpui = (() => {
   };
   const localStorage = storage(false);
   const sessionStorage = storage(true);
+  const contentView = (build, api) => {
+    if (typeof build !== "function") {
+      throw new TypeError(api + " takes a function returning an element, not an element and not a view class");
+    }
+    class OverlayContent extends View {
+      render() { return build(); }
+    }
+    return __view_new(OverlayContent, undefined);
+  };
+  const mountOverlay = (build, api, mount) => {
+    const handle = contentView(build, api);
+    try { return mount(handle); }
+    catch (error) {
+      try { __view_release(handle); } catch (_) {}
+      throw error;
+    }
+  };
   globalThis.__context = (generation) => Object.freeze({
     notify: () => __cx_notify(generation),
     focus_handle: () => focusHandle(__focus_handle_new()),
@@ -4583,7 +4973,25 @@ globalThis.__gpui = (() => {
     write_to_clipboard: (text) => __clipboard_write_text(String(text)),
   });
   globalThis.__ambient_context = ambientContext;
-  globalThis.window = Object.freeze({ localStorage, sessionStorage, paint_path: paintPath });
+  globalThis.window = Object.freeze({
+    open_dialog: (build, options) => mountOverlay(
+      build, "window.open_dialog", handle => __open_dialog(handle, options)),
+    close_dialog: () => __close_dialog(),
+    close_all_dialogs: () => __close_all_dialogs(),
+    has_active_dialog: () => __has_active_dialog(),
+    open_sheet: (build) => mountOverlay(
+      build, "window.open_sheet", handle => __open_sheet(undefined, handle)),
+    open_sheet_at: (placement, build) => mountOverlay(
+      build, "window.open_sheet_at", handle => __open_sheet(String(placement), handle)),
+    close_sheet: () => __close_sheet(),
+    has_active_sheet: () => __has_active_sheet(),
+    push_toast: (options) => __push_toast(options),
+    remove_toast: (id) => __remove_toast(String(id)),
+    clear_toasts: () => __clear_toasts(),
+    localStorage,
+    sessionStorage,
+    paint_path: paintPath,
+  });
   globalThis.localStorage = localStorage;
   globalThis.sessionStorage = sessionStorage;
 )JS"
@@ -5121,6 +5529,26 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                       NativeViewRelease, 1);
     SetGlobalFunction(impl->context, global, "__child_view", NativeChildView,
                       1);
+    SetGlobalFunction(impl->context, global, "__open_dialog",
+                      NativeOpenDialog, 2);
+    SetGlobalFunction(impl->context, global, "__close_dialog",
+                      NativeCloseDialog, 0);
+    SetGlobalFunction(impl->context, global, "__close_all_dialogs",
+                      NativeCloseAllDialogs, 0);
+    SetGlobalFunction(impl->context, global, "__has_active_dialog",
+                      NativeHasDialog, 0);
+    SetGlobalFunction(impl->context, global, "__open_sheet", NativeOpenSheet,
+                      2);
+    SetGlobalFunction(impl->context, global, "__close_sheet",
+                      NativeCloseSheet, 0);
+    SetGlobalFunction(impl->context, global, "__has_active_sheet",
+                      NativeHasSheet, 0);
+    SetGlobalFunction(impl->context, global, "__push_toast",
+                      NativePushToast, 1);
+    SetGlobalFunction(impl->context, global, "__remove_toast",
+                      NativeRemoveToast, 1);
+    SetGlobalFunction(impl->context, global, "__clear_toasts",
+                      NativeClearToasts, 0);
     SetGlobalFunction(impl->context, global, "__task_new", NativeTaskNew, 1);
     SetGlobalFunction(impl->context, global, "__task_finish",
                       NativeTaskFinish, 1);

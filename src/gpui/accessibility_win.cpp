@@ -112,7 +112,6 @@ static int AccessibilityControlType(AccessibilityRole role) {
             return UIA_ToolBarControlTypeId;
         case AccessibilityRole::Tooltip:
             return UIA_ToolTipControlTypeId;
-        case AccessibilityRole::GenericContainer:
         case AccessibilityRole::Group:
         case AccessibilityRole::Navigation:
         case AccessibilityRole::RadioGroup:
@@ -199,7 +198,6 @@ static const wchar_t* AccessibilityRoleName(AccessibilityRole role) {
             return L"toolbar";
         case AccessibilityRole::Tooltip:
             return L"tooltip";
-        case AccessibilityRole::GenericContainer:
         case AccessibilityRole::Group:
         case AccessibilityRole::None:
         default:

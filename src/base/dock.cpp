@@ -8,6 +8,7 @@ const Str kDockPanelDrag = StrL("dock-panel");
 const Str kDockResizeDrag = StrL("dock-resize");
 
 static uint64_t gNextDockDragSession = 1;
+static uint64_t gNextDockPanelId = 1;
 
 DockDrop DockDropAt(Bounds b, float x, float y) {
     if (x < b.x + b.w * 0.35f) {
@@ -189,6 +190,11 @@ int DockPanelByName(const DockState* s, Str name) {
 }
 
 int DockAddPanelDef(DockState* s, DockPanelDef def) {
+    if (def.id.value == 0) {
+        def.id = PanelId::FromU64(gNextDockPanelId++);
+        if (def.id.value == 0)
+            def.id = PanelId::FromU64(gNextDockPanelId++);
+    }
     s->panels.Append(def);
     return s->panels.len - 1;
 }

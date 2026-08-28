@@ -114,6 +114,15 @@ static int ParseNode(Arena* a, const JsonValue* v, DockAreaState* out) {
         const JsonValue* panel = JsonGet(info, "panel");
         if (panel && panel->kind == JsonKind::String) {
             node.info = StrDup(a, panel->str);
+        } else if (panel && panel->kind != JsonKind::Null) {
+            StrBuilder encoded;
+            JsonWriter writer;
+            writer.out = &encoded;
+            writer.Value(nullptr, panel);
+            Str text = encoded.TakeStr();
+            node.info = StrDup(a, text);
+            node.infoIsJson = true;
+            StrFree(text);
         }
     }
     return ix;
@@ -224,7 +233,9 @@ static void WriteNode(JsonWriter* w, const char* key, const DockAreaState* s,
             break;
         case PanelInfoKind::Panel:
         default:
-            if (node.info.s) {
+            if (node.info.s && node.infoIsJson) {
+                w->Raw("panel", node.info);
+            } else if (node.info.s) {
                 w->String("panel", node.info);
             } else {
                 w->Null("panel");
@@ -315,6 +326,10 @@ static int DumpNode(const DockState* s, DockAreaState* out, int node) {
             break;
         }
         out->nodes[leaf].kind = PanelInfoKind::Panel;
+        if (s->panels[panelIx].dump) {
+            s->panels[panelIx].dump(s->panels[panelIx].data,
+                                    &out->nodes[leaf]);
+        }
         children.Append(leaf);
     }
     PanelStateNode& sn = out->nodes[ix];

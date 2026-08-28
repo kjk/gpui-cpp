@@ -1384,6 +1384,10 @@ El* El::AriaExpanded(bool expanded) {
     accessibility.hasExpanded = true;
     return this;
 }
+El* El::AriaActiveDescendant(bool active) {
+    accessibility.activeDescendant = active;
+    return this;
+}
 El* El::AriaNumericValue(float value) {
     accessibility.numericValue = value;
     accessibility.hasNumericValue = true;

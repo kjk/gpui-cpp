@@ -449,4 +449,45 @@ void JsonWriter::Null(const char* key) {
     }
 }
 
+void JsonWriter::Raw(const char* key, Str json) {
+    Prefix(this, key);
+    if (out) out->Append(json);
+}
+
+void JsonWriter::Value(const char* key, const JsonValue* value) {
+    if (!value) {
+        Null(key);
+        return;
+    }
+    switch (value->kind) {
+        case JsonKind::Null:
+            Null(key);
+            break;
+        case JsonKind::Bool:
+            Bool(key, value->b);
+            break;
+        case JsonKind::Number:
+            Number(key, value->num);
+            break;
+        case JsonKind::String:
+            String(key, value->str);
+            break;
+        case JsonKind::Array:
+            BeginArray(key);
+            for (const JsonValue* child = value->first; child;
+                 child = child->next)
+                Value(nullptr, child);
+            EndArray();
+            break;
+        case JsonKind::Object:
+            BeginObject(key);
+            for (const JsonValue* child = value->first; child;
+                 child = child->next) {
+                Value(child->key ? child->key.s : nullptr, child);
+            }
+            EndObject();
+            break;
+    }
+}
+
 } // namespace gpui

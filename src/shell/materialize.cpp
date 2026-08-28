@@ -28,6 +28,7 @@
 #include "base/toggle.h"
 #include "base/toggle_group.h"
 #include "fps/fps.h"
+#include "shell/a11y.h"
 #include "shell/view.h"
 
 #include <math.h>
@@ -147,52 +148,6 @@ static PopupAnchor AnchorOf(Str name, bool* found) {
     if (StrEq(name, "right_center")) return PopupAnchor::RightCenter;
     *found = false;
     return PopupAnchor::TopLeft;
-}
-
-static AccessibilityRole RoleOf(Str name) {
-    struct NamedRole {
-        const char* name;
-        AccessibilityRole role;
-    };
-    static const NamedRole roles[] = {
-        {"alert", AccessibilityRole::Alert},
-        {"alert_dialog", AccessibilityRole::AlertDialog},
-        {"button", AccessibilityRole::Button},
-        {"cell", AccessibilityRole::Cell},
-        {"checkbox", AccessibilityRole::CheckBox},
-        {"column_header", AccessibilityRole::ColumnHeader},
-        {"combobox", AccessibilityRole::ComboBox},
-        {"dialog", AccessibilityRole::Dialog},
-        {"group", AccessibilityRole::Group},
-        {"heading", AccessibilityRole::Heading},
-        {"link", AccessibilityRole::Link},
-        {"list", AccessibilityRole::List},
-        {"listbox", AccessibilityRole::ListBox},
-        {"listbox_option", AccessibilityRole::ListBoxOption},
-        {"list_item", AccessibilityRole::ListItem},
-        {"menu", AccessibilityRole::Menu},
-        {"menu_bar", AccessibilityRole::MenuBar},
-        {"menu_item", AccessibilityRole::MenuItem},
-        {"navigation", AccessibilityRole::Navigation},
-        {"progress_indicator", AccessibilityRole::ProgressIndicator},
-        {"radio", AccessibilityRole::RadioButton},
-        {"radio_group", AccessibilityRole::RadioGroup},
-        {"region", AccessibilityRole::Region},
-        {"row", AccessibilityRole::Row},
-        {"row_group", AccessibilityRole::RowGroup},
-        {"slider", AccessibilityRole::Slider},
-        {"spin_button", AccessibilityRole::SpinButton},
-        {"switch", AccessibilityRole::Switch},
-        {"tab", AccessibilityRole::Tab},
-        {"table", AccessibilityRole::Table},
-        {"tab_list", AccessibilityRole::TabList},
-        {"toolbar", AccessibilityRole::Toolbar},
-        {"tooltip", AccessibilityRole::Tooltip},
-    };
-    for (const NamedRole& role : roles) {
-        if (StrEq(name, role.name)) return role.role;
-    }
-    return AccessibilityRole::None;
 }
 
 static void ResolveBehavior(const shell::SpecNode* node,
@@ -1729,11 +1684,12 @@ static El* MaterializeNode(Ctx* cx, ShellRuntime* runtime,
     if (behavior.key) element->PathId(behavior.key);
     if (behavior.accessibilityLabel) element->AriaLabel(behavior.accessibilityLabel);
     if (behavior.role) {
-        AccessibilityRole role = RoleOf(behavior.role);
+        AccessibilityRole role = shell::AccessibilityRoleFromName(behavior.role);
         if (role != AccessibilityRole::None) element->Role(role);
     }
     if (behavior.hasAriaSelected)
         element->AriaSelected(behavior.ariaSelected);
+    if (behavior.ariaActiveDescendant) element->AriaActiveDescendant();
     if (behavior.hasPosition) {
         element->AriaPositionInSet(behavior.positionInSet)
             ->AriaSizeOfSet(behavior.sizeOfSet);

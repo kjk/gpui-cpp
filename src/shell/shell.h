@@ -1,7 +1,10 @@
 #ifndef GPUI_SHELL_H_
 #define GPUI_SHELL_H_
 
+#include "shell/a11y.h"
 #include "shell/capability.h"
+#include "shell/dock.h"
+#include "shell/assets.h"
 #include "shell/error.h"
 #include "shell/fetch.h"
 #include "shell/filesystem.h"
@@ -9,6 +12,7 @@
 #include "shell/metrics.h"
 #include "shell/policy.h"
 #include "shell/process.h"
+#include "shell/root.h"
 #include "shell/retained.h"
 #include "shell/runtime.h"
 #include "shell/materialize.h"

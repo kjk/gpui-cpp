@@ -70,6 +70,11 @@ struct JsonWriter {
     void Bool(const char* key, bool v);
     void String(const char* key, Str v);
     void Null(const char* key);
+    // A caller that already validated a complete JSON value may preserve it
+    // without turning it into a quoted string. Value writes a parsed tree in
+    // canonical compact form and is the safe way to produce such text.
+    void Raw(const char* key, Str json);
+    void Value(const char* key, const JsonValue* value);
 };
 
 } // namespace gpui

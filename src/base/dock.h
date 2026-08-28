@@ -167,6 +167,8 @@ enum class DockPanelStyle : uint8_t {
     TabBar
 };
 
+struct PanelStateNode;
+
 // One panel the host handed the dock. Rust splits this across Base's behavior
 // trait and UI's presentation trait, then carries both through a concrete
 // PanelHandle. C++ has no trait objects, so the same object-safe seam is this
@@ -178,6 +180,7 @@ struct DockPanelDef {
     // shows, and it can change while the name cannot.
     Str name = {};
     Str title = {};
+    PanelId id = {};
     El* (*render)(Ctx* cx, void* data) = nullptr;
     // ui::Panel::title: an element rather than a string, so a title may carry
     // an icon, badge or styled fragments. Null falls back to `title`.
@@ -196,6 +199,10 @@ struct DockPanelDef {
     // ui::Panel::dropdown_menu. The menu is deliberately opaque here: Base
     // must not depend on the themed PopupMenu type.
     void (*dropdownMenu)(Ctx* cx, void* data, void* menu) = nullptr;
+    // Panel::dump: lets a dynamic panel attach its own serialized JSON value
+    // to the persisted leaf. `PanelState::infoIsJson` distinguishes raw JSON
+    // from the legacy string payload used by native panels.
+    void (*dump)(void* data, PanelStateNode* out) = nullptr;
     // Panel::tab_name(): the short label a tab shows when the title is too
     // much for one. Empty falls back to the title, and the single-panel title
     // row always shows the title.
