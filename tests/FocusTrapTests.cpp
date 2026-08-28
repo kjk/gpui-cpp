@@ -165,9 +165,10 @@ static void ThePublicContainerRefinesItsElement() {
     ArenaDelete(a);
 }
 
-// FocusHandle::tab_stop(false): still focusable, still shows its ring when it
-// is clicked, simply not somewhere Tab stops. An input's clear button and a
-// dock tab bar's tools are what Rust turns it off for.
+// FocusHandle::tab_stop(false): still focusable, simply not somewhere Tab
+// stops. Whether it has a focus appearance is a separate UI-layer choice. An
+// input's clear button and a dock tab bar's tools are what Rust turns it off
+// for.
 static void TabSkipsWhatIsNotAStop() {
     int ids[] = {1, 2, 3};
     int traps[] = {0, 0, 0};

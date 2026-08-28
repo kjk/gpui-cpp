@@ -421,7 +421,8 @@ El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected) {
                 ->JustifyCenter()
                 ->Radius(th.radius)
                 ->Click(clickId)
-                ->FocusId(clickId);
+                ->FocusId(clickId)
+                ->FocusRing(true);
     if (kind == BtnKind::Primary) {
         b->PadX(16)
             ->PadY(8)
@@ -5368,7 +5369,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         ctx->scrolls.Append(sr);
     }
 
-    // focus_ring_style: a focused control's own border takes the ring colour.
+    // focus_ring_style: a focused control that explicitly opted in has its
+    // own border take the ring colour.
     // That is the half of the focus appearance that costs no room, and the
     // half Rust keeps when a theme turns the ring off. The element is this
     // frame's arena copy, so writing the colour onto it is what Rust's
@@ -5906,9 +5908,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // The other half of focus_ring_style: FOCUS_RING_WIDTH of the ring
         // colour at FOCUS_RING_OPACITY, in the three DIPs immediately outside
         // the element's border, with the corners widened to match. Rust hangs
-        // it off `is_focused` alone — a control focused by a click shows it as
-        // much as one reached with Tab — and paints it as an absolutely
-        // placed child, which an ancestor that clips will cut off either way.
+        // it off the control's focus state after the UI layer explicitly calls
+        // focus_ring_style — a control focused by a click shows it as much as
+        // one reached with Tab — and paints it as an absolutely placed child,
+        // which an ancestor that clips will cut off either way.
         // Which is why `Theme::focus_ring` exists: an application that clips
         // its containers turns the ring off and keeps the border above.
         Bounds ring = e->Bounds().Inset(-kFocusRingWidth);

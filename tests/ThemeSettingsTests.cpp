@@ -238,16 +238,19 @@ static void StyledThemeChangesProjectIntoTheRuntimeSeam() {
     AppGlobalClear(&app);
 }
 
-// FocusableExt::focus_ring, which carries state and nothing else: the
-// element remembers the answer, and the paint is what reads it.
-static void AControlCanDeclineTheFocusAppearance() {
+// GPUI's track_focus carries keyboard focus and nothing visual. The UI layer
+// calls focus_ring_style only on controls whose design asks for it, so a raw
+// focusable element must opt into the equivalent appearance here.
+static void AFocusableElementMustRequestTheFocusAppearance() {
     Arena* a = ArenaNew();
     El* e = Div(a)->FocusId(7);
+    utassert(!e->style.focusRing);
+    e->FocusRing();
     utassert(e->style.focusRing);
     e->FocusRing(false);
     utassert(!e->style.focusRing);
-    // Declining the appearance is not declining focus: the element keeps its
-    // handle, so Tab still reaches it and Enter still fires.
+    // Appearance never changes focus: the element keeps its handle, so Tab
+    // still reaches it and Enter still fires.
     utassert(e->style.focusId == 7);
     ArenaDelete(a);
 }
@@ -255,7 +258,7 @@ static void AControlCanDeclineTheFocusAppearance() {
 void TestThemeSettings() {
     TestSuite("theme settings");
     TheFocusRingIsOnUntilAnApplicationTurnsItOff();
-    AControlCanDeclineTheFocusAppearance();
+    AFocusableElementMustRequestTheFocusAppearance();
     TheLargeRadiusFollowsTheSmallOne();
     TheFontSizeIsTheOneEverythingIsMeasuredAgainst();
     TheScrollbarModeIsTheThemesUntilAnElementSaysOtherwise();

@@ -9826,3 +9826,17 @@ retain their portable parsing and policy assertions under wasm, explicitly
 check that browser filesystem access is unavailable, and leave directory
 mutation/discovery coverage to the three hosted platforms. The release suite
 passes 20,652 wasm checks under Node and 21,433 checks on Windows.
+
+## Focus routing no longer implies a focus ring
+
+Raw elements now default to no focus appearance. `FocusId` and `TrackFocus`
+only put an element in the keyboard focus graph, matching GPUI; Rust draws a
+ring only where the UI layer explicitly calls `focus_ring_style`. This removes
+the unintended outline around focus-owning containers such as popup menus,
+menu bars and the story gallery's appearance-less search wrapper. The themed
+controls retain their own `FocusRing` option (enabled by default), and a custom
+raw control opts in with `El::FocusRing()` after giving itself a `FocusId` or
+`TrackFocus` handle. The application theme's `ThemeSetFocusRing` remains the
+global geometry switch for controls that opted in; it does not make arbitrary
+focused containers draw a ring. MSVC release passes 21,434 checks and the full
+story target builds.

@@ -1429,11 +1429,12 @@ struct Style {
     // reads — "Editor", or "Editor mode=full". Hashed, since that is all an
     // id is; KeyContextOf keeps the parse behind the hash.
     uint32_t keyContext = 0;
-    // FocusableExt::focus_ring: whether a focused element shows the focus
-    // appearance at all. Rust gates the whole `focus_ring_style` call on it,
-    // so turning it off drops the tinted border along with the ring — a
-    // control that draws its own focus some other way wants neither.
-    bool focusRing = true;
+    // Whether this focused element asked for the component focus appearance.
+    // FocusId / TrackFocus only route keyboard input; Rust draws no generic
+    // outline for them. A themed control calls focus_ring_style explicitly,
+    // which is El::FocusRing(true) here. Turning it off drops the tinted
+    // border along with the outside ring.
+    bool focusRing = false;
     int trapId = 0;
     Str tooltip;
 };
@@ -2357,7 +2358,10 @@ struct El {
     El* OnKeyDown(Listener fn);
     El* TabIndex(int v);
     El* TabStop(bool v);
-    El* FocusRing(bool v);
+    // Opt into the component focus appearance. FocusId / TrackFocus alone do
+    // not paint anything, matching GPUI's separation between focus routing
+    // and the UI layer's explicit focus_ring_style.
+    El* FocusRing(bool v = true);
     El* TrapId(int v);
     El* Tip(Str s);
     El* Id(Str s);
