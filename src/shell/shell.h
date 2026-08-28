@@ -11,6 +11,7 @@
 #include "shell/host_modules.h"
 #include "shell/metrics.h"
 #include "shell/policy.h"
+#include "shell/plugin.h"
 #include "shell/process.h"
 #include "shell/root.h"
 #include "shell/retained.h"

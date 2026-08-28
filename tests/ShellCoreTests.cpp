@@ -2064,6 +2064,170 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     ArenaDelete(persisted);
 }
 
+static bool ShellFixtureFs(FsOperation operation, Str root, Str relative,
+                           Str input = {}, bool recursive = false) {
+    FsResult result;
+    Str error;
+    bool ok = FsRun(operation, root, relative, input, recursive, &result,
+                    &error);
+    result.Free();
+    StrFree(error);
+    return ok;
+}
+
+static bool AuthorizePlugin(const PluginManifest*, void* data) {
+    return *(bool*)data;
+}
+
+static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
+    const Str valid = StrL(
+        "{"
+        "\"id\":\"com.example.inbox\","
+        "\"name\":\"Inbox\","
+        "\"version\":\"1.2.0\","
+        "\"shell-version\":\"0.1.0\","
+        "\"entry\":\"main.js\","
+        "\"capabilities\":{"
+        "\"fs\":{\"read\":[\"${pluginDir}\",\"${dataDir}\"],\"write\":[\"${dataDir}\"],\"execute\":[\"git\"]},"
+        "\"network\":{\"hosts\":[\"api.example.com\"],\"http\":[{\"host\":\"readonly.example.com\",\"methods\":[\"GET\"],\"paths\":[\"/v1/account\"],\"path_prefixes\":[\"/v1/quotes/\"]}]},"
+        "\"storage\":true,\"clipboard\":{\"write\":true},\"process\":{\"exit\":true}"
+        "}}" );
+    ShellError error = {};
+    PluginManifest manifest;
+    utassert(PluginManifestParse(valid, &manifest, &error));
+    utassert(!error.IsSet() && StrEq(manifest.id, "com.example.inbox") &&
+             StrEq(manifest.name, "Inbox") &&
+             StrEq(manifest.version, "1.2.0") &&
+             StrEq(manifest.shellVersion, kShellVersion) &&
+             StrEq(manifest.entry, "main.js"));
+    Capabilities granted =
+        manifest.Grant(StrL("plugin-root"), StrL("data-root"));
+    utassert(granted.HasReadAccess() && granted.HasWriteAccess() &&
+             granted.HasStorage() && granted.MayRun(StrL("git")) &&
+             granted.MayReach(StrL("API.EXAMPLE.COM")) &&
+             granted.MayRequest(StrL("https"),
+                                StrL("readonly.example.com"), 443, false,
+                                StrL("GET"), StrL("/v1/quotes/MSFT")) &&
+             granted.IsClipboardWritable() && granted.MayExit());
+
+    PluginManifest omitted;
+    utassert(PluginManifestParse(
+        StrL("{\"id\":\"com.example.empty\",\"name\":\"Empty\",\"entry\":\"main.js\"}"),
+        &omitted, &error));
+    Capabilities defaultGrant = omitted.Grant(StrL("plugin"), StrL("data"));
+    utassert(defaultGrant.HasStorage() && !defaultGrant.HasReadAccess() &&
+             !defaultGrant.MayExit());
+
+    PluginManifest badField;
+    utassert(!PluginManifestParse(
+        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"main.js\",\"capabilites\":{}}"),
+        &badField, &error));
+    utassert(StrContains(error.message, StrL("unknown field")));
+    ShellErrorClear(&error);
+    PluginManifest badId;
+    utassert(!PluginManifestParse(
+        StrL("{\"id\":\"../bad\",\"name\":\"Bad\",\"entry\":\"main.js\"}"),
+        &badId, &error));
+    utassert(StrContains(error.message, StrL("invalid `id`")));
+    ShellErrorClear(&error);
+    PluginManifest badEntry;
+    utassert(!PluginManifestParse(
+        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"../main.js\"}"),
+        &badEntry, &error));
+    utassert(StrContains(error.message, StrL("invalid `entry`")));
+    ShellErrorClear(&error);
+    PluginManifest badPlaceholder;
+    utassert(!PluginManifestParse(
+        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"main.js\",\"capabilities\":{\"fs\":{\"read\":[\"${otherDir}\"]}}}"),
+        &badPlaceholder, &error));
+    utassert(StrContains(error.message, StrL("unknown placeholder")));
+    ShellErrorClear(&error);
+    PluginManifest future;
+    utassert(!PluginManifestParse(
+        StrL("{\"id\":\"com.example.future\",\"name\":\"Future\",\"shell-version\":\"0.2.0\",\"entry\":\"main.js\"}"),
+        &future, &error));
+    utassert(StrContains(error.message, StrL("not compatible")));
+    ShellErrorClear(&error);
+
+    const Str container = StrL("shell_plugin_container_test");
+    const Str pluginDir = StrL("shell_plugin_container_test/mail");
+    const Str brokenDir = StrL("shell_plugin_container_test/broken");
+    const Str dataDir = StrL("shell_plugin_data_test");
+    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), container, {},
+                   true);
+    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), dataDir, {},
+                   true);
+    utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), pluginDir,
+                            {}, true));
+    utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), brokenDir,
+                            {}, true));
+    utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), dataDir,
+                            {}, true));
+    const Str fixtureManifest = StrL(
+        "{\"id\":\"com.example.plugin\",\"name\":\"Plugin\",\"version\":\"1.0.0\",\"shell-version\":\"0.1.0\",\"entry\":\"main.js\",\"capabilities\":{\"fs\":{\"read\":[\"${pluginDir}\"]},\"storage\":true}}" );
+    utassert(ShellFixtureFs(FsOperation::Write, pluginDir,
+                            Str(kShellManifestFile), fixtureManifest));
+    utassert(ShellFixtureFs(
+        FsOperation::Write, pluginDir, StrL("main.js"),
+        StrL("import { View, div } from 'gpui'; globalThis.pluginExecuted = true; export default class Plugin extends View { render() { return div().child('plugin'); } }")));
+    utassert(ShellFixtureFs(FsOperation::Write, brokenDir,
+                            Str(kShellManifestFile), StrL("{broken")));
+
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    PluginManager manager(container);
+    manager.DataHome(dataDir);
+    const Vec<PluginDiscovery>& discovered = manager.Discover();
+    utassert(discovered.len == 2);
+    int good = 0, broken = 0;
+    for (int i = 0; i < discovered.len; i++) {
+        good += discovered[i].manifest != nullptr;
+        broken += discovered[i].error.s != nullptr;
+    }
+    utassert(good == 1 && broken == 1);
+    bool approved = false;
+    utassert(!manager.Load(runtime, StrL("com.example.plugin"),
+                           AuthorizePlugin, &approved, &window, &app,
+                           &error));
+    utassert(StrContains(error.message, StrL("not approved")) &&
+             runtime->LiveTasks() == 0);
+    ShellErrorClear(&error);
+    approved = true;
+    utassert(manager.Load(runtime, StrL("com.example.plugin"),
+                          AuthorizePlugin, &approved, &window, &app, &error));
+    const Plugin* loaded = manager.Loaded(StrL("com.example.plugin"));
+    utassert(loaded && loaded->view.IsValid() && loaded->policy &&
+             PolicyCapabilities(loaded->policy).HasReadAccess() &&
+             PolicyCapabilities(loaded->policy).HasStorage() &&
+             StrContains(loaded->dataDirectory,
+                         StrL("gpui-shell")));
+    utassert(manager.Unload(StrL("com.example.plugin"), &app));
+    utassert(!manager.Loaded(StrL("com.example.plugin")) &&
+             !manager.Unload(StrL("com.example.plugin"), &app));
+
+    runtime->Release();
+    AppGlobalClear(&app);
+    ShellFixtureFs(FsOperation::RemoveFile, pluginDir,
+                   Str(kShellManifestFile));
+    ShellFixtureFs(FsOperation::RemoveFile, pluginDir, StrL("main.js"));
+    ShellFixtureFs(FsOperation::RemoveFile, brokenDir,
+                   Str(kShellManifestFile));
+    ShellFixtureFs(FsOperation::RemoveDirectory, container, StrL("mail"));
+    ShellFixtureFs(FsOperation::RemoveDirectory, container, StrL("broken"));
+    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), container);
+    ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
+                   StrL("gpui-shell/plugins/com.example.plugin"));
+    ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
+                   StrL("gpui-shell/plugins"));
+    ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
+                   StrL("gpui-shell"));
+    ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), dataDir);
+    ShellErrorClear(&error);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -2098,4 +2262,5 @@ void TestShellCore() {
     ShellFetchChecksEveryGetTargetBeforeContact();
     ShellAccessibilityRolesMirrorUpstream();
     ShellDockPanelsPersistAndChromeRunsInLayoutScope();
+    ShellPluginManifestsDiscoverAuthorizeAndUnload();
 }
