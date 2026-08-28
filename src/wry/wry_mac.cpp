@@ -33,7 +33,28 @@
 #include "wry/wry.h"
 
 #import <Cocoa/Cocoa.h>
-#import <WebKit/WebKit.h>
+// WebKit.h also imports WebKitLegacy, whose Objective-C JSContext and JSValue
+// classes collide with QuickJS's C API when the dist build puts every source
+// in one translation unit. Wry uses only the modern WK API, so include that
+// surface directly and keep the legacy JavaScriptCore bridge out.
+#import <WebKit/WKFrameInfo.h>
+#import <WebKit/WKNavigation.h>
+#import <WebKit/WKNavigationAction.h>
+#import <WebKit/WKNavigationDelegate.h>
+#import <WebKit/WKOpenPanelParameters.h>
+#import <WebKit/WKPreferences.h>
+#import <WebKit/WKScriptMessage.h>
+#import <WebKit/WKScriptMessageHandler.h>
+#import <WebKit/WKSecurityOrigin.h>
+#import <WebKit/WKUIDelegate.h>
+#import <WebKit/WKURLSchemeHandler.h>
+#import <WebKit/WKURLSchemeTask.h>
+#import <WebKit/WKUserContentController.h>
+#import <WebKit/WKUserScript.h>
+#import <WebKit/WKWebView.h>
+#import <WebKit/WKWebViewConfiguration.h>
+#import <WebKit/WKWebsiteDataStore.h>
+#import <WebKit/WKWindowFeatures.h>
 
 @class GpuiWryScriptHandler;
 @class GpuiWryNavigationDelegate;

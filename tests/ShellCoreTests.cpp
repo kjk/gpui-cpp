@@ -784,6 +784,14 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
              StrContains(text, StrL("export function open(...args: HostValue[]): HostValue;")) &&
              StrContains(text, StrL("export function search(...args: HostValue[]): Promise<HostValue>;")));
 
+#if GPUI_OS_WASM
+    // Browsers have no writable application directory to refresh. The
+    // declarations themselves are still generated and checked above.
+    StrFree(text);
+    HostModulesRelease(modules);
+    return;
+#endif
+
     const char* rootName = "shell_types_test_root";
     remove("shell_types_test_root/gpui.d.ts");
     remove("shell_types_test_root/nested/gpui.d.ts");
@@ -841,6 +849,11 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
 }
 
 static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
+#if GPUI_OS_WASM
+    // LoadApp is a hosted filesystem entry point. Browser scripts enter
+    // through LoadSource instead, which the surrounding runtime tests cover.
+    return;
+#endif
     const char* depName = "shell_runtime_dep.js";
     const char* mainName = "shell_runtime_main.js";
     const char* badName = "shell_runtime_bad.js";
@@ -1744,6 +1757,18 @@ static void ShellProcessRunIsBoundedAndPromiseBased() {
 }
 
 static void ShellFilesystemUsesGrantedHandleRelativePaths() {
+#if GPUI_OS_WASM
+    FsResult unavailable;
+    Str unavailableError;
+    utassert(!FsRun(FsOperation::Read, StrL("application"),
+                    StrL("note.txt"), {}, false, &unavailable,
+                    &unavailableError));
+    utassert(StrContains(unavailableError,
+                         StrL("unavailable in a browser")));
+    unavailable.Free();
+    StrFree(unavailableError);
+    return;
+#endif
     const char* rootName = "shell_fs_test_root";
 #if GPUI_OS_WINDOWS
     RemoveDirectoryA(rootName);
@@ -1852,6 +1877,11 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
 }
 
 static void ShellAssetsStayInsideTheApplicationRoot() {
+#if GPUI_OS_WASM
+    // Browser assets are the build's preloaded MEMFS snapshot, not roots a
+    // shell script may install or mutate at runtime.
+    return;
+#endif
     const char* rootName = "shell_asset_test_root";
 #if GPUI_OS_WINDOWS
     RemoveDirectoryA(rootName);
@@ -2344,6 +2374,12 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
         &future, &error));
     utassert(StrContains(error.message, StrL("not compatible")));
     ShellErrorClear(&error);
+
+#if GPUI_OS_WASM
+    // Manifest parsing and grants are platform-independent and checked above.
+    // Discovery and installation require hosted filesystem roots.
+    return;
+#endif
 
     const Str container = StrL("shell_plugin_container_test");
     const Str pluginDir = StrL("shell_plugin_container_test/mail");

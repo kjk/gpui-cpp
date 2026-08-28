@@ -806,9 +806,33 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     }
     int index = 0;
     int trailing = 0;
-    pango_layout_xy_to_index(tl->layout, (int)(relX * PANGO_SCALE),
-                             (int)((relY - BoxPad(tl)) * PANGO_SCALE), &index,
-                             &trailing);
+    int px = (int)(relX * PANGO_SCALE);
+    bool inside = pango_layout_xy_to_index(
+        tl->layout, px, (int)((relY - BoxPad(tl)) * PANGO_SCALE), &index,
+        &trailing);
+    // Outside a wrapped row Pango returns the nearest glyph's leading edge,
+    // not the nearest caret edge: a click past the right side can therefore
+    // land one character before the wrap. Clamp x against the visual line
+    // Pango selected from y, matching DirectWrite/CoreText hit testing.
+    if (!inside) {
+        int lineNo = 0;
+        int lineX = 0;
+        pango_layout_index_to_line_x(tl->layout, index, FALSE, &lineNo,
+                                     &lineX);
+        PangoLayoutLine* line =
+            pango_layout_get_line_readonly(tl->layout, lineNo);
+        if (line) {
+            PangoRectangle logical = {};
+            pango_layout_line_get_extents(line, nullptr, &logical);
+            if (px <= logical.x) {
+                index = line->start_index;
+                trailing = 0;
+            } else if (px >= logical.x + logical.width) {
+                index = line->start_index + line->length;
+                trailing = 0;
+            }
+        }
+    }
     // `trailing` counts characters past `index` the point fell after.
     const char* text = pango_layout_get_text(tl->layout);
     while (trailing > 0 && text && text[index]) {

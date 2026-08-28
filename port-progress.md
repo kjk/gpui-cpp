@@ -9806,3 +9806,23 @@ Base types (`OtpEvent` and `ThemeAppearance`) already have direct C++ ports;
 Rust's new `TextViewPrepaintState` is explicitly mapped to this runtime's fused
 `El` paint walk, which owns the generic hit-test entry and line-clamp clip.
 Both the complete Rust-tree audit and CI's checkout-free audit pass.
+
+## Cross-platform CI fixes after the soft-wrap affinity test
+
+Linux text hit testing now clamps a point outside a wrapped Pango row to that
+row's visual start or end. Pango otherwise reports the leading edge of the
+nearest final glyph, putting an end-of-row click one byte before the soft-wrap
+boundary. The release suite passes all 21,412 checks under WSL.
+
+The macOS wry backend imports the modern WK headers it uses instead of the
+WebKit umbrella. The umbrella also imports WebKitLegacy, whose Objective-C
+`JSContext` and `JSValue` declarations collide with QuickJS's C types when the
+published amalgam is compiled as one translation unit.
+
+The wasm suite no longer spells an overloaded self-assignment that Clang
+rejects under `-Werror`, and its Node runner has a deterministic text measurer
+for layout-only tests when no DOM canvas exists. Hosted-filesystem Shell tests
+retain their portable parsing and policy assertions under wasm, explicitly
+check that browser filesystem access is unavailable, and leave directory
+mutation/discovery coverage to the three hosted platforms. The release suite
+passes 20,652 wasm checks under Node and 21,433 checks on Windows.

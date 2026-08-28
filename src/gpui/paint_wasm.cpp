@@ -161,10 +161,56 @@ EM_JS(void, GpJsInit, (), {
     };
     G.measurer = function() {
         if (!G.meas) {
-            const c = document.createElement("canvas");
-            c.width = 8;
-            c.height = 8;
-            G.meas = c.getContext("2d");
+            if (typeof document !== "undefined") {
+                const c = document.createElement("canvas");
+                c.width = 8;
+                c.height = 8;
+                G.meas = c.getContext("2d");
+            } else {
+                // The wasm tests run under Node, where there is no DOM. They
+                // still exercise wrapping and hit testing, so give them a
+                // stable Canvas2D-shaped measurer. A browser always takes the
+                // real canvas branch above; this never affects rendered text.
+                G.meas = {
+                    font: "400 16px sans-serif",
+                    measureText: function(s) {
+                        const font = this.font || "400 16px sans-serif";
+                        const marker = font.indexOf("px");
+                        let start = marker;
+                        while (start > 0) {
+                            const code = font.charCodeAt(start - 1);
+                            if ((code < 48 || code > 57) && code !== 46) {
+                                break;
+                            }
+                            start--;
+                        }
+                        const parsed = marker > start
+                            ? Number(font.slice(start, marker)) : 16;
+                        const px = parsed > 0 ? parsed : 16;
+                        let units = 0;
+                        for (let i = 0; i < s.length; i++) {
+                            const code = s.charCodeAt(i);
+                            if (code === 9) {
+                                units += 4;
+                            } else if (code === 32) {
+                                units += 0.33;
+                            } else if (code >= 0xd800 && code < 0xdc00) {
+                                units += 1;
+                                i++;
+                            } else if (code < 0x80) {
+                                units += 0.6;
+                            } else {
+                                units += 1;
+                            }
+                        }
+                        return {
+                            width: units * px,
+                            fontBoundingBoxAscent: px * 0.8,
+                            fontBoundingBoxDescent: px * 0.2
+                        };
+                    }
+                };
+            }
         }
         return G.cur || G.meas;
     };

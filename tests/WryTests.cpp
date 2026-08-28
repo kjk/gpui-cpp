@@ -8,6 +8,11 @@
 
 #include "Test.h"
 
+static void AssignWebViewHandle(WebViewHandle* to,
+                                const WebViewHandle* from) {
+    *to = *from;
+}
+
 void TestWryUri() {
     TestSuite("wry_uri");
 
@@ -19,7 +24,9 @@ void TestWryUri() {
     utassert(handle.Raw() == nullptr);
     WebViewHandle copy = handle;
     utassert(!copy.IsValid());
-    copy = copy;
+    // Keep the self-assignment path covered without spelling `copy = copy`,
+    // which Clang diagnoses under -Wself-assign-overloaded before it inlines.
+    AssignWebViewHandle(&copy, &copy);
     utassert(copy.Raw() == nullptr);
     WebViewHandle assigned;
     assigned = copy;
