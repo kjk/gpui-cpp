@@ -589,7 +589,7 @@ static int ComparePaths(const void* left, const void* right) {
     return compared ? compared : a->len - b->len;
 }
 
-static Str DefaultDataHome() {
+Str ShellDataHome() {
     const char* explicitHome = getenv("XDG_DATA_HOME");
     if (explicitHome && *explicitHome) return StrDup(Str(explicitHome));
 #if GPUI_OS_WINDOWS
@@ -614,7 +614,61 @@ static Str DefaultDataHome() {
     return path.TakeStr();
 }
 
-PluginManager::PluginManager() : dataHome(DefaultDataHome()) {}
+Str ShellBundleIdForPath(Str root) {
+    uint64_t hash = 0xcbf29ce484222325ull;
+    for (int i = 0; i < root.len; i++) {
+        hash ^= (uint8_t)root.s[i];
+        hash *= 0x100000001b3ull;
+    }
+    int start = root.len;
+    while (start > 0 && root.s[start - 1] != '/' &&
+           root.s[start - 1] != '\\')
+        start--;
+    Str name(root.s + start, root.len - start);
+    StrBuilder safe;
+    bool previousDot = false;
+    for (int i = 0; i < name.len; i++) {
+        char ch = name.s[i];
+        if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + ('a' - 'A'));
+        bool allowed = (ch >= 'a' && ch <= 'z') ||
+                       (ch >= '0' && ch <= '9') || ch == '.' || ch == '-' ||
+                       ch == '_';
+        if (!allowed) ch = '-';
+        if (ch == '.' && previousDot) ch = '-';
+        safe.AppendChar(ch);
+        previousDot = ch == '.';
+    }
+    while (safe.len > 0 && (safe.els[0] == '.' || safe.els[0] == '-' ||
+                            safe.els[0] == '_')) {
+        memmove(safe.els, safe.els + 1, (size_t)--safe.len);
+    }
+    while (safe.len > 0 &&
+           (safe.els[safe.len - 1] == '.' || safe.els[safe.len - 1] == '-' ||
+            safe.els[safe.len - 1] == '_'))
+        safe.len--;
+    if (safe.len == 0) safe.Append(StrL("app"));
+    char digest[24];
+    snprintf(digest, sizeof(digest), "-%016llx",
+             (unsigned long long)hash);
+    safe.Append(Str(digest));
+    return safe.TakeStr();
+}
+
+Str ShellAppDataDirectory(Str id, Arena* arena, ShellError* error) {
+    ShellErrorClear(error);
+    if (!ValidId(id)) {
+        SetError(error, fmt("`%s` is not a usable application identity", id));
+        return {};
+    }
+    Str home = ShellDataHome();
+    Str first = Join(arena, home, StrL("gpui-shell"));
+    Str second = Join(arena, first, StrL("apps"));
+    Str result = Join(arena, second, id);
+    StrFree(home);
+    return result;
+}
+
+PluginManager::PluginManager() : dataHome(ShellDataHome()) {}
 PluginManager::PluginManager(Str directory) : PluginManager() {
     AddDirectory(directory);
 }

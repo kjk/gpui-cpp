@@ -1,5 +1,6 @@
 #include "shell/runtime.h"
 
+#include "base/theme.h"
 #include "quickjs/quickjs.h"
 #include "shell/a11y.h"
 #include "shell/fetch.h"
@@ -11,6 +12,7 @@
 #include "shell/root.h"
 #include "shell/scope.h"
 #include "shell/standard.h"
+#include "shell/theme_tokens.h"
 #include "shell/view.h"
 
 #include <math.h>
@@ -3305,6 +3307,468 @@ static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
     return JS_NewUint32(ctx, result);
 }
 
+// Shell's Rust snapshot rounds each Hsla channel to the nearest byte. The
+// general C++ palette conversion intentionally truncates to match Colorize,
+// so keep this API-specific rule here and preserve exact script hex colors.
+static uint8_t ShellThemeByte(float value) {
+    if (value <= 0) return 0;
+    if (value >= 1) return 255;
+    return (uint8_t)floorf(value * 255.f + 0.5f);
+}
+
+static Rgba ShellThemeRgba(Hsla color) {
+    float h = color.h, s = color.s, l = color.l;
+    float k = (1.f - fabsf(2.f * l - 1.f)) * s;
+    float x = k * (1.f - fabsf(fmodf(h * 6.f, 2.f) - 1.f));
+    float m = l - k * 0.5f;
+    float km = k + m;
+    float xm = x + m;
+    float r = 0, g = 0, b = 0;
+    switch ((int)floorf(h * 6.f)) {
+        case 0:
+        case 6:
+            r = km, g = xm, b = m;
+            break;
+        case 1:
+            r = xm, g = km, b = m;
+            break;
+        case 2:
+            r = m, g = km, b = xm;
+            break;
+        case 3:
+            r = m, g = xm, b = km;
+            break;
+        case 4:
+            r = xm, g = m, b = km;
+            break;
+        default:
+            r = km, g = m, b = xm;
+            break;
+    }
+    return Rgba8(ShellThemeByte(r), ShellThemeByte(g), ShellThemeByte(b),
+                 ShellThemeByte(color.a));
+}
+
+static void AppendThemeColor(StrBuilder* out, Str name, bool comma) {
+    Hsla color = {};
+    if (!shell::ThemeTokenColor(name, &color)) return;
+    Rgba rgba = ShellThemeRgba(color);
+    if (comma) out->AppendChar(',');
+    out->Append(fmt("\"%s\":\"#%02x%02x%02x\"", name, rgba.r, rgba.g,
+                    rgba.b));
+}
+
+static void AppendThemeColors(StrBuilder* out) {
+    int offset = 0;
+    int index = 0;
+    while (offset >= 0) {
+        Str name = SeqStrAt(shell::ThemeColorTokenNames(), offset);
+        if (!name) break;
+        AppendThemeColor(out, name, index++ > 0);
+        SeqStrAdvance(shell::ThemeColorTokenNames(), offset);
+    }
+}
+
+static void AppendThemeScale(StrBuilder* out, SeqStrings names,
+                             bool (*value)(Str, float*)) {
+    int offset = 0;
+    int index = 0;
+    while (offset >= 0) {
+        Str name = SeqStrAt(names, offset);
+        if (!name) break;
+        float number = 0;
+        if (value(name, &number)) {
+            if (index++) out->AppendChar(',');
+            out->Append(fmt("\"%s\":%g", name, number));
+        }
+        SeqStrAdvance(names, offset);
+    }
+}
+
+static bool ThemeRequiredProperty(JSContext* ctx, JSValueConst object,
+                                  const char* key, JSValue* out,
+                                  const char* container) {
+    *out = JS_GetPropertyStr(ctx, object, key);
+    if (JS_IsException(*out)) return false;
+    if (!JS_IsUndefined(*out)) return true;
+    JS_FreeValue(ctx, *out);
+    *out = JS_UNDEFINED;
+    JS_ThrowTypeError(ctx, "%s is missing `%s`", container, key);
+    return false;
+}
+
+static bool SetThemeColor(ColorTokens* colors, Str name, Rgba value) {
+    if (StrEq(name, "background"))
+        colors->background = value;
+    else if (StrEq(name, "foreground"))
+        colors->foreground = value;
+    else if (StrEq(name, "surface"))
+        colors->surface = value;
+    else if (StrEq(name, "surface_foreground"))
+        colors->surfaceForeground = value;
+    else if (StrEq(name, "primary"))
+        colors->primary = value;
+    else if (StrEq(name, "primary_foreground"))
+        colors->primaryForeground = value;
+    else if (StrEq(name, "secondary"))
+        colors->secondary = value;
+    else if (StrEq(name, "secondary_foreground"))
+        colors->secondaryForeground = value;
+    else if (StrEq(name, "muted"))
+        colors->muted = value;
+    else if (StrEq(name, "muted_foreground"))
+        colors->mutedForeground = value;
+    else if (StrEq(name, "accent"))
+        colors->accent = value;
+    else if (StrEq(name, "accent_foreground"))
+        colors->accentForeground = value;
+    else if (StrEq(name, "destructive"))
+        colors->destructive = value;
+    else if (StrEq(name, "destructive_foreground"))
+        colors->destructiveForeground = value;
+    else if (StrEq(name, "border"))
+        colors->border = value;
+    else if (StrEq(name, "input"))
+        colors->input = value;
+    else if (StrEq(name, "ring"))
+        colors->ring = value;
+    else
+        return false;
+    return true;
+}
+
+static bool SetThemeSpacing(SpacingTokens* spacing, Str name, float value) {
+    if (StrEq(name, "xxs"))
+        spacing->xxs = value;
+    else if (StrEq(name, "xs"))
+        spacing->xs = value;
+    else if (StrEq(name, "sm"))
+        spacing->sm = value;
+    else if (StrEq(name, "md"))
+        spacing->md = value;
+    else if (StrEq(name, "lg"))
+        spacing->lg = value;
+    else if (StrEq(name, "xl"))
+        spacing->xl = value;
+    else if (StrEq(name, "xxl"))
+        spacing->xxl = value;
+    else
+        return false;
+    return true;
+}
+
+static bool SetThemeRadius(RadiusTokens* radius, Str name, float value) {
+    if (StrEq(name, "none"))
+        radius->none = value;
+    else if (StrEq(name, "sm"))
+        radius->sm = value;
+    else if (StrEq(name, "md"))
+        radius->md = value;
+    else if (StrEq(name, "lg"))
+        radius->lg = value;
+    else if (StrEq(name, "xl"))
+        radius->xl = value;
+    else if (StrEq(name, "full"))
+        radius->full = value;
+    else
+        return false;
+    return true;
+}
+
+static bool ReadThemeColors(JSContext* ctx, JSValueConst object,
+                            ColorTokens* colors) {
+    SeqStrings names = shell::ThemeColorTokenNames();
+    int offset = 0;
+    while (offset >= 0) {
+        Str name = SeqStrAt(names, offset);
+        if (!name) break;
+        JSValue property = JS_UNDEFINED;
+        if (!ThemeRequiredProperty(ctx, object, name.s, &property,
+                                   "theme tokens.colors")) {
+            return false;
+        }
+        if (!JS_IsString(property)) {
+            JS_FreeValue(ctx, property);
+            JS_ThrowTypeError(ctx, "theme color `%.*s` must be a string",
+                              name.len, name.s);
+            return false;
+        }
+        size_t len = 0;
+        const char* text = JS_ToCStringLen(ctx, &len, property);
+        Hsla color = {};
+        ShellError error = {};
+        bool ok = text && shell::BridgedAsColor(
+                              shell::Bridged::String(Str(text, (int)len)),
+                              &color, &error);
+        if (text) JS_FreeCString(ctx, text);
+        JS_FreeValue(ctx, property);
+        if (!ok) {
+            JSValue result = JS_ThrowTypeError(
+                ctx, "theme color `%.*s`: %.*s", name.len, name.s,
+                error.message.len, error.message.s ? error.message.s : "");
+            (void)result;
+            ShellErrorClear(&error);
+            return false;
+        }
+        ShellErrorClear(&error);
+        SetThemeColor(colors, name, ShellThemeRgba(color));
+        SeqStrAdvance(names, offset);
+    }
+    return true;
+}
+
+static bool ReadThemeScale(JSContext* ctx, JSValueConst object,
+                           SeqStrings names, const char* container,
+                           SpacingTokens* spacing, RadiusTokens* radius) {
+    int offset = 0;
+    while (offset >= 0) {
+        Str name = SeqStrAt(names, offset);
+        if (!name) break;
+        JSValue property = JS_UNDEFINED;
+        if (!ThemeRequiredProperty(ctx, object, name.s, &property,
+                                   container)) {
+            return false;
+        }
+        double number = 0;
+        bool ok = JS_IsNumber(property) &&
+                  JS_ToFloat64(ctx, &number, property) == 0 &&
+                  isfinite(number) && number >= 0;
+        JS_FreeValue(ctx, property);
+        if (!ok) {
+            JS_ThrowTypeError(ctx,
+                              "theme token `%.*s` must be finite and non-negative",
+                              name.len, name.s);
+            return false;
+        }
+        if (spacing)
+            SetThemeSpacing(spacing, name, (float)number);
+        else
+            SetThemeRadius(radius, name, (float)number);
+        SeqStrAdvance(names, offset);
+    }
+    return true;
+}
+
+static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    if (shell::ScopeHasCurrent() &&
+        (shell::ScopeCurrentPhase() == ScopePhase::Render ||
+         shell::ScopeCurrentPhase() == ScopePhase::Layout)) {
+        return JS_ThrowTypeError(ctx, "set_theme(theme) cannot run during render or layout; switch themes from an event handler or task");
+    }
+    if (argc < 1 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0])) {
+        return JS_ThrowTypeError(ctx, "set_theme(theme) expects an object");
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        return JS_ThrowTypeError(ctx, "set_theme(theme) needs a live host call; call it from an event handler");
+    }
+
+    JSValue appearanceValue = JS_UNDEFINED;
+    if (!ThemeRequiredProperty(ctx, argv[0], "appearance", &appearanceValue,
+                               "theme")) {
+        return JS_EXCEPTION;
+    }
+    if (!JS_IsString(appearanceValue)) {
+        JS_FreeValue(ctx, appearanceValue);
+        return JS_ThrowTypeError(ctx,
+                                 "theme appearance must be `light` or `dark`");
+    }
+    size_t appearanceLen = 0;
+    const char* appearanceText =
+        JS_ToCStringLen(ctx, &appearanceLen, appearanceValue);
+    Str appearance(appearanceText, (int)appearanceLen);
+    bool dark = appearanceText && StrEq(appearance, StrL("dark"));
+    bool light = appearanceText && StrEq(appearance, StrL("light"));
+    if (appearanceText) JS_FreeCString(ctx, appearanceText);
+    JS_FreeValue(ctx, appearanceValue);
+    if (!dark && !light) {
+        return JS_ThrowTypeError(ctx,
+                                 "theme appearance must be `light` or `dark`");
+    }
+
+    JSValue tokensValue = JS_UNDEFINED;
+    if (!ThemeRequiredProperty(ctx, argv[0], "tokens", &tokensValue,
+                               "theme")) {
+        return JS_EXCEPTION;
+    }
+    if (!JS_IsObject(tokensValue) || JS_IsArray(tokensValue)) {
+        JS_FreeValue(ctx, tokensValue);
+        return JS_ThrowTypeError(ctx, "theme tokens must be an object");
+    }
+    JSValue colorsValue = JS_UNDEFINED;
+    JSValue spacingValue = JS_UNDEFINED;
+    JSValue radiusValue = JS_UNDEFINED;
+    bool properties =
+        ThemeRequiredProperty(ctx, tokensValue, "colors", &colorsValue,
+                              "theme tokens") &&
+        ThemeRequiredProperty(ctx, tokensValue, "spacing", &spacingValue,
+                              "theme tokens") &&
+        ThemeRequiredProperty(ctx, tokensValue, "radius", &radiusValue,
+                              "theme tokens");
+    JS_FreeValue(ctx, tokensValue);
+    if (!properties) {
+        JS_FreeValue(ctx, colorsValue);
+        JS_FreeValue(ctx, spacingValue);
+        JS_FreeValue(ctx, radiusValue);
+        return JS_EXCEPTION;
+    }
+    if (!JS_IsObject(colorsValue) || JS_IsArray(colorsValue) ||
+        !JS_IsObject(spacingValue) || JS_IsArray(spacingValue) ||
+        !JS_IsObject(radiusValue) || JS_IsArray(radiusValue)) {
+        JS_FreeValue(ctx, colorsValue);
+        JS_FreeValue(ctx, spacingValue);
+        JS_FreeValue(ctx, radiusValue);
+        return JS_ThrowTypeError(
+            ctx, "theme token colors, spacing, and radius must be objects");
+    }
+
+    BaseTheme base = BaseTheme::Global(host.GetApp());
+    SemanticThemeTokens tokens = base.tokens;
+    bool ok = ReadThemeColors(ctx, colorsValue, &tokens.colors) &&
+              ReadThemeScale(ctx, spacingValue,
+                             shell::ThemeSpacingTokenNames(),
+                             "theme tokens.spacing", &tokens.spacing,
+                             nullptr) &&
+              ReadThemeScale(ctx, radiusValue,
+                             shell::ThemeRadiusTokenNames(),
+                             "theme tokens.radius", nullptr, &tokens.radius);
+    JS_FreeValue(ctx, colorsValue);
+    JS_FreeValue(ctx, spacingValue);
+    JS_FreeValue(ctx, radiusValue);
+    if (!ok) return JS_EXCEPTION;
+
+    base.appearance = dark ? BaseThemeAppearance::Dark
+                           : BaseThemeAppearance::Light;
+    base.tokens = tokens;
+    BaseThemeSet(host.GetApp(), base);
+    shell::ThemeTokensSync(host.GetApp());
+    AppRefreshWindows(host.GetApp());
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeThemeSnapshot(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    ShellError error = {};
+    uint64_t generation = 0;
+    bool explicitGeneration = argc > 0 && !JS_IsUndefined(argv[0]);
+    if (explicitGeneration) {
+        if (JS_ToIndex(ctx, &generation, argv[0]) < 0) return JS_EXCEPTION;
+    }
+    shell::ScopeHostContext host =
+        explicitGeneration
+            ? shell::ScopeHostForGeneration(generation, &error)
+            : shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        Str message = error.IsSet() ? error.message
+                                    : StrL("cx.theme() needs a live host call");
+        JSValue result = JS_ThrowTypeError(ctx, "%.*s", message.len, message.s);
+        ShellErrorClear(&error);
+        return result;
+    }
+    shell::ThemeTokensSync(host.GetApp());
+    StrBuilder json;
+    json.AppendChar('{');
+    AppendThemeColors(&json);
+    json.Append(StrL(",\"colors\":{"));
+    AppendThemeColors(&json);
+    json.Append(StrL("},\"spacing\":{"));
+    AppendThemeScale(&json, shell::ThemeSpacingTokenNames(),
+                     shell::ThemeTokenSpacing);
+    json.Append(StrL("},\"radius\":{"));
+    AppendThemeScale(&json, shell::ThemeRadiusTokenNames(),
+                     shell::ThemeTokenRadius);
+    BaseTheme base = BaseTheme::Global(host.GetApp());
+    bool dark = base.appearance == BaseThemeAppearance::Dark;
+    json.Append(dark ? StrL("},\"appearance\":\"dark\",\"is_dark\":true}")
+                     : StrL("},\"appearance\":\"light\",\"is_dark\":false}"));
+    Str source = json.TakeStr();
+    JSValue result = JS_NewStringLen(ctx, source.s, (size_t)source.len);
+    StrFree(source);
+    ShellErrorClear(&error);
+    return result;
+}
+
+static bool ValidOpenUrl(Str url) {
+    if (!url || url.len > 32768) return false;
+    int schemeEnd = StrFind(url, StrL("://"));
+    if (schemeEnd <= 0) return false;
+    Str scheme(url.s, schemeEnd);
+    if (!StrEqI(scheme, StrL("http")) &&
+        !StrEqI(scheme, StrL("https"))) {
+        return false;
+    }
+    int authorityStart = schemeEnd + 3;
+    int authorityEnd = authorityStart;
+    while (authorityEnd < url.len && url.s[authorityEnd] != '/' &&
+           url.s[authorityEnd] != '?' && url.s[authorityEnd] != '#') {
+        unsigned char c = (unsigned char)url.s[authorityEnd];
+        if (c <= 0x20 || c >= 0x7f) return false;
+        authorityEnd++;
+    }
+    int hostStart = authorityStart;
+    for (int i = authorityStart; i < authorityEnd; i++) {
+        if (url.s[i] == '@') hostStart = i + 1;
+    }
+    if (hostStart >= authorityEnd) return false;
+    if (url.s[hostStart] == '[') {
+        int close = hostStart + 1;
+        while (close < authorityEnd && url.s[close] != ']') close++;
+        return close > hostStart + 1 && close < authorityEnd;
+    }
+    int hostEnd = authorityEnd;
+    for (int i = hostStart; i < authorityEnd; i++) {
+        if (url.s[i] == ':') {
+            hostEnd = i;
+            break;
+        }
+    }
+    return hostEnd > hostStart;
+}
+
+static JSValue NativeOpenUrl(JSContext* ctx, JSValueConst, int argc,
+                             JSValueConst* argv) {
+    if (argc < 2) {
+        return JS_ThrowTypeError(
+            ctx, "cx.open_url(url) expects an absolute HTTP(S) URL with a host");
+    }
+    uint64_t generation = 0;
+    bool explicitGeneration = !JS_IsUndefined(argv[0]);
+    if (explicitGeneration && JS_ToIndex(ctx, &generation, argv[0]) < 0) {
+        return JS_EXCEPTION;
+    }
+    Arena* arena = ArenaNew();
+    Str url;
+    if (!JsString(ctx, argv[1], arena, &url)) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    if (!ValidOpenUrl(url)) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(
+            ctx, "cx.open_url(url) expects an absolute HTTP(S) URL with a host");
+    }
+    ShellError error = {};
+    shell::ScopeHostContext host =
+        explicitGeneration
+            ? shell::ScopeHostForGeneration(generation, &error)
+            : shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        Str message = error.IsSet()
+                          ? error.message
+                          : StrL("cx.open_url(url) needs a live host call");
+        JSValue result = JS_ThrowTypeError(ctx, "%.*s", message.len,
+                                           message.s);
+        ShellErrorClear(&error);
+        ArenaDelete(arena);
+        return result;
+    }
+    OpenUrl(url);
+    ShellErrorClear(&error);
+    ArenaDelete(arena);
+    return JS_UNDEFINED;
+}
+
 static JSValue NativeNotify(JSContext* ctx, JSValueConst, int argc,
                             JSValueConst* argv) {
     uint64_t generation = 0;
@@ -4731,6 +5195,17 @@ globalThis.__gpui = (() => {
     for (const child of children) __attach(this.__id, childId(child));
     return this;
   };
+  explicit.map = function (transform) {
+    if (typeof transform !== "function") throw new TypeError("map(transform) expects a function");
+    return transform(this);
+  };
+  explicit.when = function (condition, branch) {
+    if (!condition) return this;
+    if (typeof branch !== "function") throw new TypeError("when(condition, branch) expects a function");
+    const produced = branch(this);
+    if (produced === undefined || produced === null) throw new Error("when(...) must return the element");
+    return produced;
+  };
   explicit.track_scroll = function (handle) {
     if (typeof handle?.__handle !== "number") throw new TypeError("track_scroll(handle) expects a VirtualListScrollHandle");
     __apply(this.__id, "track_scroll", [handle.__handle]);
@@ -4929,6 +5404,20 @@ globalThis.__gpui = (() => {
   };
   const localStorage = storage(false);
   const sessionStorage = storage(true);
+  let cachedThemeSource;
+  let cachedTheme;
+  const currentTheme = (generation) => {
+    const source = __theme_snapshot(generation);
+    if (source !== cachedThemeSource) {
+      cachedThemeSource = source;
+      cachedTheme = JSON.parse(source);
+      Object.freeze(cachedTheme.colors);
+      Object.freeze(cachedTheme.spacing);
+      Object.freeze(cachedTheme.radius);
+      Object.freeze(cachedTheme);
+    }
+    return cachedTheme;
+  };
   const contentView = (build, api) => {
     if (typeof build !== "function") {
       throw new TypeError(api + " takes a function returning an element, not an element and not a view class");
@@ -4947,6 +5436,8 @@ globalThis.__gpui = (() => {
     }
   };
   globalThis.__context = (generation) => Object.freeze({
+    theme: () => currentTheme(generation),
+    open_url: (url) => __open_url(generation, String(url)),
     notify: () => __cx_notify(generation),
     focus_handle: () => focusHandle(__focus_handle_new()),
     new: (Class, props) => {
@@ -4960,6 +5451,8 @@ globalThis.__gpui = (() => {
     write_to_clipboard: (text) => __clipboard_write_text(String(text)),
   });
   ambientContext = Object.freeze({
+    theme: () => currentTheme(undefined),
+    open_url: (url) => __open_url(undefined, String(url)),
     notify: () => __cx_notify_current(),
     focus_handle: () => focusHandle(__focus_handle_new()),
     new: (Class, props) => {
@@ -5442,7 +5935,7 @@ R"JS(
     SliderThumb: retained("SliderThumb"),
     OtpState: { new: (length, options = {}) => otpState(__otp_state_new(Number(length), options.value ?? null, Boolean(options.masked))) }, OtpInput: retained("OtpInput"),
     fps_monitor: () => component("FpsMonitor"),
-    set_theme: () => { throw new Error("set_theme is not installed yet"); },
+    set_theme: (theme) => __set_theme(theme),
   };
   return Object.freeze(api);
 })();
@@ -5516,6 +6009,11 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     SetGlobalFunction(impl->context, global, "__state", NativeState, 2);
     SetGlobalFunction(impl->context, global, "__slot", NativeSlot, 3);
     SetGlobalFunction(impl->context, global, "__apply", NativeApply, 3);
+    SetGlobalFunction(impl->context, global, "__theme_snapshot",
+                      NativeThemeSnapshot, 1);
+    SetGlobalFunction(impl->context, global, "__set_theme", NativeSetTheme,
+                      1);
+    SetGlobalFunction(impl->context, global, "__open_url", NativeOpenUrl, 2);
     SetGlobalFunction(impl->context, global, "__host_call", NativeHostCall, 3);
     SetGlobalFunction(impl->context, global, "__host_async_call",
                       NativeHostAsyncCall, 3);

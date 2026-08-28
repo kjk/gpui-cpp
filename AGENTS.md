@@ -333,8 +333,9 @@ on `main` is removed and cloned again rather than repaired: the script writes
 the whole of it and commits whatever `git status` reports, so a stray file
 would be published.
 
-The snapshot is a checkout, not four source files. Beside both pairs go every example,
-`assets/`, `web/shell.html`, `build.ts` and `run.ts` at the top level, and
+The snapshot is a checkout, not four source files. Beside both pairs go every
+example, `gpui_shell/`, `assets/`, `web/shell.html`, `build.ts` and `run.ts` at
+the top level, and
 `winapi.ts` + `mac-window-place.m` because `run.ts -compare` reaches for them
 by name — so `bun run.ts story` works in a fresh clone of it. Its `.gitignore`
 is written from here too, since `-compare` clones the Rust tree *into* the

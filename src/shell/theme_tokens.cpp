@@ -31,7 +31,9 @@ void ThemeTokensSync(const App* app) {
     if (!app) {
         return;
     }
-    SemanticThemeTokens tokens = ThemeSemanticTokens(ThemeNow(app));
+    const BaseTheme* base = BaseThemeGlobal(app);
+    SemanticThemeTokens tokens =
+        base ? base->tokens : ThemeSemanticTokens(ThemeNow(app));
     gThemeCache.colors = tokens.colors;
     gThemeCache.radius = tokens.radius;
     gThemeCache.spacing = tokens.spacing;

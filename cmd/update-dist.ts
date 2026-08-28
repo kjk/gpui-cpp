@@ -801,14 +801,15 @@ function syncDistRepo(): void {
 // gpui.h beside them means "this is the snapshot". winapi.ts and
 // mac-window-place.m come along because run.ts -compare reaches for them by
 // name — they are how it puts the two windows on the two halves of the
-// screen. assets/ is what the examples load at runtime and web/ is the wasm
-// shell page, so without them app_assets and every -wasm build are broken.
+// screen. gpui_shell/ is the script host command. assets/ is what the
+// examples load at runtime and web/ is the wasm shell page, so without them
+// app_assets and every -wasm build are broken.
 //
 // Each directory is emptied before it is written, so a file deleted here is
 // deleted there too rather than lingering as something that no longer
 // compiles.
 const distScripts = ["build.ts", "run.ts", "winapi.ts", "mac-window-place.m"];
-const distDirs = ["examples", "assets", "web"];
+const distDirs = ["examples", "gpui_shell", "assets", "web"];
 
 // The snapshot is a working checkout, not just the generated sources: `bun run.ts -rel
 // showcase` writes out/, `-compare` clones .work/gpui-component, and a -wasm
@@ -849,16 +850,21 @@ function writeDistReadme(sha: string): string {
   return srcRel(abs);
 }
 
-// Build every example against the amalgam that was just written, which is the
-// only check that matters: it is what someone downloading these sources
-// does. GPUI_AMALGAM_DIR points the platform build at this copy instead of
-// .work/, and its objects go to their own out/ tree.
+// Build every example and the Shell command against the amalgam that was just
+// written, which is the only check that matters: it is what someone
+// downloading these sources does. GPUI_AMALGAM_DIR points the platform build
+// at this copy instead of .work/, and its objects go to their own out/ tree.
 function checkExamples(): void {
-  console.log(`building every example against ${distRepoDir}`);
+  console.log(`building every example and gpui_shell against ${distRepoDir}`);
   // cmd/build.ts picks this host's toolchain itself.
-  const code = run(["bun", "cmd/build.ts", "-rel", "-all"], { env: { GPUI_AMALGAM_DIR: distRepoDir } });
-  if (code !== 0) {
-    die(`the examples do not build against ${distRepoDir} (exit ${code})`);
+  const env = { GPUI_AMALGAM_DIR: distRepoDir };
+  const examples = run(["bun", "cmd/build.ts", "-rel", "-all"], { env });
+  if (examples !== 0) {
+    die(`the examples do not build against ${distRepoDir} (exit ${examples})`);
+  }
+  const shell = run(["bun", "cmd/build.ts", "-rel", "gpui_shell"], { env });
+  if (shell !== 0) {
+    die(`gpui_shell does not build against ${distRepoDir} (exit ${shell})`);
   }
 }
 
@@ -933,13 +939,15 @@ function main(): void {
       `${formatCount(built.sourceLines)} lines, ` +
       `${built.sourceCount} + ${built.platformSourceCount} sources, markdown ${built.markdown})`,
   );
+  if (outDir === distRepoDir) {
+    copyDistExtras();
+  }
   if (check) {
     checkExamples();
   }
   if (outDir !== distRepoDir) {
     return;
   }
-  copyDistExtras();
   const sha = capture(["git", "rev-parse", "HEAD"]);
   const readme = writeDistReadme(sha);
   console.log(`wrote ${readme} for ${sha.slice(0, 12)}`);

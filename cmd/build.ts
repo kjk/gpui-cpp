@@ -191,13 +191,13 @@ export const simpleExamples = [
 /** A directory of .cpp built as one binary. */
 export const dirExamples = ["showcase", "story"];
 
-/** Not examples: they print a report and exit, so -all leaves them out. */
-export const consoleTargets = new Set(["tests", "bench"]);
+/** Not examples: console programs, so -all leaves them out. */
+export const consoleTargets = new Set(["tests", "bench", "gpui_shell"]);
 
 // There is no webview on the web: wry has no browser back end, and a page
 // inside a page is not what crates/webview is.
 function skippedOn(plat: Platform): Set<string> {
-  return plat === "wasm" ? new Set(["webview"]) : new Set<string>();
+  return plat === "wasm" ? new Set(["webview", "gpui_shell"]) : new Set<string>();
 }
 
 /** Every example this platform builds, in the order -all builds them. */
@@ -206,12 +206,12 @@ export function examplesFor(plat: Platform): string[] {
   return ["system_monitor", "app_assets", ...dirExamples, ...simpleExamples].filter((n) => !skip.has(n));
 }
 
-/** Every name the build accepts: the examples plus the two console runners. */
+/** Every name the build accepts: examples, repository runners and the shell tool. */
 export function targetsFor(plat: Platform): string[] {
   const skip = skippedOn(plat);
   // tests/ and bench/ are this repo's own suites, run against src/**. The
   // snapshot carries the examples and not them, so there they are not targets.
-  const runners = isDist ? [] : [...consoleTargets];
+  const runners = isDist ? ["gpui_shell"] : [...consoleTargets];
   return ["system_monitor", "app_assets", ...dirExamples, ...runners, ...simpleExamples].filter((n) => !skip.has(n));
 }
 
@@ -437,6 +437,9 @@ function objGroup(f: string): string {
   }
   if (f.startsWith("bench/")) {
     return "bench";
+  }
+  if (f.startsWith("gpui_shell/")) {
+    return "gpui_shell";
   }
   return "ex";
 }

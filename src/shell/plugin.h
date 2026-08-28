@@ -52,6 +52,13 @@ bool PluginManifestRead(Str directory, PluginManifest* out,
                         ShellError* error = nullptr);
 void PluginManifestSchema(StrBuilder* out);
 
+// Per-user application storage follows gpui-shell's Rust layout:
+// <data-home>/gpui-shell/apps/<path identity>.
+Str ShellDataHome();
+Str ShellBundleIdForPath(Str root);
+Str ShellAppDataDirectory(Str id, Arena* arena,
+                          ShellError* error = nullptr);
+
 struct PluginDiscovery {
     PluginManifest* manifest = nullptr;
     Str root;

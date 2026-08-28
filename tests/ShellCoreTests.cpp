@@ -323,6 +323,121 @@ static void ThemeTokenNamesAndValuesComeFromTheTheme() {
     AppGlobalClear(&app);
 }
 
+static void RenderContextExposesFrozenGenerationBoundTheme() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    ViewType* type = runtime ? runtime->LoadSource(
+        StrL("context-theme.js"),
+        StrL("import { div, View } from 'gpui'; export default class Themed extends View { render(cx) { const theme = cx.theme(); if (!Object.isFrozen(theme) || !Object.isFrozen(theme.colors) || !Object.isFrozen(theme.spacing) || !Object.isFrozen(theme.radius)) throw new Error('theme snapshot must be deeply frozen'); if (this.savedTheme) this.savedTheme(); else this.savedTheme = cx.theme; return div().text_color(theme.foreground).bg(theme.colors.surface).p(theme.spacing.md).rounded(theme.radius.md).child('semantic'); } }"),
+        &error) : nullptr;
+    ViewObject* object = type && runtime
+                             ? runtime->Instantiate(type, &window, &app,
+                                                    nullptr, &error)
+                             : nullptr;
+    Arena* output = ArenaNew();
+    Str first = object && runtime
+                    ? runtime->RenderToSpec(output, object, &window, &app,
+                                            {}, nullptr, &error)
+                    : Str{};
+    utassert(!error.IsSet() &&
+             StrContains(first, StrL(".text_color(\"#")) &&
+             StrContains(first, StrL(".p(12)")));
+    output->Reset();
+    Str second = object && runtime
+                     ? runtime->RenderToSpec(output, object, &window, &app,
+                                             {}, nullptr, &error)
+                     : Str{};
+    (void)second;
+    utassert(StrContains(error.message, StrL("cx is no longer valid")));
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    ArenaDelete(output);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+static void ScriptThemesAndOpenUrlsFollowHostScopeRules() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    ViewType* type = runtime ? runtime->LoadSource(
+        StrL("set-theme.js"),
+        StrL("import { div, View } from 'gpui'; import { set_theme } from 'gpui-base';\n"
+             "const colors = { background:'#010203', foreground:'#fafafa', surface:'#111111', surface_foreground:'#f0f0f0', primary:'#222222', primary_foreground:'#eeeeee', secondary:'#333333', secondary_foreground:'#dddddd', muted:'#444444', muted_foreground:'#cccccc', accent:'#555555', accent_foreground:'#bbbbbb', destructive:'#666666', destructive_foreground:'#aaaaaa', border:'#777777', input:'#888888', ring:'#999999' };\n"
+             "export default class Themed extends View {\n"
+             "  init() { set_theme({ appearance:'dark', tokens:{ colors, spacing:{xxs:1,xs:2,sm:3,md:13,lg:21,xl:34,xxl:55}, radius:{none:0,sm:2,md:9,lg:12,xl:18,full:999} } }); }\n"
+             "  render(cx) { const t = cx.theme(); if (t.appearance !== 'dark' || t.background !== '#010203' || t.spacing.md !== 13 || t.radius.md !== 9) throw new Error('installed theme was not returned'); return div().p(t.spacing.md).rounded(t.radius.md); }\n"
+             "}"),
+        &error) : nullptr;
+    ViewObject* object = type && runtime
+                             ? runtime->Instantiate(type, &window, &app,
+                                                    nullptr, &error)
+                             : nullptr;
+    const BaseTheme* theme = BaseThemeGlobal(&app);
+    utassert(!error.IsSet() && theme &&
+             theme->appearance == BaseThemeAppearance::Dark &&
+             theme->tokens.spacing.md == 13 &&
+             theme->tokens.radius.md == 9 &&
+             theme->tokens.colors.background.r == 1 &&
+             theme->tokens.colors.background.g == 2 &&
+             theme->tokens.colors.background.b == 3);
+    Arena* output = ArenaNew();
+    Str spec = object && runtime
+                   ? runtime->RenderToSpec(output, object, &window, &app, {},
+                                           nullptr, &error)
+                   : Str{};
+    utassert(!error.IsSet() && StrContains(spec, StrL(".p(13)")) &&
+             StrContains(spec, StrL(".rounded(9)")));
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+
+    type = runtime ? runtime->LoadSource(
+        StrL("theme-in-render.js"),
+        StrL("import { div, View } from 'gpui'; import { set_theme } from 'gpui-base'; export default class BadTheme extends View { render() { set_theme({}); return div(); } }"),
+        &error) : nullptr;
+    object = type && runtime
+                 ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+                 : nullptr;
+    output->Reset();
+    if (object && runtime) {
+        runtime->RenderToSpec(output, object, &window, &app, {}, nullptr,
+                              &error);
+    }
+    utassert(StrContains(error.message,
+                         StrL("cannot run during render or layout")));
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    ShellErrorClear(&error);
+
+    type = runtime ? runtime->LoadSource(
+        StrL("bad-url.js"),
+        StrL("import { div, View } from 'gpui'; export default class BadUrl extends View { render(cx) { cx.open_url('file:///tmp/no'); return div(); } }"),
+        &error) : nullptr;
+    object = type && runtime
+                 ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+                 : nullptr;
+    output->Reset();
+    if (object && runtime) {
+        runtime->RenderToSpec(output, object, &window, &app, {}, nullptr,
+                              &error);
+    }
+    utassert(StrContains(error.message, StrL("absolute HTTP(S) URL")));
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    ArenaDelete(output);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
 static shell::CallbackId FirstCallback(const RenderSnapshot* snapshot) {
     if (!snapshot || !snapshot->Specs()) return UINT64_MAX;
     const SpecNode* root = snapshot->Specs()->Node(snapshot->Root());
@@ -2335,6 +2450,8 @@ void TestShellCore() {
     SpecElementsAreSingleUseValues();
     SpecsAndSnapshotsDumpWithoutEnteringTheVm();
     ThemeTokenNamesAndValuesComeFromTheTheme();
+    RenderContextExposesFrozenGenerationBoundTheme();
+    ScriptThemesAndOpenUrlsFollowHostScopeRules();
     RuntimeLoadsRendersAndRetiresCallbacks();
     RuntimeAbortsFailedSnapshotTransactions();
     RuntimeLoadsOnlyModulesInsideTheApplicationRoot();

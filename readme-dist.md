@@ -33,13 +33,19 @@ arguments lists every example and every option.
 bun build.ts -all              # build every example, do not run one
 bun run.ts -dbg input          # debug build
 bun run.ts -wasm story         # build for the browser, serve it, open a tab
+bun run.ts gpui_shell -- examples/js_todolist --dev
 ```
+
+`gpui_shell` is the desktop JavaScript host. Its `check <directory>` command
+loads and renders once without opening a window, and `types <directory>` writes
+the matching `gpui.d.ts` declarations.
 
 ## What is here
 
 ```
 gpui.h, gpui.cpp     the C++20 library amalgam
 quickjs/             pinned QuickJS-NG as one C11 header and one C source
+gpui_shell/           command-line JavaScript application host
 examples/            every example, including story/ and showcase/
 assets/              icons, images and documents the examples load at runtime
 web/shell.html       the page a -wasm build is served in

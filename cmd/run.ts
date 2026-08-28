@@ -61,7 +61,7 @@ const self = scriptPath("run.ts");
 
 const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
                      [-debugger|-windbg|-cdb|-gdb|-lldb] [-compare]
-                     [-no-build] [-no-open] [-port N] <example>
+                     [-no-build] [-no-open] [-port N] <example> [-- <args...>]
        bun ${self} -versions
 
   -rel        release (default)
@@ -88,8 +88,9 @@ const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
   -wasm       build for the browser, serve out/wasm/<cfg>/ and open a tab
   -no-open    -wasm: do not launch a browser
   -port N     -wasm: listen on N (default 8000; the next free port if taken)
+  --          pass every remaining argument unchanged to the selected binary
 
-The example name is the last argument. -all is not accepted — pick one binary.`;
+The target name is the last argument before --. -all is not accepted — pick one binary.`;
 
 function die(msg?: string): never {
   if (msg) {
@@ -124,6 +125,8 @@ type RunArgs = {
   noBuild: boolean;
   open: boolean;
   port: number;
+  /** Arguments after --, passed unchanged to the selected binary. */
+  appArgs: string[];
 };
 
 function parseArgs(argv: string[]): RunArgs {
@@ -133,9 +136,14 @@ function parseArgs(argv: string[]): RunArgs {
   let noBuild = false;
   let open = true;
   let port = 8000;
+  let appArgs: string[] = [];
   const names: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i]!;
+    if (raw === "--") {
+      appArgs = argv.slice(i + 1);
+      break;
+    }
     if (takeBuildFlag(raw, flags)) {
       continue;
     }
@@ -214,6 +222,12 @@ function parseArgs(argv: string[]): RunArgs {
         "Drop -compare to launch just this one.",
     );
   }
+  if (compare && appArgs.length > 0) {
+    die("Arguments after -- cannot be combined with -compare.");
+  }
+  if (plat === "wasm" && appArgs.length > 0) {
+    die("Arguments after -- are only available to native binaries.");
+  }
   // Before the build, not after it: naming the wrong platform's debugger is a
   // typo, and a typo should not cost a compile first.
   if (dbgr && dbgr !== "any") {
@@ -225,7 +239,7 @@ function parseArgs(argv: string[]): RunArgs {
       die(`-${dbgr} is not a Windows debugger. Use -windbg or -cdb.`);
     }
   }
-  return { target, flags, plat, debugger: dbgr, compare, noBuild, open, port };
+  return { target, flags, plat, debugger: dbgr, compare, noBuild, open, port, appArgs };
 }
 
 // ─── small helpers ────────────────────────────────────────────────────────
@@ -892,7 +906,7 @@ async function runNative(a: RunArgs): Promise<never> {
   // programs and not their working directories.
   const cwd = root;
 
-  if (a.plat === "linux" && !process.env["DISPLAY"] && !process.env["WAYLAND_DISPLAY"]) {
+  if (a.plat === "linux" && !consoleTargets.has(a.target) && !process.env["DISPLAY"] && !process.env["WAYLAND_DISPLAY"]) {
     console.error("DISPLAY is not set: there is no X server to open a window on.");
     console.error("Under WSL, make sure WSLg is available (wsl --update).");
     process.exit(1);
@@ -911,7 +925,7 @@ async function runNative(a: RunArgs): Promise<never> {
   }
 
   const dbg = a.debugger ? findDebugger(a.debugger, a.plat, exe) : null;
-  const cppCmd = dbg ? dbg.cmd : [exe];
+  const cppCmd = [...(dbg ? dbg.cmd : [exe]), ...a.appArgs];
 
   if (dbg?.foreground) {
     // The debugger owns this terminal, so nothing can be placed beside it.
@@ -920,6 +934,11 @@ async function runNative(a: RunArgs): Promise<never> {
       launchDetached([rustExe], cwd);
     }
     console.log(`Launching ${dbg.kind} ${formatCmd([exe])}`);
+    process.exit(run(cppCmd, cwd));
+  }
+
+  if (consoleTargets.has(a.target)) {
+    console.log(`Running ${formatCmd(cppCmd)}`);
     process.exit(run(cppCmd, cwd));
   }
 

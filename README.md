@@ -57,6 +57,23 @@ GPUI_MARKDOWN=full bun cmd/build.ts -rel story   # default
 The mini feature list and intentional omissions are in
 [`src/markdown-mini/readme.md`](src/markdown-mini/readme.md).
 
+## JavaScript shell
+
+`gpui_shell` runs the port of `crates/shell` against the vendored, pinned
+QuickJS-NG engine. The upstream todo application is included unchanged:
+
+```
+bun cmd/run.ts -rel gpui_shell -- examples/js_todolist --dev
+bun cmd/run.ts -rel gpui_shell -- check examples/js_todolist
+bun cmd/run.ts -rel gpui_shell -- types examples/js_todolist
+```
+
+The first command opens the application and reloads it after source changes.
+`check` loads and renders once without a window; `types` writes the exact
+upstream `gpui.d.ts` plus declarations for registered host modules. A directory
+may optionally carry `gpui-shell.json` to set its entry point, capabilities and
+plugin metadata. `gpui_shell` is a desktop target and is skipped by `-wasm`.
+
 **Windows** needs [Bun](https://bun.sh) and the MSVC C++ toolset. `cl.exe` on
 PATH is used as it is; otherwise Visual Studio is found through `vswhere` and
 its `vcvars64.bat` is read for the environment, so a plain shell builds.
