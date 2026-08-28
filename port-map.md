@@ -12,8 +12,8 @@ bun cmd/audit-port.ts -missing-declarations # heuristic C++ spelling report
 
 The audit always checks the pinned SHA and every declared C++ destination. If
 `.work/gpui-component` exists it reads the complete Rust source trees, not
-just `lib.rs`: all 762 module-level public declarations, all 272 `pub use`
-statements and all 1,047 real tests are inventoried. Every item must belong to
+just `lib.rs`: all 765 module-level public declarations, all 272 `pub use`
+statements and all 1,073 real tests are inventoried. Every item must belong to
 a classified module, every tested module names existing C++ suites that own
 its behavioral coverage, and stable content hashes fail when a declaration,
 export or test is added, removed or renamed at the pinned checkout. (`#[test]`

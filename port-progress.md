@@ -9796,3 +9796,13 @@ comments, erased some chunk boundaries, and also collapsed declaration blank
 lines. All 54 generated declaration chunks match the tracked source after the
 dist rewrite. MSVC release builds of all 27 examples and `gpui_shell` against
 the published-layout amalgam pass.
+
+## Port audit advanced to the current upstream pin
+
+The Base/UI structural audit now records the `6d07863fe707` gpui-component pin
+from `cmd/run.ts`. Review of the intervening surface found 361 Base and 404 UI
+module-level declarations, 272 combined re-exports and 1,073 tests. The two new
+Base types (`OtpEvent` and `ThemeAppearance`) already have direct C++ ports;
+Rust's new `TextViewPrepaintState` is explicitly mapped to this runtime's fused
+`El` paint walk, which owns the generic hit-test entry and line-clamp clip.
+Both the complete Rust-tree audit and CI's checkout-free audit pass.

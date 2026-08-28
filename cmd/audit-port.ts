@@ -17,7 +17,7 @@ type Entry = {
 };
 
 const root = resolve(import.meta.dir, "..");
-const pinnedGpuiComponent = "7885c41663c7a6cc68ad0c99b1ba33550f807ff0";
+const pinnedGpuiComponent = "6d07863fe7077f85abfa0ec2fcb05f3e17c573b2";
 
 const baseModules = `
 accordion actions alert_dialog animation async_util auto_scroll avatar button
@@ -371,6 +371,10 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     collapse:
       "Rust's private sealed-trait gate has no C++ runtime representation; only the four concrete scale types expose the convention",
   },
+  "ui/text/text_view.rs::struct TextViewPrepaintState": {
+    collapse:
+      "C++ fuses element prepaint into El painting: the ordinary hit-test entry and line-clamp clip bottom are resolved by the shared paint walk rather than retained in a TextView-specific state",
+  },
   "ui/theme/color.rs::fn black": { spellings: ["ThemeBlack"] },
   "ui/theme/color.rs::fn hsl": { spellings: ["ThemeHsl"] },
   "ui/theme/color.rs::fn try_parse_background": {
@@ -496,14 +500,14 @@ function declarationSourceText(targets: string[]): string {
 // hash and forces this ledger to be reviewed with the pin update.
 const surfacePins: Record<CrateName, Record<SurfaceKind, { count: number; sha256: string }>> = {
   base: {
-    declaration: { count: 359, sha256: "3daafbdba646766d1b93c6c82980ba0bf184ce7dad4136506738caa14fb847d4" },
-    "pub-use": { count: 113, sha256: "56ab53255f342a78397752cf9ed85e4a4e9cfb53f453ffb988ecbccc3bbc8123" },
-    test: { count: 569, sha256: "085c090f4bfe3010b0a1afd9a55b9202f8edf5b013a52da55defa6998e9d8708" },
+    declaration: { count: 361, sha256: "e8778d5cd847813474e820293aa4d3a1ccadeb37665bc9e4b5a66e40e552e3e0" },
+    "pub-use": { count: 113, sha256: "d2445f6f501a6d6616338b1e978653652c75ac46dab37ca6ba52e37b21399cca" },
+    test: { count: 587, sha256: "9d917e105997005c52de376aefeee06203e1d2f456452f6983c9bcfb86b75f51" },
   },
   ui: {
-    declaration: { count: 403, sha256: "79655b6e6fe0e68186d279827d50a1babc1447a4a811ac41756307e5e4d1ec03" },
-    "pub-use": { count: 159, sha256: "88c4d5ccda0c8301b0ee1bb07a352ec0f51feef66043a73711d63c879603b37f" },
-    test: { count: 478, sha256: "94908e35450b3fb1c72567b42241cf2c36d54b3d38921bfeb1f6ef7177e277ff" },
+    declaration: { count: 404, sha256: "16466eaf31ca3349f021b528c1b57b0f67ec75f38a9a233bdd9b329703d376fb" },
+    "pub-use": { count: 159, sha256: "a83b63627ebbedaed902d73a8e7af23ccb67ef6dcf4a1dac1f9ba2eff28619dd" },
+    test: { count: 486, sha256: "4bae9b82f01cbb0e1a05aea368da8814fe8ef00954321a41c56cb806af16a85b" },
   },
 };
 
