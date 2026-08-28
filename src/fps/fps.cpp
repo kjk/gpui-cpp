@@ -1,7 +1,8 @@
 #include "fps/fps.h"
 
-#include "sys/gpu.h"
 #include "gpui/paint.h"
+#include "sys/executor.h"
+#include "sys/gpu.h"
 
 namespace gpui {
 
@@ -170,6 +171,10 @@ bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
     probe->prevAt = now;
     probe->primed = true;
     if (!primed || elapsed <= 0) {
+        // ResourceProbe::new constructs the GPU probe on Rust's background
+        // executor. Do the same while establishing our CPU baseline, so the
+        // expensive first PDH wildcard lookup cannot land in a later render.
+        (void)GpuAvailable();
         return false;
     }
 
@@ -287,21 +292,93 @@ static void UpdateAxis(FpsMonitor* self) {
                         : self->axisMax + (target - self->axisMax) * kAxisDecay;
 }
 
-static void UpdateResources(FpsMonitor* self) {
-    if (!self->showResources) {
-        return;
-    }
-    double now = TimeNow();
-    if (self->resourcesAt >= 0 &&
-        now - self->resourcesAt < (double)self->resourceInterval) {
-        return;
-    }
-    self->resourcesAt = now;
+struct FpsResourceJob {
+    App* app = nullptr;
+    EntityId monitor = {};
+    ResourceProbe probe;
     ResourceSample sample;
-    if (ResourceProbeSample(&self->probe, &sample)) {
-        self->resources = sample;
-        self->hasResources = true;
+    bool ok = false;
+};
+
+static void FpsResourceWork(FpsResourceJob* job) {
+    job->ok = ResourceProbeSample(&job->probe, &job->sample);
+}
+
+static void FpsResourceDone(FpsResourceJob* job) {
+    FpsMonitor* self =
+        job && job->app
+            ? (FpsMonitor*)EntityGet(job->app, job->monitor)
+            : nullptr;
+    // A completion can arrive after the keyed state was dropped, or after a
+    // newer job replaced it. In either case the heap job is all that remains
+    // ours to touch.
+    if (!self || self->resourceJob != job) {
+        delete job;
+        return;
     }
+    self->resourceJob = nullptr;
+    self->resourceTask = 0;
+    self->probe = job->probe;
+    if (job->ok) {
+        self->resources = job->sample;
+        self->hasResources = true;
+        NotifyEntity(job->app, job->monitor, nullptr);
+    }
+    delete job;
+}
+
+void FpsMonitor::OnResourceTick(FpsMonitor* self, Ctx* cx,
+                                const TickEvent*) {
+    if (!self || !cx || self->resourceTask || self->resourceJob) {
+        return;
+    }
+    FpsResourceJob* job = new FpsResourceJob();
+    job->app = cx->app;
+    job->monitor = cx->self;
+    job->probe = self->probe;
+    int task = ExecSpawn(MkFunc0(FpsResourceWork, job),
+                         MkFunc0(FpsResourceDone, job));
+    if (!task) {
+        delete job;
+        return;
+    }
+    self->resourceJob = job;
+    self->resourceTask = task;
+}
+
+static void StartResourceSampling(FpsMonitor* self, Ctx* cx) {
+    if (!self->showResources || self->resourceTimer || !cx->win) {
+        return;
+    }
+    int ms = (int)(self->resourceInterval * 1000.f + 0.5f);
+    // sysinfo refuses a faster refresh too; even the native one-process
+    // counters become noise below this point.
+    if (ms < 200) {
+        ms = 200;
+    }
+    self->resourceWindow = cx->win;
+    self->resourceTimer = WindowSetInterval(
+        cx->win, ms, Listen(cx, &FpsMonitor::OnResourceTick));
+    if (!self->resourceTimer) {
+        self->resourceWindow = nullptr;
+        return;
+    }
+    // Rust constructs and primes ResourceProbe immediately on its background
+    // executor, then waits one interval before publishing the first delta.
+    FpsMonitor::OnResourceTick(self, cx, nullptr);
+}
+
+FpsMonitor::~FpsMonitor() {
+    if (resourceWindow && resourceTimer) {
+        WindowCancelTimer(resourceWindow, resourceTimer);
+    }
+    if (resourceTask && ExecCancel(resourceTask)) {
+        delete resourceJob;
+    }
+    resourceWindow = nullptr;
+    resourceTimer = 0;
+    resourceTask = 0;
+    resourceJob = nullptr;
 }
 
 static bool SameRgba(Rgba a, Rgba b) {
@@ -447,7 +524,7 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
     FrameSamplerTick(&self->sampler, cx->win);
     UpdateReadout(self);
     UpdateAxis(self);
-    UpdateResources(self);
+    StartResourceSampling(self, cx);
     // The HUD keeps the window drawing back to back. GPUI spells this
     // window.request_animation_frame() once per render.
     if (self->continuous && cx->win && !cx->win->anim) {

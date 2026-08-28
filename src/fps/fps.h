@@ -90,10 +90,10 @@ struct ResourceSample {
     float gpuPercent = -1.f;
 };
 
-// Rust probes this on a background thread through sysinfo, because refreshing
-// walks the process table. Asking Windows about one known process is two cheap
-// calls, so this samples inline on the render thread instead of growing an
-// executor for it. Returns false until it has a delta to divide by.
+// Rust probes this on its background executor. Windows' process counters are
+// cheap, but opening the GPU PDH wildcard counter is not, so this port keeps
+// the whole probe off the render thread too. Returns false until it has a
+// delta to divide by.
 struct ResourceProbe {
     uint64_t prevCpu100ns = 0;
     double prevAt = 0;
@@ -111,6 +111,10 @@ struct FpsReadout {
     float frameMillis = 0;
     float droppedPercent = 0;
 };
+
+// Heap state shared by one resource worker and its main-thread completion.
+// The definition stays private to fps.cpp.
+struct FpsResourceJob;
 
 // crates/fps/src/monitor.rs. A view rather than a stateless component, so the
 // click that collapses it has an entity to run against.
@@ -130,13 +134,18 @@ struct FpsMonitor {
     ResourceProbe probe;
     ResourceSample resources;
     bool hasResources = false;
-    double resourcesAt = -1;
+    Window* resourceWindow = nullptr;
+    int resourceTimer = 0;
+    int resourceTask = 0;
+    FpsResourceJob* resourceJob = nullptr;
     bool compact = false;
     // Upper bound of the chart's y axis, in seconds.
     float axisMax = (1.f / 60.f) * 2.f;
 
+    ~FpsMonitor();
     static El* Render(FpsMonitor* self, Ctx* cx);
     static void OnToggleCompact(FpsMonitor* self, Ctx* cx, const ClickEvent*);
+    static void OnResourceTick(FpsMonitor* self, Ctx* cx, const TickEvent*);
 };
 
 // Where in the parent the HUD sits.

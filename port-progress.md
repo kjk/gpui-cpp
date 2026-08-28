@@ -9854,3 +9854,32 @@ a paint backend is now left uncached for `ImageForSrc`, and TextView applies
 Rust's `max_w(relative(1.))` even when HTML supplies a width, so the screenshot
 fits the text column. The MSVC release suite passes 21,437 checks, and a live
 story capture after the asynchronous fetch shows the image.
+
+## FPS monitor startup resource sampling is off the render thread
+
+Windows ETW sampling at 2 kHz found the startup discrepancy in the FPS HUD,
+not in the animated curve example: the first inline `ResourceProbeSample`
+opened the wildcard GPU Engine PDH counter from `FpsMonitor::Render`.
+`PdhAddEnglishCounterW` alone occupied 311 samples (about 155.5 ms) in the
+original startup trace, and a 1600x1120 startup benchmark retained a 578.753 ms
+frame. Upstream constructs and samples its `ResourceProbe` on GPUI's background
+executor.
+
+The C++ monitor now follows that ownership split. Its window timer keeps the
+500 ms cadence, finite executor jobs own copies of the probe while sampling,
+and generation-checked completions publish into the entity and notify its
+windows on the main thread. Only one sample may be in flight; dropping the
+monitor cancels its timer and queued work. The initial background job primes
+both the CPU delta and Windows' GPU counter, so no delayed PDH setup can return
+to a later frame. The process-wide Windows PDH query is locked across open,
+collection and its reused result buffer, making concurrent monitors safe.
+
+Three fresh 1600x1120 startup runs now retain 15 frames in the first measured
+0.2 seconds, with 2.124--3.948 ms means and 4.290--4.879 ms maxima. A follow-up
+ETW trace attributes all 271 `PdhAddEnglishCounterW` samples to
+`WorkerMain -> FpsResourceWork -> ResourceProbeSample`, and zero to the main
+thread. A five-second steady-state sample is 3.400 ms mean / 4.663 ms p95;
+Direct2D's per-line tessellation remains the native backend's main cost, while
+`GPUI_PAINT=gpu` was already about twice as fast for this deliberately
+line-heavy example. MSVC release passes all 21,437 checks, and both MSVC and
+clang-cl release builds of `fps_monitor` pass.
