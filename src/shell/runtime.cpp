@@ -9,6 +9,7 @@
 #include "shell/retained.h"
 #include "shell/scope.h"
 #include "shell/standard.h"
+#include "shell/view.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -47,6 +48,15 @@ struct AppModule {
 struct ScriptViewRegistration {
     EntityId view = {};
     bool* dirty = nullptr;
+};
+
+struct NestedViewEntry {
+    uint32_t token = 0;
+    EntityId view = {};
+    EntityId owner = {};
+    Policy* policy = nullptr;
+    AppModule* application = nullptr;
+    App* app = nullptr;
 };
 
 enum class ShellTaskKind : uint8_t {
@@ -265,10 +275,12 @@ struct ShellRuntimeImpl {
     shell::Metrics metrics;
     Vec<AppModule*> modules;
     Vec<ScriptViewRegistration> views;
+    Vec<NestedViewEntry> nestedViews;
     Vec<ShellTask*> tasks;
     Entity<ShellTaskDriver> taskDriver = {};
     App* taskApp = nullptr;
     uint32_t nextTask = 1;
+    uint32_t nextNestedView = 1;
     uint32_t nextModuleGeneration = 1;
     uint64_t detachedExecution = 0;
     uint64_t interruptIdentity = UINT64_MAX;
@@ -298,6 +310,54 @@ struct ShellRuntimeAccess {
         return runtime ? runtime->control : nullptr;
     }
 };
+
+static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
+                                     Window* window, App* app, Policy* policy,
+                                     JSValueConst props, ShellError* error,
+                                     EntityId view);
+
+static NestedViewEntry* FindNestedView(ShellRuntimeImpl* impl,
+                                       uint32_t token, int* index = nullptr) {
+    if (!impl || token == 0) return nullptr;
+    for (int i = 0; i < impl->nestedViews.len; i++) {
+        if (impl->nestedViews[i].token != token) continue;
+        if (index) *index = i;
+        return &impl->nestedViews[i];
+    }
+    return nullptr;
+}
+
+static bool NestedViewIsCurrent(const NestedViewEntry* entry) {
+    return entry && entry->policy == shell::ScopeCurrentPolicy() &&
+           entry->application ==
+               (AppModule*)shell::ScopeCurrentApplication();
+}
+
+static void DropNestedViewAt(ShellRuntimeImpl* impl, int at) {
+    if (!impl || at < 0 || at >= impl->nestedViews.len) return;
+    NestedViewEntry entry = impl->nestedViews[at];
+    for (int i = at + 1; i < impl->nestedViews.len; i++) {
+        impl->nestedViews[i - 1] = impl->nestedViews[i];
+    }
+    impl->nestedViews.len--;
+    if (entry.app && entry.view.IsValid()) EntityDrop(entry.app, entry.view);
+    PolicyRelease(entry.policy);
+}
+
+static void RollbackNestedViews(ShellRuntimeImpl* impl,
+                                uint32_t checkpoint) {
+    for (;;) {
+        int found = -1;
+        for (int i = impl ? impl->nestedViews.len - 1 : -1; i >= 0; i--) {
+            if (impl->nestedViews[i].token >= checkpoint) {
+                found = i;
+                break;
+            }
+        }
+        if (found < 0) return;
+        DropNestedViewAt(impl, found);
+    }
+}
 
 struct ProcessJob {
     ShellRuntimeControl* control = nullptr;
@@ -1815,6 +1875,15 @@ static bool RefuseRetainedCreation(JSContext* ctx, const char* what) {
                           what);
         return true;
     }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (impl && impl->retained.Len() + impl->nestedViews.len >=
+                    shell::kMaxLiveEntities) {
+        JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
+        return true;
+    }
     return false;
 }
 
@@ -1829,6 +1898,257 @@ static bool RefuseRetainedMutation(JSContext* ctx, const char* what) {
         return true;
     }
     return false;
+}
+
+static JSValue ThrowNestedError(JSContext* ctx, ShellError* error,
+                                const char* fallback) {
+    JSValue result = error && error->IsSet()
+                         ? JS_ThrowInternalError(ctx, "%.*s", error->message.len,
+                                                 error->message.s)
+                         : JS_ThrowInternalError(ctx, "%s", fallback);
+    ShellErrorClear(error);
+    return result;
+}
+
+static JSValue NativeViewNew(JSContext* ctx, JSValueConst, int argc,
+                             JSValueConst* argv) {
+    // Rust defers this operation until its RefCell/GPUI context borrows have
+    // ended. The C API holds neither across a native call, so construction can
+    // enter QuickJS directly and put init-created state under the final child
+    // owner. One observable difference is intentional: a construction or
+    // update failure throws at cx.new/set_props and is catchable there.
+    if (RefuseRetainedCreation(ctx, "cx.new(Class, props)")) {
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx,
+                                 "cx.new(Class, props) expects a View subclass");
+    }
+    EntityId owner = shell::ScopeCurrentView();
+    if (!owner.IsValid() || shell::ScopeCurrentRuntime() != impl->owner) {
+        return JS_ThrowTypeError(
+            ctx,
+            "cx.new(Class, props) needs a current script view; call it from "
+            "a view's init(), event handler or task");
+    }
+    Window* window = nullptr;
+    App* app = nullptr;
+    {
+        shell::ScopeHostContext host = shell::ScopeCurrentHost();
+        if (!host.IsSet()) {
+            return JS_ThrowTypeError(
+                ctx,
+                "cx.new(Class, props) needs a live Window/App context");
+        }
+        window = host.GetWindow();
+        app = host.GetApp();
+    }
+    uint32_t token = impl->nextNestedView++;
+    if (token == 0 || impl->nextNestedView == 0) {
+        return JS_ThrowRangeError(ctx,
+                                  "the nested Entity token space is exhausted");
+    }
+
+    ViewType* type = new ViewType();
+    type->runtime = impl->owner->Retain();
+    type->value = JS_DupValue(ctx, argv[0]);
+    type->application = (AppModule*)shell::ScopeCurrentApplication();
+    Policy* policy = shell::ScopeCurrentPolicy();
+    Entity<ScriptView> entity =
+        ScriptView::New(app, impl->owner, type, policy);
+    ScriptView* view = entity.Get(app);
+    if (!view) {
+        ViewTypeRelease(type);
+        return JS_ThrowInternalError(ctx,
+                                     "could not allocate the nested script view");
+    }
+    ShellError error = {};
+    JSValueConst props = argc > 1 ? argv[1] : JS_UNDEFINED;
+    ViewObject* object = InstantiateObject(impl->owner, type, window, app,
+                                           policy, props, &error, entity.id);
+    if (!object) {
+        EntityDrop(app, entity.id);
+        ViewTypeRelease(type);
+        return ThrowNestedError(ctx, &error,
+                                "could not initialize the nested script view");
+    }
+    view = entity.Get(app);
+    if (!view) {
+        ViewObjectRelease(object);
+        ViewTypeRelease(type);
+        return JS_ThrowInternalError(
+            ctx, "the nested script view was released during initialization");
+    }
+    view->object = object;
+    NestedViewEntry nested = {};
+    nested.token = token;
+    nested.view = entity.id;
+    nested.owner = owner;
+    nested.policy = PolicyRetain(policy);
+    nested.application = type->application;
+    nested.app = app;
+    impl->nestedViews.Append(nested);
+    ViewTypeRelease(type);
+    return JS_NewUint32(ctx, token);
+}
+
+static JSValue NativeViewSetProps(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv) {
+    if (RefuseRetainedMutation(ctx, "entity.set_props(props)")) {
+        return JS_EXCEPTION;
+    }
+    uint32_t token = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &token, argv[0]) < 0) {
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    NestedViewEntry* nested = FindNestedView(impl, token);
+    if (!NestedViewIsCurrent(nested)) {
+        return JS_ThrowTypeError(
+            ctx, "this Entity has been released and can no longer be updated");
+    }
+    NestedViewEntry current = *nested;
+    Window* window = nullptr;
+    App* app = nullptr;
+    {
+        shell::ScopeHostContext host = shell::ScopeCurrentHost();
+        if (!host.IsSet()) {
+            return JS_ThrowTypeError(
+                ctx, "entity.set_props(props) needs a live Window/App context");
+        }
+        window = host.GetWindow();
+        app = host.GetApp();
+    }
+    ScriptView* view = (ScriptView*)EntityGet(app, current.view);
+    if (!view || !view->object) {
+        return JS_ThrowTypeError(
+            ctx, "this Entity has been released and can no longer be updated");
+    }
+
+    shell::CallScopeGuard scope = shell::ScopeEnter(
+        window, app, ScopePhase::Event, current.view, current.policy,
+        impl->owner, current.application);
+    uint32_t retainedCheckpoint = impl->retained.Checkpoint();
+    uint32_t nestedCheckpoint = impl->nextNestedView;
+    int taskCheckpoint = impl->tasks.len;
+    BeginExecution(impl);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue checkpoint = JS_GetPropertyStr(ctx, global, "__checkpoint_view");
+    JSValue restore = JS_Call(ctx, checkpoint, JS_UNDEFINED, 1,
+                              &view->object->value);
+    JS_FreeValue(ctx, checkpoint);
+    JS_FreeValue(ctx, global);
+    if (JS_IsException(restore)) {
+        ShellError error = {};
+        CaptureException(impl, &error);
+        return ThrowNestedError(ctx, &error,
+                                "could not checkpoint the nested script view");
+    }
+
+    JSValue update = JS_GetPropertyStr(ctx, view->object->value, "update");
+    JSValue result = JS_UNDEFINED;
+    if (JS_IsException(update)) {
+        result = JS_EXCEPTION;
+    } else if (!JS_IsUndefined(update) && !JS_IsNull(update)) {
+        if (!JS_IsFunction(ctx, update)) {
+            JS_ThrowTypeError(
+                ctx, "a nested view's update property must be a function");
+            result = JS_EXCEPTION;
+        } else {
+            JSValueConst props = argc > 1 ? argv[1] : JS_UNDEFINED;
+            result = JS_Call(ctx, update, view->object->value, 1, &props);
+        }
+    }
+    JS_FreeValue(ctx, update);
+    if (JS_IsException(result)) {
+        ShellError updateError = {};
+        CaptureException(impl, &updateError);
+        BeginExecution(impl);
+        JSValue restored = JS_Call(ctx, restore, JS_UNDEFINED, 0, nullptr);
+        ShellError restoreError = {};
+        if (JS_IsException(restored)) CaptureException(impl, &restoreError);
+        else JS_FreeValue(ctx, restored);
+        while (impl->tasks.len > taskCheckpoint) {
+            ForgetTask(impl, impl->tasks[impl->tasks.len - 1]->id);
+        }
+        Vec<shell::CallbackId> retired;
+        impl->retained.Rollback(retainedCheckpoint, &retired);
+        for (int i = 0; i < retired.len; i++) {
+            impl->callbacks.RetireId(ctx, retired[i]);
+        }
+        retired.Reset();
+        RollbackNestedViews(impl, nestedCheckpoint);
+        JS_FreeValue(ctx, restore);
+        if (restoreError.IsSet()) {
+            Str message = StrDup(fmt("%s; failed to restore child state: %s",
+                                     updateError.message,
+                                     restoreError.message));
+            ShellErrorClear(&updateError);
+            ShellErrorClear(&restoreError);
+            JSValue thrown = JS_ThrowInternalError(ctx, "%s", message.s);
+            StrFree(message);
+            return thrown;
+        }
+        return ThrowNestedError(ctx, &updateError,
+                                "the nested script view update failed");
+    }
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, restore);
+    view->dirty = true;
+    NotifyEntity(app, current.view, window);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeViewRelease(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    if (RefuseRetainedMutation(ctx, "entity.release()")) return JS_EXCEPTION;
+    uint32_t token = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &token, argv[0]) < 0) {
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    int at = -1;
+    NestedViewEntry* nested = FindNestedView(impl, token, &at);
+    if (!NestedViewIsCurrent(nested)) {
+        return JS_ThrowTypeError(
+            ctx, "this Entity has been released and can no longer be released");
+    }
+    App* app = nested->app;
+    Window* window = nullptr;
+    {
+        shell::ScopeHostContext host = shell::ScopeCurrentHost();
+        if (host.IsSet()) window = host.GetWindow();
+    }
+    EntityId owner = nested->owner;
+    bool live = app && EntityGet(app, nested->view);
+    DropNestedViewAt(impl, at);
+    if (owner.IsValid() && app) NotifyEntity(app, owner, window);
+    return JS_NewBool(ctx, live);
+}
+
+static JSValue NativeChildView(JSContext* ctx, JSValueConst, int argc,
+                               JSValueConst* argv) {
+    uint32_t token = 0;
+    if (argc < 1 || JS_ToUint32(ctx, &token, argv[0]) < 0) {
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    NestedViewEntry* nested = FindNestedView(impl, token);
+    if (!NestedViewIsCurrent(nested) || !nested->app ||
+        !EntityGet(nested->app, nested->view)) {
+        return JS_ThrowTypeError(
+            ctx, "this Entity has been released and can no longer be mounted");
+    }
+    shell::Component component = {};
+    component.kind = shell::ComponentKind::ChildView;
+    component.handle = token;
+    shell::SpecId id = 0;
+    shell::SpecError failure = {};
+    if (!impl->scratch->PushChildView(component, &id, &failure)) {
+        return SpecFailure(ctx, failure);
+    }
+    return JS_NewUint32(ctx, id);
 }
 
 static bool OptionalJsString(JSContext* ctx, JSValueConst value, Arena* arena,
@@ -3933,7 +4253,8 @@ globalThis.__gpui = (() => {
     if (["string", "number", "boolean"].includes(typeof child)) {
       return __component("text", String(child));
     }
-    throw new TypeError("child(value) expects an element or primitive text");
+    if (child?.__entity) return __child_view(child.__handle);
+    throw new TypeError("child(value) expects an element, primitive text, or an entity from cx.new(Class, props)");
   };
   explicit.child = function (child) { __attach(this.__id, childId(child)); return this; };
   explicit.children = function (children) {
@@ -3955,10 +4276,53 @@ globalThis.__gpui = (() => {
       return this;
     };
   }
-  class View {}
-  globalThis.__construct = (Class) => new Class();
-  globalThis.__initialize = (instance, cx) => {
-    if (typeof instance.init === "function") instance.init(undefined, cx);
+  let deferInit = false;
+  class View {
+    constructor(props) {
+      if (!deferInit && typeof this.init === "function") this.init(props, ambientContext);
+    }
+  }
+  globalThis.__construct = (Class) => {
+    deferInit = true;
+    try { return new Class(); }
+    finally { deferInit = false; }
+  };
+  globalThis.__initialize = (instance, props, cx) => {
+    if (typeof instance.init === "function") instance.init(props, cx);
+  };
+  globalThis.__checkpoint_view = (instance) => {
+    const snapshots = [];
+    const seen = new Set();
+    const pending = [instance];
+    let propertyCount = 0;
+    while (pending.length > 0) {
+      const value = pending.pop();
+      if (value === null || (typeof value !== "object" && typeof value !== "function") || seen.has(value)) continue;
+      if (snapshots.length >= 10000) throw new RangeError("a nested view update reached the 10,000-object rollback limit");
+      seen.add(value);
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      const keys = Reflect.ownKeys(descriptors);
+      propertyCount += keys.length;
+      if (propertyCount > 100000) throw new RangeError("a nested view update reached the 100,000-property rollback limit");
+      snapshots.push([value, descriptors]);
+      for (const key of keys) {
+        const descriptor = descriptors[key];
+        if (Object.prototype.hasOwnProperty.call(descriptor, "value")) pending.push(descriptor.value);
+      }
+    }
+    return () => {
+      for (let index = snapshots.length - 1; index >= 0; index -= 1) {
+        const [value, descriptors] = snapshots[index];
+        const saved = new Set(Reflect.ownKeys(descriptors));
+        for (const key of Reflect.ownKeys(value)) {
+          if (!saved.has(key)) {
+            const current = Object.getOwnPropertyDescriptor(value, key);
+            if (current?.configurable) delete value[key];
+          }
+        }
+        Object.defineProperties(value, descriptors);
+      }
+    };
   };
   const taskHandle = (id) => Object.freeze({
     cancel: () => __task_cancel(id),
@@ -4002,6 +4366,10 @@ globalThis.__gpui = (() => {
   globalThis.__context = (generation) => Object.freeze({
     notify: () => __cx_notify(generation),
     focus_handle: () => focusHandle(__focus_handle_new()),
+    new: (Class, props) => {
+      if (typeof Class !== "function" || !(Class.prototype instanceof View)) throw new TypeError("cx.new(Class, props) expects a View subclass");
+      return entity(__view_new(Class, props));
+    },
     sleep: (ms = 0) => __sleep(Number(ms)),
     spawn,
     timer,
@@ -4011,6 +4379,10 @@ globalThis.__gpui = (() => {
   ambientContext = Object.freeze({
     notify: () => __cx_notify_current(),
     focus_handle: () => focusHandle(__focus_handle_new()),
+    new: (Class, props) => {
+      if (typeof Class !== "function" || !(Class.prototype instanceof View)) throw new TypeError("cx.new(Class, props) expects a View subclass");
+      return entity(__view_new(Class, props));
+    },
     sleep: (ms = 0) => __sleep(Number(ms)),
     spawn,
     timer,
@@ -4386,6 +4758,12 @@ R"JS(
     is_focused: () => __focus_is_focused(handle),
     release: () => __focus_release(handle),
   });
+  const entity = (handle) => ({
+    __entity: true,
+    __handle: handle,
+    set_props: (props) => __view_set_props(handle, props),
+    release: () => __view_release(handle),
+  });
   const virtualScrollHandle = (handle) => ({
     __handle: handle,
     scroll_to_item: (index, strategy = "top") => __virtual_scroll_to_item(handle, Number(index), String(strategy)),
@@ -4520,6 +4898,13 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     SetGlobalFunction(impl->context, global, "__cx_notify", NativeNotify, 1);
     SetGlobalFunction(impl->context, global, "__cx_notify_current",
                       NativeNotifyCurrent, 0);
+    SetGlobalFunction(impl->context, global, "__view_new", NativeViewNew, 2);
+    SetGlobalFunction(impl->context, global, "__view_set_props",
+                      NativeViewSetProps, 2);
+    SetGlobalFunction(impl->context, global, "__view_release",
+                      NativeViewRelease, 1);
+    SetGlobalFunction(impl->context, global, "__child_view", NativeChildView,
+                      1);
     SetGlobalFunction(impl->context, global, "__task_new", NativeTaskNew, 1);
     SetGlobalFunction(impl->context, global, "__task_finish",
                       NativeTaskFinish, 1);
@@ -4728,6 +5113,7 @@ ShellRuntime::~ShellRuntime() {
         }
         impl->modules.Reset();
         impl->views.Reset();
+        impl->nestedViews.Reset();
         if (impl->context) {
             JS_SetContextOpaque(impl->context, nullptr);
             JS_FreeContext(impl->context);
@@ -4890,21 +5276,29 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
     return result;
 }
 
-ViewObject* ShellRuntime::Instantiate(ViewType* type, Window* window, App* app,
-                                      Policy* policy, ShellError* error,
-                                      EntityId view) {
+static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
+                                     Window* window, App* app, Policy* policy,
+                                     JSValueConst props, ShellError* error,
+                                     EntityId view) {
     ShellErrorClear(error);
-    if (!type || type->runtime != this || !window || !app) {
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    if (!runtime || !impl || !type || type->runtime != runtime || !window ||
+        !app) {
         SetError(error, StrL("instantiate needs a view type from this runtime and a live Window/App"));
         return nullptr;
     }
     shell::CallScopeGuard scope =
-        shell::ScopeEnter(window, app, ScopePhase::Event, view, policy, this,
+        shell::ScopeEnter(window, app, ScopePhase::Event, view, policy, runtime,
                           type->application);
     uint32_t retainedCheckpoint = impl->retained.Checkpoint();
+    uint32_t nestedCheckpoint = impl->nextNestedView;
+    int taskCheckpoint = impl->tasks.len;
     BeginExecution(impl);
-    JSValue object =
-        JS_CallConstructor(impl->context, type->value, 0, nullptr);
+    JSValue global = JS_GetGlobalObject(impl->context);
+    JSValue construct = JS_GetPropertyStr(impl->context, global, "__construct");
+    JSValue object = JS_Call(impl->context, construct, JS_UNDEFINED, 1,
+                             &type->value);
+    JS_FreeValue(impl->context, construct);
     if (JS_IsException(object)) {
         Vec<shell::CallbackId> retired;
         impl->retained.Rollback(retainedCheckpoint, &retired);
@@ -4912,17 +5306,23 @@ ViewObject* ShellRuntime::Instantiate(ViewType* type, Window* window, App* app,
             impl->callbacks.RetireId(impl->context, retired[i]);
         }
         retired.Reset();
+        while (impl->tasks.len > taskCheckpoint) {
+            ForgetTask(impl, impl->tasks[impl->tasks.len - 1]->id);
+        }
+        RollbackNestedViews(impl, nestedCheckpoint);
+        JS_FreeValue(impl->context, global);
         CaptureException(impl, error);
         return nullptr;
     }
-    JSValue global = JS_GetGlobalObject(impl->context);
     JSValue initialize = JS_GetPropertyStr(impl->context, global, "__initialize");
     JSValue context = JS_GetPropertyStr(impl->context, global, "__context");
     JSValue generation = JS_NewInt64(impl->context, (int64_t)scope.Generation());
     JSValue cx = JS_Call(impl->context, context, JS_UNDEFINED, 1, &generation);
-    JSValue args[2] = {object, cx};
-    JSValue initialized = JS_Call(impl->context, initialize, JS_UNDEFINED, 2, args);
+    JSValue args[3] = {object, JS_DupValue(impl->context, props), cx};
+    JSValue initialized =
+        JS_Call(impl->context, initialize, JS_UNDEFINED, 3, args);
     JS_FreeValue(impl->context, generation);
+    JS_FreeValue(impl->context, args[1]);
     JS_FreeValue(impl->context, cx);
     JS_FreeValue(impl->context, context);
     JS_FreeValue(impl->context, initialize);
@@ -4935,15 +5335,26 @@ ViewObject* ShellRuntime::Instantiate(ViewType* type, Window* window, App* app,
             impl->callbacks.RetireId(impl->context, retired[i]);
         }
         retired.Reset();
+        while (impl->tasks.len > taskCheckpoint) {
+            ForgetTask(impl, impl->tasks[impl->tasks.len - 1]->id);
+        }
+        RollbackNestedViews(impl, nestedCheckpoint);
         CaptureException(impl, error);
         return nullptr;
     }
     JS_FreeValue(impl->context, initialized);
     ViewObject* result = new ViewObject();
-    result->runtime = Retain();
+    result->runtime = runtime->Retain();
     result->value = object;
     result->application = type->application;
     return result;
+}
+
+ViewObject* ShellRuntime::Instantiate(ViewType* type, Window* window, App* app,
+                                      Policy* policy, ShellError* error,
+                                      EntityId view) {
+    return InstantiateObject(this, type, window, app, policy, JS_UNDEFINED,
+                             error, view);
 }
 
 static bool ElementId(JSContext* ctx, JSValueConst value, shell::SpecId* id) {
@@ -5070,11 +5481,22 @@ int ShellRuntime::LiveCallbacks() const { return impl->callbacks.Live(); }
 
 int ShellRuntime::LiveEntities() const { return impl->retained.Len(); }
 
+int ShellRuntime::LiveNestedViews() const { return impl->nestedViews.len; }
+
 int ShellRuntime::LiveTasks() const { return impl->tasks.len; }
 
 shell::RetainedEntry* ShellRuntime::Retained(
     shell::EntityHandle handle) const {
     return impl->retained.Find(handle);
+}
+
+EntityId ShellRuntime::NestedView(shell::EntityHandle handle, App* app) const {
+    if (handle == 0 || handle > UINT32_MAX) return {};
+    NestedViewEntry* entry = FindNestedView(impl, (uint32_t)handle);
+    if (!entry || !app || entry->app != app || !EntityGet(app, entry->view)) {
+        return {};
+    }
+    return entry->view;
 }
 
 void ShellRuntime::RegisterScriptView(EntityId view, bool* dirty) {
@@ -5105,6 +5527,17 @@ void ShellRuntime::InvalidateScriptView(EntityId view) {
 }
 
 void ShellRuntime::ReleaseOwnedEntities(EntityId view) {
+    for (;;) {
+        int nested = -1;
+        for (int i = impl->nestedViews.len - 1; i >= 0; i--) {
+            if (impl->nestedViews[i].owner == view) {
+                nested = i;
+                break;
+            }
+        }
+        if (nested < 0) break;
+        DropNestedViewAt(impl, nested);
+    }
     for (int i = impl->tasks.len - 1; i >= 0; i--) {
         if (impl->tasks[i]->owner == view) {
             ForgetTask(impl, impl->tasks[i]->id);
@@ -5121,6 +5554,17 @@ void ShellRuntime::ReleaseOwnedEntities(EntityId view) {
 void ShellRuntime::ReleaseApplicationState(ViewObject* object) {
     if (!object || object->runtime != this || !object->application) return;
     AppModule* application = object->application;
+    for (;;) {
+        int nested = -1;
+        for (int i = impl->nestedViews.len - 1; i >= 0; i--) {
+            if (impl->nestedViews[i].application == application) {
+                nested = i;
+                break;
+            }
+        }
+        if (nested < 0) break;
+        DropNestedViewAt(impl, nested);
+    }
     for (int i = impl->tasks.len - 1; i >= 0; i--) {
         if (impl->tasks[i]->application == application) {
             ForgetTask(impl, impl->tasks[i]->id);

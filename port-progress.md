@@ -9663,3 +9663,28 @@ view/policy/application task scope. Dropping or reloading the owner removes
 the continuation without making up a cancellation error. Tests cover reserved
 names, declaration mismatches, nested data round trips, Promise settlement
 and live revocation. MSVC release passes 21,295 checks.
+
+## Shell retained nested views
+
+Script views can now retain other script views with `cx.new(Class, props)`,
+mount them through ordinary `.child(entity)` calls, update only the child with
+`entity.set_props(props)`, and release an entire child-owned subtree. JavaScript
+keeps a 32-bit token while the runtime privately resolves it to the native
+generational entity, policy and application generation; stale, released or
+foreign-provenance tokens cannot be mounted or mutated. Child `init` runs only
+after its final native owner exists, so its controls, callbacks, tasks and
+further nested views all retire at the right boundary.
+
+Updates journal up to 10,000 reachable ordinary objects and 100,000 property
+descriptors. A throwing update restores those descriptors and rolls back newly
+created retained controls, tasks and nested views before returning the error.
+As documented beside the native entry point, this C binding applies nested
+operations directly because it has no Rust `RefCell` or borrowed GPUI context
+to escape; unlike upstream's deferred host-entry flush, its construction and
+update errors are catchable around the synchronous JavaScript call.
+
+Materialization renders the child entity through the normal GPUI entity seam,
+so its snapshot and dirty bit remain independent of its parent. Tests cover
+initial props, mounting, child-only rebuilding, ordinary-state and retained
+resource rollback, and release. MSVC release passes 21,311 checks; clang-cl and
+wasm release builds of `hello_world` also pass.

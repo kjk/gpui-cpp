@@ -867,6 +867,134 @@ static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
     AppGlobalClear(&app);
 }
 
+static void NestedScriptViewsRetainUpdateRollbackAndRelease() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { Button, InputState } from 'gpui-base';\n"
+        "globalThis.nestedAction = 'none';\n"
+        "globalThis.nestedNext = undefined;\n"
+        "class Leaf extends View {\n"
+        "  init(props) { this.label = props.label; }\n"
+        "  render(cx) { globalThis.nestedLeafRendered = this.label; return div().child(this.label); }\n"
+        "}\n"
+        "class Child extends View {\n"
+        "  init(props, cx) {\n"
+        "    this.state = { label: props.label };\n"
+        "    this.leaf = cx.new(Leaf, { label: 'leaf' });\n"
+        "  }\n"
+        "  update(props) {\n"
+        "    if (props.append) this.state.label += props.append;\n"
+        "    else this.state.label = props.label;\n"
+        "    if (props.fail) {\n"
+        "      this.temporary = InputState.new({ value: 'temporary' });\n"
+        "      throw new Error('nested update failed');\n"
+        "    }\n"
+        "  }\n"
+        "  render(cx) {\n"
+        "    globalThis.nestedRendered = this.state.label;\n"
+        "    return div().children([this.state.label, this.leaf]);\n"
+        "  }\n"
+        "}\n"
+        "export default class Main extends View {\n"
+        "  init(props, cx) { this.child = cx.new(Child, { label: 'one' }); }\n"
+        "  render(cx) {\n"
+        "    return div().children([\n"
+        "      Button.new('nested-action').on_click(() => {\n"
+        "        if (globalThis.nestedAction === 'release')\n"
+        "          globalThis.nestedReleased = this.child.release();\n"
+        "        else this.child.set_props(globalThis.nestedNext);\n"
+        "      }),\n"
+        "      this.child,\n"
+        "    ]);\n"
+        "  }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("nested-view.js"), source,
+                                               &error)
+                         : nullptr;
+    Entity<ScriptView> parent =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = parent.IsValid()
+                   ? EntityRender(&app, &window, frame, parent.id)
+                   : nullptr;
+    ScriptView* parentView = parent.Get(&app);
+    shell::CallbackId callback =
+        parentView ? FirstCallback(parentView->snapshot) : UINT64_MAX;
+    utassert(root != nullptr && !error.IsSet());
+    utassert(runtime && runtime->LiveNestedViews() == 2);
+    utassert(callback != UINT64_MAX);
+    utassert(runtime && runtime->Eval(
+        StrL("if (globalThis.nestedRendered !== 'one' || globalThis.nestedLeafRendered !== 'leaf') throw new Error('nested init props were not rendered')"),
+        StrL("nested-init-check.js"), &error));
+
+    utassert(runtime && runtime->Eval(
+        StrL("globalThis.nestedNext = { label: 'two' }"),
+        StrL("nested-update-input.js"), &error));
+    if (callback != UINT64_MAX) {
+        ClickEvent click = {};
+        runtime->DispatchClick(callback, click, &window, &app);
+    }
+    ArenaDelete(frame);
+    frame = ArenaNew();
+    window.frameArena = frame;
+    root = EntityRender(&app, &window, frame, parent.id);
+    utassert(root != nullptr);
+    utassert(runtime && runtime->Eval(
+        StrL("if (globalThis.nestedRendered !== 'two') throw new Error('set_props did not rebuild only the child')"),
+        StrL("nested-update-check.js"), &error));
+
+    utassert(runtime && runtime->Eval(
+        StrL("globalThis.nestedNext = { label: 'bad', fail: true }"),
+        StrL("nested-failure-input.js"), &error));
+    if (callback != UINT64_MAX) {
+        ClickEvent click = {};
+        runtime->DispatchClick(callback, click, &window, &app);
+    }
+    utassert(runtime && runtime->LiveEntities() == 0);
+    utassert(runtime && runtime->LiveNestedViews() == 2);
+    utassert(runtime && runtime->Eval(
+        StrL("globalThis.nestedNext = { append: '!' }"),
+        StrL("nested-rollback-probe.js"), &error));
+    if (callback != UINT64_MAX) {
+        ClickEvent click = {};
+        runtime->DispatchClick(callback, click, &window, &app);
+    }
+    ArenaDelete(frame);
+    frame = ArenaNew();
+    window.frameArena = frame;
+    root = EntityRender(&app, &window, frame, parent.id);
+    utassert(root != nullptr);
+    utassert(runtime && runtime->Eval(
+        StrL("if (globalThis.nestedRendered !== 'two!') throw new Error('failed update state was not restored')"),
+        StrL("nested-rollback-check.js"), &error));
+
+    utassert(runtime && runtime->Eval(
+        StrL("globalThis.nestedAction = 'release'"),
+        StrL("nested-release-input.js"), &error));
+    if (callback != UINT64_MAX) {
+        ClickEvent click = {};
+        runtime->DispatchClick(callback, click, &window, &app);
+    }
+    utassert(runtime && runtime->LiveNestedViews() == 0);
+    utassert(runtime && runtime->Eval(
+        StrL("if (globalThis.nestedReleased !== true) throw new Error('release failed')"),
+        StrL("nested-release-check.js"), &error));
+    EntityDrop(&app, parent.id);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
 static void VirtualListsRenderOneVisibleBatch() {
     App app;
     Window window;
@@ -1574,6 +1702,7 @@ void TestShellCore() {
     PublishedSnapshotsMaterializeToNativeElements();
     ScriptViewsReuseSnapshotsUntilNotified();
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();
+    NestedScriptViewsRetainUpdateRollbackAndRelease();
     VirtualListsRenderOneVisibleBatch();
     ShellSandboxWithholdsCompilersAndSharedPrototypeWrites();
     ShellSchedulerResumesPromisesInTaskScope();

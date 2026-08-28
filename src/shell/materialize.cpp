@@ -641,7 +641,16 @@ static El* Construct(Ctx* cx, ShellRuntime* runtime,
             }
             return VirtualList::New(cx, list->id, opts);
         }
-        case shell::ComponentKind::ChildView:
+        case shell::ComponentKind::ChildView: {
+            EntityId child = runtime
+                                 ? runtime->NestedView(component.handle,
+                                                       cx->app)
+                                 : EntityId{};
+            El* rendered = child.IsValid()
+                               ? EntityRender(cx->app, cx->win, cx->a, child)
+                               : nullptr;
+            return rendered ? rendered : Div(cx->a);
+        }
         case shell::ComponentKind::PathFill:
         case shell::ComponentKind::PathStroke:
             return Div(cx->a);

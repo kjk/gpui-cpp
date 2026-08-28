@@ -46,8 +46,10 @@ class ShellRuntime {
     void RecordMaterialize(uint64_t nanos);
     int LiveCallbacks() const;
     int LiveEntities() const;
+    int LiveNestedViews() const;
     int LiveTasks() const;
     shell::RetainedEntry* Retained(shell::EntityHandle handle) const;
+    EntityId NestedView(shell::EntityHandle handle, App* app) const;
 
     // ScriptView registers its dirty bit so cx.notify() can invalidate the
     // JavaScript description as well as the native window. Ordinary repaint
