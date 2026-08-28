@@ -191,9 +191,9 @@ void ResizableState::OnHandleUp(ResizableState* self, Ctx* cx,
         return;
     }
     self->dragging = -1;
-    // ResizablePanelEvent::Resized, once the boundary has settled.
+    // The complete panel-size slice, once the boundary has settled.
     if (self->onResized.IsValid()) {
-        ResizablePanelEvent ev = ResizablePanelEvent::Resized;
+        ResizablePanelEvent ev = {self->sizes.els, self->sizes.len};
         ListenerCall(cx->app, cx->win, self->onResized, &ev);
     }
     Notify(cx);
@@ -216,7 +216,7 @@ bool ResizableState::ResizePanel(Ctx* cx, int ix, float size) {
     // Rust calls done_resizing for every valid panel, even when the requested
     // value was already current or the range clamps it back to that value.
     if (onResized.IsValid()) {
-        ResizablePanelEvent ev = ResizablePanelEvent::Resized;
+        ResizablePanelEvent ev = {sizes.els, sizes.len};
         ListenerCall(cx->app, cx->win, onResized, &ev);
     }
     Notify(cx);

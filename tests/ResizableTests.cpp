@@ -200,8 +200,9 @@ static void SourceConstructorsAndHandleAppearanceRemainConcrete() {
     configured->IntoEl();
     utassert(explicitState.Get(&cx)->axis == Axis::Vertical);
 
-    ResizablePanelEvent event = ResizablePanelEvent::Resized;
-    utassert(event == ResizablePanelEvent::Resized);
+    ResizablePanelEvent event = {explicitState.Get(&cx)->sizes.els,
+                                 explicitState.Get(&cx)->sizes.len};
+    utassert(event.sizes == explicitState.Get(&cx)->sizes.els);
     utassertnear(PANEL_MIN_SIZE, 100.f);
     EntityDropAll(&app);
     AppGlobalClear(&app);

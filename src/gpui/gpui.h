@@ -465,6 +465,9 @@ struct MouseUpEvent {
 struct MouseMoveEvent {
     float x = 0;
     float y = 0;
+    // Filled for an element-level on_mouse_move listener. Window-level moves
+    // leave it empty, as GPUI's window subscription does.
+    Bounds el = {};
     // Rust's Option<MouseButton>: `pressed` is the Some, `pressedButton` its
     // value. With no button down, pressedButton means nothing.
     bool pressed = false;
@@ -1694,6 +1697,8 @@ struct El {
     // `div().on_hover(..)`. Fires with a HoverEvent when the pointer enters
     // the element and again when it leaves, never in between.
     Listener onHover;
+    // on_mouse_move: every move over this element, without requiring a press.
+    Listener onMouseMove;
     Listener onScroll;
     ActionSlot* actions = nullptr;
     // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
@@ -1726,6 +1731,13 @@ struct El {
     // on the answer while building.
     Style hoverStyle = {};
     uint32_t hoverSet = 0;
+    // The other two StatefulInteractiveElement refinements. Unlike
+    // Style::activeBg these may name any field carried by a refinement; they
+    // are resolved beside hoverStyle after element ids have been collected.
+    Style activeStyle = {};
+    uint32_t activeSet = 0;
+    Style focusStyle = {};
+    uint32_t focusSet = 0;
     Style dragOverStyle = {};
     uint32_t dragOverSet = 0;
     Str dragOverKind = {};
@@ -2078,6 +2090,7 @@ struct El {
     // thumb or pressing the track reports one for it to store.
     El* OnScroll(Listener l);
     El* OnHover(Listener l);
+    El* OnMouseMove(Listener l);
     El* OnMouseDown(Listener l, DispatchPhase phase = DispatchPhase::Bubble);
     El* OnMouseUp(Listener l, DispatchPhase phase = DispatchPhase::Bubble);
     El* OnDragMove(Listener l);
@@ -2097,6 +2110,8 @@ struct El {
     // `div().hover(..)`. The refinement is a StateStyle, which is what every
     // other refinement in this tree is built with.
     El* Hover(const struct StateStyle& s);
+    El* Active(const struct StateStyle& s);
+    El* Focus(const struct StateStyle& s);
     // `div().drag_over::<T>(..)`, where `kind` is the drag payload's kind the
     // way `OnDrop` names it.
     El* DragOver(Str dragKind, const struct StateStyle& s);
@@ -2242,6 +2257,7 @@ struct HitRect {
     Func0 onClick;
     Listener listener;
     Listener onHover;
+    Listener onMouseMove;
     Listener onMouseDown;
     Listener onMouseUp;
     // Which pass of the chain each of the two was registered for.

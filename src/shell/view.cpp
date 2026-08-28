@@ -1,4 +1,6 @@
 #include "shell/view.h"
+#include "base/resizable.h"
+#include "base/select.h"
 
 namespace gpui {
 
@@ -135,6 +137,108 @@ void ScriptView::OnOpenChange(ScriptView* self, Ctx* cx,
     if (!self || !self->runtime || !event) return;
     self->runtime->DispatchChange((shell::CallbackId)callback, event->open,
                                   cx->win, cx->app);
+}
+
+void ScriptView::OnResize(ScriptView* self, Ctx* cx,
+                          const ResizablePanelEvent* event,
+                          intptr_t callback) {
+    if (!self || !self->runtime || !event) return;
+    self->runtime->DispatchNumbers((shell::CallbackId)callback, event->sizes,
+                                   event->count, cx->win, cx->app);
+}
+
+void ScriptView::OnBoundBool(ScriptView* self, Ctx* cx, const void*,
+                             intptr_t binding) {
+    ShellBoolBinding* value = (ShellBoolBinding*)binding;
+    if (!self || !self->runtime || !value || !value->callback) return;
+    self->runtime->DispatchChange(value->callback, value->value, cx->win,
+                                  cx->app);
+}
+
+void ScriptView::OnBoundString(ScriptView* self, Ctx* cx,
+                               const ClickEvent*, intptr_t binding) {
+    ShellStringBinding* value = (ShellStringBinding*)binding;
+    if (!self || !self->runtime || !value || !value->callback) return;
+    self->runtime->DispatchString(value->callback, value->value, cx->win,
+                                  cx->app);
+}
+
+void ScriptView::OnSelectAction(ScriptView* self, Ctx* cx,
+                                const ActionEvent* event,
+                                intptr_t binding) {
+    ShellSelectBinding* value = (ShellSelectBinding*)binding;
+    if (!self || !self->runtime || !event || !value) return;
+    switch (SelectActionOf(event->action, value->open, value->disabled)) {
+        case SelectAction::Open:
+            if (value->contentFocus.IsValid())
+                FocusHandleFocus(cx->win, value->contentFocus);
+            if (value->onOpenChange)
+                self->runtime->DispatchChange(value->onOpenChange, true,
+                                              cx->win, cx->app);
+            break;
+        case SelectAction::Confirm:
+            if (value->onConfirm)
+                self->runtime->DispatchSignal(value->onConfirm, cx->win,
+                                              cx->app);
+            break;
+        case SelectAction::Dismiss:
+            if (value->onDismiss)
+                self->runtime->DispatchSignal(value->onDismiss, cx->win,
+                                              cx->app);
+            if (value->triggerFocus.IsValid())
+                FocusHandleFocus(cx->win, value->triggerFocus);
+            if (value->onOpenChange)
+                self->runtime->DispatchChange(value->onOpenChange, false,
+                                              cx->win, cx->app);
+            break;
+        case SelectAction::None:
+            const_cast<ActionEvent*>(event)->propagate = true;
+            break;
+    }
+}
+
+void ScriptView::OnSelectOpen(ScriptView* self, Ctx* cx,
+                              const ClickEvent*, intptr_t binding) {
+    ShellSelectBinding* value = (ShellSelectBinding*)binding;
+    if (!self || !self->runtime || !value || value->disabled || value->open)
+        return;
+    if (value->contentFocus.IsValid())
+        FocusHandleFocus(cx->win, value->contentFocus);
+    if (value->onOpenChange)
+        self->runtime->DispatchChange(value->onOpenChange, true, cx->win,
+                                      cx->app);
+}
+
+void ScriptView::OnNumberStep(ScriptView* self, Ctx* cx,
+                              const NumberInputEvent* event,
+                              intptr_t callback) {
+    if (!self || !self->runtime || !event || !callback) return;
+    self->runtime->DispatchString(
+        (shell::CallbackId)callback,
+        event->action == StepAction::Increment ? StrL("increment")
+                                               : StrL("decrement"),
+        cx->win, cx->app);
+}
+
+void ScriptView::OnNumberKey(ScriptView* self, Ctx* cx,
+                             const KeyEvent* event, intptr_t binding) {
+    ShellNumberBinding* value = (ShellNumberBinding*)binding;
+    if (!self || !event || !value) return;
+    StepAction action;
+    if (!NumberStepForKey(event->vk, &action)) return;
+    Listener onStep = value->onStep
+                          ? Listen(cx, &ScriptView::OnNumberStep,
+                                   (intptr_t)value->onStep)
+                          : Listener{};
+    const NumberStep* step = value->onStep || !value->hasStep
+                                 ? nullptr
+                                 : &value->step;
+    if (NumberInputApplyStep(value->state, cx->app, cx->win, action, step,
+                             value->hasMin, value->min, value->hasMax,
+                             value->max, value->disabled, onStep)) {
+        const_cast<KeyEvent*>(event)->propagate = false;
+        Notify(cx);
+    }
 }
 
 void ScriptView::OnInputEvent(ScriptView* self, Ctx* cx,

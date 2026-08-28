@@ -9688,3 +9688,25 @@ so its snapshot and dirty bit remain independent of its parent. Tests cover
 initial props, mounting, child-only rebuilding, ordinary-state and retained
 resource rollback, and release. MSVC release passes 21,311 checks; clang-cl and
 wasm release builds of `hello_world` also pass.
+
+## Shell native component materialization
+
+The snapshot materializer now implements the remaining shell component
+contracts rather than treating them as generic boxes. Popovers, hover cards,
+selects and collapsibles preserve their controlled state and native event
+semantics; resizable groups carry all panel sizes through `on_resize`; number
+and OTP inputs compose their decoration slots and state styles; sliders draw
+their range and thumbs; virtual-list item clicks report stable keys in one VM
+crossing per visible range. Links use the platform URL opener, and hover,
+active and focus refinements are applied by the native element state path.
+
+`PathBuilder` and `Background` now reach a native custom painter, including
+percentage coordinates, quadratic/cubic curves, SVG elliptical arcs, solid
+fills, linear gradients and strokes. Pattern and checkerboard backgrounds
+retain their declared foreground color but currently use a solid fill because
+the renderer background type has no repeating-pattern variant. Script motion
+policies animate opacity and absolute pixel width, height, left and top without
+re-entering QuickJS per frame, using stable control/retained-state identities
+where Rust does. Tests cover state refinements, decorated inputs, paths,
+motion, resizable payloads and keyed virtual-list clicks. MSVC release passes
+21,326 checks.

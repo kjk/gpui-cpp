@@ -761,6 +761,72 @@ static void PublishedSnapshotsMaterializeToNativeElements() {
     AppGlobalClear(&app);
 }
 
+static void ShellMaterializesStateTemplatesInputsAndPaths() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    Str source = StrL(
+        "import { View, div, PathBuilder, Background } from 'gpui';\n"
+        "import { InputState, NumberInput, OtpState, OtpInput } from 'gpui-base';\n"
+        "globalThis.numberStep = '';\n"
+        "export default class Main extends View {\n"
+        "  init() { this.number = InputState.new({ value: '4' }); this.number.set_step(2); this.otp = OtpState.new(3, { value: '1' }); }\n"
+        "  render(cx) {\n"
+        "    const path = PathBuilder.fill().move_to(0, 0).line_to('100%', 0).curve_to('100%', '100%', '50%', '50%').close().build();\n"
+        "    return div().children([\n"
+        "      div().id('states').w(100).transition('width', { duration: 0 }).hover(s => s.bg('#112233').p(4)).active(s => s.bg('#223344')).focus(s => s.opacity(0.5)),\n"
+        "      NumberInput.new(this.number).controls_right().decrement_button(div().size(10).child('-')).increment_button(div().size(10).child('+')).on_step(action => { globalThis.numberStep = action; }),\n"
+        "      OtpInput.new(this.otp).cell_style(cell => cell.size(20).bg('#334455')).cell_active_style(cell => cell.border(2)),\n"
+        "      window.paint_path(path, Background.linear_gradient(90, Background.stop('#000000', 0.25), '#ffffff')).w(100).h(80),\n"
+        "    ]);\n"
+        "  }\n"
+        "}\n");
+    ViewType* type = runtime
+                         ? runtime->LoadSource(StrL("material-components.js"),
+                                               source, &error)
+                         : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = view.IsValid()
+                   ? EntityRender(&app, &window, frame, view.id)
+                   : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    El* states = root ? root->first : nullptr;
+    El* number = states ? states->next : nullptr;
+    El* otp = number ? number->next : nullptr;
+    El* path = otp ? otp->next : nullptr;
+    utassert(states && states->hoverSet & StyleFieldBg);
+    utassert(states && states->hoverSet & StyleFieldPad);
+    utassert(states && states->activeSet & StyleFieldBg);
+    utassert(states && states->focusSet & StyleFieldOpacity);
+    utassert(states && states->style.width == 100);
+    utassert(number && number->accessibility.role ==
+                           AccessibilityRole::SpinButton);
+    El* controls = number && number->first ? number->first->next : nullptr;
+    El* increment = controls ? controls->first : nullptr;
+    utassert(increment && increment->onClick.IsValid());
+    if (increment && increment->onClick.IsValid()) increment->onClick.Call();
+    utassert(runtime && runtime->Eval(
+        StrL("if (globalThis.numberStep !== 'increment') throw new Error('number step was not dispatched')"),
+        StrL("number-step-check.js"), &error));
+    utassert(otp && otp->first && otp->first->next &&
+             otp->first->next->next);
+    utassert(otp && otp->first && otp->first->style.hasBg);
+    utassert(path && path->customPaint != nullptr);
+    utassert(path && path->style.width == 100 && path->style.height == 80);
+    EntityDrop(&app, view.id);
+    ArenaDelete(frame);
+    if (runtime) runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
 static void ScriptViewsReuseSnapshotsUntilNotified() {
     App app;
     Window window;
@@ -1005,7 +1071,7 @@ static void VirtualListsRenderOneVisibleBatch() {
     Str source = StrL(
         "import { View, div } from 'gpui';\n"
         "import { v_virtual_list, VirtualListScrollHandle } from 'gpui-base';\n"
-        "globalThis.virtualBatches = 0;\n"
+        "globalThis.virtualBatches = 0; globalThis.virtualClick = '';\n"
         "export default class Main extends View {\n"
         "  init(props, cx) { this.scroll = VirtualListScrollHandle.new(); }\n"
         "  render(cx) { return v_virtual_list('rows', 20, 24,\n"
@@ -1013,7 +1079,7 @@ static void VirtualListsRenderOneVisibleBatch() {
         "    range => { globalThis.virtualBatches += 1; const out = [];\n"
         "      for (let i = range.start; i < range.end; i++) out.push(div().child('row ' + i));\n"
         "      return out;\n"
-        "    }).track_scroll(this.scroll); }\n"
+        "    }).track_scroll(this.scroll).on_item_click(key => { globalThis.virtualClick = key; }); }\n"
         "}\n");
     ViewType* type = runtime
                          ? runtime->LoadSource(StrL("virtual-list.js"), source,
@@ -1031,6 +1097,15 @@ static void VirtualListsRenderOneVisibleBatch() {
     utassert(runtime->Eval(
         StrL("if (globalThis.virtualBatches !== 1) throw new Error('virtual list did not render one range')"),
         StrL("virtual-list-check.js"), &error));
+    El* firstRow = root && root->first ? root->first->first : nullptr;
+    utassert(firstRow && firstRow->listener.IsValid());
+    if (firstRow && firstRow->listener.IsValid()) {
+        ClickEvent click = {};
+        ListenerCall(&app, &window, firstRow->listener, &click);
+    }
+    utassert(runtime->Eval(
+        StrL("if (globalThis.virtualClick !== 'row-0') throw new Error('virtual item key was not dispatched')"),
+        StrL("virtual-list-click-check.js"), &error));
     utassert(runtime->LiveEntities() == 1);
     EntityDrop(&app, view.id);
     utassert(runtime->LiveEntities() == 0);
@@ -1700,6 +1775,7 @@ void TestShellCore() {
     ShellSourceWatchReloadsAtomically();
     ShellHostModulesBridgePlainDataAndPromises();
     PublishedSnapshotsMaterializeToNativeElements();
+    ShellMaterializesStateTemplatesInputsAndPaths();
     ScriptViewsReuseSnapshotsUntilNotified();
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();
     NestedScriptViewsRetainUpdateRollbackAndRelease();

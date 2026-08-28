@@ -13,6 +13,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 namespace gpui {
@@ -1605,6 +1606,102 @@ static JSValue NativeComponent(JSContext* ctx, JSValueConst, int argc,
     return JS_NewUint32(ctx, id);
 }
 
+static bool JsArrayString(JSContext* ctx, JSValueConst array, uint32_t index,
+                          Arena* arena, Str* out) {
+    JSValue value = JS_GetPropertyUint32(ctx, array, index);
+    bool ok = !JS_IsException(value) && JsString(ctx, value, arena, out);
+    JS_FreeValue(ctx, value);
+    return ok;
+}
+
+static bool ParseFiniteText(Str text, float* out) {
+    if (!text.s || text.len <= 0 || text.len >= 64) return false;
+    char buf[64] = {};
+    memcpy(buf, text.s, (size_t)text.len);
+    char* end = nullptr;
+    double value = strtod(buf, &end);
+    if (!end || end == buf || *end || !isfinite(value)) return false;
+    *out = (float)value;
+    return true;
+}
+
+static JSValue NativePath(JSContext* ctx, JSValueConst, int argc,
+                          JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || argc < 6)
+        return JS_ThrowTypeError(ctx, "path description is incomplete");
+    double opacity = 0, width = 0;
+    if (JS_ToFloat64(ctx, &opacity, argv[3]) < 0 ||
+        JS_ToFloat64(ctx, &width, argv[5]) < 0)
+        return JS_EXCEPTION;
+    if (!isfinite(opacity) || opacity < 0 || !isfinite(width) || width < 0)
+        return JS_ThrowTypeError(
+            ctx, "path opacity and stroke width must be finite and non-negative");
+    int64_t count64 = 0;
+    if (JS_GetLength(ctx, argv[2], &count64) < 0 || count64 < 0 ||
+        count64 > 8)
+        return JS_ThrowTypeError(ctx, "path background has invalid values");
+    Arena* arena = ArenaNew();
+    Str kind, colorSpace;
+    if (!JsString(ctx, argv[1], arena, &kind) ||
+        !JsString(ctx, argv[4], arena, &colorSpace)) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    Str values[8] = {};
+    for (int i = 0; i < (int)count64; i++) {
+        if (!JsArrayString(ctx, argv[2], (uint32_t)i, arena, &values[i])) {
+            ArenaDelete(arena);
+            return JS_EXCEPTION;
+        }
+    }
+    shell::Component component = {};
+    component.kind = JS_ToBool(ctx, argv[0])
+                         ? shell::ComponentKind::PathFill
+                         : shell::ComponentKind::PathStroke;
+    component.strokeWidth = (float)width;
+    component.background.opacity = (float)opacity;
+    component.background.colorSpace = colorSpace;
+    bool valid = true;
+    if (StrEq(kind, "solid")) {
+        component.background.kind = shell::BackgroundKind::Solid;
+        valid = count64 >= 1;
+        if (valid) component.background.color = values[0];
+    } else if (StrEq(kind, "linear-gradient")) {
+        component.background.kind = shell::BackgroundKind::LinearGradient;
+        valid = count64 >= 5 &&
+                ParseFiniteText(values[0], &component.background.angle) &&
+                ParseFiniteText(values[2],
+                                &component.background.fromPosition) &&
+                ParseFiniteText(values[4],
+                                &component.background.toPosition);
+        if (valid) {
+            component.background.fromColor = values[1];
+            component.background.toColor = values[3];
+        }
+    } else if (StrEq(kind, "pattern-slash")) {
+        component.background.kind = shell::BackgroundKind::PatternSlash;
+        valid = count64 >= 3 &&
+                ParseFiniteText(values[1], &component.background.width) &&
+                ParseFiniteText(values[2], &component.background.interval);
+        if (valid) component.background.color = values[0];
+    } else if (StrEq(kind, "checkerboard")) {
+        component.background.kind = shell::BackgroundKind::Checkerboard;
+        valid = count64 >= 2 &&
+                ParseFiniteText(values[1], &component.background.size);
+        if (valid) component.background.color = values[0];
+    } else {
+        valid = false;
+    }
+    if (!valid) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx, "invalid path Background description");
+    }
+    shell::SpecId id = impl->scratch->Push(component);
+    ArenaDelete(arena);
+    return JS_NewUint32(ctx, id);
+}
+
 static bool JsSpecId(JSContext* ctx, JSValueConst value, shell::SpecId* out) {
     return JS_ToUint32(ctx, out, value) == 0;
 }
@@ -1734,7 +1831,7 @@ static bool IsBehavior(Str name) {
         "start\0value\0indeterminate\0axis\0row_count\0column_count\0"
         "open\0default_open\0overlay_closable\0anchor\0mouse_button\0"
         "open_delay\0close_delay\0transition\0spring\0"
-        "with_item_to_measure_index\0";
+        "with_item_to_measure_index\0close\0";
     for (const char* at = names; *at; at += strlen(at) + 1) {
         if (StrEq(name, at)) return true;
     }
@@ -4276,6 +4373,102 @@ globalThis.__gpui = (() => {
       return this;
     };
   }
+  const finiteNonNegative = (value, name) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new TypeError(name + " must be a finite non-negative number");
+    return value;
+  };
+  const finitePositive = (value, name) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new TypeError(name + " must be a finite positive number");
+    return value;
+  };
+  const finiteDuration = (value, name) => {
+    value = finiteNonNegative(Number(value), name);
+    if (value > 86400000) throw new RangeError(name + " must not exceed 86400000 milliseconds");
+    return value;
+  };
+  explicit.transition = function (property, options) {
+    property = String(property);
+    if (!["opacity", "width", "height", "left", "top"].includes(property)) throw new TypeError("transition supports opacity, width, height, left or top");
+    const policy = typeof options === "number" ? { duration: options } : (options ?? {});
+    const duration = finiteDuration(policy.duration ?? 0, "transition duration");
+    const delay = finiteDuration(policy.delay ?? 0, "transition delay");
+    const easing = String(policy.easing ?? "ease-out");
+    if (!["linear", "ease-in", "ease-out", "ease-in-out"].includes(easing)) throw new TypeError("transition easing must be linear, ease-in, ease-out or ease-in-out");
+    __apply(this.__id, "transition", [property, duration, delay, easing]);
+    return this;
+  };
+  explicit.spring = function (property, options = {}) {
+    property = String(property);
+    if (!["opacity", "width", "height", "left", "top"].includes(property)) throw new TypeError("spring supports opacity, width, height, left or top");
+    __apply(this.__id, "spring", [property, finiteDuration(options.response ?? 250, "spring response"), finiteNonNegative(Number(options.damping ?? 1), "spring damping"), finitePositive(Number(options.epsilon ?? 0.001), "spring epsilon")]);
+    return this;
+  };
+  const coordinate = (value, name) => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(value)) return value;
+    throw new TypeError(name + " must be a finite pixel number or percentage string");
+  };
+  const background = (kind, values, opacityFactor = 1, colorSpace = "srgb") => Object.freeze({
+    __background: true,
+    kind,
+    values: Object.freeze(values),
+    opacityFactor,
+    colorSpace,
+    opacity(factor) { return background(kind, values, finiteNonNegative(factor, "background opacity"), colorSpace); },
+    color_space(space) {
+      space = String(space).toLowerCase();
+      if (!["srgb", "oklab"].includes(space)) throw new TypeError("background color_space must be srgb or oklab");
+      return background(kind, values, opacityFactor, space);
+    },
+  });
+  const asBackground = (value) => value?.__background ? value : background("solid", [String(value)]);
+  const pathBuilder = (fill, width) => {
+    const commands = [];
+    const builder = {};
+    const command = (name, arity, coordinateCount = arity) => (...args) => {
+      if (args.length < arity) throw new TypeError(name + " expects at least " + arity + " argument(s)");
+      for (let index = 0; index < coordinateCount; index++) coordinate(args[index], name + " coordinate");
+      commands.push(Object.freeze([name, ...args]));
+      return builder;
+    };
+    builder.move_to = command("move_to", 2);
+    builder.line_to = command("line_to", 2);
+    builder.curve_to = command("curve_to", 4);
+    builder.cubic_bezier_to = command("cubic_bezier_to", 6);
+    builder.arc_to = (...args) => {
+      if (args.length < 7) throw new TypeError("arc_to expects at least 7 argument(s)");
+      coordinate(args[0], "arc x radius"); coordinate(args[1], "arc y radius");
+      if (typeof args[2] !== "number" || !Number.isFinite(args[2])) throw new TypeError("arc rotation must be finite");
+      coordinate(args[5], "arc destination x"); coordinate(args[6], "arc destination y");
+      commands.push(Object.freeze(["arc_to", ...args]));
+      return builder;
+    };
+    builder.close = () => { commands.push(Object.freeze(["close"])); return builder; };
+    builder.dash_array = (values) => {
+      if (fill) throw new TypeError("dash_array is only available on stroke paths");
+      if (!Array.isArray(values) || values.some((value) => typeof value !== "number" || !Number.isFinite(value) || value <= 0)) throw new TypeError("dash_array(values) expects positive finite pixel numbers");
+      commands.push(Object.freeze(["dash_array", ...values]));
+      return builder;
+    };
+    builder.add_polygon = (points, closed = true) => {
+      if (!Array.isArray(points) || points.length === 0) throw new TypeError("add_polygon(points) expects a non-empty array");
+      points.forEach((point, index) => {
+        if (!Array.isArray(point) || point.length < 2) throw new TypeError("each polygon point must be [x, y]");
+        command(index === 0 ? "move_to" : "line_to", 2)(point[0], point[1]);
+      });
+      if (closed) builder.close();
+      return builder;
+    };
+    builder.build = () => Object.freeze({ __path: true, fill, width, commands: Object.freeze(commands.slice()) });
+    return builder;
+  };
+  const paintPath = (pathValue, paintValue) => {
+    if (!pathValue?.__path) throw new TypeError("window.paint_path(path, background) expects a Path built by PathBuilder");
+    const paint = asBackground(paintValue);
+    const object = element(__path(pathValue.fill, paint.kind, paint.values.map(String), paint.opacityFactor, paint.colorSpace, pathValue.width));
+    for (const [name, ...args] of pathValue.commands) __apply(object.__id, name, args);
+    return object;
+  };
   let deferInit = false;
   class View {
     constructor(props) {
@@ -4390,7 +4583,7 @@ globalThis.__gpui = (() => {
     write_to_clipboard: (text) => __clipboard_write_text(String(text)),
   });
   globalThis.__ambient_context = ambientContext;
-  globalThis.window = Object.freeze({ localStorage, sessionStorage });
+  globalThis.window = Object.freeze({ localStorage, sessionStorage, paint_path: paintPath });
   globalThis.localStorage = localStorage;
   globalThis.sessionStorage = sessionStorage;
 )JS"
@@ -4787,8 +4980,30 @@ R"JS(
       if (typeof body !== "function") throw new TypeError("with_cx(fn) expects a function");
       return body(ambientContext);
     },
-    PathBuilder: Object.freeze({}),
-    Background: Object.freeze({ solid: (color) => String(color) }),
+    PathBuilder: Object.freeze({
+      fill: () => pathBuilder(true, 0),
+      stroke: (width) => pathBuilder(false, finitePositive(width, "stroke width")),
+    }),
+    Background: Object.freeze({
+      solid: (color) => background("solid", [String(color)]),
+      stop: (color, percentage) => {
+        if (typeof percentage !== "number" || !Number.isFinite(percentage)) throw new TypeError("background stop percentage must be finite");
+        return Object.freeze({ __backgroundStop: true, color: String(color), percentage });
+      },
+      linear_gradient: (angle, from, to) => {
+        angle = Number(angle);
+        if (!Number.isFinite(angle)) throw new TypeError("gradient angle must be finite");
+        const stop = (value, fallback, name) => {
+          if (typeof value === "string") return [value, fallback];
+          if (!value?.__backgroundStop) throw new TypeError(name + " must be a color or Background.stop(color, percentage)");
+          return [value.color, value.percentage];
+        };
+        const a = stop(from, 0, "gradient from stop"), b = stop(to, 1, "gradient to stop");
+        return background("linear-gradient", [String(angle), a[0], String(a[1]), b[0], String(b[1])]);
+      },
+      pattern_slash: (color, width, interval) => background("pattern-slash", [String(color), String(finitePositive(width, "pattern width")), String(finitePositive(interval, "pattern interval"))]),
+      checkerboard: (color, size) => background("checkerboard", [String(color), String(finitePositive(size, "checkerboard size"))]),
+    }),
     Button: named("Button"), Link: named("Link"),
     Checkbox: named("Checkbox"), Switch: named("Switch"),
     Tabs: named("Tabs"), Tab: named("Tab"), Progress: named("Progress"),
@@ -4888,6 +5103,7 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     JS_SetPropertyStr(impl->context, global, "__shell_arch",
                       JS_NewString(impl->context, architecture));
     SetGlobalFunction(impl->context, global, "__component", NativeComponent, 4);
+    SetGlobalFunction(impl->context, global, "__path", NativePath, 6);
     SetGlobalFunction(impl->context, global, "__attach", NativeAttach, 2);
     SetGlobalFunction(impl->context, global, "__state", NativeState, 2);
     SetGlobalFunction(impl->context, global, "__slot", NativeSlot, 3);
@@ -5695,6 +5911,28 @@ void ShellRuntime::DispatchMouseMove(shell::CallbackId callback,
                                      const MouseMoveEvent& event,
                                      Window* window, App* app) {
     JSValue payload = JS_NewObject(impl->context);
+    JSValue position = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, position, "x",
+                      JS_NewFloat64(impl->context, event.x));
+    JS_SetPropertyStr(impl->context, position, "y",
+                      JS_NewFloat64(impl->context, event.y));
+    JS_SetPropertyStr(impl->context, payload, "position", position);
+    JSValue local = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, local, "x",
+                      JS_NewFloat64(impl->context, event.x - event.el.x));
+    JS_SetPropertyStr(impl->context, local, "y",
+                      JS_NewFloat64(impl->context, event.y - event.el.y));
+    JS_SetPropertyStr(impl->context, payload, "local_position", local);
+    JSValue bounds = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, bounds, "x",
+                      JS_NewFloat64(impl->context, event.el.x));
+    JS_SetPropertyStr(impl->context, bounds, "y",
+                      JS_NewFloat64(impl->context, event.el.y));
+    JS_SetPropertyStr(impl->context, bounds, "width",
+                      JS_NewFloat64(impl->context, event.el.w));
+    JS_SetPropertyStr(impl->context, bounds, "height",
+                      JS_NewFloat64(impl->context, event.el.h));
+    JS_SetPropertyStr(impl->context, payload, "bounds", bounds);
     JS_SetPropertyStr(impl->context, payload, "x",
                       JS_NewFloat64(impl->context, event.x));
     JS_SetPropertyStr(impl->context, payload, "y",
@@ -5720,6 +5958,25 @@ void ShellRuntime::DispatchChange(shell::CallbackId callback, bool value,
 void ShellRuntime::DispatchIndex(shell::CallbackId callback, uint32_t value,
                                  Window* window, App* app) {
     Dispatch(this, callback, JS_NewUint32(impl->context, value), window, app);
+}
+
+void ShellRuntime::DispatchNumbers(shell::CallbackId callback,
+                                   const float* values, int count,
+                                   Window* window, App* app) {
+    JSValue array = JS_NewArray(impl->context);
+    for (int i = 0; values && i < count; i++) {
+        JS_SetPropertyUint32(impl->context, array, (uint32_t)i,
+                             JS_NewFloat64(impl->context, values[i]));
+    }
+    Dispatch(this, callback, array, window, app);
+}
+
+void ShellRuntime::DispatchString(shell::CallbackId callback, Str value,
+                                  Window* window, App* app) {
+    Dispatch(this, callback,
+             JS_NewStringLen(impl->context, value.s ? value.s : "",
+                             (size_t)value.len),
+             window, app);
 }
 
 void ShellRuntime::DispatchSignal(shell::CallbackId callback, Window* window,
@@ -5809,8 +6066,9 @@ void ShellRuntime::DispatchOtpEvent(shell::EntityHandle handle,
 }
 
 void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
-                                      shell::CallbackId keyId, int first,
-                                      int end, Ctx* cx, El** out) {
+                                      shell::CallbackId keyId,
+                                      shell::CallbackId onItemClick,
+                                      int first, int end, Ctx* cx, El** out) {
     if (!cx || !out || end <= first) return;
     for (int i = 0; i < end - first; i++) out[i] = nullptr;
     CallbackEntry* render = impl->callbacks.Get(renderId);
@@ -5823,6 +6081,7 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
     shell::SpecArena* batch = new shell::SpecArena();
     impl->scratch = batch;
     Vec<shell::SpecId> roots;
+    Vec<Str> itemKeys;
     bool succeeded = true;
     {
         shell::CallScopeGuard scope = shell::ScopeEnter(
@@ -5887,7 +6146,10 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                     succeeded = false;
                 }
             }
-            if (succeeded) seen.Append(text);
+            if (succeeded) {
+                seen.Append(text);
+                itemKeys.Append(StrDup(cx->a, text));
+            }
         }
         seen.Reset();
         ArenaDelete(keys);
@@ -5905,8 +6167,25 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                 log(error.message);
                 ShellErrorClear(&error);
             }
+            if (onItemClick && out[i] && i < itemKeys.len) {
+                ShellStringBinding* binding =
+                    ArenaNew<ShellStringBinding>(cx->a);
+                binding->callback = onItemClick;
+                binding->value = itemKeys[i];
+                Str rowId = StrDup(
+                    cx->a, fmt("gpui-shell-virtual-item:%s", itemKeys[i]));
+                out[i] = Div(cx->a)
+                             ->PathClick(rowId)
+                             ->SizeFull()
+                             ->Child(out[i])
+                             ->OnClick(ListenTo(
+                                 Entity<ScriptView>{render->view},
+                                 &ScriptView::OnBoundString,
+                                 (intptr_t)binding));
+            }
         }
     }
+    itemKeys.Reset();
     roots.Reset();
     delete batch;
     double elapsed = TimeNow() - started;

@@ -1479,6 +1479,12 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     if (win->onMouseMove.IsValid()) {
         ListenerCall(win->app, win, win->onMouseMove, &in);
     }
+    const HitRect* movingOver = HitTestRect(&win->paint, x, y);
+    if (movingOver && movingOver->onMouseMove.IsValid()) {
+        MouseMoveEvent local = in;
+        local.el = movingOver->bounds;
+        ListenerCall(win->app, win, movingOver->onMouseMove, &local);
+    }
     // Whether this press has become a drag: GPUI starts one from the move
     // that leaves the press behind, not from the press itself.
     if (win->mouseDown && !win->pressedMoved) {

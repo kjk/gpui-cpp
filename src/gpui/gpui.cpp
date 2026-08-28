@@ -1495,6 +1495,10 @@ El* El::OnHover(Listener l) {
     onHover = l;
     return this;
 }
+El* El::OnMouseMove(Listener l) {
+    onMouseMove = l;
+    return this;
+}
 El* El::OnMouseDown(Listener l, DispatchPhase phase) {
     onMouseDown = l;
     mouseDownPhase = phase;
@@ -1544,6 +1548,22 @@ El* El::Hover(const StateStyle& s) {
     if (s.set) {
         StyleApplyFields(&hoverStyle, s.style, s.set);
         hoverSet |= s.set;
+    }
+    return this;
+}
+
+El* El::Active(const StateStyle& s) {
+    if (s.set) {
+        StyleApplyFields(&activeStyle, s.style, s.set);
+        activeSet |= s.set;
+    }
+    return this;
+}
+
+El* El::Focus(const StateStyle& s) {
+    if (s.set) {
+        StyleApplyFields(&focusStyle, s.style, s.set);
+        focusSet |= s.set;
     }
     return this;
 }
@@ -3160,6 +3180,13 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     // "nothing is hovered" is spelled as.
     if (e->hoverSet && e->clickId && ctx && e->clickId == ctx->hoverId) {
         StyleApplyFields(&e->style, e->hoverStyle, e->hoverSet);
+    }
+    if (e->activeSet && e->clickId && ctx && e->clickId == ctx->activeId) {
+        StyleApplyFields(&e->style, e->activeStyle, e->activeSet);
+    }
+    if (e->focusSet && e->style.focusId && ctx &&
+        e->style.focusId == ctx->focusId) {
+        StyleApplyFields(&e->style, e->focusStyle, e->focusSet);
     }
     if (e->dragOverSet && e->clickId && ctx && e->clickId == ctx->dragOverId &&
         base::StrEq(e->dragOverKind, ctx->dragKind)) {
@@ -5265,7 +5292,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // recorded a hit rect, and whatever was around it if it did not.
     int outerHitParent = ctx->hitParent;
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
-        e->clickAction || e->onHover.IsValid() || e->onMouseDown.IsValid() ||
+        e->clickAction || e->onHover.IsValid() ||
+        e->onMouseMove.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
         e->onMouseDownOut.IsValid() || e->onMouseUpOut.IsValid() ||
         e->drag.IsValid() || e->onDrop.IsValid() ||
@@ -5280,6 +5308,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.clickActionArg = e->clickActionArg;
         hr.listener = e->listener;
         hr.onHover = e->onHover;
+        hr.onMouseMove = e->onMouseMove;
         hr.tooltip = e->style.tooltip;
         hr.onMouseDown = e->onMouseDown;
         hr.onMouseUp = e->onMouseUp;

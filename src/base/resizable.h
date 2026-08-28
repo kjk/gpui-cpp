@@ -164,8 +164,9 @@ struct ResizableState {
     void Clear();
 };
 
-enum class ResizablePanelEvent : uint8_t {
-    Resized,
+struct ResizablePanelEvent {
+    const float* sizes = nullptr;
+    int count = 0;
 };
 
 // The size panel `ix` is drawn at: what the state holds, or what the caller

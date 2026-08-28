@@ -69,6 +69,10 @@ class ShellRuntime {
                         App* app);
     void DispatchIndex(shell::CallbackId callback, uint32_t value, Window* window,
                        App* app);
+    void DispatchNumbers(shell::CallbackId callback, const float* values,
+                         int count, Window* window, App* app);
+    void DispatchString(shell::CallbackId callback, Str value, Window* window,
+                        App* app);
     void DispatchSignal(shell::CallbackId callback, Window* window, App* app);
     void DispatchInputEvent(shell::EntityHandle handle,
                             const InputEvent& event, Window* window, App* app);
@@ -78,8 +82,9 @@ class ShellRuntime {
     void DispatchOtpEvent(shell::EntityHandle handle, const OtpEvent& event,
                           Window* window, App* app);
     void RenderVirtualItems(shell::CallbackId render,
-                            shell::CallbackId getKey, int first, int end,
-                            Ctx* cx, El** out);
+                            shell::CallbackId getKey,
+                            shell::CallbackId onItemClick, int first,
+                            int end, Ctx* cx, El** out);
 
   private:
     friend struct ShellRuntimeAccess;
