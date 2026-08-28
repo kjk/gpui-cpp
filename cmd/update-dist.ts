@@ -277,6 +277,50 @@ function stripInternalIncludes(fromRel: string, text: string): string {
   return keep.join("\n");
 }
 
+// Return the byte after a C++ raw string that starts at `R`, or null when the
+// bytes at `start` are not a raw-string introducer. Encoding prefixes (`u8R`,
+// `uR`, `UR`, `LR`) need no special case because the scanner reaches their R
+// after copying the prefix. Raw-string contents are data: the shell typings in
+// particular contain both `//` URLs and `/** ... */` documentation comments.
+function rawStringEnd(src: string, start: number): number | null {
+  if (src[start] !== "R" || src[start + 1] !== '"') {
+    return null;
+  }
+  const delimiterStart = start + 2;
+  let open = delimiterStart;
+  while (open < src.length && open - delimiterStart <= 16 && src[open] !== "(") {
+    const c = src[open]!;
+    if (c.charCodeAt(0) <= 0x20 || c === ")" || c === "\\") {
+      return null;
+    }
+    open++;
+  }
+  if (open >= src.length || src[open] !== "(" || open - delimiterStart > 16) {
+    return null;
+  }
+  const delimiter = src.slice(delimiterStart, open);
+  const close = `)${delimiter}\"`;
+  const closeAt = src.indexOf(close, open + 1);
+  return closeAt < 0 ? src.length : closeAt + close.length;
+}
+
+function quotedEnd(src: string, start: number): number {
+  const quote = src[start]!;
+  let i = start + 1;
+  while (i < src.length) {
+    const c = src[i]!;
+    i++;
+    if (c === "\\" && i < src.length) {
+      i++;
+      continue;
+    }
+    if (c === quote || c === "\n") {
+      break;
+    }
+  }
+  return i;
+}
+
 function stripComments(src: string): string {
   let out = "";
   let i = 0;
@@ -284,46 +328,22 @@ function stripComments(src: string): string {
   while (i < n) {
     const c = src[i]!;
     const d = i + 1 < n ? src[i + 1]! : "";
+    const rawEnd = rawStringEnd(src, i);
+    if (rawEnd !== null) {
+      out += src.slice(i, rawEnd);
+      i = rawEnd;
+      continue;
+    }
     if (c === '"') {
-      out += c;
-      i++;
-      while (i < n) {
-        const ch = src[i]!;
-        out += ch;
-        i++;
-        if (ch === "\\" && i < n) {
-          out += src[i]!;
-          i++;
-          continue;
-        }
-        if (ch === '"') {
-          break;
-        }
-        if (ch === "\n") {
-          break;
-        }
-      }
+      const end = quotedEnd(src, i);
+      out += src.slice(i, end);
+      i = end;
       continue;
     }
     if (c === "'") {
-      out += c;
-      i++;
-      while (i < n) {
-        const ch = src[i]!;
-        out += ch;
-        i++;
-        if (ch === "\\" && i < n) {
-          out += src[i]!;
-          i++;
-          continue;
-        }
-        if (ch === "'") {
-          break;
-        }
-        if (ch === "\n") {
-          break;
-        }
-      }
+      const end = quotedEnd(src, i);
+      out += src.slice(i, end);
+      i = end;
       continue;
     }
     if (c === "/" && d === "/") {
@@ -359,11 +379,37 @@ function stripComments(src: string): string {
 }
 
 function trimTrailingSpace(src: string): string {
-  const lines = src.split("\n").map((l) => l.replace(/[ \t]+$/g, ""));
-  while (lines.length > 0 && lines[lines.length - 1] === "") {
-    lines.pop();
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const rawEnd = rawStringEnd(src, i);
+    if (rawEnd !== null) {
+      out += src.slice(i, rawEnd);
+      i = rawEnd;
+      continue;
+    }
+    const c = src[i]!;
+    if (c === '"' || c === "'") {
+      const end = quotedEnd(src, i);
+      out += src.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (c === " " || c === "\t") {
+      let end = i + 1;
+      while (end < src.length && (src[end] === " " || src[end] === "\t")) {
+        end++;
+      }
+      if (src[end] !== "\n") {
+        out += src.slice(i, end);
+      }
+      i = end;
+      continue;
+    }
+    out += c;
+    i++;
   }
-  return lines.join("\n") + "\n";
+  return out.replace(/\n+$/g, "") + "\n";
 }
 
 function staticNames(src: string): string[] {
@@ -461,7 +507,35 @@ function sortedIncludes(lines: Iterable<string>): string[] {
 // them, so its line numbers stay in step with the `#line` markers the builds
 // compile against.
 function collapseBlankRuns(text: string): string {
-  return text.replace(/\n{3,}/g, "\n\n");
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const rawEnd = rawStringEnd(text, i);
+    if (rawEnd !== null) {
+      out += text.slice(i, rawEnd);
+      i = rawEnd;
+      continue;
+    }
+    const c = text[i]!;
+    if (c === '"' || c === "'") {
+      const end = quotedEnd(text, i);
+      out += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (c === "\n") {
+      let end = i + 1;
+      while (end < text.length && text[end] === "\n") {
+        end++;
+      }
+      out += text.slice(i, Math.min(end, i + 2));
+      i = end;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
 }
 
 // src/taffy, src/markdown and src/wry are ports of crates that have never

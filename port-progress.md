@@ -9784,3 +9784,15 @@ backgrounds remain solid until the native renderer has a repeating-pattern
 primitive. MSVC release passes 21,433 checks, including theme mutation and URL
 validation. The command's separate one-shot check also loads and renders the
 exact upstream todo source unchanged.
+
+## Dist raw-string preservation
+
+The published amalgam's comment and whitespace compaction now recognizes C++
+raw string literals, including custom delimiters and encoding prefixes, and
+leaves their contents byte-for-byte intact. This fixes MSVC C2026 failures in
+the embedded shell declarations: the old pass interpreted TypeScript `//`
+URLs and `/** ... */` documentation inside `R"GPUI_DTS(...)GPUI_DTS"` as C++
+comments, erased some chunk boundaries, and also collapsed declaration blank
+lines. All 54 generated declaration chunks match the tracked source after the
+dist rewrite. MSVC release builds of all 27 examples and `gpui_shell` against
+the published-layout amalgam pass.
