@@ -35,7 +35,7 @@ Rgba RgbaOpacity(Rgba c, float a01) {
     if (a01 > 1) {
         a01 = 1;
     }
-    c.a = (uint8_t)(c.a * a01);
+    c.a = (uint8_t)((float)c.a * a01);
     return c;
 }
 
@@ -47,10 +47,10 @@ Rgba RgbaMix(Rgba a, Rgba b, float t) {
         t = 1;
     }
     Rgba o;
-    o.r = (uint8_t)lroundf(a.r * t + b.r * (1 - t));
-    o.g = (uint8_t)lroundf(a.g * t + b.g * (1 - t));
-    o.b = (uint8_t)lroundf(a.b * t + b.b * (1 - t));
-    o.a = (uint8_t)lroundf(a.a * t + b.a * (1 - t));
+    o.r = (uint8_t)lroundf((float)a.r * t + (float)b.r * (1 - t));
+    o.g = (uint8_t)lroundf((float)a.g * t + (float)b.g * (1 - t));
+    o.b = (uint8_t)lroundf((float)a.b * t + (float)b.b * (1 - t));
+    o.a = (uint8_t)lroundf((float)a.a * t + (float)b.a * (1 - t));
     return o;
 }
 
@@ -105,7 +105,8 @@ Rgba HslaToRgba(Hsla c) {
 
 // `impl From<Rgba> for Hsla`.
 Hsla HslaFromRgba(Rgba c) {
-    float r = c.r / 255.f, g = c.g / 255.f, b = c.b / 255.f;
+    float r = (float)c.r / 255.f, g = (float)c.g / 255.f,
+          b = (float)c.b / 255.f;
     float mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
     float mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
     float delta = mx - mn;
@@ -130,7 +131,7 @@ Hsla HslaFromRgba(Rgba c) {
             h = ((r - g) / delta + 4.f) / 6.f;
         }
     }
-    return Hsla{h, s, l, c.a / 255.f};
+    return Hsla{h, s, l, (float)c.a / 255.f};
 }
 
 Rgba RgbaHsla(float h, float s, float l, float a01) {
@@ -245,9 +246,9 @@ Rgba RgbaBlend(Rgba base, Rgba over) {
     if (over.a == 0) {
         return base;
     }
-    float f = over.a / 255.f;
+    float f = (float)over.a / 255.f;
     auto mix = [&](uint8_t b, uint8_t o) {
-        return (uint8_t)(b * (1.f - f) + o * f);
+        return (uint8_t)((float)b * (1.f - f) + (float)o * f);
     };
     return Rgba8(mix(base.r, over.r), mix(base.g, over.g), mix(base.b, over.b),
                  base.a);
@@ -278,9 +279,9 @@ static float FromLinear(float c) {
 }
 
 static void RgbToOklab(Rgba c, float* L, float* A, float* B) {
-    float lr = ToLinear(c.r / 255.f);
-    float lg = ToLinear(c.g / 255.f);
-    float lb = ToLinear(c.b / 255.f);
+    float lr = ToLinear((float)c.r / 255.f);
+    float lg = ToLinear((float)c.g / 255.f);
+    float lb = ToLinear((float)c.b / 255.f);
     float l = 0.4122214708f * lr + 0.5363325363f * lg + 0.0514459929f * lb;
     float m = 0.2119034982f * lr + 0.6806995451f * lg + 0.1073969566f * lb;
     float s = 0.0883024619f * lr + 0.2817188376f * lg + 0.6299787005f * lb;
@@ -308,7 +309,7 @@ static Rgba OklabToRgb(float L, float A, float B, float alpha) {
 Rgba RgbaMixOklab(Rgba a, Rgba b, float factor) {
     factor = Clamp01(factor);
     float inv = 1.f - factor;
-    float aa = a.a / 255.f, ab = b.a / 255.f;
+    float aa = (float)a.a / 255.f, ab = (float)b.a / 255.f;
     float alpha = aa * factor + ab * inv;
     if (alpha <= 0) {
         return RgbaTransparent();
@@ -2034,7 +2035,7 @@ El* El::Child(El* c) {
 // ─── measure / layout ─────────────────────────────────────────────────────
 
 float PxToDip(PaintCtx* ctx, int px) {
-    return px * 96.f / (ctx->dpi > 0 ? ctx->dpi : 96.f);
+    return (float)px * 96.f / (ctx->dpi > 0 ? ctx->dpi : 96.f);
 }
 int DipToPx(PaintCtx* ctx, float dip) {
     return (int)lroundf(dip * (ctx->dpi > 0 ? ctx->dpi : 96.f) / 96.f);
@@ -4675,7 +4676,7 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         const float kGridDash[2] = {4.f, 2.f};
         if (barRow) {
             for (int i = 1; i <= 4; i++) {
-                float gx = x + w * (i / 4.f);
+                float gx = x + w * ((float)i / 4.f);
                 CanvasLine(ctx, gx, y, gx, y + plotH, 1.f, th.border,
                            kGridDash);
             }

@@ -221,8 +221,9 @@ El* AvatarGroup::IntoEl() {
     float step = sz - sz * 0.3f;
     int shown = avatars.len < limit ? avatars.len : limit;
     bool more = ellipsis && avatars.len > limit;
-    float chipLeft = shown * step + 4;
-    float w = more ? chipLeft + sz : sz + (shown > 0 ? (shown - 1) * step : 0);
+    float chipLeft = (float)shown * step + 4;
+    float w = more ? chipLeft + sz
+                   : sz + (shown > 0 ? (float)(shown - 1) * step : 0);
     El* box = Div(a)->H(sz)->W(w);
     // flex_row_reverse: the row is built right to left, so the leftmost
     // avatar is the last child and paints over its neighbour. Absolute
@@ -239,7 +240,7 @@ El* AvatarGroup::IntoEl() {
     }
     for (int i = shown - 1; i >= 0; i--) {
         box->Child(
-            avatars[i]->WithSize(size)->IntoEl()->Absolute()->Left(i * step));
+            avatars[i]->WithSize(size)->IntoEl()->Absolute()->Left((float)i * step));
     }
     return box;
 }

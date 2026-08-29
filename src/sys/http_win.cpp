@@ -171,7 +171,7 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
     // The path and the query sit next to each other in the same string, so
     // one run covers both; a URL with neither is "/".
     DWORD pathLen = uc.dwUrlPathLength + uc.dwExtraInfoLength;
-    wchar_t* path = cracked ? AllocArray<wchar_t>(pathLen + 2) : nullptr;
+    wchar_t* path = cracked ? AllocArray<wchar_t>((int)pathLen + 2) : nullptr;
     if (cracked && path && pathLen > 0) {
         memcpy(path, uc.lpszUrlPath, (size_t)pathLen * sizeof(wchar_t));
     }

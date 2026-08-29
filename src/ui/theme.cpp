@@ -1482,7 +1482,7 @@ static Rgba ClampAlpha(Rgba c, float max) {
 // the cap; one that came from a fallback is scaled as a whole, which is what
 // `Background::opacity` does and what Rust's `clamp_alpha` falls back to.
 static void ClampToken(Rgba* flat, Background* tok, bool raw, float max) {
-    float a = tok->color.a / 255.f;
+    float a = (float)tok->color.a / 255.f;
     float target = a < max ? a : max;
     Background b = raw ? BackgroundClampAlpha(*tok, max)
                        : BackgroundOpacity(*tok, a > 0 ? target / a : 1.f);

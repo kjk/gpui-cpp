@@ -3496,7 +3496,9 @@ static bool AttachCustomProtocolHandler(WebView* wv, EventRegistrationToken* tok
             // The newer filter, which is what lets a shared worker or an
             // iframe reach a custom protocol.
             HRESULT hr = wv22->AddWebResourceRequestedFilterWithRequestSourceKinds(
-                ToCWstrTemp(filter), kWebResourceContextAll, kWebResourceRequestSourceKindsAll);
+                ToCWstrTemp(filter), kWebResourceContextAll,
+                (COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS)
+                    kWebResourceRequestSourceKindsAll);
             Rel(&wv22);
             if (FAILED(hr)) {
                 return false;

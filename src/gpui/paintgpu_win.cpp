@@ -193,10 +193,10 @@ struct TriVert {
 };
 
 static void SetColor(float* out, Rgba c) {
-    out[0] = c.r / 255.f;
-    out[1] = c.g / 255.f;
-    out[2] = c.b / 255.f;
-    out[3] = c.a / 255.f;
+    out[0] = (float)c.r / 255.f;
+    out[1] = (float)c.g / 255.f;
+    out[2] = (float)c.b / 255.f;
+    out[3] = (float)c.a / 255.f;
 }
 
 // ─── the glyph atlas ─────────────────────────────────────────────────────
@@ -2161,7 +2161,8 @@ void CanvasClear(PaintCtx* ctx, Rgba c) {
     if (!clipped) {
         Flush();
         Rgba f = PaintFade(ctx, c);
-        float col[4] = {f.r / 255.f, f.g / 255.f, f.b / 255.f, f.a / 255.f};
+        float col[4] = {(float)f.r / 255.f, (float)f.g / 255.f,
+                        (float)f.b / 255.f, (float)f.a / 255.f};
         if (PaintD3d12On()) {
             D12Target* t = (D12Target*)gB.target;
             D3D12_CPU_DESCRIPTOR_HANDLE rtv =

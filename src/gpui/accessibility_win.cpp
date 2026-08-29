@@ -920,8 +920,8 @@ HRESULT WinAccessibilityNode::GetPropertyValue(PROPERTYID property,
         RECT client = {};
         GetClientRect(root->hwnd, &client);
         bool off = node->bounds.Right() <= 0 || node->bounds.Bottom() <= 0 ||
-                   node->bounds.x >= client.right ||
-                   node->bounds.y >= client.bottom;
+                   node->bounds.x >= (float)client.right ||
+                   node->bounds.y >= (float)client.bottom;
         VariantBool(out, off);
     }
     return S_OK;
@@ -1023,8 +1023,8 @@ HRESULT WinAccessibilityNode::get_BoundingRectangle(UiaRect* out) {
     }
     POINT origin = {};
     ClientToScreen(root->hwnd, &origin);
-    out->left = origin.x + node->bounds.x;
-    out->top = origin.y + node->bounds.y;
+    out->left = (float)origin.x + node->bounds.x;
+    out->top = (float)origin.y + node->bounds.y;
     out->width = node->bounds.w;
     out->height = node->bounds.h;
     return S_OK;

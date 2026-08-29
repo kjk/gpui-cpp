@@ -100,7 +100,8 @@ bool WinPaintOptionsTakeArg(Str arg) {
 }
 
 static inline D2D1_COLOR_F ToD2D(Rgba c) {
-    return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
+    return D2D1::ColorF((float)c.r / 255.f, (float)c.g / 255.f,
+                        (float)c.b / 255.f, (float)c.a / 255.f);
 }
 
 template <typename T>

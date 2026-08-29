@@ -535,7 +535,7 @@ El* Dialog::IntoEl(WinSize size) {
                     ->H(viewH)
                     ->FlexCol()
                     ->ItemsCenter()
-                    ->PadT((viewH * 0.1f + layerIx * 16.f) * delta)
+                     ->PadT((viewH * 0.1f + (float)layerIx * 16.f) * delta)
                     ->Child(panel);
     Str trap = StrDup(a, fmt("dialog-%d", layerIx));
     // The escape and enter bindings, on the popup that traps the focus. They

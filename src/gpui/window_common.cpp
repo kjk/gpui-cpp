@@ -143,7 +143,7 @@ static void FrameBenchTick(Window* win, float secs) {
     logf(
         "frame-bench n=%d mean=%.3fms median=%.3fms p95=%.3fms min=%.3fms "
         "max=%.3fms",
-        n, sum / n, samples[n / 2], samples[(int)(n * 0.95f)], samples[0],
+        n, sum / n, samples[n / 2], samples[(int)((float)n * 0.95f)], samples[0],
         samples[n - 1]);
     double sb = 0, sl = 0, sp = 0;
     for (int i = 0; i < n; i++) {
@@ -2768,11 +2768,11 @@ int GpuiTakeRuntimeArgs(int argc, char** argv) {
 // crates/story/src/lib.rs create_new_window_with_size: a window never asks
 // for more than 85% of the display, however big the caller's default is.
 void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH) {
-    if (screenW > 0 && *dipW > (int)(screenW * 0.85f)) {
-        *dipW = (int)(screenW * 0.85f);
+    if (screenW > 0 && *dipW > (int)((float)screenW * 0.85f)) {
+        *dipW = (int)((float)screenW * 0.85f);
     }
-    if (screenH > 0 && *dipH > (int)(screenH * 0.85f)) {
-        *dipH = (int)(screenH * 0.85f);
+    if (screenH > 0 && *dipH > (int)((float)screenH * 0.85f)) {
+        *dipH = (int)((float)screenH * 0.85f);
     }
 }
 

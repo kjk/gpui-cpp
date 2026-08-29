@@ -434,7 +434,7 @@ El* Textarea::New(Ctx* cx, InputState* state,
     }
     float numW = 0;
     if (lineNumbers) {
-        numW = 12.f + 7.f * (rows >= 100 ? 3 : (rows >= 10 ? 2 : 1));
+        numW = 12.f + 7.f * (float)(rows >= 100 ? 3 : (rows >= 10 ? 2 : 1));
     }
     // The fold gutter. Rust widens the line-number column by the hitbox and
     // lays the icons into the space it made; the column here is a flex row,
@@ -1896,7 +1896,7 @@ static Str NormalizeInput(Arena* a, const InputState* s, Str newText) {
     if (!hasBreak) {
         return out;
     }
-    char* buf = (char*)Alloc(a, (size_t)out.len + 1);
+    char* buf = (char*)Alloc(a, out.len + 1);
     int n = 0;
     for (int i = 0; i < out.len; i++) {
         if (out.s[i] != '\n' && out.s[i] != '\r') {

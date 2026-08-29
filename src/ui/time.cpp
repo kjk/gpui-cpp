@@ -265,7 +265,8 @@ El* Calendar::IntoEl() {
     // a month — because that one is built `border_0().rounded_none().p_0()`
     // and so has none of the padding the panel width above counts in. The
     // three pairs differ by exactly the 12 either side.
-    float width = (CalendarWidth(size) - (bare ? 24.f : 0.f)) * numberOfMonths;
+    float width = (CalendarWidth(size) - (bare ? 24.f : 0.f)) *
+                  (float)numberOfMonths;
     // The source-shaped path delegates all structure and behavior to Base's
     // retained calendar. The legacy controlled path below remains for
     // callers written against the first C++ surface.

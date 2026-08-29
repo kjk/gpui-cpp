@@ -368,7 +368,7 @@ void TextViewState::SetText(Str value, App* app, Window* window) {
 void TextViewState::PushStr(Str value, App* app, Window* window) {
     if (value.len <= 0) return;
     int oldLen = text.len;
-    char* joined = (char*)Alloc(nullptr, (size_t)oldLen + value.len + 1);
+    char* joined = (char*)Alloc(nullptr, oldLen + value.len + 1);
     if (!joined) return;
     if (oldLen > 0) memcpy(joined, text.s, (size_t)oldLen);
     memcpy(joined + oldLen, value.s, (size_t)value.len);
