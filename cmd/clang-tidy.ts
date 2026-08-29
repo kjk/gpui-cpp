@@ -134,6 +134,8 @@ function main(): void {
     files = files.filter((file) => !/_wasm\.cpp$/.test(file));
     console.log("Emscripten not found; skipping wasm source files");
   }
+  // QuickJS-NG is vendored upstream C, not part of this project's code.
+  files = files.filter((file) => file !== "src/quickjs/quickjs.c");
   if (files.length === 0) die("No source files found under src/.");
   shuffle(files);
   const exe = findClangTidy();
