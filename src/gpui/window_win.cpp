@@ -1112,7 +1112,6 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
 }
 
 void ClipboardSetText(Window* win, Str text) {
-    HWND hwnd = Hwnd(win);
     if (!text.s || text.len <= 0) {
         return;
     }
@@ -1129,14 +1128,29 @@ void ClipboardSetText(Window* win, Str text) {
     }
     memcpy(dst, w, (size_t)(wn + 1) * sizeof(WCHAR));
     GlobalUnlock(h);
-    if (!OpenClipboard(hwnd)) {
-        GlobalFree(h);
-        return;
+    // OpenClipboard often fails right after TrackPopupMenu or while OLE
+    // holds the clipboard; retry and fall back to a null owner.
+    HWND hwnd = Hwnd(win);
+    bool ok = false;
+    for (int i = 0; i < 16 && !ok; i++) {
+        HWND owner = (i < 8 && hwnd) ? hwnd : nullptr;
+        if (!OpenClipboard(owner)) {
+            Sleep(8);
+            continue;
+        }
+        EmptyClipboard();
+        if (SetClipboardData(CF_UNICODETEXT, h)) {
+            ok = true;
+            h = nullptr;
+        }
+        CloseClipboard();
+        if (!ok) {
+            Sleep(8);
+        }
     }
-    EmptyClipboard();
-    // The clipboard owns the handle from here on.
-    SetClipboardData(CF_UNICODETEXT, h);
-    CloseClipboard();
+    if (h) {
+        GlobalFree(h);
+    }
 }
 
 void WindowSetTextContentType(Window* win, Str value) {
