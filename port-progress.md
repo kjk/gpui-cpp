@@ -10171,3 +10171,35 @@ samples over the same 18 s, `Textarea::New` from 762 self samples to 14,
 and the lexer off the profile entirely; what is left is element build,
 taffy and Direct2D, which is the shape a frame should have. The
 21510-check suite passes and the editor screenshot is pixel-identical.
+
+## The InputHighlighter seam, made real
+
+2026-08-29, after the frame cache: four upstream behaviours the editor
+was missing, one commit each.
+
+- **A line index on the document** (`InputState::lineStarts`): ropey
+  answers line math in O(log n); the flat buffer scanned. The frame, the
+  click path and the caret position now index; a 2 MB frame fell from
+  1.2 ms to 0.53.
+- **The highlighting seam consumed** (`InputHighlighter`, gpui.h): the
+  declarations existed unwired in input_editor.h; now the lexer is the
+  one implementation (highlighter.cpp — input_adapter.rs without
+  tree-sitter), Textarea::New queries styles() for the visible byte
+  range only, and the 4096-span cap is gone — past ~40 KB of source,
+  highlighting used to silently stop. Upstream keeps tree-sitter behind
+  this same trait as an *optional* cargo feature; crates/base depends on
+  no parser, so a tree-sitter port here would be a second implementation
+  of the same five entries.
+- **The background lex** (input_adapter.rs's constants): a document over
+  256 KB never lexes on the UI thread — stale styles, a 150 ms debounce,
+  ExecSpawn, NotifyEntity on landing. A 2 MB file opens instantly and is
+  coloured within a quarter second.
+- **MAX_HIGHLIGHT_LINE_LENGTH** (10,000): a longer line draws unstyled,
+  upstream's guard against minified one-liners.
+
+Found on the way, worth remembering: an access violation inside WM_PAINT
+is swallowed at the x64 kernel-callback boundary — the frame dies before
+Present, and with WS_EX_NOREDIRECTIONBITMAP there is no surface to fall
+back to, so the app looks alive with a pure black window. cdb attach +
+`~0 k` finds the faulting line in seconds; both bugs it caught here were
+an out-parameter a styles()/foldRanges() implementation forgot to write.
