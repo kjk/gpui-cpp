@@ -1030,7 +1030,8 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
       // runtime features out of every Windows translation unit and executable.
       "/EHs-c-",
       "/GR-",
-      "/DHAS_EXCEPTIONS=0",
+      // MSVC's STL switch; /EHs-c- disables compiler EH itself.
+      "/D_HAS_EXCEPTIONS=0",
       "/utf-8",
       ...(f.nonAmalgam
         ? ["/I", "src", "/I", "src/gpui", "/FI", "markdown/markdown.h", "/FI", "base/lib.h", "/FI", "ui/lib.h", "/FI", "gpui/paint.h", "/FI", "gpui/assets.h", "/FI", "gpui/svg.h", "/FI", "gpui/accessibility_win.h", "/FI", "sys/executor.h"]
@@ -1091,7 +1092,9 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
     "-Werror",
     "-fno-exceptions",
     "-fno-rtti",
-    "-DHAS_EXCEPTIONS=0",
+    // Clang/GCC's feature macro is absent with -fno-exceptions; define it
+    // explicitly as zero so portable code can test it with #if.
+    "-D__EXCEPTIONS=0",
     ...(f.debug ? ["-O0", "-DDEBUG"] : ["-O2", "-DNDEBUG"]),
   ];
   if (tc.plat === "mac") {
