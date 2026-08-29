@@ -78,6 +78,29 @@ function findClangTidy(): string {
   die("clang-tidy was not found. Install LLVM (or the Visual Studio C++ Clang tools) and put it on PATH.");
 }
 
+function emscriptenInclude(): string | null {
+  const candidates: string[] = [];
+  const emcc = process.env["EMCC"];
+  if (emcc) candidates.push(emcc);
+  const onPath = findExecutable(process.platform === "win32" ? "em++.exe" : "em++");
+  if (onPath) candidates.push(onPath);
+  const roots = [
+    process.env["EMSDK"],
+    join(root, "..", ".emsdk"),
+    join(root, "..", "emsdk"),
+    join(root, ".emsdk"),
+  ];
+  for (const sdk of roots) {
+    if (sdk) candidates.push(join(sdk, "upstream", "emscripten", "em++"));
+  }
+  for (const exe of candidates) {
+    const dir = dirname(exe);
+    const include = join(dir, "cache", "sysroot", "include");
+    if (existsSync(join(include, "emscripten", "emscripten.h"))) return include;
+  }
+  return null;
+}
+
 function shuffle<T>(items: T[]): void {
   // Fisher–Yates: unlike sort(() => Math.random() - 0.5), every ordering has
   // the same probability and the source list itself remains the only state.
@@ -105,7 +128,12 @@ function main(): void {
   }
 
   const plat = hostPlatform();
-  const files = sourceFiles("src", hostOnly ? plat : null);
+  const wasmInclude = emscriptenInclude();
+  let files = sourceFiles("src", hostOnly ? plat : null);
+  if (!wasmInclude) {
+    files = files.filter((file) => !/_wasm\.cpp$/.test(file));
+    console.log("Emscripten not found; skipping wasm source files");
+  }
   if (files.length === 0) die("No source files found under src/.");
   shuffle(files);
   const exe = findClangTidy();
@@ -129,6 +157,7 @@ function main(): void {
     "-include", "gpui/svg.h",
     "-include", "gpui/accessibility_win.h",
     "-include", "sys/executor.h",
+    ...(wasmInclude ? ["-I", wasmInclude] : []),
     ...(plat === "win" ? ["-DWIN_BACKEND_ALL=1", "-DUNICODE", "-D_UNICODE"] : []),
     ...extraArgs,
   ];
