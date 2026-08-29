@@ -450,9 +450,8 @@ static void PlotStackSeries() {
     for (const plot::StackSeries& item : series) {
         if (resolvedCount >= 3) break;
         resolvedKeys[resolvedCount] = item.key;
-        for (const plot::StackPoint& point : item.points) {
-            resolvedPoints[resolvedCount] = point;
-            break;
+        if (item.points.len > 0) {
+            resolvedPoints[resolvedCount] = item.points[0];
         }
         resolvedCount++;
     }
@@ -496,17 +495,17 @@ static void PlotBarAndAxisContracts() {
     utassert(axis.xLabel.items.len == 0);
     axis.X(30)->XLabel(&tick, 1);
     utassert(axis.xLabel.items.len == 1);
-    for (const plot::Text& text : axis.xLabel.items) {
+    if (axis.xLabel.items.len > 0) {
+        const plot::Text& text = axis.xLabel.items[0];
         utassertnear(text.origin.x, 20.f);
         utassertnear(text.origin.y, 36.f);
-        break;
     }
     axis.YLabelSide(plot::AxisLabelSide::Start)->Y(12)->YLabel(&tick, 1);
     utassert(axis.yLabel.items.len == 1);
-    for (const plot::Text& text : axis.yLabel.items) {
+    if (axis.yLabel.items.len > 0) {
+        const plot::Text& text = axis.yLabel.items[0];
         utassertnear(text.origin.x, 10.f);
         utassertnear(text.origin.y, 15.f);
-        break;
     }
     ArenaDelete(arena);
 
