@@ -39,11 +39,14 @@ static bool RoleNameMatches(Str snake, const char* variantName) {
     for (int i = 0; variantName[i]; i++) {
         char ch = variantName[i];
         if (ch >= 'A' && ch <= 'Z') {
-            if (i > 0 && (at >= snake.len || snake.s[at++] != '_'))
-                return false;
+            if (i > 0) {
+                if (at >= snake.len || snake.s[at] != '_') return false;
+                at++;
+            }
             ch = (char)(ch - 'A' + 'a');
         }
-        if (at >= snake.len || snake.s[at++] != ch) return false;
+        if (at >= snake.len || snake.s[at] != ch) return false;
+        at++;
     }
     return at == snake.len;
 }

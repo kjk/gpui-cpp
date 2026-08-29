@@ -129,8 +129,10 @@ static bool ParseSemver(Str value, int* major, int* minor, int* patch) {
             number = number * 10 + value.s[at++] - '0';
         }
         parts[part] = number;
-        if (part < 2 && (at >= value.len || value.s[at++] != '.'))
-            return false;
+        if (part < 2) {
+            if (at >= value.len || value.s[at] != '.') return false;
+            at++;
+        }
     }
     if (at < value.len) {
         if (value.s[at] != '-' && value.s[at] != '+') return false;

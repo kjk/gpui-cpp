@@ -446,10 +446,10 @@ bool ZlibInflate(Str input, bool gzip, Str* output, Str* error) {
             start += 2 + extra;
         }
         if (flags & 8) {
-            while (start < input.len - 8 && bytes[start++] != 0) {}
+            while (start < input.len - 8 && bytes[start] != 0) start++;
         }
         if (flags & 16) {
-            while (start < input.len - 8 && bytes[start++] != 0) {}
+            while (start < input.len - 8 && bytes[start] != 0) start++;
         }
         if (flags & 2) start += 2;
         trailer = 8;
