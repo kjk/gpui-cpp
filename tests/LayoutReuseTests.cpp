@@ -123,14 +123,25 @@ static void AParentThatLostAChildShrinks() {
 // slides the window. The taffy tree must not grow — that was the editor's
 // scroll leak, InsertNode allocating a NodeData for every newly visible row
 // and never recycling the one that scrolled off.
+//
+// Rows are nested the way the editor's line-number band is (gutter + pane +
+// text), so a spacer becoming a row is a whole subtree, not a leaf. That is
+// the InsertNode stack scrolling still produced: LayoutSync AddChild of a
+// band, then LayoutBuild of its children.
+static El* SlidingRow(Arena* a) {
+    El* band = Div(a)->FlexRow()->W(kFill)->H(20);
+    band->Child(Div(a)->W(40)->Child(TextEl(a, StrL("1"))));
+    band->Child(Div(a)->Flex1()->Child(TextEl(a, StrL("row"))));
+    return band;
+}
+
 static El* SlidingList(Arena* a, int first, int visible, int total) {
     El* col = Div(a)->FlexCol()->W(kFill);
     if (first > 0) {
         col->Child(Div(a)->W(kFill)->H((float)first * 20));
     }
     for (int i = 0; i < visible; i++) {
-        col->Child(
-            Div(a)->FlexRow()->W(kFill)->H(20)->Child(TextEl(a, StrL("row"))));
+        col->Child(SlidingRow(a));
     }
     int end = first + visible;
     if (end < total) {
@@ -145,11 +156,16 @@ static void ASlidingWindowDoesNotGrowTheTaffyTree() {
     const int kVisible = 10;
     const int kTotal = 80;
     int live = 0;
+    int peakSlots = 0;
     for (int first = 0; first < 40; first++) {
         a->Reset();
         El* root = SlidingList(a, first, kVisible, kTotal);
         LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
         int now = LayoutCacheNodeCount(lc);
+        int slots = LayoutCacheSlotCount(lc);
+        if (slots > peakSlots) {
+            peakSlots = slots;
+        }
         if (first == 1) {
             // first=0 has no top spacer; first>=1 does, and the bottom
             // spacer is there until the window hits the end.
@@ -160,6 +176,33 @@ static void ASlidingWindowDoesNotGrowTheTaffyTree() {
         }
     }
     utassert(live > 0);
+    utassert(peakSlots > 0);
+
+    // Back to the top: the spacer at index 0 becomes a row, and the last
+    // row becomes a spacer. Building that row before dropping the last
+    // one is what InsertNode'd a NodeData on every scroll-up — live count
+    // stayed flat (the extras were freed at the end of the pass) while
+    // the slot array kept growing.
+    for (int first = 39; first >= 0; first--) {
+        a->Reset();
+        El* root = SlidingList(a, first, kVisible, kTotal);
+        LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
+        if (first > 0) {
+            utassert(LayoutCacheNodeCount(lc) == live);
+        }
+        utassert(LayoutCacheSlotCount(lc) <= peakSlots);
+    }
+
+    // Down again: the free list must absorb the same swap.
+    for (int first = 0; first < 40; first++) {
+        a->Reset();
+        El* root = SlidingList(a, first, kVisible, kTotal);
+        LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
+        if (first > 0) {
+            utassert(LayoutCacheNodeCount(lc) == live);
+        }
+        utassert(LayoutCacheSlotCount(lc) <= peakSlots);
+    }
 
     ArenaDelete(a);
     LayoutCacheFree(lc);

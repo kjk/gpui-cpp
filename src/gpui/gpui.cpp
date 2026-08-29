@@ -3400,6 +3400,54 @@ struct LayoutSyncCtx {
 static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
                                 bool havePrev, bool isRoot);
 
+// Drop extra children of every reused node before LayoutSync builds
+// anything. Sync is left-to-right: scrolling a virtualized list back to
+// the top turns the spacer at index 0 into a row (LayoutBuild its guts)
+// before the row at the other end becomes a spacer and is dropped, so
+// InsertNode sees an empty free list and `new NodeData` on every scroll-up.
+static void LayoutShrink(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
+                         bool isRoot) {
+    LayoutCache* lc = sc->lc;
+    LayoutNode* rec = (LayoutNode*)lc->tree.GetNodeContext(prev);
+    if (!rec || rec->kind != (uint8_t)e->kind) {
+        return;
+    }
+    int want = 0;
+    for (El* c = e->first; c; c = c->next) {
+        if (!c->style.fixed) {
+            want++;
+        }
+    }
+    if (!isRoot) {
+        bool dropped = false;
+        for (int j = lc->tree.ChildCount(prev) - 1; j >= want; j--) {
+            LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
+            dropped = true;
+        }
+        // taffy's Remove does not dirty the parent, so a node that only
+        // lost a child would keep the layout it had when the child was
+        // still there. LayoutSync used to MarkDirty after its own
+        // drop-first; shrink now does that drop, so it has to say so.
+        if (dropped) {
+            lc->tree.MarkDirty(prev);
+        }
+    }
+    int i = 0;
+    for (El* c = e->first; c; c = c->next) {
+        if (c->style.fixed) {
+            continue;
+        }
+        if (i < lc->tree.ChildCount(prev)) {
+            taffy::NodeId old = lc->tree.ChildAtIndex(prev, i);
+            LayoutNode* oldRec = (LayoutNode*)lc->tree.GetNodeContext(old);
+            if (oldRec && oldRec->kind == (uint8_t)c->kind) {
+                LayoutShrink(sc, c, old, false);
+            }
+        }
+        i++;
+    }
+}
+
 // A node and its subtree, made from nothing.
 static taffy::NodeId LayoutBuild(LayoutSyncCtx* sc, El* e, bool isRoot) {
     LayoutCache* lc = sc->lc;
@@ -3474,9 +3522,11 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
     // only counts the ones that stay.
     //
     // Drop whatever this node has past the new child count *before* making
-    // anything, so InsertNode recycles. Skip that on the root: its taffy
-    // children include last frame's `fixed` overlays, which the pass below
-    // reuses; treating them as extras rebuilt every popover on every frame.
+    // anything, so InsertNode recycles. LayoutShrink already did this for
+    // every reused node; keeping it here covers a kind-mismatch replace
+    // that shrink skipped. Skip that on the root: its taffy children
+    // include last frame's `fixed` overlays, which the pass below reuses;
+    // treating them as extras rebuilt every popover on every frame.
     int want = 0;
     for (El* c = e->first; c; c = c->next) {
         if (!c->style.fixed) {
@@ -3902,6 +3952,9 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
             lc->root = taffy::NodeId{};
         }
     }
+    if (lc->hasRoot) {
+        LayoutShrink(&sc, e, lc->root, true);
+    }
     // Rust's `stretch_auto_size_to_fill` is applied to the root's style
     // inside the sync, so that the style the node carries is the one the
     // next frame compares against.
@@ -4026,6 +4079,10 @@ LayoutCacheStats LayoutCacheLastStats(const LayoutCache* lc) {
 
 int LayoutCacheNodeCount(const LayoutCache* lc) {
     return lc ? lc->tree.TotalNodeCount() : 0;
+}
+
+int LayoutCacheSlotCount(const LayoutCache* lc) {
+    return lc ? lc->tree.SlotCount() : 0;
 }
 
 // The scratch cache is a static, so the app's teardown is what gives its

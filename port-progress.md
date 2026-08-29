@@ -10243,3 +10243,16 @@ reuses. Kind mismatch detaches and drops the old subtree *before* building.
 `TaffyTree::Remove` does not kill descendants (the cache walks those for
 GiveBack); a sweep at the end of the pass drops anything not reachable
 from the root. A fixed overlay over 12 identical frames makes no nodes.
+
+Drop-first on the parent that *gained* a child was still too late on
+scroll-up. Sync is left-to-right: going back to the top turns the spacer
+at index 0 into a row and `LayoutBuild`s its guts *before* the last row
+becomes a spacer and is dropped. Live count stayed flat (the extras were
+freed at the end of the pass) while `InsertNode` `new`'d a NodeData every
+time — the stack was `LayoutSync` 3520 `AddChild` after a run of kind-
+matching 3505s. `LayoutShrink` now walks the reused tree and drops every
+node's extra children *before* `LayoutSync` builds anything, so the row
+that scrolled off is already on the free list when the one that scrolled
+on is made. The sliding-window test now uses editor-like nested rows,
+scrolls back to the top, and checks the slot count (not just the live
+count) does not grow.

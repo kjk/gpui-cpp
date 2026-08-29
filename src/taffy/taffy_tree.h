@@ -131,6 +131,9 @@ struct TaffyTree {
     // Rust panics on an out-of-range index; this returns a zero NodeId.
     NodeId ChildAtIndex(NodeId parent, int childIndex) const;
     int TotalNodeCount() const { return liveCount; }
+    // Slots that have ever been allocated, including dead ones on the free
+    // list. InsertNode `new`s a NodeData only when this grows.
+    int SlotCount() const { return slots.len; }
     // hasParent is false for a root.
     NodeId Parent(NodeId child, bool* hasParent) const;
 
