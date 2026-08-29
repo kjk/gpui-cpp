@@ -7,6 +7,8 @@ using namespace gpui;
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <math.h>
+
 static StoryPageNewFn gNew[StoryCount] = {};
 static StoryPageKeyFn gKey[StoryCount] = {};
 
@@ -747,7 +749,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
 // half a 1920 screen and 221 at 1400, which is what the Rust app draws.
 static float SidebarWidth(Ctx* cx) {
     float w = WindowSize(cx->win).dipW * (255.f / 1600.f);
-    w = (float)(int)(w + 0.5f); // GPUI rounds; truncating is off by one at 1400
+    w = (float)lroundf(w); // GPUI rounds; truncating is off by one at 1400
     if (w < 200.f) {
         w = 200.f;
     }

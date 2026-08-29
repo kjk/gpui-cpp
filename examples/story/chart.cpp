@@ -225,8 +225,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
         float mean = sum / (float)kMonthlyDeviceCount;
         for (int i = 0; i < kMonthlyDeviceCount; i++) {
             float v = kMonthlyDesktop[i] - mean;
-            variations[i] =
-                v < 0 ? -(float)(int)(-v + 0.5f) : (float)(int)(v + 0.5f);
+            variations[i] = (float)lroundf(v);
         }
     }
     barRow->Child(

@@ -3314,7 +3314,7 @@ static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
 static uint8_t ShellThemeByte(float value) {
     if (value <= 0) return 0;
     if (value >= 1) return 255;
-    return (uint8_t)floorf(value * 255.f + 0.5f);
+    return (uint8_t)lroundf(value * 255.f);
 }
 
 static Rgba ShellThemeRgba(Hsla color) {

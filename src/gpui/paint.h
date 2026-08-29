@@ -8,6 +8,8 @@
 
 #include "gpui/gpui.h"
 
+#include <math.h>
+
 // Windows renderer selection is a compile-time choice. Defining
 // WIN_BACKEND_ALL preserves the runtime __paint=d2d|d3d11|d3d12 selector;
 // otherwise exactly one backend is compiled and __paint is ignored. With
@@ -182,7 +184,7 @@ inline Rgba PaintFade(const PaintCtx* ctx, Rgba c) {
         return c;
     }
     float a = (float)c.a * (ctx->opacity < 0 ? 0 : ctx->opacity);
-    c.a = (uint8_t)(a <= 0 ? 0 : (a >= 255 ? 255 : a + 0.5f));
+    c.a = (uint8_t)(a <= 0 ? 0 : (a >= 255 ? 255 : lroundf(a)));
     return c;
 }
 

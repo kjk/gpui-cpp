@@ -5,6 +5,8 @@
 
 #include "gpui.h"
 
+#include <math.h>
+
 using namespace gpui;
 
 static const int kDefaultMaxLines = 5;
@@ -61,7 +63,7 @@ struct MaxLinesExample {
     static void OnSlider(MaxLinesExample* self, Ctx* cx,
                          const SliderEvent* event) {
         if (event->kind != SliderEventKind::Change) return;
-        self->maxLines = (int)(event->value.Start() + 0.5f);
+        self->maxLines = (int)lroundf(event->value.Start());
         Notify(cx);
     }
 
