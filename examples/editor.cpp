@@ -144,8 +144,8 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
         if (wrote <= 0) {
             continue;
         }
-        int ix = TreeAddItem(s, StrDup(Str(child)), StrDup(Str(found[i].name)),
-                             parent);
+        // TreeAddItem copies both strings; the state owns and frees them.
+        int ix = TreeAddItem(s, Str(child), Str(found[i].name), parent);
         if (ix < 0) {
             break;
         }
@@ -351,8 +351,7 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
         if (query.len > item.label.len) {
             continue;
         }
-        if (query.len > 0 &&
-            !StrEq(Str(item.label.s, query.len), query)) {
+        if (query.len > 0 && !StrEq(Str(item.label.s, query.len), query)) {
             continue;
         }
         if (n < cap && out) {
@@ -460,8 +459,7 @@ static Str InlineCompletionAt(void*, Arena* a, Str text, int offset) {
     Str line(text.s + lineStart, offset - lineStart);
     auto endsWith = [](Str s, const char* suffix) {
         int n = (int)strlen(suffix);
-        return s.len >= n &&
-               StrEq(Str(s.s + s.len - n, n), Str(suffix, n));
+        return s.len >= n && StrEq(Str(s.s + s.len - n, n), Str(suffix, n));
     };
     if (endsWith(line, "for (")) {
         return StrDup(a, StrL("int i = 0; i < n; i++) {\n}"));
@@ -533,9 +531,9 @@ static int SemanticTokensFor(void*, Str text, Selection range,
         int deltaLine = hits[i].line - prevLine;
         if (i < cap && out) {
             out[i].deltaLine = (uint32_t)deltaLine;
-            out[i].deltaStart = (uint32_t)(deltaLine == 0
-                                                ? hits[i].col - prevCol
-                                                : hits[i].col);
+            out[i]
+                .deltaStart = (uint32_t)(deltaLine == 0 ? hits[i].col - prevCol
+                                                        : hits[i].col);
             out[i].length = (uint32_t)hits[i].len;
             out[i].tokenType = (uint32_t)hits[i].type;
             out[i].tokenModifiers = 0;

@@ -33,9 +33,8 @@ static Entity<TreeState> ShowcaseTreeState(ShowcaseApp* app, Ctx* cx) {
     }
     // A row is 32 here, not the ListItem's 34: the page draws its own.
     s->rowH = 32;
-    // The state keeps the strings it is given rather than copying them, and
-    // it outlives the frame — so these are the literals in the table above
-    // and a static id per row, never the frame arena.
+    // TreeAddItem copies the strings it is given, so a stack buffer per row
+    // would do; static keeps the ids stable for a debugger's benefit.
     static char ids[kTreeCount][16];
     for (int i = 0; i < kTreeCount; i++) {
         snprintf(ids[i], sizeof(ids[i]), "sc-tree-%d", i);
@@ -49,8 +48,7 @@ static Entity<TreeState> ShowcaseTreeState(ShowcaseApp* app, Ctx* cx) {
 }
 
 // One row: the indent, a chevron for a folder, and the label.
-static El* ShowcaseTreeRow(void*, Ctx* cx, int,
-                           const TreeEntry& entry,
+static El* ShowcaseTreeRow(void*, Ctx* cx, int, const TreeEntry& entry,
                            TreeEntryState entryState) {
     const TreeItem* it = entry.item;
     if (!it) {

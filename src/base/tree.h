@@ -29,7 +29,7 @@ namespace tree {
 // Source-named module initializer. The global-prefixed spelling remains for
 // callers that use this tree's conventional C++ surface.
 void init();
-}
+} // namespace tree
 
 // Where Up and Down move the selection. Both wrap, and both treat an unset
 // selection as 0 before stepping — which is why Up from nothing lands on the
@@ -131,13 +131,21 @@ struct TreeState {
     static void OnScroll(TreeState* self, Ctx* cx, const ScrollEvent* ev);
 
     ~TreeState() {
+        // TreeAddItem duplicated every id and label into the state.
+        for (int i = 0; i < items.len; i++) {
+            StrFree(items[i].id);
+            StrFree(items[i].label);
+        }
         VecReset(items);
         VecReset(entries);
     }
 };
 
 // Build the tree. `parent` is an item index, or -1 for a root; the children of
-// an item must be added after it. Answers the new item's index.
+// an item must be added after it. Answers the new item's index. `id` and
+// `label` are copied — the state owns its strings and frees them with itself,
+// the way InputSetPlaceholder does — so a literal, a stack buffer or a frame
+// arena string are all fine to pass.
 int TreeAddItem(TreeState* s, Str id, Str label, int parent);
 // replace_items + add_entry: walk the roots depth-first and take in the
 // children of every expanded folder. Called for you by everything that
@@ -151,8 +159,9 @@ const TreeItem* TreeEntryItem(const TreeState* s, int entryIx);
 TreeEntry TreeEntryAt(const TreeState* s, int entryIx);
 
 // set_items: replace the complete item array in one operation, rebuild the
-// visible entries, clear both interaction indices and notify. Strings remain
-// caller-owned, as with TreeAddItem.
+// visible entries, clear both interaction indices and notify. `id` and
+// `label` are copied the way TreeAddItem copies them; the pointers in
+// `items` need not outlive the call.
 void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count);
 
 // toggle_expand, without a window to notify. Answers false for a leaf or a

@@ -10203,3 +10203,19 @@ Present, and with WS_EX_NOREDIRECTIONBITMAP there is no surface to fall
 back to, so the app looks alive with a pure black window. cdb attach +
 `~0 k` finds the faulting line in seconds; both bugs it caught here were
 an out-parameter a styles()/foldRanges() implementation forgot to write.
+
+## TreeAddItem leaked every id and label
+
+2026-08-29: The editor's file tree leaked the path and name of every row.
+`LoadDir` `StrDup`'d both into `TreeAddItem`, which stored the pointers as
+handed in; `TreeState` never freed them, and could not have without also
+freeing a caller's literal. `TreeAddItem` / `TreeSetItems` now copy, the
+destructor and a replace free the old ones, and the two `LoadDir`s (editor,
+story tree) pass the stack buffers they already had. Showcase and the tests
+already passed literals. The 21516-check suite covers the copy: overwriting
+the buffer after add must not change the row.
+
+Scrolling the editor still grows the CRT heap (~0.45 MB/s after this fix,
+no plateau). Heap buckets that move are 80/400/432-byte live blocks, which
+is the shape of DWrite layouts and cached line text, not the tree. The
+plain `input` example does not grow. That hunt is still open.

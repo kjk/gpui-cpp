@@ -74,8 +74,12 @@ bool TreeExpands(bool isFolder, bool isExpanded) {
 
 int TreeAddItem(TreeState* s, Str id, Str label, int parent) {
     TreeItem it;
-    it.id = id;
-    it.label = label;
+    // Copies, owned by the state and freed with it — the convention
+    // InputSetPlaceholder set. The strings used to be stored as handed in,
+    // which left the caller's heap copies to leak: nothing freed them, and
+    // nothing could have without also freeing a caller's literal.
+    it.id = StrDup(id);
+    it.label = StrDup(label);
     it.parent = parent;
     int ix = s->items.len;
     if (parent >= 0 && parent < ix) {
@@ -137,10 +141,19 @@ void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count) {
     if (!s) {
         return;
     }
+    // The state owns every item's strings (see TreeAddItem): the old ones go
+    // with the old items, and the new ones come in as copies.
+    for (int i = 0; i < s->items.len; i++) {
+        StrFree(s->items[i].id);
+        StrFree(s->items[i].label);
+    }
     s->items.len = 0;
     if (items && count > 0) {
         for (int i = 0; i < count; i++) {
-            VecAppend(s->items, items[i]);
+            TreeItem it = items[i];
+            it.id = StrDup(it.id);
+            it.label = StrDup(it.label);
+            VecAppend(s->items, it);
         }
     }
     s->selected = -1;
@@ -240,8 +253,7 @@ static void TreeExpandAncestors(TreeState* s, Ctx* cx, int item) {
     VecReset(ancestors);
 }
 
-int TreeRevealItem(TreeState* s, Ctx* cx, Str id,
-                   ScrollStrategy strategy) {
+int TreeRevealItem(TreeState* s, Ctx* cx, Str id, ScrollStrategy strategy) {
     if (!s) {
         return -1;
     }
@@ -417,8 +429,7 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
         if (!it->disabled) {
             wrap->OnMouseDown(ListenerArg(down, i));
         }
-        TreeEntryState entryState = {i == s->selected,
-                                     i == s->rightClicked};
+        TreeEntryState entryState = {i == s->selected, i == s->rightClicked};
         if (El* built = row(user, cx, i, entry, entryState)) {
             wrap->Child(built);
         }

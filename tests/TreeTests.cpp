@@ -169,6 +169,28 @@ static void ReplacingItemsResetsBothInteractionIndices() {
     utassert(base::StrEq(TreeEntryAt(&s, 0).item->id, "Cargo.toml"));
 }
 
+static void TheStateOwnsTheStringsItIsGiven() {
+    // LoadDir used to StrDup into TreeAddItem, which stored the pointers
+    // as handed in; nothing freed them. The state now copies, so a stack
+    // buffer is enough and overwriting it must not change the row.
+    TreeState s;
+    char id[16] = "root";
+    char label[16] = "Root";
+    utassert(TreeAddItem(&s, Str(id), Str(label), -1) == 0);
+    id[0] = 'X';
+    label[0] = 'Y';
+    utassert(base::StrEq(s.items[0].id, "root"));
+    utassert(base::StrEq(s.items[0].label, "Root"));
+
+    TreeItem only = {};
+    only.id = StrL("Cargo.toml");
+    only.label = only.id;
+    TreeSetItems(&s, nullptr, &only, 1);
+    utassert(s.items.len == 1);
+    utassert(base::StrEq(s.items[0].id, "Cargo.toml"));
+    utassert(base::StrEq(s.items[0].label, "Cargo.toml"));
+}
+
 static void SelectingHiddenItemExpandsItsAncestors() {
     TreeState s;
     Seed(&s);
@@ -194,5 +216,6 @@ void TestTree() {
     CollapsingPastTheSelectionPullsItBack();
     EntriesExposeItemDepthAndInteractionState();
     ReplacingItemsResetsBothInteractionIndices();
+    TheStateOwnsTheStringsItIsGiven();
     SelectingHiddenItemExpandsItsAncestors();
 }

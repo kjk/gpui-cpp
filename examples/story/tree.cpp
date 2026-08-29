@@ -96,9 +96,8 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
             continue;
         }
         // The id has to be unique and stable, so it is the path; the label is
-        // the name.
-        int ix = TreeAddItem(s, StrDup(Str(child)), StrDup(Str(found[i].name)),
-                             parent);
+        // the name. TreeAddItem copies both; the state owns and frees them.
+        int ix = TreeAddItem(s, Str(child), Str(found[i].name), parent);
         if (ix < 0) {
             break;
         }
