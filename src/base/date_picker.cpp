@@ -22,7 +22,11 @@ static int DateCompare(LocalDate a, LocalDate b) {
 }
 
 intptr_t DatePickerDateKey(LocalDate date) {
-    return (intptr_t)(date.year * 10000 + date.month * 100 + date.day);
+    intptr_t key = date.year;
+    intptr_t month = date.month;
+    intptr_t day = date.day;
+    key = key * 10000 + month * 100 + day;
+    return key;
 }
 
 LocalDate DatePickerDateFromKey(intptr_t key) {

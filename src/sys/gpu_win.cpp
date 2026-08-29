@@ -143,10 +143,8 @@ static float GpuUsagePercentLocked() {
     // them: 3D, Copy and Video Decode run concurrently, so adding them up can
     // pass 100% while the adapter still has headroom. Within one type this
     // process' engines are summed, since it can be on several at once.
-    enum {
-        kMaxTypes = 16,
-        kNameMax = 256
-    };
+    static constexpr int kMaxTypes = 16;
+    static constexpr int kNameMax = 256;
     char names[kMaxTypes][32] = {};
     double busy[kMaxTypes] = {};
     int nTypes = 0;

@@ -78,6 +78,15 @@ function findClangTidy(): string {
   die("clang-tidy was not found. Install LLVM (or the Visual Studio C++ Clang tools) and put it on PATH.");
 }
 
+function shuffle<T>(items: T[]): void {
+  // Fisher–Yates: unlike sort(() => Math.random() - 0.5), every ordering has
+  // the same probability and the source list itself remains the only state.
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j]!, items[i]!];
+  }
+}
+
 function main(): void {
   const tidyArgs: string[] = [];
   const extraArgs: string[] = [];
@@ -98,6 +107,7 @@ function main(): void {
   const plat = hostPlatform();
   const files = sourceFiles("src", hostOnly ? plat : null);
   if (files.length === 0) die("No source files found under src/.");
+  shuffle(files);
   const exe = findClangTidy();
   // The normal clang-tidy summary includes a repetitive hint about
   // non-system headers whenever the project's HeaderFilterRegex suppresses
