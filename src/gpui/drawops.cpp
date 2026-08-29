@@ -502,7 +502,8 @@ void DrawOpsBuilder::StrokeWidth(float w) {
     uint16_t op = kOpStrokeWidth;
     uint8_t* p = VecAppendBlanks(data, 6);
     if (p) {
-        memcpy(p, &op, 2);
+        p[0] = (uint8_t)op;
+        p[1] = (uint8_t)(op >> 8);
         memcpy(p + 2, &w, 4);
     }
 }
