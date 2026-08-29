@@ -15,12 +15,11 @@ static void SetError(ShellError* error, Str message) {
 
 static Str Join(Arena* arena, Str left, Str right) {
     StrBuilder path;
-    path.a = arena;
-    path.Append(left);
+    StrBuilderAppend(arena, path, left);
     if (left && left.s[left.len - 1] != '/' && left.s[left.len - 1] != '\\')
-        path.AppendChar(GPUI_OS_WINDOWS ? '\\' : '/');
-    path.Append(right);
-    return path.TakeStr();
+        StrBuilderAppendChar(arena, path, GPUI_OS_WINDOWS ? '\\' : '/');
+    StrBuilderAppend(arena, path, right);
+    return StrBuilderTakeStr(arena, path);
 }
 
 static bool ReadBoundedFile(Str path, int limit, Str* out) {

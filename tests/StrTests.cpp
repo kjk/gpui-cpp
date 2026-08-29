@@ -76,6 +76,62 @@ static void TrimAsciiReturnsASlice() {
     utassert(base::StrEq(base::StrTrimAscii(StrL(" \t\r\n")), ""));
 }
 
+static void BuilderBorrowsThenGrowsLikeAVec() {
+    char scratch[5] = {};
+    StrBuilder b;
+    StrBuilderUseExternalBuffer(b, Str(scratch, (int)sizeof(scratch)));
+    utassert(b.cap == -4); // the fifth byte is held back for the NUL
+    utassert(b.Append(StrL("four")));
+    utassert(b.els == scratch && scratch[4] == 0);
+
+    // Taking borrowed storage copies the result and keeps the scratch bound.
+    Str four = b.TakeStr();
+    utassert(base::StrEq(four, "four"));
+    utassert(four.s != scratch && b.els == scratch && b.len == 0);
+    StrFree(four);
+
+    // The next append past the lent capacity allocates and copies. The caller's
+    // buffer remains untouched, and the heap block can be handed over.
+    utassert(b.Append(StrL("abcde")));
+    utassert(b.els != scratch && b.cap > 0);
+    utassert(scratch[0] == 0);
+    Str five = b.TakeStr();
+    utassert(base::StrEq(five, "abcde"));
+    utassert(b.els == nullptr && b.cap == 0 && b.len == 0);
+    StrFree(five);
+}
+
+static void BuilderArenaStorageStaysWithTheArena() {
+    Arena* a = ArenaNew();
+    StrBuilder b;
+    utassert(StrBuilderReserve(a, b, 4));
+    char* first = b.els;
+    utassert(first && b.cap < 0);
+    utassert(StrBuilderAppend(a, b, StrL("a string longer than reserve")));
+    utassert(b.cap < 0 && b.els != first);
+    char* storage = b.els;
+
+    Str result = StrBuilderTakeStr(a, b);
+    utassert(base::StrEq(result, "a string longer than reserve"));
+    utassert(result.s != storage);
+    utassert(b.els == storage && b.cap < 0 && b.len == 0);
+    // Destroying b must not try to free either arena allocation.
+    ArenaDelete(a);
+}
+
+static void BuilderRemovalKeepsTheTerminator() {
+    StrBuilder b;
+    utassert(b.Append(StrL("abcd")));
+    utassert(b.LastChar() == 'd');
+    utassert(b.RemoveAt(1, 2) == 'b');
+    utassert(base::StrEq(Str(b.els, b.len), "ad"));
+    utassert(b.els[b.len] == 0);
+    utassert(b.RemoveLast() == 'd');
+    utassert(b.LastChar() == 'a' && b.els[b.len] == 0);
+    utassert(b.RemoveLast() == 'a');
+    utassert(b.RemoveLast() == 0 && b.LastChar() == 0);
+}
+
 void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
@@ -85,4 +141,7 @@ void TestStr() {
     ReplaceAllHandlesEmptyAndMissingMatches();
     PrefixSuffixAndFindHelpersHandleBoundaries();
     TrimAsciiReturnsASlice();
+    BuilderBorrowsThenGrowsLikeAVec();
+    BuilderArenaStorageStaysWithTheArena();
+    BuilderRemovalKeepsTheTerminator();
 }

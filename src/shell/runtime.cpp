@@ -1024,16 +1024,15 @@ static int Interrupt(JSRuntime*, void* opaque) {
 static Str ExceptionText(Arena* arena, JSContext* ctx) {
     JSValue exception = JS_GetException(ctx);
     StrBuilder out;
-    out.a = arena;
     size_t messageLen = 0;
     const char* message = JS_ToCStringLen(ctx, &messageLen, exception);
     Str messageText;
     if (message) {
         messageText = StrDup(arena, Str(message, (int)messageLen));
-        out.Append(messageText);
+        StrBuilderAppend(arena, out, messageText);
         JS_FreeCString(ctx, message);
     } else {
-        out.Append(StrL("JavaScript exception"));
+        StrBuilderAppend(arena, out, StrL("JavaScript exception"));
     }
     if (JS_IsError(exception)) {
         JSValue stack = JS_GetPropertyStr(ctx, exception, "stack");
@@ -1043,11 +1042,13 @@ static Str ExceptionText(Arena* arena, JSContext* ctx) {
             if (text && stackLen > 0) {
                 Str stackText(text, (int)stackLen);
                 if (!messageText || !StrStartsWith(stackText, messageText)) {
-                    out.AppendChar('\n');
-                    out.Append(stackText);
+                    StrBuilderAppendChar(arena, out, '\n');
+                    StrBuilderAppend(arena, out, stackText);
                 } else if ((int)stackLen > (int)messageLen) {
-                    out.Append(Str(text + messageLen,
-                                   (int)stackLen - (int)messageLen));
+                    StrBuilderAppend(
+                        arena, out,
+                        Str(text + messageLen,
+                            (int)stackLen - (int)messageLen));
                 }
                 JS_FreeCString(ctx, text);
             }
@@ -1055,7 +1056,7 @@ static Str ExceptionText(Arena* arena, JSContext* ctx) {
         JS_FreeValue(ctx, stack);
     }
     JS_FreeValue(ctx, exception);
-    return out.TakeStr();
+    return StrBuilderTakeStr(arena, out);
 }
 
 static bool CaptureException(ShellRuntimeImpl* impl, ShellError* error) {

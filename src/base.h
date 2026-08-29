@@ -1724,26 +1724,29 @@ int SeqStrCount(SeqStrings strs);
 // compare.
 void StrLowerAscii(char* s);
 
-struct StrBuilder {
-    // Vec-compatible prefix, so generic vec storage helpers can erase this
-    // type without copying its fields in and out.
-    int len = 0;
-    int cap = 0;
-    char* els = nullptr;
-    Arena* a = nullptr;
-    Str buf;
-
-    explicit StrBuilder(Str externalBuf = {});
-    StrBuilder(const StrBuilder&) = delete;
-    StrBuilder& operator=(const StrBuilder&) = delete;
-    ~StrBuilder();
-
+// A Vec<char> that always keeps a NUL after the last char, so the storage is
+// also a C string. Vec supplies the fields, operator[], begin/end and the
+// destructor; only what needs the terminator or an arena is left here.
+struct StrBuilder : Vec<char> {
     void Reset(Str s = {});
-    bool InsertAt(int idx, char el);
+    // These grow on the heap. To grow from an arena use the StrBuilderAppend*()
+    // free functions below, which take the allocator like VecPush() does.
     bool AppendChar(char c);
     bool Append(Str src);
+    char RemoveAt(int idx, int count = 1);
+    char RemoveLast();
     Str TakeStr();
+    char LastChar() const;
 };
+
+// Lend b a buffer to start in. One byte is held back for the NUL; growing
+// past it allocates and copies, leaving the caller's storage alone.
+void StrBuilderUseExternalBuffer(StrBuilder& b, Str buf);
+// Pre-allocate cap chars. Arena storage remains owned by the arena.
+bool StrBuilderReserve(Arena* a, StrBuilder& b, int cap);
+bool StrBuilderAppendChar(Arena* a, StrBuilder& b, char c);
+bool StrBuilderAppend(Arena* a, StrBuilder& b, Str s);
+Str StrBuilderTakeStr(Arena* a, StrBuilder& b);
 
 struct FmtArg {
     enum class Kind {

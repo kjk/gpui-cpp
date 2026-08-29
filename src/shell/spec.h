@@ -177,7 +177,7 @@ class SpecArena {
     bool CheckLive(SpecId id, SpecError* error) const;
     Component CopyComponent(const Component& component);
     SpecOp CopyOp(const SpecOp& op);
-    void WriteTree(StrBuilder* out, SpecId id, int depth) const;
+    void WriteTree(Arena* a, StrBuilder* out, SpecId id, int depth) const;
 };
 
 } // namespace gpui::shell

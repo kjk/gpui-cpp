@@ -355,19 +355,18 @@ static bool IsAbsolute(Str path) {
 static Str NormalizePath(Arena* arena, Str path, bool* escaped) {
     if (escaped) *escaped = false;
     StrBuilder out;
-    out.a = arena;
     int prefix = 0;
 #if GPUI_OS_WINDOWS
     if (path.len >= 2 && path.s[1] == ':') {
         char drive = path.s[0];
         if (drive >= 'a' && drive <= 'z') drive = (char)(drive - 'a' + 'A');
-        out.AppendChar(drive);
-        out.AppendChar(':');
+        StrBuilderAppendChar(arena, out, drive);
+        StrBuilderAppendChar(arena, out, ':');
         prefix = 2;
     }
 #endif
     if (prefix < path.len && IsSeparator(path.s[prefix])) {
-        out.AppendChar('/');
+        StrBuilderAppendChar(arena, out, '/');
         while (prefix < path.len && IsSeparator(path.s[prefix])) prefix++;
     }
     Vec<Str> parts;
@@ -392,10 +391,10 @@ static Str NormalizePath(Arena* arena, Str path, bool* escaped) {
     for (int i = 0; i < parts.len; i++) {
         if (out.len > 0 && !(rootSlash && out.len == 1) &&
             out.els[out.len - 1] != '/')
-            out.AppendChar('/');
-        out.Append(parts[i]);
+            StrBuilderAppendChar(arena, out, '/');
+        StrBuilderAppend(arena, out, parts[i]);
     }
-    Str result = out.TakeStr();
+    Str result = StrBuilderTakeStr(arena, out);
     return result.len == 0 ? StrDup(arena, StrL(".")) : result;
 }
 

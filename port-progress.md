@@ -9906,3 +9906,25 @@ reset and free the prior allocation twice. New Vec tests cover the
 free-function surface and taking borrowed storage. MSVC and clang-cl release
 both pass 21,464 checks, g++ release passes 21,443, and wasm passes 20,683;
 every MSVC release example and a debug amalgam build pass as well.
+
+## StrBuilder follows Sumatra's Vec-backed Builder
+
+The 2026-08-28/29 `str::Builder` series in SumatraPDF (`6b5e238aa` through
+`8b9a5f5f1`) is replicated in the curated base under this tree's existing
+`StrBuilder` name. `StrBuilder` now derives from `Vec<char>` instead of
+duplicating its `{len, cap, els}` storage and growth code. Constructor-held
+scratch buffers and the stored `Arena*` are gone: `StrBuilderUseExternalBuffer`,
+`StrBuilderReserve`, `StrBuilderAppend*` and `StrBuilderTakeStr` make borrowed
+storage and allocator choice explicit at the operation that needs them.
+
+The two string-specific invariants remain explicit. Every mutation writes the
+trailing NUL, including borrowed buffers, whose last byte is held back for it;
+and arena capacity is made negative after `VecReserve`, so the inherited Vec
+destructor cannot free arena memory. `RemoveAt`, `RemoveLast` and `LastChar`
+delegate to the Vec removal API, while `TakeStr` transfers owned heap storage
+and copies storage still owned by a caller or arena. Arena-backed format, shell
+path/error/spec, and date formatting call sites now pass their allocator
+through rather than storing it in the builder. New string tests cover borrowed
+buffer growth, arena growth and destruction, ownership transfer, removal and
+NUL termination. MSVC release and debug and clang-cl release each pass 21,490
+checks; wasm passes 20,709.
