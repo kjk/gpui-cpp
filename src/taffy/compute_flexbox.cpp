@@ -33,6 +33,7 @@ struct FlexItem {
     SizeFOpt size = SizeFOptNone();
     SizeFOpt minSize = SizeFOptNone();
     SizeFOpt maxSize = SizeFOptNone();
+    Optf aspectRatio = None();
     AlignSelf alignSelf;
 
     PointOverflow overflow;
@@ -237,13 +238,12 @@ void GenerateAnonymousFlexItems(TaffyTree* tree, NodeId node,
                                   aspectRatio),
             boxSizingAdjustment);
         item.minSize = MaybeAdd(
-            MaybeApplyAspectRatio(
-                cs.minSize.MaybeResolve(c.nodeInnerSize, calc), aspectRatio),
+            cs.minSize.MaybeResolve(c.nodeInnerSize, calc),
             boxSizingAdjustment);
         item.maxSize = MaybeAdd(
-            MaybeApplyAspectRatio(
-                cs.maxSize.MaybeResolve(c.nodeInnerSize, calc), aspectRatio),
+            cs.maxSize.MaybeResolve(c.nodeInnerSize, calc),
             boxSizingAdjustment);
+        item.aspectRatio = aspectRatio;
         // The inset resolves left/right against the width and top/bottom
         // against the height, which is Rust's `zip_size`.
         item.inset = cs.inset.MaybeResolveZip(c.nodeInnerSize, calc);
@@ -252,7 +252,9 @@ void GenerateAnonymousFlexItems(TaffyTree* tree, NodeId node,
                              cs.margin.top.IsAuto(), cs.margin.bottom.IsAuto()};
         item.padding = padding;
         item.border = border;
-        item.alignSelf = cs.alignSelf.UnwrapOr(c.alignItems);
+        item.alignSelf = ResolveSelfRelative(
+            cs.alignSelf.UnwrapOr(c.alignItems), cs.direction,
+            c.layoutDirection, c.isColumn);
         item.overflow = cs.overflow;
         item.scrollbarWidth = cs.scrollbarWidth;
         item.flexGrow = cs.flexGrow;
@@ -309,10 +311,14 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
         SizeFOpt childParentSize = SizeFOptFromCross(dir, crossAxisParentSize);
 
         float crossAxisMarginSum = CrossAxisSum(c.margin, dir);
+        SizeFOpt transferredMinSize =
+            MaybeApplyAspectRatio(child.minSize, child.aspectRatio);
+        SizeFOpt transferredMaxSize =
+            MaybeApplyAspectRatio(child.maxSize, child.aspectRatio);
         Optf childMinCross =
-            MaybeAdd(Cross(child.minSize, dir), crossAxisMarginSum);
+            MaybeAdd(Cross(transferredMinSize, dir), crossAxisMarginSum);
         Optf childMaxCross =
-            MaybeAdd(Cross(child.maxSize, dir), crossAxisMarginSum);
+            MaybeAdd(Cross(transferredMaxSize, dir), crossAxisMarginSum);
 
         // Clamp the available space by the item's min- and max- size.
         AvailableSpace crossAxisAvailableSpace;
@@ -339,6 +345,10 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
 
         SizeFOpt childKnownDimensions = child.size;
         SetMain(&childKnownDimensions, dir, None());
+        SetCross(&childKnownDimensions, dir,
+                 MaybeClamp(Cross(childKnownDimensions, dir),
+                            Cross(transferredMinSize, dir),
+                            Cross(transferredMaxSize, dir)));
         if (child.alignSelf.keyword == AlignItemsKeyword::Stretch &&
             !child.marginIsAuto.CrossStart(dir) &&
             !child.marginIsAuto.CrossEnd(dir) &&
@@ -426,16 +436,18 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
             // https://www.w3.org/TR/css-flexbox-1/#min-size-auto
             float clamped =
                 MaybeMin(MaybeMin(minContentMainSize, Main(child.size, dir)),
-                         Main(child.maxSize, dir));
+                         Main(transferredMaxSize, dir));
             child.resolvedMinimumMainSize =
                 MaybeMax(clamped, Main(paddingBorderAxesSums, dir));
         }
 
         float hypotheticalInnerMinMain = MaybeMax(
-            child.resolvedMinimumMainSize, Main(paddingBorderAxesSums, dir));
+            MaybeMax(child.resolvedMinimumMainSize,
+                     Main(transferredMinSize, dir)),
+            Main(paddingBorderAxesSums, dir));
         float hypotheticalInnerSize =
             MaybeClamp(child.flexBasis, Some(hypotheticalInnerMinMain),
-                       Main(child.maxSize, dir));
+                       Main(transferredMaxSize, dir));
         float hypotheticalOuterSize =
             hypotheticalInnerSize + MainAxisSum(child.margin, dir);
 
@@ -652,15 +664,12 @@ void DetermineContainerMainSize(TaffyTree* tree, SizeAvail availableSpace,
                         // found by matching Webkit/Firefox output rather than
                         // by reading the spec.
                         if (c->isRow) {
-                            contentContribution = F32Max(
-                                MaybeClamp(contentMainSize, styleMin, styleMax),
-                                mainContentBoxInset);
+                            contentContribution =
+                                MaybeClamp(contentMainSize, styleMin, styleMax);
                         } else {
-                            contentContribution = F32Max(
-                                MaybeClamp(
-                                    F32Max(contentMainSize, item.flexBasis),
-                                    styleMin, styleMax),
-                                mainContentBoxInset);
+                            contentContribution = MaybeClamp(
+                                F32Max(contentMainSize, item.flexBasis),
+                                styleMin, styleMax);
                         }
                     }
 
@@ -912,14 +921,19 @@ void DetermineHypotheticalCrossSize(TaffyTree* tree, FlexLine* line,
         AvailableSpace childKnownMain =
             AvailableSpace::Definite(Main(c.containerSize, dir));
 
+        Optf transferredMinCross =
+            Cross(MaybeApplyAspectRatio(child.minSize, child.aspectRatio), dir);
+        Optf transferredMaxCross =
+            Cross(MaybeApplyAspectRatio(child.maxSize, child.aspectRatio), dir);
+
         Optf childCross = MaybeMax(
-            MaybeClamp(Cross(child.size, dir), Cross(child.minSize, dir),
-                       Cross(child.maxSize, dir)),
+            MaybeClamp(Cross(child.size, dir), transferredMinCross,
+                       transferredMaxCross),
             paddingBorderSum);
 
         AvailableSpace childAvailableCross = MaybeMax(
-            MaybeClamp(availableSpace.Cross(dir), Cross(child.minSize, dir),
-                       Cross(child.maxSize, dir)),
+            MaybeClamp(availableSpace.Cross(dir), transferredMinCross,
+                       transferredMaxCross),
             paddingBorderSum);
 
         float childInnerCross;
@@ -934,8 +948,8 @@ void DetermineHypotheticalCrossSize(TaffyTree* tree, FlexLine* line,
                 child.node, known, c.nodeInnerSize, avail,
                 SizingMode::ContentSize, CrossAxis(dir), LineBool::False());
             childInnerCross =
-                F32Max(MaybeClamp(measured, Cross(child.minSize, dir),
-                                  Cross(child.maxSize, dir)),
+                F32Max(MaybeClamp(measured, transferredMinCross,
+                                  transferredMaxCross),
                        paddingBorderSum);
         }
         float childOuterCross =
@@ -989,8 +1003,11 @@ void CalculateChildrenBaseLines(TaffyTree* tree, SizeFOpt nodeSize,
             LayoutOutput out = tree->PerformChildLayout(
                 child.node, known, c.nodeInnerSize, avail,
                 SizingMode::ContentSize, LineBool::False());
-            child.baseline =
-                UnwrapOr(out.firstBaselines.y, out.size.h) + child.margin.top;
+            float baseline = UnwrapOr(out.firstBaselines.y, out.size.h);
+            if (IsScrollContainer(child.overflow.y)) {
+                baseline = F32Max(0.0f, F32Min(baseline, out.size.h));
+            }
+            child.baseline = baseline + child.margin.top;
         }
     }
 }
@@ -1211,7 +1228,9 @@ void DistributeRemainingFreeSpace(Vec<FlexLine>* lines,
 // https://www.w3.org/TR/css-flexbox-1/#algo-cross-align
 
 float AlignFlexItemsAlongCrossAxis(const FlexItem& child, float freeSpace,
-                                   float maxBaseline, const AlgoConstants& c) {
+                                   float maxBaseline,
+                                   float maxBaselineToBottomDistance,
+                                   const AlgoConstants& c) {
     bool crossAxisShouldReverse =
         c.isColumn && c.layoutDirection == Direction::Rtl;
 
@@ -1237,6 +1256,12 @@ float AlignFlexItemsAlongCrossAxis(const FlexItem& child, float freeSpace,
             return freeSpace / 2.0f;
         case AlignItemsKeyword::Baseline: {
             if (c.isRow) {
+                if (c.isWrapReverse) {
+                    float lineCrossSize =
+                        freeSpace + Cross(child.outerTargetSize, c.dir);
+                    return lineCrossSize - maxBaselineToBottomDistance -
+                           child.baseline;
+                }
                 return maxBaseline - child.baseline;
             }
             // Without vertical writing modes, baseline alignment only makes
@@ -1262,8 +1287,16 @@ void ResolveCrossAxisAutoMargins(Vec<FlexLine>* lines, const AlgoConstants& c) {
         FlexLine& line = (*lines)[li];
         float lineCrossSize = line.crossSize;
         float maxBaseline = 0.0f;
+        float maxBaselineToBottomDistance = 0.0f;
         for (int i = 0; i < line.count; i++) {
             maxBaseline = F32Max(maxBaseline, line.items[i].baseline);
+            if (line.items[i].alignSelf.keyword ==
+                AlignItemsKeyword::Baseline) {
+                maxBaselineToBottomDistance = F32Max(
+                    maxBaselineToBottomDistance,
+                    Cross(line.items[i].outerTargetSize, c.dir) -
+                        line.items[i].baseline);
+            }
         }
 
         for (int i = 0; i < line.count; i++) {
@@ -1294,7 +1327,8 @@ void ResolveCrossAxisAutoMargins(Vec<FlexLine>* lines, const AlgoConstants& c) {
             } else {
                 // 14. Align all flex items along the cross axis.
                 child.offsetCross = AlignFlexItemsAlongCrossAxis(
-                    child, freeSpace, maxBaseline, c);
+                    child, freeSpace, maxBaseline,
+                    maxBaselineToBottomDistance, c);
             }
         }
     }
@@ -1408,6 +1442,9 @@ void CalculateFlexItem(TaffyTree* tree, FlexItem* item, float* totalOffsetMain,
                         CrossStart(item->margin, direction) + crossRelativeInset;
 
     float innerBaseline = UnwrapOr(layoutOutput.firstBaselines.y, size.h);
+    if (IsRow(direction) && IsScrollContainer(item->overflow.y)) {
+        innerBaseline = F32Max(0.0f, F32Min(innerBaseline, size.h));
+    }
     if (IsRow(direction)) {
         float baselineOffsetCross = totalOffsetCross + item->offsetCross +
                                     effectiveLineOffsetCross +
@@ -1541,7 +1578,9 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
         PointOverflow overflow = cs.overflow;
         float scrollbarWidth = cs.scrollbarWidth;
         Optf aspectRatio = cs.aspectRatio;
-        AlignSelf alignSelf = cs.alignSelf.UnwrapOr(c.alignItems);
+        AlignSelf alignSelf = ResolveSelfRelative(
+            cs.alignSelf.UnwrapOr(c.alignItems), cs.direction,
+            c.layoutDirection, c.isColumn);
         RectFOpt margin = cs.margin
                               .MaybeResolve(Some(insetRelativeSize.w), calc);
         RectF padding = cs.padding
@@ -1635,8 +1674,12 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
         int autoH =
             (IsSome(margin.top) ? 0 : 1) + (IsSome(margin.bottom) ? 0 : 1);
         SizeF autoMarginSize = {
-            autoW > 0 ? freeSpace.w / (float)autoW : 0.0f,
-            autoH > 0 ? freeSpace.h / (float)autoH : 0.0f};
+            autoW > 0 && IsSome(left) && IsSome(right)
+                ? freeSpace.w / (float)autoW
+                : 0.0f,
+            autoH > 0 && IsSome(top) && IsSome(bottom)
+                ? freeSpace.h / (float)autoH
+                : 0.0f};
         RectF resolvedMargin = {UnwrapOr(margin.left, autoMarginSize.w),
                                 UnwrapOr(margin.right, autoMarginSize.w),
                                 UnwrapOr(margin.top, autoMarginSize.h),
@@ -1690,12 +1733,17 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                 Main(finalSize, c.dir) - MainEnd(resolvedMargin, c.dir);
             AlignContentKeyword jc =
                 c.justifyContent
-                    .UnwrapOr(AlignContent{AlignContentKeyword::Start})
+                    .UnwrapOr(AlignContent{AlignContentKeyword::FlexStart})
                     .Keyword();
             bool rev = mainAxisFlexStartReversed;
+            bool startPosition =
+                jc == AlignContentKeyword::Start
+                    ? !mainIsRtl
+                : jc == AlignContentKeyword::End ? mainIsRtl
+                                                 : true;
             switch (jc) {
                 case AlignContentKeyword::SpaceBetween:
-                    offsetMain = startPos;
+                    offsetMain = rev ? endPos : startPos;
                     break;
                 case AlignContentKeyword::Stretch:
                 case AlignContentKeyword::FlexStart:
@@ -1705,10 +1753,8 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                     offsetMain = rev ? startPos : endPos;
                     break;
                 case AlignContentKeyword::Start:
-                    offsetMain = rev ? endPos : startPos;
-                    break;
                 case AlignContentKeyword::End:
-                    offsetMain = rev ? startPos : endPos;
+                    offsetMain = startPosition ? startPos : endPos;
                     break;
                 default: // SpaceEvenly, SpaceAround, Center
                     offsetMain = (Main(c.containerSize, c.dir) +
@@ -1751,12 +1797,17 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                            Cross(finalSize, c.dir) -
                            CrossEnd(resolvedMargin, c.dir);
             bool rev = crossAxisFlexStartReversed;
+            bool startPosition =
+                ck == AlignItemsKeyword::Start ||
+                        ck == AlignItemsKeyword::Baseline
+                    ? !crossIsRtl
+                : ck == AlignItemsKeyword::End ? crossIsRtl
+                                               : true;
             switch (ck) {
                 case AlignItemsKeyword::Start:
-                    offsetCross = rev ? endPos : startPos;
-                    break;
                 case AlignItemsKeyword::End:
-                    offsetCross = rev ? startPos : endPos;
+                case AlignItemsKeyword::Baseline:
+                    offsetCross = startPosition ? startPos : endPos;
                     break;
                 case AlignItemsKeyword::Center:
                     offsetCross = (Cross(c.containerSize, c.dir) +
@@ -1771,7 +1822,7 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                     offsetCross = rev ? startPos : endPos;
                     break;
                 default:
-                    // Baseline, Stretch and FlexStart. Stretch alignment does
+                    // Stretch and FlexStart. Stretch alignment does
                     // not apply to absolutely positioned items; see "Example
                     // 3" at https://www.w3.org/TR/css-flexbox-1/#abspos-items
                     offsetCross = rev ? endPos : startPos;
@@ -1976,10 +2027,12 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
     // 8.5. Flex Container Baselines
     // https://www.w3.org/TR/css-flexbox-1/#flex-baselines
     Optf firstVerticalBaseline = None();
-    if (flexLines.len > 0 && flexLines[0].count > 0) {
+    int firstLineIdx = constants.isWrapReverse ? flexLines.len - 1 : 0;
+    if (firstLineIdx >= 0 && flexLines[firstLineIdx].count > 0) {
+        FlexLine& firstLine = flexLines[firstLineIdx];
         const FlexItem* chosen = nullptr;
-        for (int i = 0; i < flexLines[0].count; i++) {
-            const FlexItem& item = flexLines[0].items[i];
+        for (int i = 0; i < firstLine.count; i++) {
+            const FlexItem& item = firstLine.items[i];
             if (constants.isColumn ||
                 item.alignSelf.keyword == AlignItemsKeyword::Baseline) {
                 chosen = &item;
@@ -1987,11 +2040,9 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
             }
         }
         if (!chosen) {
-            chosen = &flexLines[0].items[0];
+            chosen = &firstLine.items[0];
         }
-        float offsetVertical =
-            constants.isRow ? chosen->offsetCross : chosen->offsetMain;
-        firstVerticalBaseline = Some(offsetVertical + chosen->baseline);
+        firstVerticalBaseline = Some(chosen->baseline);
     }
 
     VecReset(flexItems);

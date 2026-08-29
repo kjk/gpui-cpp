@@ -116,15 +116,17 @@ RectFOpt RectLpa::MaybeResolveZip(SizeFOpt context, CalcResolver calc) const {
 // ─── grid coordinates ────────────────────────────────────────────────────
 
 OriginZeroLine IntoOriginZeroLine(GridLine line, uint16_t explicitTrackCount) {
-    int16_t explicitLineCount = (int16_t)(explicitTrackCount + 1);
+    int32_t explicitLineCount = (int32_t)explicitTrackCount + 1;
+    int32_t value = 0;
     if (line.v > 0) {
-        return OriginZeroLine{(int16_t)(line.v - 1)};
+        value = (int32_t)line.v - 1;
+    } else if (line.v < 0) {
+        value = (int32_t)line.v + explicitLineCount;
     }
-    if (line.v < 0) {
-        return OriginZeroLine{(int16_t)(line.v + explicitLineCount)};
-    }
-    // Grid line zero is invalid; every caller filters it out first.
-    return OriginZeroLine{0};
+    value = value < kMinOzLine ? kMinOzLine
+            : value > kMaxOzLine ? kMaxOzLine
+                                 : value;
+    return OriginZeroLine{(int16_t)value};
 }
 
 // ─── grid placement ──────────────────────────────────────────────────────
@@ -196,10 +198,10 @@ LinePlain LinePlain::IntoOriginZero(uint16_t explicitTrackCount) const {
 
 uint16_t LinePlain::IndefiniteSpan() const {
     if (start.IsSpan()) {
-        return start.span;
+        return start.span < kMaxGridTracks ? start.span : kMaxGridTracks;
     }
     if (end.IsSpan()) {
-        return end.span;
+        return end.span < kMaxGridTracks ? end.span : kMaxGridTracks;
     }
     // (Line, Auto), (Auto, Line) and (Auto, Auto) all span one track. Rust
     // panics on (Line, Line); the callers here only reach this with an
@@ -363,7 +365,10 @@ bool operator==(const Style& a, const Style& b) {
            SameSlice(a.gridAutoColumns, b.gridAutoColumns) &&
            a.gridAutoFlow == b.gridAutoFlow &&
            // Grid container, named
-           SameSlice(a.gridTemplateAreas, b.gridTemplateAreas) &&
+           SameSlice(a.gridTemplateAreas.areas, b.gridTemplateAreas.areas) &&
+           a.gridTemplateAreas.rowCount == b.gridTemplateAreas.rowCount &&
+           a.gridTemplateAreas.columnCount ==
+               b.gridTemplateAreas.columnCount &&
            SameSlice(a.gridTemplateColumnNames, b.gridTemplateColumnNames) &&
            SameSlice(a.gridTemplateRowNames, b.gridTemplateRowNames) &&
            // Grid child

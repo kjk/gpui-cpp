@@ -9970,3 +9970,44 @@ fresh `GPUI_SCENE=off` D3D11 and D3D12 story captures are byte-identical.
 MSVC release passes 21,490 checks under each of Direct2D, D3D11 and D3D12;
 MSVC release builds of story, showcase and system_monitor pass, and clang-cl
 release builds story with `/W4 /WX`.
+
+## Taffy 0.13.0
+
+2026-08-29: The layout port now matches the Taffy version resolved by the
+pinned gpui-component tree: 0.13.0, crate checksum
+`c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f`.
+`cmd/run.ts -versions`, the port readme, the upstream-refresh instructions and
+the active AGENTS version note all name that version; the older 0.12.2 entry
+above remains as history of the original port.
+
+The 0.12.2 -> 0.13.0 source diff is ported across all three layout algorithms.
+Block layout gained `flow-root`, independent formatting contexts, CSS2 float
+placement/avoidance and clearance (including zero-sized floats and adjoining
+margin struts), replaced-block sizing, percentage-margin resolution and block
+baseline propagation. Flexbox gained aspect-ratio-transferred min/max sizing,
+scroll-container baseline clamping, wrap-reverse baseline synthesis, corrected
+absolute auto margins/static positions and `self-start` / `self-end`. Grid gained
+the explicit template-area dimensions required for unnamed cells, content-box
+min/max track constraints, accumulated distribution limits and fit-content caps,
+aligned origins for empty and absolute grids, border-relative content extents,
+and the 10,000-track CSS overlarge-grid clamp with saturating line/span math.
+Scroll extents now include both border edges.
+
+Rust 0.13 changed grid occupancy to sparse per-track interval vectors. The C++
+port deliberately keeps its flat POD byte matrix, derives the occupied interval
+at a collision and performs the same auto-placement jump. That preserves layout
+behavior and simple ownership, at the cost of greater memory use for a very
+sparse implicit grid; `src/taffy/readme.md` records the representation difference.
+
+New end-to-end regressions cover flow-root float containment and sibling-float
+avoidance, RTL `self-start`, two-sided border scroll extents and the 10,000-track
+repeat clamp. The benchmark target also had its last heap-`Vec::Append` calls
+migrated to `VecAppend`, which the recent Sumatra Vec synchronization had made
+visible only when this target was compiled. Release medians over three samples:
+flexbox's 10,000-node wide tree is 7.68 ms and huge nested tree 5.34 ms; grid's
+100x100 case is 18.94 ms and 316x316 case 232.5 ms on this machine.
+
+Validation: MSVC release and debug and clang-cl release each pass 21,500 checks;
+strict Linux g++ passes 21,479 applicable checks; wasm passes 20,719. Every MSVC
+release example builds with `/W4 /WX`, and both the flexbox and grid benchmark
+groups build and run in release mode.

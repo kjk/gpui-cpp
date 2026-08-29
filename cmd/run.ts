@@ -554,15 +554,15 @@ export const zedGpui = {
 } as const;
 
 /**
- * The layout crate that gpui-component's Cargo.lock resolves for `gpui`,
- * which asks for `taffy = "=0.12.2"`. We port it: `src/taffy/` is a C++ port
- * of exactly this version, and `src/gpui` lays out through it. See
+ * The layout crate that gpui-component's pinned Cargo.lock resolves for
+ * `gpui`. We port it: `src/taffy/` is a C++ port of exactly this version, and
+ * `src/gpui` lays out through it. See
  * `src/taffy/readme.md`.
  */
 export const taffy = {
   repo: "https://github.com/DioxusLabs/taffy",
-  version: "0.12.2",
-  crateSha256: "340a09581f29809fc0df82a3955501dc7f2a21f887e5d1c13dbe288fe1c0bef4",
+  version: "0.13.0",
+  crateSha256: "c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f",
   dir: "src/taffy",
 } as const;
 

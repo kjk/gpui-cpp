@@ -358,8 +358,10 @@ float ComputeAlignmentOffset(float freeSpace, int numItems, float gap,
             case AlignContentKeyword::SpaceBetween:
                 return 0.0f;
             case AlignContentKeyword::SpaceAround:
-                return freeSpace >= 0.0f ? (freeSpace / (float)numItems) / 2.0f
-                                         : freeSpace / 2.0f;
+                return freeSpace >= 0.0f
+                           ? (freeSpace / (float)(numItems > 0 ? numItems : 1)) /
+                                 2.0f
+                                          : freeSpace / 2.0f;
             case AlignContentKeyword::SpaceEvenly:
                 return freeSpace >= 0.0f ? freeSpace / (float)(numItems + 1)
                                          : freeSpace / 2.0f;

@@ -330,6 +330,8 @@ enum class AlignItemsKeyword : uint8_t {
     End,
     FlexStart,
     FlexEnd,
+    SelfStart,
+    SelfEnd,
     Center,
     Baseline,
     Stretch
@@ -463,6 +465,7 @@ constexpr bool operator!=(OptAlignContent a, OptAlignContent b) {
 // Sets the layout used for the children of this node.
 enum class Display : uint8_t {
     Block,
+    FlowRoot,
     Flex,
     Grid,
     None
@@ -514,6 +517,24 @@ enum class Direction : uint8_t {
 
 constexpr bool IsRtl(Direction d) {
     return d == Direction::Rtl;
+}
+
+// Resolve the item's writing-mode-relative self-start/self-end keyword into
+// the container-relative start/end used by the layout algorithms. Taffy only
+// supports horizontal-tb, so only an inline axis can flip with direction.
+constexpr AlignItems ResolveSelfRelative(AlignItems value,
+                                         Direction itemDirection,
+                                         Direction containerDirection,
+                                         bool axisIsInline) {
+    bool flip = axisIsInline && itemDirection != containerDirection;
+    if (value.keyword == AlignItemsKeyword::SelfStart) {
+        value.keyword = flip ? AlignItemsKeyword::End
+                             : AlignItemsKeyword::Start;
+    } else if (value.keyword == AlignItemsKeyword::SelfEnd) {
+        value.keyword = flip ? AlignItemsKeyword::Start
+                             : AlignItemsKeyword::End;
+    }
+    return value;
 }
 
 // Used by block layout for the legacy behaviour of `<center>` and
@@ -863,6 +884,10 @@ struct OptOriginZeroLine {
 
     constexpr bool IsSome() const { return has; }
 };
+
+constexpr uint16_t kMaxGridTracks = 10000;
+constexpr int16_t kMinOzLine = -(int16_t)kMaxGridTracks;
+constexpr int16_t kMaxOzLine = (int16_t)kMaxGridTracks;
 
 // Convert into OriginZero coordinates. Line zero is invalid and every caller
 // filters it out first.
@@ -1259,6 +1284,15 @@ struct GridTemplateArea {
     uint16_t columnEnd = 0;
 };
 
+// The named areas plus the full template dimensions. Unnamed `.` cells can
+// make the template larger than the extents of all named areas, so 0.13 no
+// longer derives these counts from the area rectangles.
+struct GridTemplateAreas {
+    Slice<GridTemplateArea> areas;
+    uint16_t rowCount = 0;
+    uint16_t columnCount = 0;
+};
+
 // Which axis a named grid area edge belongs to, and which end of it.
 enum class GridAreaAxis : uint8_t {
     Row,
@@ -1336,7 +1370,7 @@ struct Style {
     GridAutoFlow gridAutoFlow = GridAutoFlow::Row;
 
     // Grid container, named
-    Slice<GridTemplateArea> gridTemplateAreas;
+    GridTemplateAreas gridTemplateAreas;
     Slice<LineNameSet> gridTemplateColumnNames;
     Slice<LineNameSet> gridTemplateRowNames;
 

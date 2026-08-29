@@ -475,6 +475,8 @@ const char* TaffyTree::GetDebugLabel(NodeId node) const {
     switch (d->style.display) {
         case Display::Block:
             return "BLOCK";
+        case Display::FlowRoot:
+            return "FLOW-ROOT";
         case Display::Grid:
             return "GRID";
         default:
@@ -561,6 +563,9 @@ LayoutOutput TaffyTree::ComputeBlockChildLayout(NodeId node, LayoutInput inputs,
         switch (displayMode) {
             case Display::Block:
                 out = ComputeBlockLayout(this, node, inputs, blockCtx);
+                break;
+            case Display::FlowRoot:
+                out = ComputeBlockLayout(this, node, inputs, nullptr);
                 break;
             case Display::Grid:
                 out = ComputeGridLayout(this, node, inputs);

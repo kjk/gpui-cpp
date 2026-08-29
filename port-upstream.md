@@ -60,8 +60,8 @@ We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Blade, 
 ## taffy (a crate we port)
 
 `src/taffy/` is a C++ port of [taffy](https://github.com/DioxusLabs/taffy) at
-the version `gpui-component`'s `Cargo.lock` resolves for `gpui` — currently the
-`=0.12.2` that `crates/gpui/Cargo.toml` asks for. It is the layout engine, not
+the version `gpui-component`'s `Cargo.lock` resolves for `gpui` — currently
+`0.13.0`. It is the layout engine, not
 a reference: every box in this tree goes through it.
 
 **It moves when the gpui-component pin moves.** After bumping
@@ -76,8 +76,8 @@ crate between the two versions:
 
 ```
 git clone https://github.com/DioxusLabs/taffy .work/taffy   # once
-git -C .work/taffy log --oneline v0.12.2..vNEW -- src
-git -C .work/taffy diff v0.12.2 vNEW -- src/compute/flexbox.rs
+git -C .work/taffy log --oneline v0.13.0..vNEW -- src
+git -C .work/taffy diff v0.13.0 vNEW -- src/compute/flexbox.rs
 ```
 
 `src/taffy/readme.md` has the file-for-file map from the Rust modules to the

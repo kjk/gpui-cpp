@@ -37,9 +37,10 @@ static void CreationRun(CreationCase* c) {
         int subCount = c->rng.RangeInt(1, 4);
         Vec<taffy::NodeId> sub;
         for (int i = 0; i < subCount; i++) {
-            sub.Append(c->tree.NewLeaf(taffy::Style{}));
+            VecAppend(sub, c->tree.NewLeaf(taffy::Style{}));
         }
-        children.Append(c->tree.NewWithChildren(taffy::Style{}, sub.els, sub.len));
+        VecAppend(children,
+                  c->tree.NewWithChildren(taffy::Style{}, sub.els, sub.len));
         nodeCount += 1 + (uint32_t)subCount;
     }
 

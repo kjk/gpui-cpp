@@ -1,11 +1,11 @@
 # src/taffy — the taffy layout crate, ported to C++
 
-This is a port of [taffy](https://github.com/DioxusLabs/taffy) **0.12.2**, the
+This is a port of [taffy](https://github.com/DioxusLabs/taffy) **0.13.0**, the
 layout crate Zed's GPUI uses and therefore the one gpui-component's layout is
 defined by. Everything in `src/gpui` that has a box lays it out through here.
 
 The pinned version is the one `gpui-component`'s `Cargo.lock` resolves for
-`gpui`, which asks for `taffy = "=0.12.2"`. The pin lives in
+`gpui`. The pin lives in
 [`cmd/run.ts`](../../cmd/run.ts) (`taffy`) alongside the
 gpui-component and Zed GPUI pins, and moves when they do — see
 [`port-upstream.md`](../../port-upstream.md).
@@ -106,6 +106,12 @@ Each of these is also stated in a comment at the place it applies.
   set for the duration of a `ComputeLayoutWithMeasure` call.
 - **`NodeContext` is a `void*`**, handed back to the measure function
   untouched, rather than a type parameter.
+- **Grid occupancy is flat storage.** Rust 0.13 changed its
+  `CellOccupancyMatrix` to sparse per-track interval vectors. This port keeps
+  the POD byte matrix, but derives the occupied interval at each collision and
+  makes the same jump over it during auto-placement. The layout behavior is
+  the same; the tradeoff is simpler ownership and indexing here versus the
+  Rust representation's lower memory use for very sparse implicit grids.
 
 ## Tests
 
@@ -147,7 +153,7 @@ When the `gpuiComponent` pin moves to a checkin whose `Cargo.lock` resolves a
 different taffy, bump `taffy.version` there too and diff the crate:
 
 ```
-git -C <a taffy checkout> log --oneline v0.12.2..vNEW -- src
+git -C <a taffy checkout> log --oneline v0.13.0..vNEW -- src
 ```
 
 The C++ file that owns each Rust file is in the table above, and every function

@@ -488,7 +488,7 @@ Rules:
 ## Layout
 
 `src/taffy/` is a C++ port of [taffy](https://github.com/DioxusLabs/taffy)
-0.12.2 — the crate Zed's GPUI lays out with, and therefore the one that defines
+0.13.0 — the crate Zed's GPUI lays out with, and therefore the one that defines
 what gpui-component's layout *means*. Flexbox, CSS Grid, block layout and
 floats are all there, and so are ports of the crate's own unit tests
 (`tests/TaffyTests.cpp`). It lives in `namespace taffy`, not `gpui`: `Style`,

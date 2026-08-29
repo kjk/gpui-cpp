@@ -1,4 +1,4 @@
-/* Ports of the unit tests inside the taffy 0.12.2 crate:
+/* Ports of the unit tests inside the taffy 0.13.0 crate:
    src/util/math.rs, src/util/resolve.rs, src/style/alignment.rs,
    src/style/flex.rs, src/style/mod.rs, src/compute/mod.rs and
    src/tree/taffy_tree.rs.
@@ -1782,6 +1782,108 @@ static void TestScrollColumnDoesNotShrink() {
     tree.Free();
 }
 
+static void TestTaffy013Regressions() {
+    TestSuite("taffy 0.13 regressions");
+
+    // display:flow-root contains its floats.
+    {
+        TaffyTree tree;
+        tree.Init();
+        taffy::Style floated;
+        floated.display = taffy::Display::Block;
+        floated.floatMode = taffy::Float::Left;
+        floated.size = SizeDim::FromLengths(20.0f, 30.0f);
+        TaffyNodeId child = tree.NewLeaf(floated);
+        taffy::Style rootStyle;
+        rootStyle.display = taffy::Display::FlowRoot;
+        rootStyle.size.width = Dimension::Length(100.0f);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, &child, 1);
+        tree.ComputeLayout(root, SizeAvail::MaxContent());
+        utassertnear(tree.GetLayout(root).size.w, 100.0f);
+        utassertnear(tree.GetLayout(root).size.h, 30.0f);
+        tree.Free();
+    }
+
+    // A flow-root beside a preceding float establishes an independent BFC
+    // and narrows to the remaining width.
+    {
+        TaffyTree tree;
+        tree.Init();
+        taffy::Style floated;
+        floated.display = taffy::Display::Block;
+        floated.floatMode = taffy::Float::Left;
+        floated.size = SizeDim::FromLengths(30.0f, 20.0f);
+        TaffyNodeId a = tree.NewLeaf(floated);
+        taffy::Style innerStyle;
+        innerStyle.display = taffy::Display::Block;
+        innerStyle.size.height = Dimension::Length(10.0f);
+        TaffyNodeId inner = tree.NewLeaf(innerStyle);
+        taffy::Style flow;
+        flow.display = taffy::Display::FlowRoot;
+        TaffyNodeId b = tree.NewWithChildren(flow, &inner, 1);
+        TaffyNodeId kids[] = {a, b};
+        taffy::Style rootStyle;
+        rootStyle.display = taffy::Display::Block;
+        rootStyle.size.width = Dimension::Length(100.0f);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, kids, 2);
+        tree.ComputeLayout(root, SizeAvail::MaxContent());
+        utassertnear(tree.GetLayout(root).size.h, 20.0f);
+        utassertnear(tree.GetLayout(b).location.x, 30.0f);
+        utassertnear(tree.GetLayout(b).size.w, 70.0f);
+        utassertnear(tree.GetLayout(inner).size.w, 70.0f);
+        tree.Free();
+    }
+
+    // self-start in a flex column uses the child's own inline direction.
+    {
+        TaffyTree tree;
+        tree.Init();
+        taffy::Style childStyle;
+        childStyle.direction = taffy::Direction::Rtl;
+        childStyle.size = SizeDim::FromLengths(10.0f, 10.0f);
+        childStyle.alignSelf = OptAlignSelf(
+            AlignItems{AlignItemsKeyword::SelfStart});
+        TaffyNodeId child = tree.NewLeaf(childStyle);
+        taffy::Style rootStyle;
+        rootStyle.flexDirection = FlexDirection::Column;
+        rootStyle.size = SizeDim::FromLengths(100.0f, 20.0f);
+        TaffyNodeId root = tree.NewWithChildren(rootStyle, &child, 1);
+        tree.ComputeLayout(root, SizeAvail::MaxContent());
+        utassertnear(tree.GetLayout(child).location.x, 90.0f);
+        tree.Free();
+    }
+
+    // The scroll extent subtracts the padding box, including both border
+    // edges symmetrically.
+    {
+        Layout l;
+        l.size = {100.0f, 80.0f};
+        l.contentSize = {120.0f, 95.0f};
+        l.border = {3.0f, 7.0f, 5.0f, 11.0f};
+        utassertnear(l.ScrollWidth(), 30.0f);
+        utassertnear(l.ScrollHeight(), 31.0f);
+    }
+
+    // Overlarge explicit grids are clamped to the CSS-mandated 10,000
+    // tracks, including fixed repetitions.
+    {
+        TrackSizingFunction track = TrackSizingFunction::Auto();
+        Slice<TrackSizingFunction> tracks = SliceDup(gGridArena, &track, 1);
+        GridTemplateRepetition rep;
+        rep.count = RepetitionCount::Exactly(20000);
+        rep.tracks = tracks;
+        GridTemplateComponent component = GridTemplateComponent::Repeat(rep);
+        taffy::Style style;
+        style.gridTemplateColumns = GridTemplateOf(&component, 1);
+        uint16_t repeats = 0;
+        uint16_t count = 0;
+        GridExplicitSizeForTest(style, None(), true,
+                                AbsoluteAxis::Horizontal, NoCalc(), &repeats,
+                                &count);
+        utassert(count == 10000);
+    }
+}
+
 void TestTaffy() {
     TestScrollColumnDoesNotShrink();
     TestMaybeMathOptOpt();
@@ -1812,6 +1914,7 @@ void TestTaffy() {
     TestGridImplicitSizing();
     TestGridPlacement();
     TestGridLayout();
+    TestTaffy013Regressions();
     gpui::ArenaDelete(gGridArena);
     gGridArena = nullptr;
 }

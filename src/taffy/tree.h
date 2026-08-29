@@ -217,12 +217,12 @@ struct Layout {
     float ScrollWidth() const {
         return F32Max(0.0f, contentSize.w +
                                 F32Min(scrollbarSize.w, size.w) -
-                                size.w + border.right);
+                                size.w + border.left + border.right);
     }
     float ScrollHeight() const {
         return F32Max(0.0f, contentSize.h +
                                 F32Min(scrollbarSize.h, size.h) -
-                                size.h + border.bottom);
+                                size.h + border.top + border.bottom);
     }
 };
 

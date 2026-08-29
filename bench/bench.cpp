@@ -100,7 +100,7 @@ void BenchCase(const char* group, const char* name, const char* unit,
         double start = TimeNow();
         run.Call();
         double elapsed = TimeNow() - start;
-        times.Append(elapsed);
+        VecAppend(times, elapsed);
     }
 
     SortTimes(times.els, times.len);

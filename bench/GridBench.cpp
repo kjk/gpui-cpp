@@ -104,7 +104,7 @@ static void FlatSetup(GridCase* c) {
     Vec<taffy::NodeId> children;
     VecReserve(children, cells);
     for (int i = 0; i < cells; i++) {
-        children.Append(BuildRandomLeaf(&c->tree));
+        VecAppend(children, BuildRandomLeaf(&c->tree));
     }
     c->root = c->tree.NewWithChildren(s, children.els, children.len);
 }
@@ -115,7 +115,7 @@ static void BuildDeepGridTree(GridCase* c, int levels,
     int childCount = c->trackCount * c->trackCount;
     if (levels == 1) {
         for (int i = 0; i < childCount; i++) {
-            out->Append(BuildRandomLeaf(&c->tree));
+            VecAppend(*out, BuildRandomLeaf(&c->tree));
         }
         return;
     }
@@ -123,7 +123,8 @@ static void BuildDeepGridTree(GridCase* c, int levels,
         Vec<taffy::NodeId> children;
         BuildDeepGridTree(c, levels - 1, &children);
         taffy::Style s = RandomNxNGridStyle(c->arena, &c->rng, c->trackCount);
-        out->Append(c->tree.NewWithChildren(s, children.els, children.len));
+        VecAppend(*out,
+                  c->tree.NewWithChildren(s, children.els, children.len));
     }
 }
 
