@@ -768,9 +768,15 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
         if (style.mono) {
             el->Mono();
         }
+        // element.rs MAX_HIGHLIGHT_LINE_LENGTH: a line longer than this —
+        // minified output, generated code — draws in the default style
+        // rather than styled, which is Rust's guard against laying spans
+        // over an enormous run. The cursor is not advanced here; the next
+        // row's catch-up loop above skips whatever this one left behind.
+        const int kMaxHighlightLineLen = 10000;
         // The runs that fall inside this row, rebased onto it. The document's
         // are in order, so the walk carries on where the last row left off.
-        if (nDocSpans > 0) {
+        if (nDocSpans > 0 && line.len <= kMaxHighlightLineLen) {
             while (spanAt < nDocSpans && docSpans[spanAt].hi <= start) {
                 spanAt++;
             }
