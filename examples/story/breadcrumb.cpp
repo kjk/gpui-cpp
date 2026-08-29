@@ -35,7 +35,7 @@ El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
     El* col = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
     // "Home" is a plain level: it names itself and takes no click.
     component::Breadcrumb* trail = component::Breadcrumb::New(cx)
-                                       ->Child(StrL(kCrumbs[0]));
+                                       ->Child(Str(kCrumbs[0]));
     for (int i = 1; i < 4; i++) {
         trail->Child(component::BreadcrumbItem::New(cx, Str(kCrumbs[i]))
                          ->OnClick(Listen(cx, &OnCrumb, i)));

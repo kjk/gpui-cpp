@@ -123,7 +123,7 @@ void log(Str s);
 
 using TempStr = Str;
 
-#define StrL(lit) ::base::Str((char*)(lit), (int)(sizeof(lit) - 1))
+#define StrL(lit) ::base::Str{(char*)(lit), (int)dimof(lit) - 1}
 
 Str AllocStrTemp(int size);
 
