@@ -862,7 +862,7 @@ static FILE* VecDbgOut() {
 }
 
 int VecDbgBirth(const char* file, int line, const char* func, char kind,
-                int elSize) {
+                int elSize) noexcept {
     int id = gVecDbgNextId++;
     FILE* f = VecDbgOut();
     if (f) {
@@ -872,7 +872,7 @@ int VecDbgBirth(const char* file, int line, const char* func, char kind,
     return id;
 }
 
-void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap) {
+void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap) noexcept {
     FILE* f = VecDbgOut();
     if (f) {
         fprintf(f, "G %d %d %d %d %d\n", id, len, oldCap, needed, newCap);
@@ -880,7 +880,7 @@ void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap) {
 }
 
 void VecDbgSegment(int id, int len, int want, int lastSegCap, int newSegCap,
-                   int totalCap, bool reused) {
+                   int totalCap, bool reused) noexcept {
     FILE* f = VecDbgOut();
     if (f) {
         fprintf(f, "S %d %d %d %d %d %d %d\n", id, len, want, lastSegCap,
@@ -888,14 +888,14 @@ void VecDbgSegment(int id, int len, int want, int lastSegCap, int newSegCap,
     }
 }
 
-void VecDbgDeath(int id, int len, int cap) {
+void VecDbgDeath(int id, int len, int cap) noexcept {
     FILE* f = VecDbgOut();
     if (f) {
         fprintf(f, "D %d %d %d\n", id, len, cap);
     }
 }
 
-void VecDbgArenaDeath(int id, int len, int totalCap, int segCount) {
+void VecDbgArenaDeath(int id, int len, int totalCap, int segCount) noexcept {
     FILE* f = VecDbgOut();
     if (f) {
         fprintf(f, "E %d %d %d %d\n", id, len, totalCap, segCount);

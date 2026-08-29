@@ -624,12 +624,12 @@ GPUI_NOINLINE bool VecRealloc(struct Arena* a, void** els, int len, int* cap,
 // in a release build.
 #if defined(DEBUG)
 int VecDbgBirth(const char* file, int line, const char* func, char kind,
-                int elSize);
-void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap);
+                int elSize) noexcept;
+void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap) noexcept;
 void VecDbgSegment(int id, int len, int want, int lastSegCap, int newSegCap,
-                   int totalCap, bool reused);
-void VecDbgDeath(int id, int len, int cap);
-void VecDbgArenaDeath(int id, int len, int totalCap, int segCount);
+                   int totalCap, bool reused) noexcept;
+void VecDbgDeath(int id, int len, int cap) noexcept;
+void VecDbgArenaDeath(int id, int len, int totalCap, int segCount) noexcept;
 
 // The trailing parameters, and the initializer that records them. Macros
 // rather than an `#if` around each constructor, because a signature split
@@ -833,7 +833,7 @@ struct Vec {
     int dbgId = 0;
 #endif
 
-    explicit Vec(GPUI_VEC_DBG_ARGS0) GPUI_VEC_DBG_INIT('V') {}
+    explicit Vec(GPUI_VEC_DBG_ARGS0) noexcept GPUI_VEC_DBG_INIT('V') {}
 
     // Still a copy constructor in a debug build: every parameter after the
     // first has a default, and those three are how the copy gets the
@@ -1298,7 +1298,7 @@ struct ArenaVec {
     // the `#if`, unlike `Vec`'s, because in a release build this type has no
     // constructor of its own at all — it is an aggregate, and every one of
     // the `ArenaVec<T> v = {}` declarations in the tree wants it to stay one.
-    ArenaVec(GPUI_VEC_DBG_ARGS0) GPUI_VEC_DBG_INIT('A') {}
+    ArenaVec(GPUI_VEC_DBG_ARGS0) noexcept GPUI_VEC_DBG_INIT('A') {}
 
     ~ArenaVec() { VecDbgArenaDeath(dbgId, len, dbgTotalCap, dbgSegs); }
 #endif
