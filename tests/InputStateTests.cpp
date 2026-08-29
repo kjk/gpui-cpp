@@ -2612,10 +2612,11 @@ static void ALongDocumentBuildsOnlyTheVisibleBand() {
     EntityDropAll(&app);
 }
 
-// A click in a scrolled editor must use scrollY, not the first row's last
-// painted box. That box is only written while row 0 is on screen; after
-// scrolling it is stale at the top of the viewport, so the press mapped
-// into lines 0..viewH/lineH and scroll_to jumped the view back there.
+// A click in a scrolled editor must use the clip box plus live scrollY.
+// lastBounds is row 0's text (only painted at the top of the file);
+// contentBox.y is the column's last painted origin, so it still has the
+// scrollY of that frame. Scrolling from line 200 to 400 then clicking
+// would otherwise map as if the top were still 200.
 static void AClickInAScrolledEditorMapsThroughScrollY() {
     const int kLines = 400;
     char* buf = (char*)Alloc(nullptr, kLines * 2);
@@ -2632,10 +2633,13 @@ static void AClickInAScrolledEditorMapsThroughScrollY() {
     state.lastFont = 14;
     state.lastBounds = {12, 80, 200, 20};
     state.inputBounds = {0, 80, 400, 400};
-    state.scrollY = 200.f * 20.f;
+    // Stale column origin from when the viewport top was line 200. A click
+    // after scrolling to line 400 must not use it.
+    state.contentBox = {0, 80.f - 200.f * 20.f, 400, (float)kLines * 20.f};
+    state.scrollY = 400.f * 20.f;
     PaintCtx ctx = {};
     int at = InputIndexForPosition(&state, &ctx, 12, 80.f + 100.f, nullptr);
-    utassert(at == InputLineStartOffset(&state, 205));
+    utassert(at == InputLineStartOffset(&state, 405));
 }
 
 void TestInputState() {
