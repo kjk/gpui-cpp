@@ -10215,7 +10215,23 @@ story tree) pass the stack buffers they already had. Showcase and the tests
 already passed literals. The 21516-check suite covers the copy: overwriting
 the buffer after add must not change the row.
 
-Scrolling the editor still grows the CRT heap (~0.45 MB/s after this fix,
-no plateau). Heap buckets that move are 80/400/432-byte live blocks, which
-is the shape of DWrite layouts and cached line text, not the tree. The
-plain `input` example does not grow. That hunt is still open.
+Scrolling the editor still grew the CRT heap after that (~0.45 MB/s, no
+plateau). The next stack named it: `taffy::InsertNode` / `new NodeData`
+from `LayoutBuild` adding children the reconcile thought were new.
+
+## Layout reconcile allocated a NodeData for every newly visible row
+
+2026-08-29: A virtualized editor (and the tree) rebuilds only the visible
+rows and stands the rest in with spacers. The taffy cache matches children
+by position. When the window slid, a parent had more children than last
+frame, so `LayoutSync` `AddChild`'d a freshly `InsertNode`'d subtree
+*before* dropping the row that had scrolled off. `InsertNode` saw an empty
+free list and `new NodeData`; the drop recycled too late for that frame,
+and if the count never shrank the extra slots stayed live. Scrolling was
+one new node (plus its descendants) per newly visible row, forever.
+
+`LayoutSync` now drops extra children first so the free list is populated
+before anything is made. `TaffyTree::Remove` also drops descendants, so a
+parent taken off the tree cannot leave live children occupying slots. A
+sliding 10-row window over 80 items keeps a constant live count; an
+identical second frame makes no nodes.

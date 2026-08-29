@@ -4588,6 +4588,9 @@ struct LayoutCacheStats {
 };
 
 LayoutCacheStats LayoutCacheLastStats(const LayoutCache* lc);
+// Live taffy nodes in the cache, including ones the last reconcile no longer
+// has an element for. A virtualized list that leaks on scroll grows this.
+int LayoutCacheNodeCount(const LayoutCache* lc);
 // The scratch cache MeasureEl and a cache-less LayoutEl share, given back at
 // AppFree.
 void LayoutScratchFree();

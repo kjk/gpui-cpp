@@ -3468,13 +3468,30 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
     // The children, in order. A `fixed` child is not one of this node's — it
     // hangs off the root — so it is collected and skipped here, and the index
     // only counts the ones that stay.
-    int had = lc->tree.ChildCount(prev);
+    //
+    // Drop whatever this node has past the new child count *before* making
+    // anything. A virtualized list that grew or swapped a spacer for a row
+    // used to AddChild first, and InsertNode saw an empty free list and
+    // allocated a fresh NodeData; the drop that followed recycled too late
+    // for this frame, and if the count never shrank the extra slots stayed.
+    int want = 0;
+    for (El* c = e->first; c; c = c->next) {
+        if (!c->style.fixed) {
+            want++;
+        }
+    }
+    bool dropped = false;
+    for (int j = lc->tree.ChildCount(prev) - 1; j >= want; j--) {
+        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
+        dropped = true;
+    }
     int i = 0;
     for (El* c = e->first; c; c = c->next) {
         if (c->style.fixed) {
             VecAppend(gLayoutFixed, c);
             continue;
         }
+        int had = lc->tree.ChildCount(prev);
         if (i < had) {
             taffy::NodeId old = lc->tree.ChildAtIndex(prev, i);
             taffy::NodeId now = LayoutSync(sc, c, old, true, false);
@@ -3488,13 +3505,6 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
             lc->tree.AddChild(prev, LayoutBuild(sc, c, false));
         }
         i++;
-    }
-    // Whatever the element no longer has. Dropping a child detaches it, so
-    // the parent's list shortens as they go.
-    bool dropped = false;
-    for (int j = lc->tree.ChildCount(prev) - 1; j >= i; j--) {
-        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
-        dropped = true;
     }
     // taffy's Remove does not dirty the parent — Rust's does not either,
     // because Rust's callers reach for `set_children`, which does. A node
@@ -3885,6 +3895,12 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
             own++;
         }
     }
+    int wantFixed = own + gLayoutFixed.len;
+    bool droppedFixed = false;
+    for (int j = lc->tree.ChildCount(root) - 1; j >= wantFixed; j--) {
+        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(root, j));
+        droppedFixed = true;
+    }
     for (int i = 0; i < gLayoutFixed.len; i++) {
         El* f = gLayoutFixed[i];
         int at = own + i;
@@ -3898,13 +3914,6 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
             lc->tree.ReplaceChildAtIndex(root, at, now);
             LayoutDropSubtree(lc, old);
         }
-    }
-    // A fixed element that has gone takes its node with it.
-    bool droppedFixed = false;
-    for (int j = lc->tree.ChildCount(root) - 1; j >= own + gLayoutFixed.len;
-         j--) {
-        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(root, j));
-        droppedFixed = true;
     }
     if (droppedFixed) {
         lc->tree.MarkDirty(root);
@@ -3976,6 +3985,10 @@ void LayoutCacheFree(LayoutCache* lc) {
 
 LayoutCacheStats LayoutCacheLastStats(const LayoutCache* lc) {
     return lc ? lc->stats : LayoutCacheStats{};
+}
+
+int LayoutCacheNodeCount(const LayoutCache* lc) {
+    return lc ? lc->tree.TotalNodeCount() : 0;
 }
 
 // The scratch cache is a static, so the app's teardown is what gives its

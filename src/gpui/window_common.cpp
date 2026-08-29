@@ -158,9 +158,10 @@ static void FrameBenchTick(Window* win, float secs) {
     // of boxes whose style is a function of something that moved.
     LayoutCacheStats ls = LayoutCacheLastStats(win->layout);
     logf(
-        "frame-bench layout nodes=%d made=%d dropped=%d restyled=%d "
+        "frame-bench layout nodes=%d live=%d made=%d dropped=%d restyled=%d "
         "remeasured=%d",
-        ls.nodes, ls.made, ls.dropped, ls.restyled, ls.remeasured);
+        ls.nodes, LayoutCacheNodeCount(win->layout), ls.made, ls.dropped,
+        ls.restyled, ls.remeasured);
 #if GPUI_OS_WINDOWS
     if (PaintGpuOn()) {
         const gpuw::FrameStats& st = gpuw::LastFrameStats();

@@ -156,6 +156,12 @@ void TaffyTree::Remove(NodeId node) {
     if (!d) {
         return;
     }
+    // Descendants first. Leaving them alive with no parent would occupy a
+    // slot forever, so the next InsertNode would `new NodeData` instead of
+    // recycling — which is what scrolling a virtualized list was doing.
+    for (int i = d->children.len - 1; i >= 0; i--) {
+        Remove(d->children[i]);
+    }
     if (d->hasParent) {
         NodeData* p = Get(d->parent);
         if (p) {
@@ -166,13 +172,6 @@ void TaffyTree::Remove(NodeId node) {
                 }
             }
             p->children.len = w;
-        }
-    }
-    // Drop the "parent" back-reference from every child.
-    for (int i = 0; i < d->children.len; i++) {
-        NodeData* c = Get(d->children[i]);
-        if (c) {
-            c->hasParent = false;
         }
     }
     d->alive = false;
@@ -662,9 +661,8 @@ static void PrintNode(TaffyTree* tree, NodeId node, bool hasSibling,
         "%s%s%s [x: %-4g y: %-4g w: %-4g h: %-4g "
         "content_w: %-4g content_h: %-4g",
         Str(linesString), Str(fork), Str(displayStr), (double)layout.location.x,
-        (double)layout.location.y, (double)layout.size.w,
-        (double)layout.size.h, (double)layout.contentSize.w,
-        (double)layout.contentSize.h));
+        (double)layout.location.y, (double)layout.size.w, (double)layout.size.h,
+        (double)layout.contentSize.w, (double)layout.contentSize.h));
     base::log(
         base::fmt(" border: l:%g r:%g t:%g b:%g, "
                   "padding: l:%g r:%g t:%g b:%g] (%llu)\n",

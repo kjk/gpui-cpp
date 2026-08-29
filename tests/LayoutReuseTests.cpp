@@ -54,8 +54,8 @@ static void APageSwitchLaysOutEveryBox() {
     Arena* a = ArenaNew();
 
     El* page = Div(a)->FlexCol()->W(kFill)->H(kFill);
-    page->Child(Div(a)->FlexCol()->W(kFill)->Child(IconEl(a, IconName::Check,
-                                                          16)));
+    page->Child(
+        Div(a)->FlexCol()->W(kFill)->Child(IconEl(a, IconName::Check, 16)));
     LayoutEl(nullptr, page, 0, 0, 400, 300, 14, Rgba{}, lc);
 
     // The next frame's page is deeper and wider than the one before it: the
@@ -113,6 +113,75 @@ static void AParentThatLostAChildShrinks() {
     root2->Child(shorter);
     LayoutEl(nullptr, root2, 0, 0, 400, 300, 14, Rgba{}, lc);
     utassert(shorter->h == 40);
+    utassert(LayoutCacheNodeCount(lc) < 10);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
+// A virtualized column: a spacer, a window of rows, a spacer. Scrolling
+// slides the window. The taffy tree must not grow — that was the editor's
+// scroll leak, InsertNode allocating a NodeData for every newly visible row
+// and never recycling the one that scrolled off.
+static El* SlidingList(Arena* a, int first, int visible, int total) {
+    El* col = Div(a)->FlexCol()->W(kFill);
+    if (first > 0) {
+        col->Child(Div(a)->W(kFill)->H((float)first * 20));
+    }
+    for (int i = 0; i < visible; i++) {
+        col->Child(
+            Div(a)->FlexRow()->W(kFill)->H(20)->Child(TextEl(a, StrL("row"))));
+    }
+    int end = first + visible;
+    if (end < total) {
+        col->Child(Div(a)->W(kFill)->H((float)(total - end) * 20));
+    }
+    return Div(a)->FlexCol()->W(kFill)->H(kFill)->Child(col);
+}
+
+static void ASlidingWindowDoesNotGrowTheTaffyTree() {
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+    const int kVisible = 10;
+    const int kTotal = 80;
+    int live = 0;
+    for (int first = 0; first < 40; first++) {
+        a->Reset();
+        El* root = SlidingList(a, first, kVisible, kTotal);
+        LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
+        int now = LayoutCacheNodeCount(lc);
+        if (first == 1) {
+            // first=0 has no top spacer; first>=1 does, and the bottom
+            // spacer is there until the window hits the end.
+            live = now;
+        }
+        if (first > 1) {
+            utassert(now == live);
+        }
+    }
+    utassert(live > 0);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
+static void ASecondIdenticalFrameMakesNoNodes() {
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+    El* first = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    first->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("a"))));
+    first->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("b"))));
+    LayoutEl(nullptr, first, 0, 0, 400, 300, 14, Rgba{}, lc);
+    int live = LayoutCacheNodeCount(lc);
+    utassert(LayoutCacheLastStats(lc).made > 0);
+
+    a->Reset();
+    El* second = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    second->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("a"))));
+    second->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("b"))));
+    LayoutEl(nullptr, second, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(LayoutCacheNodeCount(lc) == live);
+    utassert(LayoutCacheLastStats(lc).made == 0);
 
     ArenaDelete(a);
     LayoutCacheFree(lc);
@@ -122,4 +191,6 @@ void TestLayoutReuse() {
     AChildOfAnotherKindIsStillLaidOut();
     APageSwitchLaysOutEveryBox();
     AParentThatLostAChildShrinks();
+    ASlidingWindowDoesNotGrowTheTaffyTree();
+    ASecondIdenticalFrameMakesNoNodes();
 }
