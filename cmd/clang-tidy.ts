@@ -113,13 +113,12 @@ function shuffle<T>(items: T[]): void {
 function main(): void {
   const tidyArgs: string[] = [];
   const extraArgs: string[] = [];
-  let hostOnly = false;
   let afterSeparator = false;
   for (const arg of Bun.argv.slice(2)) {
     if (arg === "--") {
       afterSeparator = true;
     } else if (!afterSeparator && arg === "--host") {
-      hostOnly = true;
+      // Retained for compatibility; platform filtering is now always on.
     } else if (afterSeparator) {
       extraArgs.push(arg);
     } else {
@@ -129,7 +128,10 @@ function main(): void {
 
   const plat = hostPlatform();
   const wasmInclude = emscriptenInclude();
-  let files = sourceFiles("src", hostOnly ? plat : null);
+  // Platform-specific translation units require that platform's SDK headers.
+  // Always restrict the scan to the host platform; otherwise a Windows run
+  // would try to parse macOS/Linux files (and vice versa).
+  let files = sourceFiles("src", plat);
   if (!wasmInclude) {
     files = files.filter((file) => !/_wasm\.cpp$/.test(file));
     console.log("Emscripten not found; skipping wasm source files");
@@ -146,6 +148,10 @@ function main(): void {
   // verbose output.
   if (!tidyArgs.includes("-quiet") && !tidyArgs.includes("--quiet")) {
     tidyArgs.unshift("-quiet");
+  }
+  if (!tidyArgs.some((arg) => arg === "-header-filter" || arg.startsWith("-header-filter="))) {
+    // Do not report diagnostics from QuickJS-NG, which is vendored upstream C.
+    tidyArgs.push("-header-filter=^src/(base|fps|gpui|markdown|shell|sys|taffy|ui|wry)/");
   }
   const cxxCompileArgs = [
     "-std=c++20",
@@ -168,7 +174,7 @@ function main(): void {
        "-U_WIN32", "-D__EMSCRIPTEN__=1", ...extraArgs]
     : cxxCompileArgs;
 
-  console.log(`Running ${exe} on ${files.length} source files${hostOnly ? ` (${plat})` : ""}`);
+  console.log(`Running ${exe} on ${files.length} source files (${plat})`);
   for (let i = 0; i < files.length; i++) {
     const file = files[i]!;
     console.log(`${i + 1}/${files.length} ${file}`);

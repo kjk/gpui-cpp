@@ -42,7 +42,7 @@ static_assert(sizeof(Arena) <= kArenaHeaderSize,
 // ─── Arena.cpp ───────────────────────────────────────────────────────────────
 
 using ArenaFlags = uint64_t;
-enum : ArenaFlags {
+enum : uint8_t {
     ArenaFlagNoChain = 1ull << 0,
     ArenaFlagLargePages = 1ull << 1,
 };

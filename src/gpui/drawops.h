@@ -19,7 +19,7 @@ namespace gpui {
 
 // The opcodes. Append only: a number here is in the generated
 // `asset_icons.cpp`, so renumbering one silently redraws every icon.
-enum DrawOp : uint16_t {
+enum DrawOp : uint8_t {
     kOpEnd = 0,
     // The coordinate system every following op is written in. Without one the
     // drawing is read as 0 0 24 24.
@@ -71,7 +71,7 @@ enum DrawOp : uint16_t {
 // kOpText's flags word: which end of the run the anchor point is, and whether
 // it is bold. `text-anchor` and `font-weight`, the two of that element's
 // presentation attributes a run of glyphs here can answer for.
-enum DrawOpTextFlag : uint32_t {
+enum DrawOpTextFlag : uint8_t {
     kTextAnchorMask = 3,
     kTextAnchorStart = 0,
     kTextAnchorMiddle = 1,

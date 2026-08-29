@@ -92,33 +92,33 @@ struct Rgba {
 };
 
 /** `wry::Theme` — what `prefers-color-scheme` reports to the page. */
-enum class Theme {
+enum class Theme : uint8_t {
     Dark,
     Light,
     Auto,
 };
 
 /** `wry::PageLoadEvent`. */
-enum class PageLoadEvent {
+enum class PageLoadEvent : uint8_t {
     Started,
     Finished,
 };
 
 /** `webview2::ScrollBarStyle` — Windows only, ignored elsewhere. */
-enum class ScrollBarStyle {
+enum class ScrollBarStyle : uint8_t {
     Default,
     FluentOverlay,
 };
 
 /** `wry::MemoryUsageLevel` — Windows only. */
-enum class MemoryUsageLevel {
+enum class MemoryUsageLevel : uint8_t {
     Normal,
     Low,
 };
 
 /** `wry::BackgroundThrottlingPolicy`. Only WebKit currently honours it,
     and only on macOS 14 or later. */
-enum class BackgroundThrottlingPolicy {
+enum class BackgroundThrottlingPolicy : uint8_t {
     Disabled,
     Suspend,
     Throttle,
@@ -126,7 +126,7 @@ enum class BackgroundThrottlingPolicy {
 
 /** `proxy.rs`: `ProxyConfig` and its endpoint, folded into one struct
     because `ProxyKind::None` is what `Option<ProxyConfig>` said. */
-enum class ProxyKind {
+enum class ProxyKind : uint8_t {
     None,
     Http,
     Socks5,
@@ -193,7 +193,7 @@ struct WebView;
 
 /** `wry::NewWindowResponse`. For Create, the handler writes the target
     WebView through its final out-parameter. */
-enum class NewWindowResponse {
+enum class NewWindowResponse : uint8_t {
     Allow,
     Create,
     Deny,
@@ -227,7 +227,7 @@ using DownloadCompletedHandler = void (*)(void* ctx, Str url, const Str* path, b
 
 /** `wry::DragDropEvent`. Paths are present for Enter and Drop and borrowed
     only for the callback. Position is relative to the WebView2 child window. */
-enum class DragDropKind {
+enum class DragDropKind : uint8_t {
     Enter,
     Over,
     Drop,
@@ -247,7 +247,7 @@ using DragDropHandler = bool (*)(void* ctx, const DragDropEvent* event);
 /** The `cookie::Cookie` fields WebView exposes, without depending on the Rust
     cookie/time crates. Strings returned by a query are heap-owned and freed
     together with the list by `CookieListFree`; input strings are borrowed. */
-enum class CookieSameSite {
+enum class CookieSameSite : uint8_t {
     None,
     Lax,
     Strict,

@@ -238,7 +238,7 @@ static bool LooksLikeSvg(const uint8_t* b, int len) {
 // The bytes a src resolves to without going near a decoder: the data: URI,
 // the asset, or the fetched body. False while a fetch is still running, which
 // is the one answer the caller must not remember.
-enum class SrcBytes : int32_t {
+enum class SrcBytes : uint8_t {
     No,
     Yes,
     Pending

@@ -93,7 +93,7 @@ char (&DimofSizeHelper(T (&array)[N]) noexcept)[N];
 
 // The longest path we put on the stack. Windows spells it MAX_PATH; Linux
 // PATH_MAX, which is 4096 and too big for the fixed arrays here.
-enum {
+enum : uint16_t {
     kMaxPath = 1024
 };
 
@@ -1761,7 +1761,7 @@ bool StrBuilderAppend(Arena* a, StrBuilder& b, Str s);
 Str StrBuilderTakeStr(Arena* a, StrBuilder& b);
 
 struct FmtArg {
-    enum class Kind {
+    enum class Kind : uint8_t {
         Char,
         Int,
         Ptr,

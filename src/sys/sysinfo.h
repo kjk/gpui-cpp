@@ -59,7 +59,7 @@ void SysStateInit(SysState* s);
 void SysStateFree(SysState* s);
 void SysRefresh(SysState* s);
 
-enum class ProcessSort : int32_t {
+enum class ProcessSort : uint8_t {
     Pid = 0,
     Name = 1,
     Cpu = 2,

@@ -592,7 +592,7 @@ struct ClickEvent {
 // Portable key codes. The values are the Win32 VK_* ones, so the Windows
 // window passes wParam straight through and the X11 window maps keysyms onto
 // them. Only the keys the widgets react to are named.
-enum {
+enum : uint8_t {
     KeyBack = 8,
     KeyTab = 9,
     KeyReturn = 13,
@@ -4562,7 +4562,7 @@ bool ClickFromKeyRelease(bool pending, int pendingGen, int focusGen, int key,
 // collide with a hashed one: HashClickId is non-negative by construction.
 // They were 100/101/102/200 once, and collided with the showcase overview
 // grid — which is what a flat id space costs when two people pick numbers.
-enum {
+enum : int8_t {
     ClickWinMin = -1,
     ClickWinMax = -2,
     ClickWinClose = -3,
@@ -4606,7 +4606,7 @@ struct FrameTiming {
     float drawSecs = 0;
 };
 
-enum {
+enum : uint16_t {
     kFrameTraceCap = 256
 };
 

@@ -164,7 +164,7 @@ static bool EnsureShaderBytes() {
 }
 
 // Kinds, matching the switch in PSQuad.
-enum {
+enum : uint8_t {
     kQuadRect = 0,    // rounded rect fill; radius 0 is a plain rect
     kQuadBorder = 1,  // the same outline, `border` wide, inside the edge
     kQuadEllipse = 2, // fill
@@ -1419,7 +1419,7 @@ static bool D12UploadTexture(ID3D12Resource* texture,
     return true;
 }
 
-enum TriMode : int {
+enum TriMode : uint8_t {
     kTriColor,
     kTriEvenOdd,
     kTriNonZero,

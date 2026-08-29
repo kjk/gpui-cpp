@@ -120,7 +120,7 @@ bool WinPaintOptionsTakeArg(Str arg);
 // Text weight byte: the weight in the low bits plus family / decoration
 // flags, so the shaped-text cache keys mono and proportional runs apart on
 // its own. Both backends decode the same byte.
-enum {
+enum : uint8_t {
     kFontWeightMask = 15,
     kFontWeightNormal = 0,
     kFontWeightThin = 1,

@@ -968,7 +968,7 @@ virtual HRESULT STDMETHODCALLTYPE put_ScrollBarStyle( COREWEBVIEW2_SCROLLBAR_STY
 
 // The handful of enum values we pass. Spelled out rather than typedef'd as a
 // whole enum, since the ABI only cares that they are ints.
-enum {
+enum : uint8_t {
     kCookieSameSiteNone = 0,
     kCookieSameSiteLax = 1,
     kCookieSameSiteStrict = 2,

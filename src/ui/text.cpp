@@ -2149,7 +2149,7 @@ El* TextView::ScrollTable(MdNode* n) {
 // the cell's align attribute. A body cell with none of its own takes the
 // header cell's, which is how a markdown table says it once.
 El* TextView::Table(MdNode* n) {
-    enum {
+    enum : uint8_t {
         // node.rs MAX_LENGTH: one long cell must not starve the rest.
         kMaxLen = 150
     };

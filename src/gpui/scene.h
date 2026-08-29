@@ -53,7 +53,7 @@ namespace gpui {
 
 // The levels above, in order, so a comparison against one of them reads as
 // "at least this much".
-enum SceneLevel : int {
+enum SceneLevel : uint8_t {
     kSceneOff = 0,
     kSceneReplay = 1,
     kSceneCache = 2,

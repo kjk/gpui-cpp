@@ -1417,7 +1417,7 @@ static void ApplyLineHeight(IDWriteTextLayout* layout, float fontSize,
     if (n == 0) {
         return;
     }
-    enum {
+    enum : uint16_t {
         kMaxLines = 256
     };
     if (n > kMaxLines) {

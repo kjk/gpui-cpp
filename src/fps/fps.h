@@ -41,7 +41,7 @@ Rgba FpsLevelColor(const FpsStyle& style, float frameSecs, float budgetSecs);
 
 // ─── sampler ──────────────────────────────────────────────────────────────
 
-enum {
+enum : uint16_t {
     // DEFAULT_CAPACITY: frames the chart keeps.
     kFpsCapacity = 120,
     // Arrivals inside the one second FPS window. An uncapped renderer can beat

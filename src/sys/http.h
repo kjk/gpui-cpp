@@ -61,7 +61,7 @@ bool HttpUrlIsRemote(Str url);
 
 // ─── fetching without waiting ─────────────────────────────────────────────
 
-enum class FetchState : int32_t {
+enum class FetchState : uint8_t {
     // Nothing has been asked for this URL, or the table has forgotten it.
     None = 0,
     // A worker thread has it.
