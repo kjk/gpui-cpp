@@ -54,6 +54,25 @@ export const isDist = existsSync(join(scriptDir, "gpui.h"));
 export const root = isDist ? scriptDir : resolve(scriptDir, "..");
 process.chdir(root);
 
+// Shader bytecode is checked in so an ordinary build needs neither fxc nor
+// D3DCompiler_47.dll. Refuse to silently amalgamate stale bytecode after the
+// HLSL changes; the explicit generator is the only writer.
+function ensureWinShadersCurrent(fail: (msg: string) => never): void {
+  if (isDist) {
+    return;
+  }
+  const sourcePath = join(root, "src/gpui/paintgpu_win.hlsl");
+  const generatedPath = join(root, "src/gpui/paintgpu_shaders_win.cpp");
+  if (!existsSync(sourcePath) || !existsSync(generatedPath)) {
+    fail("missing Windows shader source or bytecode; run bun cmd/update-win-shaders.ts");
+  }
+  const hash = new Bun.CryptoHasher("sha256").update(readFileSync(sourcePath)).digest("hex");
+  const generated = readFileSync(generatedPath, "utf8");
+  if (!generated.includes(`source-sha256: ${hash}`)) {
+    fail("Windows shader bytecode is stale; run bun cmd/update-win-shaders.ts");
+  }
+}
+
 /**
  * Repo-relative directory holding the gpui.h + gpui.cpp a build compiles:
  * the top level in gpui-cpp-dist, gitignored .work/ here. GPUI_AMALGAM_DIR
@@ -936,10 +955,10 @@ function winLibs(f: BuildFlags): string[] {
     backend === "d2d"
       ? ["d2d1.lib", "d3d11.lib", "dxgi.lib"]
       : backend === "d3d11"
-        ? ["d3d11.lib", "dxgi.lib", "d3dcompiler.lib"]
+        ? ["d3d11.lib", "dxgi.lib"]
         : backend === "d3d12"
-          ? ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib"]
-          : ["d2d1.lib", "d3d11.lib", "d3d12.lib", "dxgi.lib", "d3dcompiler.lib"];
+          ? ["d3d12.lib", "dxgi.lib"]
+          : ["d2d1.lib", "d3d11.lib", "d3d12.lib", "dxgi.lib"];
   return [...renderer, ...winCommonLibs];
 }
 
@@ -1513,6 +1532,7 @@ export type BuildRequest = {
  */
 export async function build(req: BuildRequest): Promise<void> {
   const { names, plat, flags, fail } = req;
+  ensureWinShadersCurrent(fail);
   const tc = findToolchain(plat, flags, fail);
   // Every compile and link below is echoed with a `> `, and what those lines
   // leave out is said once here rather than on every one of them: where they

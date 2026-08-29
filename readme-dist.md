@@ -73,7 +73,8 @@ guards, so the same source set builds on all four:
   define one of `WIN_BACKEND_DIRECT2D`, `WIN_BACKEND_D3D11` or
   `WIN_BACKEND_D3D12` and link its import libraries. With no definition the
   compatibility default is Direct2D. `WIN_BACKEND_ALL` compiles and links all
-  three.
+  three. The custom backends already contain their shader bytecode and do not
+  require `d3dcompiler.lib` or `D3DCompiler_47.dll`.
 - **Linux** — `g++ -std=c++20` with `pkg-config --cflags --libs x11 cairo pangocairo`.
 - **macOS** — `clang++ -std=c++20 -x objective-c++` with the Cocoa, CoreText and
   IOKit frameworks. The file is Objective-C++ because the mac half is.

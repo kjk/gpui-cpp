@@ -254,6 +254,15 @@ custom renderers' sample count. `WinPaintBackend`, `WinPaintMsaa`,
 them while stripping the reserved arguments before `GpuiMain`, and
 `WinPaintOptionsGet()` is the paint backends' typed accessor.
 
+The four Shader Model 5 entry points live in `src/gpui/paintgpu_win.hlsl` and
+are not compiled at application startup. `bun cmd/update-win-shaders.ts` runs
+FXC with `/O3 /WX` and rewrites the checked-in
+`src/gpui/paintgpu_shaders_win.cpp` only when its output changes. That file
+stores DXBC as basE95 over every printable ASCII character in raw strings;
+the renderer decodes it once into BSS. `cmd/build.ts` checks the HLSL SHA-256
+recorded in the generated file and rejects stale bytecode. Ordinary builds do
+not need FXC, do not link D3DCompiler, and do not load D3DCompiler_47.dll.
+
 All three share everything device-independent rather than writing it three
 times: the DirectWrite factory and its formats, the `IDWriteTextLayout` a
 `TextLayout*` is on Windows — so shaping, measurement, hit-testing and range rects are the
@@ -776,6 +785,9 @@ cmd/compare-story.ts   screenshot a story page from the Rust app and this one
 cmd/update-dist.ts     amalgamate src/** into gpui.h + gpui.cpp (`.work/` for
                        builds; run by hand to publish gpui-cpp-dist, which also
                        carries the examples, assets/, web/ and both scripts)
+cmd/update-win-shaders.ts
+                       compile paintgpu_win.hlsl's four SM5 entry points with
+                       FXC and update the checked-in basE95 DXBC source
 readme-dist.md         the published snapshot's readme, `<checkin-sha1>` filled
                        in on the way over; the dist copy is overwritten each run
 cmd/test.ts            build tests/ and run it

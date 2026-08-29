@@ -35,9 +35,9 @@
 
    Known gaps, which are why this is not the default: no subpixel glyph
    positioning — x is snapped, where DirectWrite positions at a third of a
-   pixel — dashes are expanded on the CPU for lines and ignored on rounded
-   rects, and the shaders are compiled with D3DCompile at startup rather than
-   built to bytecode by fxc. */
+   pixel — and dashes are expanded on the CPU for lines and ignored on rounded
+   rects. The four shaders are checked-in FXC bytecode generated from
+   paintgpu_win.hlsl by cmd/update-win-shaders.ts. */
 
 #include "gpui/paintgpu.h"
 #include "gpui/scene.h"
@@ -46,7 +46,6 @@
 
 #include <d3d11.h>
 #include <d3d12.h>
-#include <d3dcompiler.h>
 #include <dwrite.h>
 #include <dxgi1_2.h>
 #include <dxgi1_4.h>
@@ -78,6 +77,92 @@ static void Rel(T** p) {
 
 // ─── the shaders ─────────────────────────────────────────────────────────
 
+// Defined by generated paintgpu_shaders_win.cpp. Printable basE95 keeps the
+// checked-in source about five times smaller than comma-separated hex; these
+// BSS arrays receive the decoded DXBC once, when the first GPU device opens.
+extern const char kShaderVSQuad95[];
+extern const int kShaderVSQuadSize;
+extern uint8_t kShaderVSQuadBytes[];
+extern const char kShaderPSQuad95[];
+extern const int kShaderPSQuadSize;
+extern uint8_t kShaderPSQuadBytes[];
+extern const char kShaderVSTri95[];
+extern const int kShaderVSTriSize;
+extern uint8_t kShaderVSTriBytes[];
+extern const char kShaderPSTri95[];
+extern const int kShaderPSTriSize;
+extern uint8_t kShaderPSTriBytes[];
+
+static bool DecodeBase95(const char* encoded, uint8_t* out, int expected) {
+    uint32_t bits = 0;
+    int bitCount = 0;
+    int pending = -1;
+    int at = 0;
+    bool lineStart = true;
+    for (const uint8_t* p = (const uint8_t*)encoded; *p; p++) {
+        // The generator wraps at 100 columns. CR/LF are the only bytes in a
+        // generated raw string that are not in the printable-ASCII alphabet.
+        if (*p == '\r' || *p == '\n') {
+            lineStart = true;
+            continue;
+        }
+        if (lineStart) {
+            if (*p != '.') {
+                return false;
+            }
+            lineStart = false;
+            continue;
+        }
+        if (*p < 32 || *p > 126) {
+            return false;
+        }
+        int digit = *p - 32;
+        if (pending < 0) {
+            pending = digit;
+            continue;
+        }
+        uint32_t value = (uint32_t)(pending + digit * 95);
+        bits |= value << bitCount;
+        bitCount += ((value & 8191) > 832) ? 13 : 14;
+        while (bitCount >= 8) {
+            if (at >= expected) {
+                return false;
+            }
+            out[at++] = (uint8_t)(bits & 255);
+            bits >>= 8;
+            bitCount -= 8;
+        }
+        pending = -1;
+    }
+    if (pending >= 0) {
+        if (at >= expected) {
+            return false;
+        }
+        out[at++] = (uint8_t)((bits | ((uint32_t)pending << bitCount)) & 255);
+    }
+    return at == expected;
+}
+
+static bool EnsureShaderBytes() {
+    static int result = -1;
+    if (result >= 0) {
+        return result != 0;
+    }
+    bool ok = DecodeBase95(kShaderVSQuad95, kShaderVSQuadBytes,
+                           kShaderVSQuadSize) &&
+              DecodeBase95(kShaderPSQuad95, kShaderPSQuadBytes,
+                           kShaderPSQuadSize) &&
+              DecodeBase95(kShaderVSTri95, kShaderVSTriBytes,
+                           kShaderVSTriSize) &&
+              DecodeBase95(kShaderPSTri95, kShaderPSTriBytes,
+                           kShaderPSTriSize);
+    result = ok ? 1 : 0;
+    if (!ok) {
+        logf("paint/gpu: embedded shader bytecode is invalid");
+    }
+    return ok;
+}
+
 // Kinds, matching the switch in PSQuad.
 enum {
     kQuadRect = 0,    // rounded rect fill; radius 0 is a plain rect
@@ -89,142 +174,6 @@ enum {
     kQuadGradient = 6, // linear, between two points in DIP space
     kQuadSolid = 7     // no shaping at all; the cover pass of a path fill
 };
-
-static const char* kShaderSrc = R"HLSL(
-cbuffer Globals : register(b0) {
-    float2 uViewport;
-    float2 uPad;
-};
-
-struct Inst {
-    float4 rect;   // x, y, w, h in DIPs
-    float4 color;  // straight rgba
-    float4 misc;   // radius, border, kind, unused
-    float4 clip;   // x0, y0, x1, y1 — GPUI's content mask
-    float4 uv;     // atlas rect, or the two gradient endpoints
-    float4 color2; // the gradient's far end
-};
-
-StructuredBuffer<Inst> gInst : register(t0);
-Texture2D<float4> gAtlas : register(t1);
-Texture2D<float4> gImage : register(t2);
-SamplerState gSamp : register(s0);
-
-struct VSOut {
-    float4 pos    : SV_Position;
-    float2 local  : TEXCOORD0;
-    float2 halfsz : TEXCOORD1;
-    float4 color  : COLOR0;
-    float4 color2 : COLOR1;
-    float4 misc   : TEXCOORD2;
-    float4 clipr  : TEXCOORD3;
-    float2 uv     : TEXCOORD4;
-    float2 gpos   : TEXCOORD5;
-    float4 uvraw  : TEXCOORD6;
-};
-
-VSOut VSQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
-    Inst i = gInst[iid];
-    float2 corner = float2((vid == 1 || vid == 3) ? 1.0 : 0.0,
-                           (vid >= 2) ? 1.0 : 0.0);
-    float2 p = i.rect.xy + corner * i.rect.zw;
-    VSOut o;
-    o.pos = float4(p.x / uViewport.x * 2.0 - 1.0,
-                   1.0 - p.y / uViewport.y * 2.0, 0.0, 1.0);
-    o.halfsz = i.rect.zw * 0.5;
-    o.local = p - (i.rect.xy + o.halfsz);
-    o.color = i.color;
-    o.color2 = i.color2;
-    o.misc = i.misc;
-    o.clipr = i.clip;
-    o.uv = lerp(i.uv.xy, i.uv.zw, corner);
-    o.uvraw = i.uv;
-    o.gpos = p;
-    return o;
-}
-
-// iq's rounded box: negative inside, and in the same units as the position,
-// which here are DIPs and therefore pixels.
-float sdRound(float2 p, float2 b, float r) {
-    float2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-float4 PSQuad(VSOut v) : SV_Target {
-    if (v.gpos.x < v.clipr.x || v.gpos.x > v.clipr.z ||
-        v.gpos.y < v.clipr.y || v.gpos.y > v.clipr.w) {
-        discard;
-    }
-    int kind = (int)(v.misc.z + 0.5);
-    if (kind == 5) {
-        // Already premultiplied: WIC decoded it that way.
-        float4 t = gImage.Sample(gSamp, v.uv) * v.color.a;
-        if (t.a <= 0.0) {
-            discard;
-        }
-        return t;
-    }
-    float4 col = v.color;
-    float cov = 1.0;
-    if (kind == 0 || kind == 1) {
-        float r = min(v.misc.x, min(v.halfsz.x, v.halfsz.y));
-        float d = sdRound(v.local, v.halfsz, r);
-        float outer = saturate(0.5 - d);
-        cov = (kind == 0) ? outer : outer - saturate(0.5 - (d + v.misc.y));
-    } else if (kind == 2 || kind == 3) {
-        float2 rr = max(v.halfsz, 1e-4);
-        // Close enough to a distance for an antialiased edge, and exact on a
-        // circle, which is what almost every one of these is.
-        float d = (length(v.local / rr) - 1.0) * min(rr.x, rr.y);
-        float outer = saturate(0.5 - d);
-        cov = (kind == 2) ? outer : outer - saturate(0.5 - (d + v.misc.y));
-    } else if (kind == 4) {
-        cov = gAtlas.Sample(gSamp, v.uv).r;
-    } else if (kind == 6) {
-        float2 d = v.uvraw.zw - v.uvraw.xy;
-        float t = saturate(dot(v.gpos - v.uvraw.xy, d) / max(dot(d, d), 1e-6));
-        col = lerp(v.color, v.color2, t);
-    }
-    float a = col.a * cov;
-    if (a <= 0.0) {
-        discard;
-    }
-    return float4(col.rgb * a, a);
-}
-
-// ─── triangles ───────────────────────────────────────────────────────────
-
-struct TriIn {
-    float2 pos   : POSITION;
-    float4 color : COLOR;
-    float4 clipr : TEXCOORD0;
-};
-
-struct TriOut {
-    float4 pos   : SV_Position;
-    float4 color : COLOR;
-    float4 clipr : TEXCOORD0;
-    float2 gpos  : TEXCOORD1;
-};
-
-TriOut VSTri(TriIn i) {
-    TriOut o;
-    o.pos = float4(i.pos.x / uViewport.x * 2.0 - 1.0,
-                   1.0 - i.pos.y / uViewport.y * 2.0, 0.0, 1.0);
-    o.color = i.color;
-    o.clipr = i.clipr;
-    o.gpos = i.pos;
-    return o;
-}
-
-float4 PSTri(TriOut v) : SV_Target {
-    if (v.gpos.x < v.clipr.x || v.gpos.x > v.clipr.z ||
-        v.gpos.y < v.clipr.y || v.gpos.y > v.clipr.w) {
-        discard;
-    }
-    return float4(v.color.rgb * v.color.a, v.color.a);
-}
-)HLSL";
 
 // ─── instance and vertex data ────────────────────────────────────────────
 
@@ -410,10 +359,6 @@ struct D12Gpu {
     IDXGIFactory4* factory = nullptr;
     ID3D12GraphicsCommandList* list = nullptr;
     ID3D12RootSignature* root = nullptr;
-    ID3DBlob* vsQuad = nullptr;
-    ID3DBlob* psQuad = nullptr;
-    ID3DBlob* vsTri = nullptr;
-    ID3DBlob* psTri = nullptr;
     ID3D12DescriptorHeap* srvHeap = nullptr;
     UINT srvStep = 0;
     ID3D12Fence* fence = nullptr;
@@ -478,30 +423,6 @@ const FrameStats& LastFrameStats() {
 }
 
 // ─── device setup ────────────────────────────────────────────────────────
-
-static bool CompileShader(const char* entry, const char* target,
-                          ID3DBlob** out) {
-    ID3DBlob* err = nullptr;
-    UINT flags =
-        D3DCOMPILE_OPTIMIZATION_LEVEL3 | D3DCOMPILE_WARNINGS_ARE_ERRORS;
-    HRESULT hr =
-        D3DCompile(kShaderSrc, strlen(kShaderSrc), "gpui.hlsl", nullptr,
-                   nullptr, entry, target, flags, 0, out, &err);
-    if (FAILED(hr)) {
-        if (err) {
-            logf("paint/gpu: %s failed: %s", Str(entry),
-                 Str((const char*)err->GetBufferPointer()));
-            err->Release();
-        } else {
-            logf("paint/gpu: %s failed %08x", Str(entry), (unsigned)hr);
-        }
-        return false;
-    }
-    if (err) {
-        err->Release();
-    }
-    return true;
-}
 
 static D3D12_HEAP_PROPERTIES D12Heap(D3D12_HEAP_TYPE type) {
     D3D12_HEAP_PROPERTIES h = {};
@@ -625,8 +546,8 @@ static bool D12MakePipelines(int samples) {
     p->samples = samples;
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d = {};
     d.pRootSignature = g->root;
-    d.VS = {g->vsQuad->GetBufferPointer(), g->vsQuad->GetBufferSize()};
-    d.PS = {g->psQuad->GetBufferPointer(), g->psQuad->GetBufferSize()};
+    d.VS = {kShaderVSQuadBytes, (SIZE_T)kShaderVSQuadSize};
+    d.PS = {kShaderPSQuadBytes, (SIZE_T)kShaderPSQuadSize};
     d.BlendState = D12Blend();
     d.SampleMask = UINT_MAX;
     d.RasterizerState = D12Raster(samples);
@@ -661,8 +582,8 @@ static bool D12MakePipelines(int samples) {
          D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     };
     d.InputLayout = {input, 3};
-    d.VS = {g->vsTri->GetBufferPointer(), g->vsTri->GetBufferSize()};
-    d.PS = {g->psTri->GetBufferPointer(), g->psTri->GetBufferSize()};
+    d.VS = {kShaderVSTriBytes, (SIZE_T)kShaderVSTriSize};
+    d.PS = {kShaderPSTriBytes, (SIZE_T)kShaderPSTriSize};
     d.DepthStencilState = D12DepthOff();
     if (FAILED(g->dev->CreateGraphicsPipelineState(&d, __uuidof(ID3D12PipelineState),
                                                     (void**)&p->tri))) {
@@ -699,7 +620,7 @@ static bool D12EnsureGpu(PaintApp* pa) {
     if (g->ready) {
         return true;
     }
-    if (!pa) {
+    if (!pa || !EnsureShaderBytes()) {
         return false;
     }
     IDXGIFactory4* factory = nullptr;
@@ -834,13 +755,6 @@ static bool D12EnsureGpu(PaintApp* pa) {
     if (FAILED(hr)) {
         return false;
     }
-    if (!CompileShader("VSQuad", "vs_5_0", &g->vsQuad) ||
-        !CompileShader("PSQuad", "ps_5_0", &g->psQuad) ||
-        !CompileShader("VSTri", "vs_5_0", &g->vsTri) ||
-        !CompileShader("PSTri", "ps_5_0", &g->psTri)) {
-        return false;
-    }
-
     D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
     D3D12_RESOURCE_DESC atlas = D12Texture(
         kAtlasDim, kAtlasDim, DXGI_FORMAT_R8_UNORM, 1,
@@ -979,28 +893,19 @@ static bool EnsureGpu(PaintApp* pa) {
         return false;
     }
 
-    ID3DBlob* vsq = nullptr;
-    ID3DBlob* psq = nullptr;
-    ID3DBlob* vst = nullptr;
-    ID3DBlob* pst = nullptr;
-    bool ok = CompileShader("VSQuad", "vs_5_0", &vsq) &&
-              CompileShader("PSQuad", "ps_5_0", &psq) &&
-              CompileShader("VSTri", "vs_5_0", &vst) &&
-              CompileShader("PSTri", "ps_5_0", &pst);
-    if (ok) {
-        ok = SUCCEEDED(g->dev->CreateVertexShader(vsq->GetBufferPointer(),
-                                                  vsq->GetBufferSize(), nullptr,
-                                                  &g->vsQuad)) &&
-             SUCCEEDED(g->dev->CreatePixelShader(psq->GetBufferPointer(),
-                                                 psq->GetBufferSize(), nullptr,
-                                                 &g->psQuad)) &&
-             SUCCEEDED(g->dev->CreateVertexShader(vst->GetBufferPointer(),
-                                                  vst->GetBufferSize(), nullptr,
-                                                  &g->vsTri)) &&
-             SUCCEEDED(g->dev->CreatePixelShader(pst->GetBufferPointer(),
-                                                 pst->GetBufferSize(), nullptr,
-                                                 &g->psTri));
-    }
+    bool ok = EnsureShaderBytes() &&
+              SUCCEEDED(g->dev->CreateVertexShader(
+                  kShaderVSQuadBytes, (SIZE_T)kShaderVSQuadSize, nullptr,
+                  &g->vsQuad)) &&
+              SUCCEEDED(g->dev->CreatePixelShader(
+                  kShaderPSQuadBytes, (SIZE_T)kShaderPSQuadSize, nullptr,
+                  &g->psQuad)) &&
+              SUCCEEDED(g->dev->CreateVertexShader(
+                  kShaderVSTriBytes, (SIZE_T)kShaderVSTriSize, nullptr,
+                  &g->vsTri)) &&
+              SUCCEEDED(g->dev->CreatePixelShader(
+                  kShaderPSTriBytes, (SIZE_T)kShaderPSTriSize, nullptr,
+                  &g->psTri));
     if (ok) {
         D3D11_INPUT_ELEMENT_DESC el[] = {
             {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0,
@@ -1010,21 +915,9 @@ static bool EnsureGpu(PaintApp* pa) {
             {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24,
              D3D11_INPUT_PER_VERTEX_DATA, 0},
         };
-        ok = SUCCEEDED(g->dev->CreateInputLayout(el, 3, vst->GetBufferPointer(),
-                                                 vst->GetBufferSize(),
-                                                 &g->triLayout));
-    }
-    if (vsq) {
-        vsq->Release();
-    }
-    if (psq) {
-        psq->Release();
-    }
-    if (vst) {
-        vst->Release();
-    }
-    if (pst) {
-        pst->Release();
+        ok = SUCCEEDED(g->dev->CreateInputLayout(
+            el, 3, kShaderVSTriBytes, (SIZE_T)kShaderVSTriSize,
+            &g->triLayout));
     }
     if (!ok) {
         return false;

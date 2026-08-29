@@ -10083,3 +10083,33 @@ argument passes 21,511, proving they were removed before `GpuiMain`; an
 all-backend `hello_world` also launches with D3D12, four samples and `damage`.
 Before the scene addition, MSVC debug and clang-cl release all-backend suites
 passed 21,509 checks under `/W4 /WX`.
+
+## Windows shaders are generated once, not compiled at startup
+
+2026-08-29: `paintgpu_win.cpp` no longer carries an HLSL raw string or calls
+`D3DCompile` while opening the first D3D11/D3D12 device. The source is now
+`src/gpui/paintgpu_win.hlsl`; `bun cmd/update-win-shaders.ts` compiles VSQuad,
+PSQuad, VSTri and PSTri as Shader Model 5 with FXC `/O3 /WX` and writes
+`src/gpui/paintgpu_shaders_win.cpp` only when the generated content changes.
+The generator round-trips every payload through its own decoder before writing.
+
+The generated file uses basE95: the basE91 packing generalized to every
+printable ASCII byte from space through `~`, the largest source-safe ASCII
+alphabet a C++ raw string can carry. It chooses a collision-free raw delimiter
+and wraps without leaving an encoded space as trailing source whitespace. At
+startup the renderer performs only the small decode into fixed BSS arrays;
+D3D11 creates its shaders directly from those arrays and D3D12 keeps them for
+lazy per-MSAA pipeline creation.
+
+`cmd/build.ts` compares the HLSL SHA-256 to the marker in the generated C++ and
+stops with the regeneration command if it is stale. Ordinary builds never run
+FXC. D3D11, D3D12 and all-backend link sets no longer contain
+`d3dcompiler.lib`, and the all-backend executable imports `d3d11.dll` and
+`d3d12.dll` but not `D3DCompiler_47.dll`.
+
+The four blobs total 7,176 bytes; their generated C++ file is 9,432 bytes
+including declarations, wrapping and BSS definitions. MSVC `/W4 /WX` passes
+the 21,510-check release suite in an all-backend build. Fixed D3D11 and fixed
+D3D12 `hello_world` builds both complete the 30-frame warmup plus one measured
+frame and exit 0. clang-cl `/W4 /WX` builds the all-backend executable and the
+same smoke exits 0 under both runtime backend choices.

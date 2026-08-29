@@ -66,6 +66,11 @@ enabled, with `skip` as the default. Windows consumes all three reserved
 arguments before calling `GpuiMain`, so application argument parsing never
 sees them. See `src/gpui/paint.h` for the quality, cost and caching tradeoffs.
 
+The custom renderers use checked-in FXC bytecode rather than compiling HLSL at
+application startup. After editing `src/gpui/paintgpu_win.hlsl`, regenerate it
+with `bun cmd/update-win-shaders.ts`; ordinary builds verify the source hash and
+otherwise need neither `fxc.exe` nor `D3DCompiler_47.dll`.
+
 Markdown defaults to the complete CommonMark + GFM parser. Applications that
 prefer a smaller executable can select the basic parser at build time:
 

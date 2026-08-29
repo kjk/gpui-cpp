@@ -27,6 +27,15 @@
    expanded strokes get their antialiasing from the sample count, and its
    cost is worth being able to see.
 
+   The HLSL lives in paintgpu_win.hlsl, but an ordinary build never compiles
+   it. `bun cmd/update-win-shaders.ts` runs fxc /O3 /WX for VSQuad, PSQuad,
+   VSTri and PSTri and writes checked-in paintgpu_shaders_win.cpp. Its DXBC is
+   encoded with all 95 printable ASCII characters in C++ raw strings and
+   decoded once into BSS when the first custom device opens. build.ts compares
+   the HLSL SHA-256 with the generated marker and stops with the regeneration
+   command if they differ. Thus shipping binaries neither link D3DCompiler nor
+   depend on D3DCompiler_47.dll.
+
    What lives where: everything device-independent is shared with
    paint_win.cpp rather than written three times — the DirectWrite factory
    and its text formats, an IDWriteTextLayout (which is what a `TextLayout*`
