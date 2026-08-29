@@ -96,10 +96,10 @@ struct SankeyGraph {
     int errNode = 0;
 
     void Reset() {
-        nodes.Reset();
-        links.Reset();
-        srcLinks.Reset();
-        tgtLinks.Reset();
+        VecReset(nodes);
+        VecReset(links);
+        VecReset(srcLinks);
+        VecReset(tgtLinks);
     }
 };
 

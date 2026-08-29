@@ -52,26 +52,27 @@ void TilesStory::OnSave(TilesStory* self, Ctx* cx, const ClickEvent*) {
     int n = s->items.len;
     Vec<TileMeta> metas;
     Vec<int> panels;
-    metas.AppendBlanks(n);
-    panels.AppendBlanks(n);
+    VecAppendBlanks(metas, n);
+    VecAppendBlanks(panels, n);
     int nMeta = TilesToMetas(s, metas.els, panels.els, n);
     Vec<int> childIx;
     for (int i = 0; i < nMeta; i++) {
         // The child a meta belongs to. Rust names it after the panel's type
         // and finds it again through the registry; the panels here are the
         // caller's own list, so the index is the name.
-        childIx.Append(state.NewNode(StrDup(StoryFmt(cx, "%d", panels[i]))));
+        VecAppend(childIx, state
+                               .NewNode(StrDup(StoryFmt(cx, "%d", panels[i]))));
     }
     // NewNode grew the pool, so the node is reached again after it has.
     PanelStateNode& node = state.nodes[state.center];
     node.kind = PanelInfoKind::Tiles;
     for (int i = 0; i < nMeta; i++) {
-        node.metas.Append(metas[i]);
-        node.children.Append(childIx[i]);
+        VecAppend(node.metas, metas[i]);
+        VecAppend(node.children, childIx[i]);
     }
-    childIx.Reset();
-    metas.Reset();
-    panels.Reset();
+    VecReset(childIx);
+    VecReset(metas);
+    VecReset(panels);
     StrBuilder sb;
     DockAreaStateWrite(&state, &sb);
     if (self->saved.s) {
@@ -95,10 +96,10 @@ void TilesStory::OnRestore(TilesStory* self, Ctx* cx, const ClickEvent*) {
                                                    : node.metas.len;
         Vec<int> panels;
         for (int i = 0; i < n; i++) {
-            panels.Append(atoi(state.nodes[node.children[i]].panelName.s));
+            VecAppend(panels, atoi(state.nodes[node.children[i]].panelName.s));
         }
         TilesFromMetas(s, node.metas.els, panels.els, n);
-        panels.Reset();
+        VecReset(panels);
     }
     ArenaDelete(a);
     Notify(cx);

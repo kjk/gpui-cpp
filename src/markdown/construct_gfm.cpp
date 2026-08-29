@@ -38,7 +38,7 @@ State GfmLabelStartFootnoteOpen(Tokenizer* t) {
         mark.kind = LabelKind::GfmFootnote;
         mark.startA = t->events.len - 6;
         mark.startB = t->events.len - 1;
-        t->tokenizeState.labelStarts.Append(mark);
+        VecAppend(t->tokenizeState.labelStarts, mark);
         RegisterResolverBefore(t, ResolveName::Label);
         return StateOk();
     }
@@ -196,8 +196,8 @@ State GfmFootnoteDefinitionLabelAfter(Tokenizer* t) {
         int32_t end = SkipToBack(t->events, t->events.len - 1, &labelString, 1);
         Position position = PositionFromExitEvent(t->events, end);
         Slice slice = SliceFromPosition(t->parseState->bytes, position);
-        t->tokenizeState.gfmFootnoteDefinitions.Append(
-            NormalizeIdentifier(t->parseState->scratch, slice.bytes));
+        VecAppend(t->tokenizeState.gfmFootnoteDefinitions,
+                  NormalizeIdentifier(t->parseState->scratch, slice.bytes));
         Enter(t, Name::DefinitionMarker);
         Consume(t);
         Exit(t, Name::DefinitionMarker);

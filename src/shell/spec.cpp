@@ -156,10 +156,10 @@ SpecArena::~SpecArena() {
 }
 
 void SpecArena::Reset() {
-    nodes.Clear();
-    parented.Clear();
-    claimed.Clear();
-    mountedViews.Clear();
+    VecClear(nodes);
+    VecClear(parented);
+    VecClear(claimed);
+    VecClear(mountedViews);
     virtualItems = 0;
     arena->Reset();
 }
@@ -205,9 +205,9 @@ SpecOp SpecArena::CopyOp(const SpecOp& source) {
 SpecId SpecArena::Push(const Component& component) {
     SpecNode* node = ArenaNew<SpecNode>(arena);
     node->component = CopyComponent(component);
-    nodes.Append(node);
-    parented.Append(0);
-    claimed.Append(0);
+    VecAppend(nodes, node);
+    VecAppend(parented, 0);
+    VecAppend(claimed, 0);
     return (SpecId)(nodes.len - 1);
 }
 
@@ -223,7 +223,7 @@ bool SpecArena::PushChildView(const Component& component, SpecId* out,
             return false;
         }
     }
-    mountedViews.Append(component.handle);
+    VecAppend(mountedViews, component.handle);
     SpecId id = Push(component);
     if (out) *out = id;
     return true;

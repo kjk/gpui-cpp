@@ -43,7 +43,7 @@ static bool ReadBounded(Str path, int limit, Str* out) {
     for (;;) {
         size_t count = fread(block, 1, sizeof(block), file);
         if (count > 0) {
-            char* destination = bytes.AppendBlanks((int)count);
+            char* destination = VecAppendBlanks(bytes, (int)count);
             if (bytes.len > limit || !destination) {
                 ok = false;
                 break;
@@ -57,7 +57,7 @@ static bool ReadBounded(Str path, int limit, Str* out) {
     }
     fclose(file);
     if (!ok) {
-        bytes.Reset();
+        VecReset(bytes);
         return false;
     }
     int len = bytes.len;
@@ -100,7 +100,7 @@ static bool AppendDirectory(Vec<TypesDirectory>* directories, Str path,
     memcpy(directory.path, path.s, (size_t)path.len);
     directory.path[path.len] = 0;
     directory.depth = depth;
-    return directories->Append(directory);
+    return VecAppend(*directories, directory);
 }
 
 static void AppendQuoted(StrBuilder* out, Str value) {
@@ -264,7 +264,8 @@ bool ShellWriteTypeDeclarations(Str root, const HostModules* modules,
 
     Vec<TypesDirectory> pending;
     Vec<TypesDirectory> targets;
-    bool ok = pending.Append(rootDirectory) && targets.Append(rootDirectory);
+    bool ok =
+        VecAppend(pending, rootDirectory) && VecAppend(targets, rootDirectory);
     DirEntry* entries = ok ? AllocArray<DirEntry>(kTypesMaxEntries) : nullptr;
     if (!entries) ok = false;
     int files = 0;
@@ -317,8 +318,8 @@ bool ShellWriteTypeDeclarations(Str root, const HostModules* modules,
         ShellErrorSet(error,
                       StrL("out of memory while writing type declarations"));
     Free(nullptr, entries);
-    targets.Reset();
-    pending.Reset();
+    VecReset(targets);
+    VecReset(pending);
     StrFree(text);
     return ok;
 }

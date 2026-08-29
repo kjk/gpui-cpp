@@ -6,7 +6,7 @@ void FsResult::Free() {
     StrFree(bytes);
     bytes = {};
     for (int i = 0; i < entries.len; i++) StrFree(entries[i].name);
-    entries.Reset();
+    VecReset(entries);
     exists = false;
 }
 

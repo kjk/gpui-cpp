@@ -176,10 +176,10 @@ struct CommandState {
     static void OnAction(CommandState* self, Ctx* cx, const ActionEvent* ev);
 
     ~CommandState() {
-        rows.Reset();
-        matched.Reset();
-        rowSizes.Reset();
-        applied.Reset();
+        VecReset(rows);
+        VecReset(matched);
+        VecReset(rowSizes);
+        VecReset(applied);
     }
 };
 

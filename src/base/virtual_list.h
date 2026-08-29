@@ -126,8 +126,8 @@ struct ItemSizeLayout {
     Bounds lastLayoutBounds = {};
 
     ~ItemSizeLayout() {
-        sizes.Reset();
-        origins.Reset();
+        VecReset(sizes);
+        VecReset(origins);
     }
 };
 

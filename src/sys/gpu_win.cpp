@@ -130,7 +130,7 @@ static float GpuUsagePercentLocked() {
         return -1.f;
     }
     gProbe.buffer.len = 0;
-    if (!gProbe.buffer.AppendBlanks((int)bytes)) {
+    if (!VecAppendBlanks(gProbe.buffer, (int)bytes)) {
         return -1.f;
     }
     auto* items = (PDH_FMT_COUNTERVALUE_ITEM_W*)&gProbe.buffer[0];
@@ -213,7 +213,7 @@ void GpuProbeFree() {
     }
     gProbe.query = nullptr;
     gProbe.counter = nullptr;
-    gProbe.buffer.Reset();
+    VecReset(gProbe.buffer);
     gProbe.opened = false;
     gProbe.failed = false;
     gProbeLock.Unlock();

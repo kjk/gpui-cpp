@@ -131,7 +131,7 @@ struct TextSelectionProjection {
     int Len() const { return ranges.len; }
     const TextSelectionRange* Ranges() const { return ranges.els; }
     bool IsActive() const { return active; }
-    void Reset() { ranges.Reset(); }
+    void Reset() { VecReset(ranges); }
 };
 
 enum class TextSelectionEventKind : uint8_t {

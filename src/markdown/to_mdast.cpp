@@ -142,7 +142,7 @@ static Node* TailPenultimateMut(CompileContext* c) {
 static void Buffer(CompileContext* c) {
     TreeFrame frame;
     frame.tree = NodeNew(c->a, NodeKind::Paragraph);
-    c->trees.Append(frame);
+    VecAppend(c->trees, frame);
 }
 
 static Node* Resume(CompileContext* c) {
@@ -219,7 +219,7 @@ static void OnEnterListItem(CompileContext* c) {
 static void OnEnterMedia(CompileContext* c, NodeKind kind) {
     TailPush(c, NodeNew(c->a, kind));
     Reference reference;
-    c->mediaReferenceStack.Append(reference);
+    VecAppend(c->mediaReferenceStack, reference);
 }
 
 static void Enter(CompileContext* c) {
@@ -867,7 +867,7 @@ Node* ToMdastCompile(const Vec<Event>& events, ParseState* parseState) {
 
     TreeFrame frame;
     frame.tree = NodeNew(context.a, NodeKind::Root);
-    context.trees.Append(frame);
+    VecAppend(context.trees, frame);
 
     int32_t index = 0;
     while (index < events.len) {

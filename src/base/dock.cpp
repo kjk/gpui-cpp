@@ -195,7 +195,7 @@ int DockAddPanelDef(DockState* s, DockPanelDef def) {
         if (def.id.value == 0)
             def.id = PanelId::FromU64(gNextDockPanelId++);
     }
-    s->panels.Append(def);
+    VecAppend(s->panels, def);
     return s->panels.len - 1;
 }
 
@@ -206,9 +206,9 @@ static int DockNewNode(DockState* s) {
     for (int i = 0; i < s->nodes.len; i++) {
         if (!s->nodes[i].used) {
             DockNode& n = s->nodes[i];
-            n.child.Clear();
-            n.size.Clear();
-            n.panel.Clear();
+            VecClear(n.child);
+            VecClear(n.size);
+            VecClear(n.panel);
             n.split = false;
             n.axis = Axis::Horizontal;
             n.parent = -1;
@@ -223,7 +223,7 @@ static int DockNewNode(DockState* s) {
             return i;
         }
     }
-    s->nodes.Append(DockNode{});
+    VecAppend(s->nodes, DockNode{});
     s->nodes[s->nodes.len - 1].used = true;
     return s->nodes.len - 1;
 }
@@ -249,7 +249,7 @@ void DockTabsAdd(DockState* s, int node, int panelIx) {
     if (n.split) {
         return;
     }
-    n.panel.Append(panelIx);
+    VecAppend(n.panel, panelIx);
 }
 
 void DockTabsInsert(DockState* s, int node, int panelIx, int at) {
@@ -263,7 +263,7 @@ void DockTabsInsert(DockState* s, int node, int panelIx, int at) {
     if (at < 0 || at > n.panel.len) {
         at = n.panel.len;
     }
-    n.panel.InsertAt(at, panelIx);
+    VecInsertAt(n.panel, at, panelIx);
     // insert_panel_at ends with set_active_ix(ix): what was dropped is what
     // the group shows.
     n.activeIx = at;
@@ -278,8 +278,8 @@ void DockSplitAdd(DockState* s, int node, int childNode, float size) {
     if (!n.split) {
         return;
     }
-    n.size.Append(size);
-    n.child.Append(childNode);
+    VecAppend(n.size, size);
+    VecAppend(n.child, childNode);
     s->nodes[childNode].parent = node;
 }
 
@@ -425,14 +425,15 @@ static void DockSpliceChild(DockState* s, int node, int at) {
     Vec<float> size;
     for (int i = 0; i < n.child.len; i++) {
         if (i != at) {
-            child.Append(n.child[i]);
-            size.Append(n.size[i]);
+            VecAppend(child, n.child[i]);
+            VecAppend(size, n.size[i]);
             continue;
         }
         const DockNode& cn = s->nodes[childNode];
         for (int j = 0; j < cn.child.len; j++) {
-            child.Append(cn.child[j]);
-            size.Append(total > 0 ? cn.size[j] * (slot / total) : cn.size[j]);
+            VecAppend(child, cn.child[j]);
+            VecAppend(size,
+                      total > 0 ? cn.size[j] * (slot / total) : cn.size[j]);
         }
     }
     for (int j = 0; j < s->nodes[childNode].child.len; j++) {
@@ -441,8 +442,8 @@ static void DockSpliceChild(DockState* s, int node, int at) {
     s->nodes[childNode] = DockNode{};
     n.child = child;
     n.size = size;
-    child.Reset();
-    size.Reset();
+    VecReset(child);
+    VecReset(size);
 }
 
 // One pass, answering whether it changed anything.
@@ -670,8 +671,8 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
         }
         int insert = before ? ix : ix + 1;
         float half = p.size[ix] * 0.5f;
-        p.child.Append(0);
-        p.size.Append(0);
+        VecAppend(p.child, 0);
+        VecAppend(p.size, 0);
         for (int i = p.child.len - 1; i > insert; i--) {
             p.child[i] = p.child[i - 1];
             p.size[i] = p.size[i - 1];

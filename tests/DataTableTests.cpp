@@ -541,23 +541,23 @@ static void ADumpRangeIsClampedToTheTable() {
 
     // Past the end clamps rather than reading off it, so a caller can walk a
     // table in fixed steps without knowing where it ends.
-    heads.Reset();
-    cells.Reset();
+    VecReset(heads);
+    VecReset(cells);
     t->DumpRange(2, 99, &heads, &cells);
     utassert(cells.len == 2);
     // A range the wrong way round, or past the end entirely, is no rows.
-    heads.Reset();
-    cells.Reset();
+    VecReset(heads);
+    VecReset(cells);
     t->DumpRange(3, 1, &heads, &cells);
     utassert(cells.len == 0 && heads.len == 2);
 
     // The whole table is what dump answers.
-    heads.Reset();
-    cells.Reset();
+    VecReset(heads);
+    VecReset(cells);
     t->Dump(&heads, &cells);
     utassert(cells.len == 6);
-    heads.Reset();
-    cells.Reset();
+    VecReset(heads);
+    VecReset(cells);
     ArenaDelete(a);
 }
 

@@ -212,11 +212,11 @@ struct TableState {
     FocusHandle focus = {};
 
     ~TableState() {
-        colWidth.Reset();
-        colMinWidths.Reset();
-        colMaxWidths.Reset();
-        colOrder.Reset();
-        colBounds.Reset();
+        VecReset(colWidth);
+        VecReset(colMinWidths);
+        VecReset(colMaxWidths);
+        VecReset(colOrder);
+        VecReset(colBounds);
     }
     Listener onLoadMore = {};
     // UI TableDelegate hooks stored in base-shaped signatures so retained

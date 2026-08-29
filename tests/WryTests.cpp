@@ -66,7 +66,7 @@ void TestWryUri() {
     cookie.value = StrDup(StrL("value"));
     cookie.domain = StrDup(StrL("example.com"));
     cookie.path = StrDup(StrL("/"));
-    cookies.Append(cookie);
+    VecAppend(cookies, cookie);
     wry::CookieListFree(&cookies);
     utassert(cookies.len == 0);
 

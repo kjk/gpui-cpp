@@ -138,12 +138,12 @@ struct ResizableState {
     Listener onResized = {};
 
     ~ResizableState() {
-        sizes.Reset();
-        mins.Reset();
-        maxs.Reset();
-        grows.Reset();
-        shown.Reset();
-        laid.Reset();
+        VecReset(sizes);
+        VecReset(mins);
+        VecReset(maxs);
+        VecReset(grows);
+        VecReset(shown);
+        VecReset(laid);
     }
 
     static void OnHandleDown(ResizableState* self, Ctx* cx,

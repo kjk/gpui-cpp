@@ -662,6 +662,172 @@ GPUI_NOINLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
     return true;
 }
 
+// Doubling, but never from a first capacity of one. The byte-sensitive floor
+// is the policy measured by cmd/vec-log.ts; keep it shared by every erased
+// element type.
+static int VecNextCap(int cap, int wanted, int elSize) {
+    if (cap == 0) {
+        int floorCap = elSize == 1 ? 8 : elSize <= 1024 ? 4 : 1;
+        return std::max(floorCap, wanted);
+    }
+    return std::max(cap * 2, wanted);
+}
+
+// The element type is erased below so these storage operations are compiled
+// once rather than once per Vec<T>. A negative cap is caller-owned external
+// storage; growing copies out of it and freeing leaves it alone.
+GPUI_NOINLINE bool VecReserveNT(Arena* arena, VecNonTemplated* v, int elSize,
+                                int wantedSize) {
+    int cap = v->cap;
+    int curCap = cap < 0 ? -cap : cap;
+    if (wantedSize <= curCap) {
+        return true;
+    }
+    int newCap = VecNextCap(curCap, wantedSize, elSize);
+    if (cap < 0) {
+        void* borrowed = v->els;
+        v->els = nullptr;
+        v->cap = 0;
+        if (!VecRealloc(arena, &v->els, 0, &v->cap, newCap, elSize)) {
+            v->els = borrowed;
+            v->cap = -curCap;
+            return false;
+        }
+        if (v->len > 0) {
+            memcpy(v->els, borrowed, (size_t)v->len * (size_t)elSize);
+        }
+        return true;
+    }
+    return VecRealloc(arena, &v->els, v->len, &v->cap, newCap, elSize);
+}
+
+GPUI_NOINLINE void* VecInsertSpaceNT(VecNonTemplated* v, int elSize, int idx,
+                                     int count) {
+    int oldLen = v->len;
+    int newLen = std::max(oldLen, idx) + count;
+    if (!VecReserveNT(nullptr, v, elSize, newLen)) {
+        return nullptr;
+    }
+    char* res = (char*)v->els + (size_t)idx * (size_t)elSize;
+    if (oldLen > idx) {
+        char* dst = res + (size_t)count * (size_t)elSize;
+        memmove(dst, res, (size_t)(oldLen - idx) * (size_t)elSize);
+    }
+    v->len = newLen;
+    return res;
+}
+
+GPUI_NOINLINE bool VecResizeNT(VecNonTemplated* v, int elSize, int newSize) {
+    if (newSize < 0) {
+        return false;
+    }
+    int curCap = v->cap < 0 ? -v->cap : v->cap;
+    if (newSize > curCap) {
+        if (!VecReserveNT(nullptr, v, elSize, newSize)) {
+            return false;
+        }
+        curCap = v->cap < 0 ? -v->cap : v->cap;
+    }
+    v->len = newSize;
+    if (v->els && curCap > newSize) {
+        char* tail = (char*)v->els + (size_t)newSize * (size_t)elSize;
+        memset(tail, 0, (size_t)(curCap - newSize) * (size_t)elSize);
+    }
+    return true;
+}
+
+GPUI_NOINLINE void VecRemoveAtNT(VecNonTemplated* v, int elSize, int idx,
+                                 int count) {
+    int oldLen = v->len;
+    char* els = (char*)v->els;
+    if (oldLen > idx + count) {
+        char* dst = els + (size_t)idx * (size_t)elSize;
+        char* src = els + (size_t)(idx + count) * (size_t)elSize;
+        memmove(dst, src, (size_t)(oldLen - idx - count) * (size_t)elSize);
+    }
+    int newLen = oldLen - count;
+    memset(els + (size_t)newLen * (size_t)elSize, 0,
+           (size_t)count * (size_t)elSize);
+    v->len = newLen;
+}
+
+GPUI_NOINLINE void VecRemoveAtFastNT(VecNonTemplated* v, int elSize, int idx) {
+    int oldLen = v->len;
+    if (idx >= oldLen) {
+        return;
+    }
+    char* els = (char*)v->els;
+    char* removed = els + (size_t)idx * (size_t)elSize;
+    char* last = els + (size_t)(oldLen - 1) * (size_t)elSize;
+    if (removed != last) {
+        memcpy(removed, last, (size_t)elSize);
+    }
+    memset(last, 0, (size_t)elSize);
+    v->len = oldLen - 1;
+}
+
+GPUI_NOINLINE void VecFreeElementsNT(VecNonTemplated* v) {
+    v->len = 0;
+    if (!v->els) {
+        v->cap = 0;
+        return;
+    }
+    if (v->cap > 0) {
+        Free(nullptr, v->els);
+    }
+    v->cap = 0;
+    v->els = nullptr;
+}
+
+GPUI_NOINLINE void VecClearNT(VecNonTemplated* v, int elSize) {
+    v->len = 0;
+    int curCap = v->cap < 0 ? -v->cap : v->cap;
+    if (v->els && curCap > 0) {
+        memset(v->els, 0, (size_t)curCap * (size_t)elSize);
+    }
+}
+
+GPUI_NOINLINE void* VecTakeNT(VecNonTemplated* v, int elSize) {
+    void* els = v->els;
+    if (v->cap < 0) {
+        int n = v->len;
+        v->els = nullptr;
+        v->cap = 0;
+        v->len = 0;
+        if (n <= 0) {
+            return nullptr;
+        }
+        if (!VecRealloc(nullptr, &v->els, 0, &v->cap, n, elSize)) {
+            return nullptr;
+        }
+        void* result = v->els;
+        memcpy(result, els, (size_t)n * (size_t)elSize);
+        v->els = nullptr;
+        v->cap = 0;
+        return result;
+    }
+    v->els = nullptr;
+    v->len = 0;
+    v->cap = 0;
+    return els;
+}
+
+GPUI_NOINLINE void VecCopyFromNT(VecNonTemplated* v, int elSize, int srcLen,
+                                 const void* srcEls, bool zeroTail) {
+    VecReserveNT(nullptr, v, elSize, srcLen);
+    v->len = srcLen;
+    if (srcLen > 0 && srcEls && v->els) {
+        memcpy(v->els, srcEls, (size_t)srcLen * (size_t)elSize);
+    }
+    if (zeroTail && v->els) {
+        int curCap = v->cap < 0 ? -v->cap : v->cap;
+        if (curCap > srcLen) {
+            char* tail = (char*)v->els + (size_t)srcLen * (size_t)elSize;
+            memset(tail, 0, (size_t)(curCap - srcLen) * (size_t)elSize);
+        }
+    }
+}
+
 #if defined(DEBUG)
 // ─── growth instrumentation ──────────────────────────────────────────────
 //
@@ -1204,6 +1370,10 @@ static char* MakeSpaceAt(StrBuilder* s, int idx, int count) {
     // memset(res, 0, count);
     return res;
 }
+
+static_assert(offsetof(StrBuilder, len) == offsetof(VecNonTemplated, len));
+static_assert(offsetof(StrBuilder, cap) == offsetof(VecNonTemplated, cap));
+static_assert(offsetof(StrBuilder, els) == offsetof(VecNonTemplated, els));
 
 static void StrBuilderReset(StrBuilder* s) {
     s->len = 0;

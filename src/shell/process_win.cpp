@@ -153,7 +153,7 @@ static bool NeedsQuotes(const WCHAR* value) {
 
 static bool AppendWide(Vec<WCHAR>* out, WCHAR value, int count = 1) {
     for (int i = 0; i < count; i++) {
-        if (!out->Append(value)) return false;
+        if (!VecAppend(*out, value)) return false;
     }
     return true;
 }
@@ -161,13 +161,13 @@ static bool AppendWide(Vec<WCHAR>* out, WCHAR value, int count = 1) {
 static bool AppendArgument(Vec<WCHAR>* out, Str argument) {
     WCHAR* value = WideDup(argument);
     if (!value) return false;
-    if (out->len > 0 && !out->Append(L' ')) {
+    if (out->len > 0 && !VecAppend(*out, L' ')) {
         Free(nullptr, value);
         return false;
     }
     if (!NeedsQuotes(value)) {
         for (const WCHAR* at = value; *at; at++) {
-            if (!out->Append(*at)) {
+            if (!VecAppend(*out, *at)) {
                 Free(nullptr, value);
                 return false;
             }
@@ -175,20 +175,21 @@ static bool AppendArgument(Vec<WCHAR>* out, Str argument) {
         Free(nullptr, value);
         return true;
     }
-    bool ok = out->Append(L'"');
+    bool ok = VecAppend(*out, L'"');
     int slashes = 0;
     for (const WCHAR* at = value; ok && *at; at++) {
         if (*at == L'\\') {
             slashes++;
         } else if (*at == L'"') {
-            ok = AppendWide(out, L'\\', slashes * 2 + 1) && out->Append(*at);
+            ok =
+                AppendWide(out, L'\\', slashes * 2 + 1) && VecAppend(*out, *at);
             slashes = 0;
         } else {
-            ok = AppendWide(out, L'\\', slashes) && out->Append(*at);
+            ok = AppendWide(out, L'\\', slashes) && VecAppend(*out, *at);
             slashes = 0;
         }
     }
-    if (ok) ok = AppendWide(out, L'\\', slashes * 2) && out->Append(L'"');
+    if (ok) ok = AppendWide(out, L'\\', slashes * 2) && VecAppend(*out, L'"');
     Free(nullptr, value);
     return ok;
 }

@@ -167,7 +167,7 @@ struct TilesState {
     static void OnTileUp(TilesState* self, Ctx* cx, const MouseUpEvent* ev,
                          intptr_t ix);
 
-    ~TilesState() { items.Reset(); }
+    ~TilesState() { VecReset(items); }
 };
 
 // One source-shaped view of a tile. It forwards gestures to the pure state

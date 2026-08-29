@@ -178,8 +178,8 @@ struct ListState {
 
     ~ListState() {
         StrFree(lastQuery);
-        sectionCounts.Reset();
-        rowHeights.Reset();
+        VecReset(sectionCounts);
+        VecReset(rowHeights);
     }
 
     // Rust's ListState is an Entity, which is what lets the item closures

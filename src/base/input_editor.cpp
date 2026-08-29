@@ -136,7 +136,7 @@ bool TextDecorationCollection::Set(const TextDecoration* decorations, int n) {
     if (!entry) {
         return false;
     }
-    entry->decorations.Clear();
+    VecClear(entry->decorations);
     return Append(decorations, n);
 }
 
@@ -150,7 +150,7 @@ bool TextDecorationCollection::Append(const TextDecoration* decorations,
     for (int i = 0; decorations && i < n; i++) {
         TextDecoration normalized;
         if (NormalizeDecoration(text, decorations[i], &normalized)) {
-            entry->decorations.Append(normalized);
+            VecAppend(entry->decorations, normalized);
         }
     }
     return true;
@@ -196,7 +196,7 @@ TextDecorationCollection DecorationCollections::Create(
     }
     DecorationCollectionEntry* entry = new DecorationCollectionEntry();
     entry->id = state->nextId++;
-    state->entries.Append(entry);
+    VecAppend(state->entries, entry);
     result.state = state;
     result.id = entry->id;
     DecorationsRetain(state);
@@ -252,7 +252,7 @@ void DecorationCollections::Clear() {
         return;
     }
     for (int i = 0; i < state->entries.len; i++) {
-        state->entries[i]->decorations.Clear();
+        VecClear(state->entries[i]->decorations);
     }
 }
 
@@ -269,7 +269,7 @@ int DecorationCollections::BuildSpans(TextSpan* out, int cap) const {
         const Vec<TextDecoration>& ds = state->entries[i]->decorations;
         for (int j = 0; j < ds.len; j++) {
             Vec<Selection> pieces;
-            pieces.Append(ds[j].range);
+            VecAppend(pieces, ds[j].range);
             for (int k = 0; k < accepted.len && pieces.len > 0; k++) {
                 Selection occupied = {accepted[k].lo, accepted[k].hi};
                 for (int p = pieces.len - 1; p >= 0; p--) {
@@ -280,12 +280,13 @@ int DecorationCollections::BuildSpans(TextSpan* out, int cap) const {
                     pieces[p] = pieces[pieces.len - 1];
                     pieces.len--;
                     if (piece.start < occupied.start) {
-                        pieces.Append({piece.start,
-                                       std::min(piece.end, occupied.start)});
+                        VecAppend(
+                            pieces,
+                            {piece.start, std::min(piece.end, occupied.start)});
                     }
                     if (piece.end > occupied.end) {
-                        pieces.Append({std::max(piece.start, occupied.end),
-                                       piece.end});
+                        VecAppend(pieces, {std::max(piece.start, occupied.end),
+                                           piece.end});
                     }
                 }
             }
@@ -293,7 +294,7 @@ int DecorationCollections::BuildSpans(TextSpan* out, int cap) const {
                 TextSpan span = ds[j].style;
                 span.lo = pieces[p].start;
                 span.hi = pieces[p].end;
-                accepted.Append(span);
+                VecAppend(accepted, span);
             }
         }
     }
@@ -352,7 +353,7 @@ DiagnosticSet::~DiagnosticSet() {
 }
 
 void DiagnosticSet::Reset(Str value) {
-    diagnostics.Clear();
+    VecClear(diagnostics);
     ArenaDelete(arena);
     arena = ArenaNew();
     text = StrDup(arena, value);
@@ -372,7 +373,7 @@ void DiagnosticSet::Push(const Diagnostic& diagnostic) {
            diagnostics[at].range.start <= entry.range.start) {
         at++;
     }
-    diagnostics.InsertAt(at, entry);
+    VecInsertAt(diagnostics, at, entry);
 }
 
 void DiagnosticSet::Extend(const Diagnostic* values, int n) {
@@ -385,7 +386,7 @@ void DiagnosticSet::Clear() {
     // Keep the arena because callers may still hold entries returned by the
     // last range query until their operation ends. Reset releases it when the
     // document itself changes.
-    diagnostics.Clear();
+    VecClear(diagnostics);
 }
 
 DiagnosticSummary DiagnosticSet::Summary() const {
@@ -673,7 +674,7 @@ void DisplayMap::AdjustFoldsForEdit(Str oldText, Selection editedRange,
 }
 
 void DisplayMap::Rebuild() {
-    rows.Clear();
+    VecClear(rows);
     int lineCount = BufferLineCount();
     FoldMapRebuild(&foldMap, lineCount);
     for (int line = 0; line < lineCount; line++) {
@@ -682,7 +683,7 @@ void DisplayMap::Rebuild() {
         }
         Str value = RopeSliceLine(text, line);
         if (wrapColumns <= 0 || value.len == 0) {
-            rows.Append({line, 0, value.len});
+            VecAppend(rows, {line, 0, value.len});
             continue;
         }
         int leadingEnd = 0;
@@ -700,7 +701,7 @@ void DisplayMap::Rebuild() {
             int columns = row == 0 ? wrapColumns : continuation;
             int end =
                 DisplayAdvanceColumns(value, start, columns, tab.tabSize);
-            rows.Append({line, start, end});
+            VecAppend(rows, {line, start, end});
             start = end;
             row++;
         }

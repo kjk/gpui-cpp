@@ -17,7 +17,7 @@ AppAssets::AppAssets(Str value) : root(StrDup(value)) {}
 AppAssets::~AppAssets() {
     Uninstall();
     for (int i = 0; i < missing.len; i++) StrFree(missing[i]);
-    missing.Reset();
+    VecReset(missing);
     StrFree(root);
 }
 
@@ -69,7 +69,7 @@ static int CompareAssetNames(const void* a, const void* b) {
 
 bool AppAssets::Load(Str path, Vec<uint8_t>* out, Str* error) {
     if (!out) return false;
-    out->Reset();
+    VecReset(*out);
     Str relative;
     if (!Resolve(path, &relative, error)) return false;
     shell::FsResult result;
@@ -86,7 +86,7 @@ bool AppAssets::Load(Str path, Vec<uint8_t>* out, Str* error) {
                     missing[i - 1] = missing[i];
                 missing.len--;
             }
-            missing.Append(StrDup(path));
+            VecAppend(missing, StrDup(path));
             log(fmt("asset `%s` was not found under `%s`; asset paths resolve against the application directory", path, root));
         }
         if (error) *error = failure;
@@ -103,7 +103,7 @@ bool AppAssets::Load(Str path, Vec<uint8_t>* out, Str* error) {
         return false;
     }
     if (result.bytes.len > 0) {
-        uint8_t* bytes = out->AppendBlanks(result.bytes.len);
+        uint8_t* bytes = VecAppendBlanks(*out, result.bytes.len);
         if (!bytes) {
             if (error) *error = StrDup(StrL("asset allocation failed"));
             result.Free();
@@ -129,7 +129,7 @@ bool AppAssets::Exists(Str path) {
 bool AppAssets::List(Str path, Vec<Str>* out, Str* error) {
     if (!out) return false;
     for (int i = 0; i < out->len; i++) StrFree((*out)[i]);
-    out->Reset();
+    VecReset(*out);
     Str relative;
     if (!Resolve(path, &relative, error)) return false;
     shell::FsResult result;
@@ -139,7 +139,7 @@ bool AppAssets::List(Str path, Vec<Str>* out, Str* error) {
         return false;
     }
     for (int i = 0; i < result.entries.len; i++)
-        out->Append(StrDup(result.entries[i].name));
+        VecAppend(*out, StrDup(result.entries[i].name));
     if (out->len > 1)
         qsort(out->els, (size_t)out->len, sizeof(Str), CompareAssetNames);
     result.Free();

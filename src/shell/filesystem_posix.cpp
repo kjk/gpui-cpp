@@ -258,7 +258,7 @@ static bool ReadDirectory(int root, Str rootName, Str relative,
             fstatat(dirfd(directory), entry->d_name, &info,
                     AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(info.st_mode);
         FsEntry value = {StrDup(Str(entry->d_name, nameLen)), directoryEntry};
-        if (!value.name.s || !result->entries.Append(value)) {
+        if (!value.name.s || !VecAppend(result->entries, value)) {
             StrFree(value.name);
             FsError(error, StrL("allocating an fs.readdir result failed"));
             ok = false;

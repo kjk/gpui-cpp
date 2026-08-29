@@ -257,7 +257,7 @@ void GenerateAnonymousFlexItems(TaffyTree* tree, NodeId node,
         item.scrollbarWidth = cs.scrollbarWidth;
         item.flexGrow = cs.flexGrow;
         item.flexShrink = cs.flexShrink;
-        flexItems->Append(item);
+        VecAppend(*flexItems, item);
     }
 }
 
@@ -454,7 +454,7 @@ void CollectFlexLines(const AlgoConstants& c, SizeAvail availableSpace,
     int total = flexItems->len;
 
     if (!c.isWrap) {
-        lines->Append({items, total, 0.0f, 0.0f});
+        VecAppend(*lines, {items, total, 0.0f, 0.0f});
         return;
     }
 
@@ -471,13 +471,13 @@ void CollectFlexLines(const AlgoConstants& c, SizeAvail availableSpace,
     switch (mainAxisAvailableSpace.kind) {
         case AvailableSpace::Kind::MaxContent:
             // Under a max-content constraint the items never wrap.
-            lines->Append({items, total, 0.0f, 0.0f});
+            VecAppend(*lines, {items, total, 0.0f, 0.0f});
             return;
         case AvailableSpace::Kind::MinContent:
             // Under a min-content constraint every wrapping opportunity is
             // taken, so each item gets its own line.
             for (int i = 0; i < total; i++) {
-                lines->Append({items + i, 1, 0.0f, 0.0f});
+                VecAppend(*lines, {items + i, 1, 0.0f, 0.0f});
             }
             return;
         default:
@@ -501,7 +501,7 @@ void CollectFlexLines(const AlgoConstants& c, SizeAvail availableSpace,
                 break;
             }
         }
-        lines->Append({items + start, index - start, 0.0f, 0.0f});
+        VecAppend(*lines, {items + start, index - start, 0.0f, 0.0f});
         start = index;
     }
 }
@@ -1858,7 +1858,7 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
     // still allocates exactly once from here.
     FlexLine lineBuf[2];
     Vec<FlexLine> flexLines;
-    VecUseInline(flexLines, lineBuf);
+    VecUseExternalBuffer(flexLines, lineBuf);
 
     // 9.1. Initial Setup
     // 1. Generate anonymous flex items.
@@ -1948,8 +1948,8 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
 
     // The container size is known; a caller that only wanted that is done.
     if (runMode == RunMode::ComputeSize) {
-        flexItems.Reset();
-        flexLines.Reset();
+        VecReset(flexItems);
+        VecReset(flexLines);
         return LayoutOutput::FromOuterSize(constants.containerSize);
     }
 
@@ -1994,8 +1994,8 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
         firstVerticalBaseline = Some(offsetVertical + chosen->baseline);
     }
 
-    flexItems.Reset();
-    flexLines.Reset();
+    VecReset(flexItems);
+    VecReset(flexLines);
 
     return LayoutOutput::FromSizesAndBaselines(
         constants.containerSize, Max(inflowContentSize, absoluteContentSize),

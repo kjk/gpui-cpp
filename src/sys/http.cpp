@@ -14,7 +14,7 @@ void HttpRspFree(HttpRsp* r) {
     if (!r) {
         return;
     }
-    r->body.Reset();
+    VecReset(r->body);
     if (r->contentType.s) {
         StrFree(r->contentType);
         r->contentType = {};

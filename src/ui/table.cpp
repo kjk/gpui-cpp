@@ -449,7 +449,7 @@ void DataTable::Headers(Vec<Str>* heads) {
         return;
     }
     for (int c = 0; c < nColumns; c++) {
-        heads->Append(TableColumnLabel(columns[c]));
+        VecAppend(*heads, TableColumnLabel(columns[c]));
     }
 }
 
@@ -472,7 +472,7 @@ void DataTable::DumpRange(int lo, int hi, Vec<Str>* heads, Vec<Str>* cells) {
     }
     for (int r = lo; r < hi; r++) {
         for (int c = 0; c < nColumns; c++) {
-            cells->Append(cellText ? cellText(cx, data, r, c) : Str());
+            VecAppend(*cells, cellText ? cellText(cx, data, r, c) : Str());
         }
     }
 }

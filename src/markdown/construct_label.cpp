@@ -111,7 +111,7 @@ State LabelEndOk(Tokenizer* t) {
     label.startB = labelStart.startB;
     label.endA = t->tokenizeState.end;
     label.endB = t->events.len - 1;
-    t->tokenizeState.labels.Append(label);
+    VecAppend(t->tokenizeState.labels, label);
     t->tokenizeState.end = 0;
     RegisterResolverBefore(t, ResolveName::Label);
     return StateOk();
@@ -120,7 +120,7 @@ State LabelEndOk(Tokenizer* t) {
 State LabelEndNok(Tokenizer* t) {
     LabelStartMark start =
         t->tokenizeState.labelStarts[--t->tokenizeState.labelStarts.len];
-    t->tokenizeState.labelStartsLoose.Append(start);
+    VecAppend(t->tokenizeState.labelStartsLoose, start);
     t->tokenizeState.end = 0;
     return StateNok();
 }
@@ -356,7 +356,7 @@ bool LabelEndResolve(Tokenizer* t, Subresult*) {
     // Inject the labels.
     Vec<Label> labels;
     for (int32_t i = 0; i < t->tokenizeState.labels.len; i++) {
-        labels.Append(t->tokenizeState.labels[i]);
+        VecAppend(labels, t->tokenizeState.labels[i]);
     }
     t->tokenizeState.labels.len = 0;
     InjectLabels(t, labels);
@@ -364,14 +364,14 @@ bool LabelEndResolve(Tokenizer* t, Subresult*) {
     // Turn the leftover starts into data.
     Vec<LabelStartMark> starts;
     for (int32_t i = 0; i < t->tokenizeState.labelStarts.len; i++) {
-        starts.Append(t->tokenizeState.labelStarts[i]);
+        VecAppend(starts, t->tokenizeState.labelStarts[i]);
     }
     t->tokenizeState.labelStarts.len = 0;
     MarkAsData(t, starts);
 
     starts.len = 0;
     for (int32_t i = 0; i < t->tokenizeState.labelStartsLoose.len; i++) {
-        starts.Append(t->tokenizeState.labelStartsLoose[i]);
+        VecAppend(starts, t->tokenizeState.labelStartsLoose[i]);
     }
     t->tokenizeState.labelStartsLoose.len = 0;
     MarkAsData(t, starts);

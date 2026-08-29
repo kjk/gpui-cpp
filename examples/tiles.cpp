@@ -66,22 +66,22 @@ static Str DumpTiles(TilesState* s) {
     int n = s->items.len;
     Vec<TileMeta> metas;
     Vec<int> panels;
-    metas.AppendBlanks(n);
-    panels.AppendBlanks(n);
+    VecAppendBlanks(metas, n);
+    VecAppendBlanks(panels, n);
     int nMeta = TilesToMetas(s, metas.els, panels.els, n);
     Vec<int> childIx;
     for (int i = 0; i < nMeta; i++) {
-        childIx.Append(state.NewNode(StrDup(fmt("%d", panels[i]))));
+        VecAppend(childIx, state.NewNode(StrDup(fmt("%d", panels[i]))));
     }
     PanelStateNode& node = state.nodes[state.center];
     node.kind = PanelInfoKind::Tiles;
     for (int i = 0; i < nMeta; i++) {
-        node.metas.Append(metas[i]);
-        node.children.Append(childIx[i]);
+        VecAppend(node.metas, metas[i]);
+        VecAppend(node.children, childIx[i]);
     }
-    childIx.Reset();
-    metas.Reset();
-    panels.Reset();
+    VecReset(childIx);
+    VecReset(metas);
+    VecReset(panels);
     StrBuilder sb;
     DockAreaStateWrite(&state, &sb);
     return sb.TakeStr();
@@ -144,7 +144,7 @@ static bool LoadTiles(TilesApp* self, TilesState* s) {
         Vec<TileMeta> metas;
         Vec<int> panels;
         for (int i = 0; i < n; i++) {
-            metas.Append(node.metas[i]);
+            VecAppend(metas, node.metas[i]);
             // The child's name is the panel index it was saved under.
             Str name = state.nodes[node.children[i]].panelName;
             int p = 0;
@@ -153,7 +153,7 @@ static bool LoadTiles(TilesApp* self, TilesState* s) {
                     p = p * 10 + (name.s[k] - '0');
                 }
             }
-            panels.Append(p);
+            VecAppend(panels, p);
         }
         if (n > 0) {
             TilesFromMetas(s, metas.els, panels.els, n);
@@ -161,8 +161,8 @@ static bool LoadTiles(TilesApp* self, TilesState* s) {
         } else {
             ok = false;
         }
-        metas.Reset();
-        panels.Reset();
+        VecReset(metas);
+        VecReset(panels);
     } else {
         ok = false;
     }

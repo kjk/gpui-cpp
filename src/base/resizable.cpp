@@ -232,12 +232,12 @@ bool ResizableState::InsertPanel(Ctx* cx, float size, int ix) {
     if (container < 1.f) container = 1.f;
     float left = container > size ? container - size : 1.f;
     for (int i = 0; i < n; i++) sizes[i] = left * sizes[i] / container;
-    sizes.InsertAt(ix, size);
-    mins.InsertAt(ix, PANEL_MIN_SIZE);
-    maxs.InsertAt(ix, 1e9f);
-    grows.InsertAt(ix, false);
-    shown.InsertAt(ix, true);
-    laid.InsertAt(ix, Bounds{});
+    VecInsertAt(sizes, ix, size);
+    VecInsertAt(mins, ix, PANEL_MIN_SIZE);
+    VecInsertAt(maxs, ix, 1e9f);
+    VecInsertAt(grows, ix, false);
+    VecInsertAt(shown, ix, true);
+    VecInsertAt(laid, ix, Bounds{});
     Notify(cx);
     return true;
 }
@@ -270,12 +270,12 @@ bool ResizableState::ResetPanel(Ctx* cx, int ix) {
 }
 
 void ResizableState::Clear() {
-    sizes.Clear();
-    mins.Clear();
-    maxs.Clear();
-    grows.Clear();
-    shown.Clear();
-    laid.Clear();
+    VecClear(sizes);
+    VecClear(mins);
+    VecClear(maxs);
+    VecClear(grows);
+    VecClear(shown);
+    VecClear(laid);
     dragging = -1;
     lastContainer = 0;
 }
@@ -537,18 +537,18 @@ El* ResizablePanelGroup::IntoEl() {
     // count is the caller's: a page that changes how many panels it has gets
     // what it declared rather than the old group's numbers.
     if (s->sizes.len != panels.len) {
-        s->sizes.Clear();
-        s->mins.Clear();
-        s->maxs.Clear();
+        VecClear(s->sizes);
+        VecClear(s->mins);
+        VecClear(s->maxs);
         for (int i = 0; i < panels.len; i++) {
             // A panel that flexes has no size of its own until the container
             // is known: what it declared is its flex basis, and the share it
             // takes is worked out below.
-            s->sizes.Append(grows[i] ? 0 : sizes[i]);
-            s->mins.Append(mins[i]);
+            VecAppend(s->sizes, grows[i] ? 0 : sizes[i]);
+            VecAppend(s->mins, mins[i]);
             // A declared 0 is Rust's `Pixels::MAX` — no ceiling — and the
             // arithmetic takes a number, not a flag.
-            s->maxs.Append(maxs[i] > 0 ? maxs[i] : 1e9f);
+            VecAppend(s->maxs, maxs[i] > 0 ? maxs[i] : 1e9f);
         }
         s->lastContainer = 0;
     } else {
@@ -557,14 +557,14 @@ El* ResizablePanelGroup::IntoEl() {
             s->maxs[i] = maxs[i] > 0 ? maxs[i] : 1e9f;
         }
     }
-    s->grows.Clear();
-    s->shown.Clear();
+    VecClear(s->grows);
+    VecClear(s->shown);
     for (int i = 0; i < panels.len; i++) {
-        s->grows.Append(grows[i]);
-        s->shown.Append(shown[i]);
+        VecAppend(s->grows, grows[i]);
+        VecAppend(s->shown, shown[i]);
     }
     while (s->laid.len < panels.len) {
-        s->laid.Append(Bounds{});
+        VecAppend(s->laid, Bounds{});
     }
 
     // The first frame is the layout's answer rather than this code's: a

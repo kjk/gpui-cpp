@@ -864,7 +864,7 @@ static NSImage* MenuIconImage(Window* win, const char* path) {
     // display; the image is then told it measures the point size.
     const int px = kMenuImageSize * 2;
     Vec<uint8_t> buf;
-    buf.AppendBlanks(px * px * 4);
+    VecAppendBlanks(buf, px * px * 4);
     // The colour does not matter for a template image, only the coverage.
     if (!SvgRasterize(win->paint.pa, Str(path), px, Rgb(0, 0, 0), buf.els)) {
         return nil;

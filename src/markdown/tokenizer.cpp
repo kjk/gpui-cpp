@@ -130,10 +130,10 @@ bool IsVoidEvent(Name name) {
 
 void SubresultAppend(Subresult& dst, Subresult& src) {
     for (int32_t i = 0; i < src.gfmFootnoteDefinitions.len; i++) {
-        dst.gfmFootnoteDefinitions.Append(src.gfmFootnoteDefinitions[i]);
+        VecAppend(dst.gfmFootnoteDefinitions, src.gfmFootnoteDefinitions[i]);
     }
     for (int32_t i = 0; i < src.definitions.len; i++) {
-        dst.definitions.Append(src.definitions[i]);
+        VecAppend(dst.definitions, src.definitions[i]);
     }
     src.gfmFootnoteDefinitions.len = 0;
     src.definitions.len = 0;
@@ -163,7 +163,7 @@ void RegisterResolver(Tokenizer* t, ResolveName name) {
             return;
         }
     }
-    t->resolvers.Append(name);
+    VecAppend(t->resolvers, name);
 }
 
 void RegisterResolverBefore(Tokenizer* t, ResolveName name) {
@@ -172,7 +172,7 @@ void RegisterResolverBefore(Tokenizer* t, ResolveName name) {
             return;
         }
     }
-    t->resolvers.InsertAt(0, name);
+    VecInsertAt(t->resolvers, 0, name);
 }
 
 static void MoveOne(Tokenizer* t);
@@ -207,7 +207,7 @@ void DefineSkip(Tokenizer* t, Point point) {
     IndexVs info = {point.index, point.vs};
     int32_t at = point.line - t->firstLine;
     if (at >= t->columnStart.len) {
-        t->columnStart.Append(info);
+        VecAppend(t->columnStart, info);
     } else {
         t->columnStart[at] = info;
     }
@@ -234,7 +234,7 @@ static void MoveOne(Tokenizer* t) {
         t->point.column = 1;
         if (t->point.line - t->firstLine + 1 > t->columnStart.len) {
             IndexVs info = {t->point.index, t->point.vs};
-            t->columnStart.Append(info);
+            VecAppend(t->columnStart, info);
         }
         t->lineStart = t->point;
         AccountForPotentialSkip(t);
@@ -258,14 +258,14 @@ void Consume(Tokenizer* t) {
 static void EnterImpl(Tokenizer* t, Name name, bool hasLink, Link link) {
     Point point = t->point;
     MovePointBack(t, &point);
-    t->stack.Append(name);
+    VecAppend(t->stack, name);
     Event event;
     event.kind = Kind::Enter;
     event.name = name;
     event.point = point;
     event.hasLink = hasLink;
     event.link = link;
-    t->events.Append(event);
+    VecAppend(t->events, event);
 }
 
 void Enter(Tokenizer* t, Name name) {
@@ -288,7 +288,7 @@ void Exit(Tokenizer* t, Name name) {
     event.kind = Kind::Exit;
     event.name = name;
     event.point = point;
-    t->events.Append(event);
+    VecAppend(t->events, event);
 }
 
 static Progress Capture(Tokenizer* t) {
@@ -316,7 +316,7 @@ void TokenizerCheck(Tokenizer* t, State ok, State nok) {
     attempt.progress = Capture(t);
     attempt.ok = ok;
     attempt.nok = nok;
-    t->attempts.Append(attempt);
+    VecAppend(t->attempts, attempt);
 }
 
 void TokenizerAttempt(Tokenizer* t, State ok, State nok) {
@@ -328,7 +328,7 @@ void TokenizerAttempt(Tokenizer* t, State ok, State nok) {
     }
     attempt.ok = ok;
     attempt.nok = nok;
-    t->attempts.Append(attempt);
+    VecAppend(t->attempts, attempt);
 }
 
 static State PushImpl(Tokenizer* t, int32_t fromIndex, int32_t fromVs,
@@ -388,11 +388,11 @@ Subresult Flush(Tokenizer* t, State state, bool resolve) {
     Subresult value;
     value.done = false;
     for (int32_t i = 0; i < t->tokenizeState.gfmFootnoteDefinitions.len; i++) {
-        value.gfmFootnoteDefinitions.Append(
-            t->tokenizeState.gfmFootnoteDefinitions[i]);
+        VecAppend(value.gfmFootnoteDefinitions, t->tokenizeState
+                                                    .gfmFootnoteDefinitions[i]);
     }
     for (int32_t i = 0; i < t->tokenizeState.definitions.len; i++) {
-        value.definitions.Append(t->tokenizeState.definitions[i]);
+        VecAppend(value.definitions, t->tokenizeState.definitions[i]);
     }
     t->tokenizeState.gfmFootnoteDefinitions.len = 0;
     t->tokenizeState.definitions.len = 0;
@@ -400,7 +400,7 @@ Subresult Flush(Tokenizer* t, State state, bool resolve) {
     if (resolve) {
         Vec<ResolveName> resolvers;
         for (int32_t i = 0; i < t->resolvers.len; i++) {
-            resolvers.Append(t->resolvers[i]);
+            VecAppend(resolvers, t->resolvers[i]);
         }
         t->resolvers.len = 0;
         for (int32_t index = 0; index < resolvers.len; index++) {

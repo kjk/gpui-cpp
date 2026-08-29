@@ -130,7 +130,7 @@ struct FloatContext {
         newSegment.yStart = divideAtY;
         newSegment.yEnd = segments[idx].yEnd;
         segments[idx].yEnd = divideAtY;
-        segments.InsertAt(idx + 1, newSegment);
+        VecInsertAt(segments, idx + 1, newSegment);
     }
 
     void UpdateLastPlacedFloat(FloatDirection direction, IndexRange placement) {
@@ -154,10 +154,10 @@ struct FloatContext {
         float xInset = placed.xInset;
         float y = placed.y;
         if (direction == FloatDirection::Left) {
-            leftFloats.Append(placed);
+            VecAppend(leftFloats, placed);
             return {xInset, y};
         }
-        rightFloats.Append(placed);
+        VecAppend(rightFloats, placed);
         return {availableWidth - xInset - floatedBox.w, y};
     }
 
@@ -332,7 +332,7 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
             Segment gap;
             gap.yStart = lastYEnd;
             gap.yEnd = startY;
-            segments.Append(gap);
+            VecAppend(segments, gap);
         }
         float newStartY = F32Max(lastYEnd, startY);
         Segment seg;
@@ -341,7 +341,7 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
         seg.insets[0] = containingBlockInsets[0];
         seg.insets[1] = containingBlockInsets[1];
         seg.insets[slot] += floatedBox.w;
-        segments.Append(seg);
+        VecAppend(segments, seg);
 
         int si = segments.len - 1;
         UpdateLastPlacedFloat(direction, {si, si + 1});
@@ -369,7 +369,7 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
             Segment gap;
             gap.yStart = lastYEnd;
             gap.yEnd = minY;
-            segments.Append(gap);
+            VecAppend(segments, gap);
         }
         ei = segments.len - 1;
     } else {
@@ -643,7 +643,7 @@ void GenerateItemList(TaffyTree* tree, NodeId node, SizeFOpt nodeInnerSize,
         item.padding = padding;
         item.border = border;
         item.paddingBorderSum = pbSum;
-        items->Append(item);
+        VecAppend(*items, item);
     }
 }
 
@@ -1571,9 +1571,9 @@ LayoutOutput ComputeBlockLayout(TaffyTree* tree, NodeId nodeId,
     rootCtx.bfc = &rootBfc;
     rootCtx.isRoot = true;
     LayoutOutput out = ComputeInner(tree, nodeId, next, &rootCtx);
-    rootBfc.floatContext.leftFloats.Reset();
-    rootBfc.floatContext.rightFloats.Reset();
-    rootBfc.floatContext.segments.Reset();
+    VecReset(rootBfc.floatContext.leftFloats);
+    VecReset(rootBfc.floatContext.rightFloats);
+    VecReset(rootBfc.floatContext.segments);
     return out;
 }
 

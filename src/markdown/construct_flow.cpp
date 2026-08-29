@@ -654,7 +654,7 @@ bool ListItemResolve(Tokenizer* t, Subresult*) {
                         before == current.start) {
                         listsWip[listIndex].end = current.end;
                         for (int32_t i = listIndex + 1; i < listsWip.len; i++) {
-                            lists.Append(listsWip[i]);
+                            VecAppend(lists, listsWip[i]);
                         }
                         listsWip.len = listIndex + 1;
                         matched = true;
@@ -675,11 +675,11 @@ bool ListItemResolve(Tokenizer* t, Subresult*) {
                     }
                     if (exit != -1) {
                         for (int32_t j = exit; j < listsWip.len; j++) {
-                            lists.Append(listsWip[j]);
+                            VecAppend(lists, listsWip[j]);
                         }
                         listsWip.len = exit;
                     }
-                    listsWip.Append(current);
+                    VecAppend(listsWip, current);
                 }
 
                 balance += 1;
@@ -691,7 +691,7 @@ bool ListItemResolve(Tokenizer* t, Subresult*) {
     }
 
     for (int32_t i = 0; i < listsWip.len; i++) {
-        lists.Append(listsWip[i]);
+        VecAppend(lists, listsWip[i]);
     }
 
     for (int32_t i = 0; i < lists.len; i++) {
@@ -829,8 +829,8 @@ State DefinitionAfterWhitespace(Tokenizer* t) {
         Slice slice = SliceFromPosition(t->parseState->bytes, position);
         // Rust reads `slice.as_str()`, so the virtual spaces a tab stands in
         // for at either edge are not part of the identifier.
-        t->tokenizeState.definitions.Append(
-            NormalizeIdentifier(t->parseState->scratch, slice.bytes));
+        VecAppend(t->tokenizeState.definitions,
+                  NormalizeIdentifier(t->parseState->scratch, slice.bytes));
         t->tokenizeState.end = 0;
         // You’d be interrupting.
         t->interrupt = true;

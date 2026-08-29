@@ -37,8 +37,8 @@ NodeData* TaffyTree::Get(NodeId node) const {
 }
 
 void TaffyTree::Init(int capacity) {
-    slots.Reset();
-    freeSlots.Reset();
+    VecReset(slots);
+    VecReset(freeSlots);
     liveCount = 0;
     useRounding = true;
     if (capacity > 0) {
@@ -52,11 +52,11 @@ void TaffyTree::Free() {
         if (!d) {
             continue;
         }
-        d->children.Reset();
+        VecReset(d->children);
         delete d;
     }
-    slots.Reset();
-    freeSlots.Reset();
+    VecReset(slots);
+    VecReset(freeSlots);
     liveCount = 0;
 }
 
@@ -67,7 +67,7 @@ static int32_t AllocSlot(TaffyTree* tree) {
         tree->freeSlots.len--;
         return idx;
     }
-    tree->slots.Append(nullptr);
+    VecAppend(tree->slots, nullptr);
     return tree->slots.len - 1;
 }
 
@@ -132,7 +132,7 @@ NodeId TaffyTree::NewWithChildren(const Style& style, const NodeId* children,
         }
         c->parent = id;
         c->hasParent = true;
-        d->children.Append(children[i]);
+        VecAppend(d->children, children[i]);
     }
     return id;
 }
@@ -146,7 +146,7 @@ void TaffyTree::Clear() {
         d->alive = false;
         d->children.len = 0;
         d->hasParent = false;
-        freeSlots.Append((int32_t)i);
+        VecAppend(freeSlots, (int32_t)i);
     }
     liveCount = 0;
 }
@@ -179,7 +179,7 @@ void TaffyTree::Remove(NodeId node) {
     d->children.len = 0;
     d->hasParent = false;
     liveCount--;
-    freeSlots.Append(IdIndex(node));
+    VecAppend(freeSlots, IdIndex(node));
 }
 
 void TaffyTree::SetNodeContext(NodeId node, void* context, bool hasContext) {
@@ -205,7 +205,7 @@ void TaffyTree::AddChild(NodeId parent, NodeId child) {
     }
     c->parent = parent;
     c->hasParent = true;
-    p->children.Append(child);
+    VecAppend(p->children, child);
     MarkDirty(parent);
 }
 
@@ -221,7 +221,7 @@ bool TaffyTree::InsertChildAtIndex(NodeId parent, int childIndex,
     }
     c->parent = parent;
     c->hasParent = true;
-    p->children.InsertAt(childIndex, child);
+    VecInsertAt(p->children, childIndex, child);
     MarkDirty(parent);
     return true;
 }
@@ -253,7 +253,7 @@ void TaffyTree::SetChildren(NodeId parent, const NodeId* children, int n) {
     }
     p->children.len = 0;
     for (int i = 0; i < n; i++) {
-        p->children.Append(children[i]);
+        VecAppend(p->children, children[i]);
     }
     MarkDirty(parent);
 }

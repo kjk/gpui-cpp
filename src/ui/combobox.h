@@ -89,7 +89,7 @@ struct ComboboxState {
     static void OnMouseDownOut(ComboboxState* self, Ctx* cx,
                                const MouseDownEvent* event);
 
-    ~ComboboxState() { selectionSnapshot.Reset(); }
+    ~ComboboxState() { VecReset(selectionSnapshot); }
 };
 
 Entity<SearchableListState> ComboboxListEntity(Entity<ComboboxState> state);

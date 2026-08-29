@@ -82,7 +82,7 @@ State DocumentContainerNewBefore(Tokenizer* t) {
     int32_t tail = t->tokenizeState.documentContainerStack.len;
     ContainerState fresh;
     fresh.kind = Container::BlockQuote;
-    t->tokenizeState.documentContainerStack.Append(fresh);
+    VecAppend(t->tokenizeState.documentContainerStack, fresh);
     ContainerState swap =
         t->tokenizeState
             .documentContainerStack[t->tokenizeState.documentContinued];
@@ -145,7 +145,7 @@ State DocumentContainerNewAfter(Tokenizer* t) {
     }
 
     t->tokenizeState.documentChild->pierce = true;
-    t->tokenizeState.documentContainerStack.Append(container);
+    VecAppend(t->tokenizeState.documentContainerStack, container);
     t->tokenizeState.documentContinued += 1;
     t->interrupt = false;
     return StateRetry(StateName::DocumentContainerNewBefore);
@@ -195,7 +195,7 @@ State DocumentFlowEnd(Tokenizer* t) {
     t->tokenizeState.documentChildStateSome = false;
 
     ArenaVec<Event> emptyExits {};
-    t->tokenizeState.documentExits.Append(emptyExits);
+    VecAppend(t->tokenizeState.documentExits, emptyExits);
 
     state = Push(child, child->point.index, child->point.vs, t->point.index,
                  t->point.vs, state);
@@ -255,7 +255,7 @@ static void ExitContainers(Tokenizer* t, Phase phase) {
     Vec<ContainerState> stackClose;
     for (int32_t i = t->tokenizeState.documentContinued;
          i < t->tokenizeState.documentContainerStack.len; i++) {
-        stackClose.Append(t->tokenizeState.documentContainerStack[i]);
+        VecAppend(stackClose, t->tokenizeState.documentContainerStack[i]);
     }
     t->tokenizeState.documentContainerStack.len =
         t->tokenizeState.documentContinued;
@@ -365,17 +365,18 @@ static void DocumentResolve(Tokenizer* t) {
             t->tokenizeState.documentExits[line] = ArenaVec<Event>{};
             for (Event& exit : exits) {
                 exit.point = t->point;
-                t->events.Append(exit);
+                VecAppend(t->events, exit);
             }
         }
     }
 
     for (int32_t i = 0; i < child->resolvers.len; i++) {
-        t->resolvers.Append(child->resolvers[i]);
+        VecAppend(t->resolvers, child->resolvers[i]);
     }
     child->resolvers.len = 0;
     for (int32_t i = 0; i < child->tokenizeState.definitions.len; i++) {
-        t->tokenizeState.definitions.Append(child->tokenizeState.definitions[i]);
+        VecAppend(t->tokenizeState.definitions, child->tokenizeState
+                                                    .definitions[i]);
     }
     child->tokenizeState.definitions.len = 0;
 }

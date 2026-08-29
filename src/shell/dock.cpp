@@ -33,8 +33,8 @@ struct ScriptPanelManager {
                 registration->script.release(registration->script.data);
             delete registration;
         }
-        panels.Reset();
-        registrations.Reset();
+        VecReset(panels);
+        VecReset(registrations);
     }
 };
 
@@ -44,7 +44,7 @@ struct PanelNameTable {
     Vec<Str> names;
 
     ~PanelNameTable() {
-        names.Reset();
+        VecReset(names);
         ArenaDelete(arena);
     }
 };
@@ -65,7 +65,7 @@ static Str InternPanelName(Str name) {
         }
     }
     Str interned = StrDup(table.arena, name);
-    table.names.Append(interned);
+    VecAppend(table.names, interned);
     table.mutex.Unlock();
     return interned;
 }
@@ -107,7 +107,7 @@ static ScriptPanelData* NewPanelData(App* app,
     panel->registration = registration;
     panel->view = view;
     panel->focus = FocusHandleNew(app);
-    manager->panels.Append(panel);
+    VecAppend(manager->panels, panel);
     return panel;
 }
 
@@ -180,7 +180,7 @@ DockPanelDef ScriptPanelNew(App* app, Str name, Entity<ScriptView> view,
         delete registration;
         return {};
     }
-    manager->registrations.Append(registration);
+    VecAppend(manager->registrations, registration);
     return PanelDef(NewPanelData(app, registration, view));
 }
 
@@ -224,7 +224,7 @@ Str ShellRegisterPanel(App* app, Str application, Str panel,
     auto* registration = new ScriptPanelRegistration();
     registration->name = name;
     registration->script = script;
-    manager->registrations.Append(registration);
+    VecAppend(manager->registrations, registration);
     register_panel(app, name, BuildRegisteredPanel, registration);
     return name;
 }

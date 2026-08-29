@@ -92,19 +92,19 @@ static void TableEmit(TableState* s, Ctx* cx, TableEventKind kind, int row,
 
 void TableEnsureCols(TableState* s, int n) {
     while (s->colWidth.len < n) {
-        s->colWidth.Append(0.f);
+        VecAppend(s->colWidth, 0.f);
     }
     while (s->colMinWidths.len < n) {
-        s->colMinWidths.Append(s->colMinWidth);
+        VecAppend(s->colMinWidths, s->colMinWidth);
     }
     while (s->colMaxWidths.len < n) {
-        s->colMaxWidths.Append(s->colMaxWidth);
+        VecAppend(s->colMaxWidths, s->colMaxWidth);
     }
     while (s->colOrder.len < n) {
-        s->colOrder.Append(s->colOrder.len);
+        VecAppend(s->colOrder, s->colOrder.len);
     }
     while (s->colBounds.len < n) {
-        s->colBounds.Append(Bounds{});
+        VecAppend(s->colBounds, Bounds{});
     }
 }
 
@@ -691,11 +691,11 @@ void TableScrollToCol(TableState* s, int col, ScrollStrategy strategy) {
     Vec<float> w;
     for (int i = s->fixedCols; i < s->colCount; i++) {
         int c = TableColAt(s, i);
-        w.Append(c < s->colWidth.len ? s->colWidth[c] : 0);
+        VecAppend(w, c < s->colWidth.len ? s->colWidth[c] : 0);
     }
     s->scrollX =
         VirtualListScrollToItem(w.els, n, d, s->scrollX, viewport, strategy);
-    w.Reset();
+    VecReset(w);
 }
 
 void TableRefreshCols(TableState* s) {

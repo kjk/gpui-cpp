@@ -523,7 +523,7 @@ static int SemanticTokensFor(void*, Str text, Selection range,
                 continue;
             }
             RopePoint p = RopeOffsetToPoint(text, i);
-            hits.Append({p.row, p.column, word.len, t});
+            VecAppend(hits, MarkerHit{p.row, p.column, word.len, t});
             i += word.len - 1;
             break;
         }

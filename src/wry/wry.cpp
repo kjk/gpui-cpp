@@ -23,7 +23,7 @@ void CookieListFree(Vec<Cookie>* cookies) {
         base::StrFree(cookie.domain);
         base::StrFree(cookie.path);
     }
-    cookies->Reset();
+    VecReset(*cookies);
 }
 
 Str WorkAroundUriPrefix(Str httpOrHttps, Str protocol) {

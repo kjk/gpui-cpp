@@ -3141,8 +3141,8 @@ struct SearchMatcher {
     bool replacing = false;
 
     ~SearchMatcher() {
-        ranges.Reset();
-        text.Reset();
+        VecReset(ranges);
+        VecReset(text);
         StrFree(query);
     }
 };

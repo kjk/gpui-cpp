@@ -418,7 +418,7 @@ struct SrcDoc {
         h.docOff = ctx.textDocLen;
         h.src = src;
         h.join = join;
-        ctx.texts.Append(h);
+        VecAppend(ctx.texts, h);
         // The gap of one between runs, which is what the copier's document
         // order leaves room for.
         ctx.textDocLen += h.text.len + 1;
@@ -434,7 +434,7 @@ struct SrcDoc {
         h.src = src;
         h.join = join;
         h.atom = true;
-        ctx.texts.Append(h);
+        VecAppend(ctx.texts, h);
         ctx.textDocLen += 1;
     }
 };
@@ -1136,19 +1136,19 @@ static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
     first.docOff = 0;
     first.owner = state.id;
     first.bounds = {0, 0, 40, 20};
-    window.paint.texts.Append(first);
+    VecAppend(window.paint.texts, first);
     TextHit other;
     other.text = StrL("other");
     other.docOff = 6;
     other.owner = EntityId{100, 1};
     other.bounds = {0, 20, 40, 20};
-    window.paint.texts.Append(other);
+    VecAppend(window.paint.texts, other);
     TextHit last;
     last.text = StrL("omega");
     last.docOff = 12;
     last.owner = state.id;
     last.bounds = {0, 40, 40, 20};
-    window.paint.texts.Append(last);
+    VecAppend(window.paint.texts, last);
     window.paint.textDocLen = 18;
 
     managed->SelectAll(&window, &app);
@@ -1160,7 +1160,7 @@ static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
     utassert(!managed->HasSelection(&window));
 
     WindowSelectionFree(&window);
-    window.paint.texts.Reset();
+    VecReset(window.paint.texts);
     EntityDropAll(&app);
     AppGlobalClear(&app);
 }

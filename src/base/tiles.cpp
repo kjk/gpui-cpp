@@ -51,7 +51,7 @@ int TilesAdd(TilesState* s, int panel, Bounds bounds) {
     TileItem it;
     it.panel = panel;
     it.bounds = bounds;
-    s->items.Append(it);
+    VecAppend(s->items, it);
     return s->items.len - 1;
 }
 

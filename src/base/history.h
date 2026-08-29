@@ -65,8 +65,8 @@ struct History {
     bool CanRedo() const { return redos.len > 0; }
 
     void Clear() {
-        undos.Clear();
-        redos.Clear();
+        VecClear(undos);
+        VecClear(redos);
     }
 
     void Push(I item) {
@@ -82,7 +82,7 @@ struct History {
             RetainDifferent(&redos, item);
         }
         item.SetVersion(nextVersion);
-        undos.Append(item);
+        VecAppend(undos, item);
         // Deliberately do not clear redos. Upstream keeps them when a new
         // item is pushed after undo; its own test then redoes the older path.
     }
@@ -143,17 +143,17 @@ struct History {
         }
         I first = (*from)[from->len - 1];
         from->len--;
-        changes.Append(first);
+        VecAppend(changes, first);
         uint64_t pickedVersion = first.Version();
         // This is deliberately the Rust implementation's whole-stack test,
         // followed by a pop, rather than merely looking at the last item.
         while (ContainsVersion(*from, pickedVersion)) {
             I change = (*from)[from->len - 1];
             from->len--;
-            changes.Append(change);
+            VecAppend(changes, change);
         }
         for (int i = 0; i < changes.len; i++) {
-            to->Append(changes[i]);
+            VecAppend(*to, changes[i]);
         }
         return changes;
     }

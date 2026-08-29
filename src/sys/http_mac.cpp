@@ -128,7 +128,7 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
             return false; // refused, not truncated
         }
         if (n > 0) {
-            uint8_t* dst = out->body.AppendBlanks((int)n);
+            uint8_t* dst = VecAppendBlanks(out->body, (int)n);
             if (!dst) {
                 return false;
             }

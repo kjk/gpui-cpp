@@ -202,13 +202,13 @@ static bool ReadFileAll(const char* path, Vec<uint8_t>* out) {
         return false;
     }
     rewind(f);
-    out->Reset();
+    VecReset(*out);
     int n = (int)size;
     if (n == 0) {
         fclose(f);
         return true;
     }
-    uint8_t* buf = out->AppendBlanks(n);
+    uint8_t* buf = VecAppendBlanks(*out, n);
     if (!buf) {
         fclose(f);
         return false;
@@ -216,7 +216,7 @@ static bool ReadFileAll(const char* path, Vec<uint8_t>* out) {
     size_t got = fread(buf, 1, (size_t)n, f);
     fclose(f);
     if ((int)got != n) {
-        out->Reset();
+        VecReset(*out);
         return false;
     }
     return true;

@@ -118,13 +118,13 @@ static void AControlCanOwnThePressWithoutACallback() {
     HitRect outer = {};
     outer.bounds = {0, 0, 100, 100};
     outer.onMouseDown = ListenTo(recorder, &MouseDownRecorder::OnDown);
-    win->paint.hits.Append(outer);
+    VecAppend(win->paint.hits, outer);
 
     HitRect inner = {};
     inner.bounds = {10, 10, 50, 50};
     inner.parent = 0;
     inner.stopMouseDown = true;
-    win->paint.hits.Append(inner);
+    VecAppend(win->paint.hits, inner);
 
     PlatformInput press = {};
     press.kind = PlatformInputKind::MouseDown;
@@ -140,7 +140,7 @@ static void AControlCanOwnThePressWithoutACallback() {
     WindowDispatchInput(win, &press);
     utassert(recorder.Get(&app)->calls == 1);
 
-    win->paint.hits.Reset();
+    VecReset(win->paint.hits);
     delete win;
     EntityDropAll(&app);
 }

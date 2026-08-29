@@ -83,13 +83,13 @@ int TreeAddItem(TreeState* s, Str id, Str label, int parent) {
         // A folder is an item something else calls its parent.
         s->items[parent].folder = true;
     }
-    s->items.Append(it);
+    VecAppend(s->items, it);
     return ix;
 }
 
 // add_entry: the item, then the children of an expanded one.
 static void TreeAddEntry(TreeState* s, int item) {
-    s->entries.Append(item);
+    VecAppend(s->entries, item);
     if (!s->items[item].expanded) {
         return;
     }
@@ -140,7 +140,7 @@ void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count) {
     s->items.len = 0;
     if (items && count > 0) {
         for (int i = 0; i < count; i++) {
-            s->items.Append(items[i]);
+            VecAppend(s->items, items[i]);
         }
     }
     s->selected = -1;
@@ -226,7 +226,7 @@ static void TreeExpandAncestors(TreeState* s, Ctx* cx, int item) {
     // it in reverse, so observers see the root before its descendant.
     Vec<int> ancestors;
     for (int p = s->items[item].parent; p >= 0; p = s->items[p].parent) {
-        ancestors.Append(p);
+        VecAppend(ancestors, p);
     }
     for (int i = ancestors.len - 1; i >= 0; i--) {
         TreeItem& ancestor = s->items[ancestors[i]];
@@ -237,7 +237,7 @@ static void TreeExpandAncestors(TreeState* s, Ctx* cx, int item) {
             }
         }
     }
-    ancestors.Reset();
+    VecReset(ancestors);
 }
 
 int TreeRevealItem(TreeState* s, Ctx* cx, Str id,

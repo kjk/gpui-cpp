@@ -463,14 +463,14 @@ bool DrawOpsViewBox(const void* data, int dataLen, Size* out) {
 
 void DrawOpsBuilder::Op(DrawOp op) {
     uint16_t v = (uint16_t)op;
-    uint8_t* p = data.AppendBlanks(2);
+    uint8_t* p = VecAppendBlanks(data, 2);
     if (p) {
         memcpy(p, &v, 2);
     }
 }
 
 void DrawOpsBuilder::F2(float a, float b) {
-    uint8_t* p = data.AppendBlanks(8);
+    uint8_t* p = VecAppendBlanks(data, 8);
     if (p) {
         memcpy(p, &a, 4);
         memcpy(p + 4, &b, 4);
@@ -478,7 +478,7 @@ void DrawOpsBuilder::F2(float a, float b) {
 }
 
 void DrawOpsBuilder::U32(uint32_t v) {
-    uint8_t* p = data.AppendBlanks(4);
+    uint8_t* p = VecAppendBlanks(data, 4);
     if (p) {
         memcpy(p, &v, 4);
     }
@@ -500,7 +500,7 @@ void DrawOpsBuilder::StrokeWidth(float w) {
     // The one argument in the format that is not half of a pair, so it goes
     // in with its opcode rather than asking for a single-float write.
     uint16_t op = kOpStrokeWidth;
-    uint8_t* p = data.AppendBlanks(6);
+    uint8_t* p = VecAppendBlanks(data, 6);
     if (p) {
         memcpy(p, &op, 2);
         memcpy(p + 2, &w, 4);
@@ -562,7 +562,7 @@ void DrawOpsBuilder::Text(float x, float y, float size, float textLength,
     F2(size, textLength);
     U32(flags);
     uint16_t len = (uint16_t)n;
-    uint8_t* p = data.AppendBlanks(2 + n);
+    uint8_t* p = VecAppendBlanks(data, 2 + n);
     if (p) {
         memcpy(p, &len, 2);
         memcpy(p + 2, s.s, (size_t)n);

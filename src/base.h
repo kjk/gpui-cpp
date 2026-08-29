@@ -13,6 +13,7 @@
 
 // C/C++ standard headers we use often
 #include <cstdint>
+#include <cstddef> // for offsetof
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -643,24 +644,175 @@ void VecDbgArenaDeath(int id, int len, int totalCap, int segCount);
 template <typename T>
 struct Vec;
 
+// Vec has no methods beyond what cannot be a free function (the ctors,
+// operator=, the destructor, operator[] and begin/end). Everything else is a
+// Vec*() free function, declared below in sections and defined after Vec in
+// the same order.
+
+// Makes a template parameter non-deduced, so VecAppend(Vec<Base*>&,
+// Derived*) still picks T from the vec and converts the element.
 template <typename T>
-bool VecReserve(Arena* arena, T& v, int wantedSize);
+struct VecIdentity {
+    using type = T;
+};
+template <typename T>
+using VecIdentityT = typename VecIdentity<T>::type;
+
+// Vec<T> with its element type erased. Vec<T>'s layout does not depend on T,
+// so VecNT() is a cast rather than a copy and the shims below cost nothing
+// beyond passing elSize. The storage bodies live in base.cpp and are compiled
+// once rather than once per element type.
+#if defined(__GNUC__) || defined(__clang__)
+// The erased operations access a Vec<T> through this layout-compatible type.
+// GCC's optimizer needs the aliasing contract stated explicitly; without it,
+// an optimized Linux build can retain fields across VecReset() and free the
+// old allocation a second time.
+struct __attribute__((__may_alias__)) VecNonTemplated {
+#else
+struct VecNonTemplated {
+#endif
+    int len;
+    int cap;
+    void* els;
+};
+
+bool VecReserveNT(Arena* arena, VecNonTemplated* v, int elSize, int wantedSize);
+void* VecInsertSpaceNT(VecNonTemplated* v, int elSize, int idx, int count);
+bool VecResizeNT(VecNonTemplated* v, int elSize, int newSize);
+void VecRemoveAtNT(VecNonTemplated* v, int elSize, int idx, int count);
+void VecRemoveAtFastNT(VecNonTemplated* v, int elSize, int idx);
+void VecFreeElementsNT(VecNonTemplated* v);
+void VecClearNT(VecNonTemplated* v, int elSize);
+void* VecTakeNT(VecNonTemplated* v, int elSize);
+void VecCopyFromNT(VecNonTemplated* v, int elSize, int srcLen,
+                   const void* srcEls, bool zeroTail);
 
 template <typename T>
-inline T* VecReserve(Vec<T>& v, int capNeeded);
+VecNonTemplated* VecNT(Vec<T>& v);
 
+// ─── storage ─────────────────────────────────────────────────────────────
+
+// Ensure capacity is at least n for a vec-like {len,cap,els}. Returns the
+// elements, or null if it could not allocate. A never-allocated vec also
+// returns null for n == 0 because there are no elements to point at.
+template <typename T>
+auto VecReserve(Arena* arena, T& v, int n) -> decltype(v.els);
+
+// Heap Vec: same growth and return value.
+template <typename T>
+inline T* VecReserve(Vec<T>& v, int n);
+
+// Set the logical length, growing if necessary and zeroing unused capacity.
+template <typename T>
+bool VecResize(Vec<T>& v, int newSize);
+
+// Open a hole of count elements at idx and return its first element.
 template <typename T>
 T* VecInsertSpace(Vec<T>& v, int idx, int count);
+
+// Empty the vec but retain its storage for reuse.
+template <typename T>
+void VecClear(Vec<T>& v);
+
+// Free the storage and leave len, cap and els all zero.
+template <typename T>
+void VecReset(Vec<T>& v);
+
+// free() every element, then reset. Only for a vec of pointers.
+template <typename T>
+void VecFreeMembers(Vec<T>& v);
+
+// Hand ownership of the allocation to the caller without copying it.
+template <typename T>
+T* VecTake(Vec<T>& v);
+
+// Return the storage without giving it up.
+template <typename T>
+T* VecData(const Vec<T>& v);
+
+// ─── adding ──────────────────────────────────────────────────────────────
+
+template <typename T>
+bool VecAppend(Vec<T>& v, const VecIdentityT<T>& el);
+
+// Append every element of other.
+template <typename T>
+bool VecAppendVec(Vec<T>& v, const Vec<T>& other);
+
+// Append count elements from src.
+template <typename T>
+bool VecAppendN(Vec<T>& v, const T* src, int count);
+
+// Append count zeroed elements.
+template <typename T>
+T* VecAppendBlanks(Vec<T>& v, int count);
+
+// Insert el at idx, moving the rest up.
+template <typename T>
+bool VecInsertAt(Vec<T>& v, int idx, const VecIdentityT<T>& el);
+
+// Append to any vec-shaped struct, using an arena or the heap.
+template <typename T, typename E>
+bool VecPush(Arena* arena, T& v, E el);
+
+// ─── removing ────────────────────────────────────────────────────────────
+
+// Remove count elements at idx, moving the rest down.
+template <typename T>
+void VecRemoveAtN(Vec<T>& v, int idx, int count);
+
+// Remove the element at idx.
+template <typename T>
+void VecRemoveAt(Vec<T>& v, int idx);
+
+// Remove and return the element at idx.
+template <typename T>
+T VecPopAt(Vec<T>& v, int idx);
+
+// Fill the hole with the last element. This changes order and requires an
+// element type that can be moved with memcpy().
+template <typename T>
+void VecRemoveAtFast(Vec<T>& v, int idx);
+
+// Drop the last element; a no-op for an empty vec.
+template <typename T>
+void VecRemoveLast(Vec<T>& v);
+
+// Remove and return the last element; the vec must not be empty.
+template <typename T>
+T VecPop(Vec<T>& v);
+
+// Remove the first matching element and return its old index, or -1.
+template <typename T>
+int VecRemove(Vec<T>& v, const T& el);
+
+// ─── reading ─────────────────────────────────────────────────────────────
+
+template <typename T>
+bool VecIsValidIndex(const Vec<T>& v, int idx);
+
+// The last element; the vec must not be empty.
+template <typename T>
+T& VecLast(const Vec<T>& v);
+
+// Index of the first matching element at or after startAt, or -1.
+template <typename T>
+int VecFind(const Vec<T>& v, const T& el, int startAt = 0);
+
+template <typename T>
+bool VecContains(const Vec<T>& v, const T& el);
+
+// ─── the vec itself ──────────────────────────────────────────────────────
 
 template <typename T>
 struct Vec {
     int len = 0;
     // Negative means the elements sit in storage this vec does not own —
-    // `VecUseInline` put them in an array on the caller's stack — and the
-    // capacity is `-cap`. `Cap()` is the one to read; the sign is only for
-    // the two places that have to tell owned from borrowed, growing and
-    // freeing. It rides in the sign rather than in a field of its own
-    // because a `Vec` is 16 bytes and is a member of a great many structs.
+    // `VecUseExternalBuffer` put them in an array on the caller's stack — and
+    // the capacity is `-cap`. The sign is only for the two places that have
+    // to tell owned from borrowed, growing and freeing. It rides in the sign
+    // rather than in a field of its own because a release Vec is 16 bytes and
+    // is a member of a great many structs.
     //
     // A vec that borrows leaves the borrowed block alone forever: the first
     // append past it allocates and copies, and nothing frees the array. The
@@ -673,137 +825,73 @@ struct Vec {
     int dbgId = 0;
 #endif
 
-    int Cap() const { return cap < 0 ? -cap : cap; }
-
-    void FreeEls() {
-        if (els) {
-            if (cap > 0) {
-                Free(nullptr, (void*)els);
-            } else {
-                // Borrowed: let go of it without freeing it, and stop
-                // claiming a capacity that no longer has anything behind it.
-                cap = 0;
-            }
-            els = nullptr;
-        }
-    }
-
-    void Reset() {
-        FreeEls();
-        len = 0;
-        cap = 0;
-    }
-
-    void Clear() {
-        len = 0;
-        if (els && Cap() > 0) {
-            memset((void*)els, 0, (size_t)Cap() * sizeof(T));
-        }
-    }
-
     explicit Vec(GPUI_VEC_DBG_ARGS0) GPUI_VEC_DBG_INIT('V') {}
 
     // Still a copy constructor in a debug build: every parameter after the
     // first has a default, and those three are how the copy gets the
     // caller's location rather than this line in base.h.
     Vec(const Vec& other GPUI_VEC_DBG_ARGS) GPUI_VEC_DBG_INIT('V') {
-        VecReserve(*this, other.len);
-        len = other.len;
-        if (other.len > 0 && other.els && els) {
-            memcpy((void*)els, (const void*)other.els,
-                   sizeof(T) * (size_t)other.len);
-        }
+        VecCopyFromNT(VecNT(*this), (int)sizeof(T), other.len,
+                      (const void*)other.els, false);
     }
 
     Vec& operator=(const Vec& other) {
         if (this == &other) {
             return *this;
         }
-        Reset();
-        VecReserve(*this, other.len);
-        len = other.len;
-        if (other.len > 0) {
-            memcpy((void*)els, (const void*)other.els, sizeof(T) * (size_t)len);
-            memset((void*)(els + len), 0, sizeof(T) * (size_t)(Cap() - len));
-        }
+        VecReset(*this);
+        VecCopyFromNT(VecNT(*this), (int)sizeof(T), other.len,
+                      (const void*)other.els, true);
         return *this;
     }
 
     ~Vec() {
 #if defined(DEBUG)
-        VecDbgDeath(dbgId, len, Cap());
+        VecDbgDeath(dbgId, len, cap < 0 ? -cap : cap);
 #endif
-        FreeEls();
+        VecReset(*this);
     }
 
     T& operator[](int idx) const { return els[idx]; }
 
-    bool InsertAt(int idx, const T& el) {
-        T* p = VecInsertSpace(*this, idx, 1);
-        if (!p) {
-            return false;
-        }
-        p[0] = el;
-        return true;
-    }
-
-    bool Append(const T& el) { return InsertAt(len, el); }
-
-    T* AppendBlanks(int count) { return VecInsertSpace(*this, len, count); }
+    using iterator = T*;
+    using const_iterator = const T*;
+    iterator begin() { return els; }
+    const_iterator begin() const { return els; }
+    iterator end() { return els ? els + len : nullptr; }
+    const_iterator end() const { return els ? els + len : nullptr; }
 };
 
-// Doubling, but never from a first capacity of one. `max(cap * 2, wanted)`
-// out of an empty vec hands back 1, so a vec that ends up holding four
-// elements reallocates and memcpys three times on the way there — and
-// `bun cmd/vec-log.ts` says that is where most of this tree's growth events
-// are. Six in ten vecs never allocate at all, so what the first allocation
-// costs the ones that do is the only thing being traded here.
-//
-// The floor is in bytes rather than in elements, which is Rust's
-// `RawVec::MIN_NON_ZERO_CAP`: four 192-byte flex items is a sensible first
-// block and four 4 KB ones is not. Replayed on its own against the taffy and
-// markdown logs, the floor takes flexbox layout from 17.9 MB of memcpy to
-// 3.4 MB and markdown from 268k growth events to 174k. A floor of 8, or a
-// growth factor of 1.5, was worse on one axis or the other in every run.
-inline int VecNextCap(int cap, int wanted, int elSize) {
-    if (cap == 0) {
-        int floorCap = elSize == 1 ? 8 : elSize <= 1024 ? 4 : 1;
-        return std::max(floorCap, wanted);
-    }
-    return std::max(cap * 2, wanted);
+// The erased view is a cast, not a copy. Debug Vec adds one field after these
+// three; their offsets still do not depend on T.
+static_assert(offsetof(Vec<char>, len) == offsetof(VecNonTemplated, len));
+static_assert(offsetof(Vec<char>, cap) == offsetof(VecNonTemplated, cap));
+static_assert(offsetof(Vec<char>, els) == offsetof(VecNonTemplated, els));
+static_assert(offsetof(Vec<double>, els) == offsetof(VecNonTemplated, els));
+#if !defined(DEBUG)
+static_assert(sizeof(Vec<char>) == sizeof(VecNonTemplated));
+static_assert(sizeof(Vec<double>) == sizeof(VecNonTemplated));
+#endif
+
+template <typename T>
+inline int len(const Vec<T>& v) {
+    return v.len;
 }
 
 template <typename T>
-bool VecReserve(Arena* arena, T& v, int wantedSize) {
-    // `v` is a `Vec<T>` or one of the two vec-shaped structs (`StrBuilder`,
-    // the executor's queue), so the borrowed-storage sign is spelled out here
-    // rather than read off a `Cap()` those do not have. A positive cap in
-    // those is the only case they ever reach.
-    int elSize = (int)sizeof(*v.els);
-    int curCap = v.cap < 0 ? -v.cap : v.cap;
-    if (wantedSize <= curCap) {
-        return true;
+VecNonTemplated* VecNT(Vec<T>& v) {
+    return (VecNonTemplated*)&v;
+}
+
+template <typename T>
+auto VecReserve(Arena* arena, T& v, int n) -> decltype(v.els) {
+    static_assert(offsetof(T, len) == offsetof(VecNonTemplated, len));
+    static_assert(offsetof(T, cap) == offsetof(VecNonTemplated, cap));
+    static_assert(offsetof(T, els) == offsetof(VecNonTemplated, els));
+    if (!VecReserveNT(arena, (VecNonTemplated*)&v, (int)sizeof(*v.els), n)) {
+        return nullptr;
     }
-    int newCap = VecNextCap(curCap, wantedSize, elSize);
-    if (v.cap < 0) {
-        // Leaving borrowed storage: there is nothing to realloc, so take a
-        // block of our own and copy what is live into it. The array we were
-        // lent is the caller's to outlive us.
-        auto* borrowed = v.els;
-        v.els = nullptr;
-        v.cap = 0;
-        if (!VecRealloc(arena, (void**)&v.els, 0, &v.cap, newCap, elSize)) {
-            v.els = borrowed;
-            v.cap = -curCap;
-            return false;
-        }
-        if (v.len > 0) {
-            memcpy((void*)v.els, (const void*)borrowed,
-                   (size_t)v.len * (size_t)elSize);
-        }
-        return true;
-    }
-    return VecRealloc(arena, (void**)&v.els, v.len, &v.cap, newCap, elSize);
+    return v.els;
 }
 
 // Lend `v` an array to start in, instead of its first allocation. The vec
@@ -812,7 +900,7 @@ bool VecReserve(Arena* arena, T& v, int wantedSize) {
 //
 //     FlexLine lineBuf[4];
 //     Vec<FlexLine> flexLines;
-//     VecUseInline(flexLines, lineBuf);
+//     VecUseExternalBuffer(flexLines, lineBuf);
 //
 // It appends into `buf` until `buf` is full, and the append past that
 // allocates and copies the way a first allocation would, leaving `buf`
@@ -821,44 +909,207 @@ bool VecReserve(Arena* arena, T& v, int wantedSize) {
 // then have its storage taken over by hand (`other.els = v.els; other.cap =
 // v.cap;`), since the sign is what says the block is not the heap's.
 template <typename T, int N>
-inline void VecUseInline(Vec<T>& v, T (&buf)[N]) {
+inline void VecUseExternalBuffer(Vec<T>& v, T (&buf)[N]) {
     v.els = buf;
     v.cap = -N;
     v.len = 0;
 }
 
 template <typename T>
-inline T* VecReserve(Vec<T>& v, int capNeeded) {
+inline T* VecReserve(Vec<T>& v, int n) {
 #if defined(DEBUG)
-    // The same test the generic one makes, one line ahead of it, so the
-    // growth is recorded with the capacity it is about to leave behind.
-    if (capNeeded > v.Cap()) {
-        VecDbgGrow(v.dbgId, v.len, v.Cap(), capNeeded,
-                   VecNextCap(v.Cap(), capNeeded, (int)sizeof(T)));
+    int curCap = v.cap < 0 ? -v.cap : v.cap;
+    if (n > curCap) {
+        int floorCap = sizeof(T) == 1 ? 8 : sizeof(T) <= 1024 ? 4 : 1;
+        int next =
+            curCap == 0 ? std::max(floorCap, n) : std::max(curCap * 2, n);
+        VecDbgGrow(v.dbgId, v.len, curCap, n, next);
     }
 #endif
-    if (!VecReserve(nullptr, v, capNeeded)) {
-        return nullptr;
-    }
-    return v.els;
+    return VecReserve(nullptr, v, n);
 }
 
 template <typename T>
 T* VecInsertSpace(Vec<T>& v, int idx, int count) {
-    int newLen = std::max(v.len, idx) + count;
-    T* ok = VecReserve(v, newLen);
-    if (!ok) {
-        return nullptr;
+    return (T*)VecInsertSpaceNT(VecNT(v), (int)sizeof(T), idx, count);
+}
+
+template <typename T>
+bool VecResize(Vec<T>& v, int newSize) {
+    return VecResizeNT(VecNT(v), (int)sizeof(T), newSize);
+}
+
+template <typename T>
+void VecClear(Vec<T>& v) {
+    VecClearNT(VecNT(v), (int)sizeof(T));
+}
+
+template <typename T>
+void VecReset(Vec<T>& v) {
+    VecFreeElementsNT(VecNT(v));
+}
+
+template <typename T>
+void VecFreeMembers(Vec<T>& v) {
+    for (int i = 0; i < v.len; i++) {
+        free(v.els[i]);
     }
-    T* res = &(v.els[idx]);
-    if (v.len > idx) {
-        T* src = v.els + idx;
-        T* dst = v.els + idx + count;
-        memmove((void*)dst, (const void*)src,
-                (size_t)(v.len - idx) * sizeof(T));
+    VecReset(v);
+}
+
+template <typename T>
+T* VecTake(Vec<T>& v) {
+    return (T*)VecTakeNT(VecNT(v), (int)sizeof(T));
+}
+
+template <typename T>
+T* VecData(const Vec<T>& v) {
+    return v.els;
+}
+
+template <typename T>
+bool VecAppend(Vec<T>& v, const VecIdentityT<T>& el) {
+    return VecInsertAt(v, v.len, el);
+}
+
+template <typename T>
+bool VecAppendVec(Vec<T>& v, const Vec<T>& other) {
+    return VecAppendN(v, other.els, other.len);
+}
+
+template <typename T>
+bool VecAppendN(Vec<T>& v, const T* src, int count) {
+    if (count == 0) {
+        return true;
     }
-    v.len = newLen;
-    return res;
+    T* dst = VecInsertSpace(v, v.len, count);
+    if (!dst) {
+        return false;
+    }
+    memcpy((void*)dst, (const void*)src, (size_t)count * sizeof(T));
+    return true;
+}
+
+template <typename T>
+T* VecAppendBlanks(Vec<T>& v, int count) {
+    return VecInsertSpace(v, v.len, count);
+}
+
+template <typename T>
+bool VecInsertAt(Vec<T>& v, int idx, const VecIdentityT<T>& el) {
+    T* p = VecInsertSpace(v, idx, 1);
+    if (!p) {
+        return false;
+    }
+    p[0] = el;
+    return true;
+}
+
+template <typename T, typename E>
+bool VecPush(Arena* arena, T& v, E el) {
+    if (!VecReserve(arena, v, v.len + 1)) {
+        return false;
+    }
+    v.els[v.len++] = el;
+    return true;
+}
+
+template <typename T>
+void VecRemoveAtN(Vec<T>& v, int idx, int count) {
+    VecRemoveAtNT(VecNT(v), (int)sizeof(T), idx, count);
+}
+
+template <typename T>
+void VecRemoveAt(Vec<T>& v, int idx) {
+    VecRemoveAtN(v, idx, 1);
+}
+
+template <typename T>
+T VecPopAt(Vec<T>& v, int idx) {
+    T el = v.els[idx];
+    VecRemoveAt(v, idx);
+    return el;
+}
+
+template <typename T>
+void VecRemoveAtFast(Vec<T>& v, int idx) {
+    VecRemoveAtFastNT(VecNT(v), (int)sizeof(T), idx);
+}
+
+template <typename T>
+void VecRemoveLast(Vec<T>& v) {
+    if (v.len > 0) {
+        VecRemoveAt(v, v.len - 1);
+    }
+}
+
+template <typename T>
+T VecPop(Vec<T>& v) {
+    T el = v.els[v.len - 1];
+    VecRemoveAtFast(v, v.len - 1);
+    return el;
+}
+
+template <typename T>
+int VecRemove(Vec<T>& v, const T& el) {
+    int i = VecFind(v, el);
+    if (i >= 0) {
+        VecRemoveAt(v, i);
+    }
+    return i;
+}
+
+template <typename T>
+inline void DeleteVecMembers(Vec<T>& v) {
+    for (T& el : v) {
+        delete el;
+    }
+    VecClear(v);
+}
+
+template <typename T>
+bool VecIsValidIndex(const Vec<T>& v, int idx) {
+    return idx >= 0 && idx < v.len;
+}
+
+template <typename T>
+T& VecLast(const Vec<T>& v) {
+    return v.els[v.len - 1];
+}
+
+template <typename T>
+int VecFind(const Vec<T>& v, const T& el, int startAt) {
+    for (int i = startAt; i < v.len; i++) {
+        if (v.els[i] == el) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+template <typename T>
+bool VecContains(const Vec<T>& v, const T& el) {
+    return VecFind(v, el) >= 0;
+}
+
+template <typename T>
+struct VecSortCmp {
+    using Fn = int (*)(const T* a, const T* b);
+};
+
+template <typename T>
+void VecSort(Vec<T>& v, typename VecSortCmp<T>::Fn cmpFunc) {
+    if (v.len > 0) {
+        auto cmp = (int (*)(const void*, const void*))cmpFunc;
+        qsort((void*)v.els, (size_t)v.len, sizeof(T), cmp);
+    }
+}
+
+template <typename T>
+void VecReverse(Vec<T>& v) {
+    for (int i = 0; i < v.len / 2; i++) {
+        std::swap(v.els[i], v.els[v.len - i - 1]);
+    }
 }
 
 // An array that grows into an arena. `Vec<T>` frees its storage in its
@@ -1474,10 +1725,12 @@ int SeqStrCount(SeqStrings strs);
 void StrLowerAscii(char* s);
 
 struct StrBuilder {
-    Arena* a = nullptr;
-    char* els = nullptr;
+    // Vec-compatible prefix, so generic vec storage helpers can erase this
+    // type without copying its fields in and out.
     int len = 0;
     int cap = 0;
+    char* els = nullptr;
+    Arena* a = nullptr;
     Str buf;
 
     explicit StrBuilder(Str externalBuf = {});

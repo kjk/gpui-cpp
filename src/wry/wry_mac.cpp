@@ -544,7 +544,7 @@ static void FlushPendingScripts(WebView* wv) {
         [wv->webview evaluateJavaScript:ToNS(wv->pendingScripts[i]) completionHandler:nil];
         StrFree(wv->pendingScripts[i]);
     }
-    wv->pendingScripts.Reset();
+    VecReset(wv->pendingScripts);
     wv->pendingOpen = false;
 }
 
@@ -570,14 +570,14 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task) {
         Header h;
         h.name = FromNSTemp(name);
         h.value = FromNSTemp(all[name]);
-        headerStore.Append(h);
+        VecAppend(headerStore, h);
     }
 
     // The body, whether it came whole or as a stream.
     Vec<uint8_t> bodyStore;
     NSData* body = request.HTTPBody;
     if (body) {
-        uint8_t* dst = bodyStore.AppendBlanks((int)body.length);
+        uint8_t* dst = VecAppendBlanks(bodyStore, (int)body.length);
         if (dst) {
             memcpy(dst, body.bytes, body.length);
         }
@@ -590,7 +590,7 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task) {
             if (got <= 0) {
                 break;
             }
-            uint8_t* dst = bodyStore.AppendBlanks((int)got);
+            uint8_t* dst = VecAppendBlanks(bodyStore, (int)got);
             if (!dst) {
                 break;
             }
@@ -621,8 +621,8 @@ static void HandleSchemeTask(WebView* wv, int index, id<WKURLSchemeTask> task) {
         Respond(responder, &response);
     }
 
-    headerStore.FreeEls();
-    bodyStore.FreeEls();
+    VecReset(headerStore);
+    VecReset(bodyStore);
 }
 
 // `didReceiveResponse` / `didReceiveData` / `didFinish`, on the main thread
@@ -819,7 +819,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         p.ctx = attrs->customProtocols[i].ctx;
         p.handler = attrs->customProtocols[i].handler;
         int protocolIndex = wv->protocols.len;
-        wv->protocols.Append(p);
+        VecAppend(wv->protocols, p);
 
         GpuiWrySchemeHandler* handler = [[GpuiWrySchemeHandler alloc] init];
         handler.wv = wv;
@@ -1017,11 +1017,11 @@ void WebViewFree(WebView* wv) {
     for (int i = 0; i < wv->protocols.len; i++) {
         StrFree(wv->protocols[i].name);
     }
-    wv->protocols.FreeEls();
+    VecReset(wv->protocols);
     for (int i = 0; i < wv->pendingScripts.len; i++) {
         StrFree(wv->pendingScripts[i]);
     }
-    wv->pendingScripts.FreeEls();
+    VecReset(wv->pendingScripts);
     StrFree(wv->id);
     // ARC releases the delegates, the webview and the collections as the
     // struct's members go out of scope.
@@ -1041,7 +1041,7 @@ bool WebViewEval(WebView* wv, Str js) {
     // An eval before the first navigation commits is held, which is what
     // `pending_scripts` is; didCommitNavigation replays them.
     if (wv->pendingOpen) {
-        wv->pendingScripts.Append(StrDup(js));
+        VecAppend(wv->pendingScripts, StrDup(js));
         return true;
     }
     [wv->webview evaluateJavaScript:ToNS(js) completionHandler:nil];
@@ -1059,7 +1059,7 @@ bool WebViewEvalWithCallback(WebView* wv, Str js, void* ctx,
     if (wv->pendingOpen) {
         // A callback cannot be queued the way a bare script can: Rust's
         // pending list holds strings and drops the callback here too.
-        wv->pendingScripts.Append(StrDup(js));
+        VecAppend(wv->pendingScripts, StrDup(js));
         return true;
     }
     [wv->webview evaluateJavaScript:ToNS(js)

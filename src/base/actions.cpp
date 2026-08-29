@@ -73,7 +73,7 @@ void CancelInitKeys(const char* context) {
         return;
     }
     CancelBound bound = {id, gen};
-    gCancelBound.Append(bound);
+    VecAppend(gCancelBound, bound);
     KeyBinding b = {"escape", action::Cancel(), context};
     KeymapBind(&b, 1);
 }

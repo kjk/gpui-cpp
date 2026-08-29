@@ -11,7 +11,7 @@ struct UiGlobalState {
     Vec<EntityId> textViewStateStack;
     uint64_t selectionDocumentOrder = 1;
 
-    ~UiGlobalState() { textViewStateStack.Reset(); }
+    ~UiGlobalState() { VecReset(textViewStateStack); }
 };
 
 UiGlobalState* UiGlobalStateOf(App* app);

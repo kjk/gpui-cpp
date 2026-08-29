@@ -704,7 +704,7 @@ static void ShellHostModulesBridgePlainDataAndPromises() {
     App app;
     Window window;
     window.app = &app;
-    app.windows.Append(&window);
+    VecAppend(app.windows, &window);
     component::Init(&app);
     ExecInit();
     ShellError error = {};
@@ -1485,7 +1485,7 @@ static void ShellSchedulerResumesPromisesInTaskScope() {
                            StrL("scheduler-cancel.js"), &error));
     utassert(runtime->LiveTasks() == 0);
     EntityDrop(&app, view.id);
-    window.timers.Reset();
+    VecReset(window.timers);
     ArenaDelete(frame);
     runtime->Release();
     ShellErrorClear(&error);
@@ -1563,7 +1563,7 @@ static void SettleStorageTestWaiters(Vec<StorageWaiter*>* ready,
         delete waiter;
         settle.Call(outcome);
     }
-    ready->Reset();
+    VecReset(*ready);
 }
 
 static void ShellStorageWritesRevisionsInOrderAndFlushes() {
@@ -1641,7 +1641,7 @@ static void ShellStorageWritesRevisionsInOrderAndFlushes() {
     App app;
     Window window;
     window.app = &app;
-    app.windows.Append(&window);
+    VecAppend(app.windows, &window);
     component::Init(&app);
     ExecInit();
     ShellError error = {};
@@ -1705,7 +1705,7 @@ static void ShellProcessRunIsBoundedAndPromiseBased() {
     App app;
     Window window;
     window.app = &app;
-    app.windows.Append(&window);
+    VecAppend(app.windows, &window);
     component::Init(&app);
     ExecInit();
     Str commands[] = {StrL("cmd.exe")};
@@ -1821,7 +1821,7 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
     App app;
     Window window;
     window.app = &app;
-    app.windows.Append(&window);
+    VecAppend(app.windows, &window);
     component::Init(&app);
     ExecInit();
     ShellError error = {};
@@ -1903,7 +1903,7 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
         utassert(AssetsLoad(StrL("icons/check.svg"), &bytes));
         utassert(bytes.len == 6 &&
                  memcmp(bytes.els, "<svg/>", 6) == 0);
-        bytes.Reset();
+        VecReset(bytes);
         Str relative;
         utassert(!assets.Resolve(StrL("../secret.svg"), &relative, &error));
         StrFree(error);
@@ -1912,7 +1912,7 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
         utassert(assets.List(StrL("icons"), &names, &error));
         utassert(names.len == 1 && StrEq(names[0], "check.svg"));
         for (int i = 0; i < names.len; i++) StrFree(names[i]);
-        names.Reset();
+        VecReset(names);
     }
     utassert(AssetsRootCount() == 0);
     utassert(FsRun(FsOperation::RemoveFile, Str(rootName),
@@ -2008,13 +2008,13 @@ static bool ShellFetchFixture(Str url, HttpRsp* out) {
     if (StrEq(url, "https://cdn.example.test/result")) {
         out->status = 201;
         const char* body = "redirected";
-        memcpy(out->body.AppendBlanks(10), body, 10);
+        memcpy(VecAppendBlanks(out->body, 10), body, 10);
         return true;
     }
     if (StrEq(url, "https://api.example.test/data")) {
         out->status = 200;
         const char* body = "{\"answer\":42}";
-        memcpy(out->body.AppendBlanks(13), body, 13);
+        memcpy(VecAppendBlanks(out->body, 13), body, 13);
         return true;
     }
     return false;
@@ -2070,7 +2070,7 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     App app;
     Window window;
     window.app = &app;
-    app.windows.Append(&window);
+    VecAppend(app.windows, &window);
     component::Init(&app);
     ExecInit();
     PolicyUpdateDefaultCapabilities(initialOnly);

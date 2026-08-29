@@ -117,7 +117,7 @@ Lsp& Lsp::Completion(const CompletionProvider& provider) {
 
 Lsp& Lsp::AddCodeAction(const CodeActionProvider& provider) {
     if (provider.IsValid()) {
-        codeActionProviders.Append(provider);
+        VecAppend(codeActionProviders, provider);
     }
     return *this;
 }
@@ -159,7 +159,7 @@ void Lsp::Install(InputState* input) {
         return;
     }
     // Reinstalling capabilities replaces the server's provider list.
-    state->codeActionProviders.Clear();
+    VecClear(state->codeActionProviders);
     state->codeActionProvider = nullptr;
     state->codeActionData = nullptr;
     completionProvider.Install(state, completionMenu);
@@ -212,8 +212,8 @@ int Lsp::SemanticTokensForRange(
         return 0;
     }
     int n = gpui::SemanticTokensForRange(
-        state->semanticTokens.els, state->semanticTokens.len,
-        InputValue(state), visible, ranges.els, ranges.Cap());
+        state->semanticTokens.els, state->semanticTokens.len, InputValue(state),
+        visible, ranges.els, ranges.cap);
     int total = 0;
     for (int i = 0; i < n; i++) {
         TextSpan span;

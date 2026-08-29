@@ -7,7 +7,7 @@ PanelRegistry::PanelRegistry() {
 }
 
 PanelRegistry::~PanelRegistry() {
-    items.Reset();
+    VecReset(items);
     if (arena) {
         ArenaDelete(arena);
     }
@@ -29,7 +29,7 @@ void PanelRegistry::Register(Str panelName, PanelRegistryBuild build,
     entry.name = StrDup(arena, panelName);
     entry.build = build;
     entry.data = data;
-    items.Append(entry);
+    VecAppend(items, entry);
 }
 
 bool PanelRegistry::BuildPanel(Str panelName,

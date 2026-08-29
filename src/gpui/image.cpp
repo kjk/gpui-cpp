@@ -42,7 +42,7 @@ static void Base64Decode(Str s, Vec<uint8_t>* out) {
         bits += 6;
         if (bits >= 8) {
             bits -= 8;
-            out->Append((uint8_t)((acc >> bits) & 0xff));
+            VecAppend(*out, (uint8_t)((acc >> bits) & 0xff));
         }
     }
 }
@@ -66,12 +66,12 @@ static void PercentDecode(Str s, Vec<uint8_t>* out) {
             int hi = HexValue(s.s[i + 1]);
             int lo = HexValue(s.s[i + 2]);
             if (hi >= 0 && lo >= 0) {
-                out->Append((uint8_t)(hi * 16 + lo));
+                VecAppend(*out, (uint8_t)(hi * 16 + lo));
                 i += 2;
                 continue;
             }
         }
-        out->Append((uint8_t)s.s[i]);
+        VecAppend(*out, (uint8_t)s.s[i]);
     }
 }
 
@@ -257,7 +257,7 @@ static SrcBytes BytesForSrc(Str src, Vec<uint8_t>* owned,
     if (asset.s && AssetsLoad(asset, owned) && owned->len > 0) {
         return SrcBytes::Yes;
     }
-    owned->Reset();
+    VecReset(*owned);
     if (!HttpUrlIsRemote(src)) {
         return SrcBytes::No;
     }
@@ -376,7 +376,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
             // same bytes to the platform decoder later in this frame. Caching
             // the empty answer here made every remote <img width="..."> stay
             // blank after its fetch completed.
-            owned.Reset();
+            VecReset(owned);
             return nullptr;
         }
     }

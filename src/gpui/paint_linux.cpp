@@ -337,7 +337,7 @@ void PathFree(Path* p) {
 
 static void Push(Path* p, const CairoPathOp& op) {
     if (p) {
-        p->ops.Append(op);
+        VecAppend(p->ops, op);
     }
 }
 

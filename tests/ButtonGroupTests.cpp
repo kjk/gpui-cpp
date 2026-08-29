@@ -159,7 +159,7 @@ static void SelectionEventsAreOrderedAndNotWordSized() {
         utassert(state->selected[2] == 69);
     }
 
-    win->accessibility.Reset();
+    VecReset(win->accessibility);
     WindowKeyedFree(win);
     delete win;
     ArenaDelete(arena);
@@ -330,7 +330,7 @@ static void SourceToggleAndSegmentedGroupKeepStateAndGeometry() {
     utassert(state && state->calls == 1 && state->count == 2);
     utassert(state && state->checked[0] && state->checked[1]);
 
-    win->accessibility.Reset();
+    VecReset(win->accessibility);
     WindowKeyedFree(win);
     delete win;
     ArenaDelete(arena);

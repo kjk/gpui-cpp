@@ -336,7 +336,7 @@ static El* FoldChevron(Arena* a, InputState* state,
     if (state->foldIcons.len < state->foldIcons.cap) {
         FoldIconBox slot;
         slot.line = row;
-        state->foldIcons.Append(slot);
+        VecAppend(state->foldIcons, slot);
         cell->BoundsOut(&state->foldIcons[state->foldIcons.len - 1].bounds);
     }
     // paint_fold_icons: hovered, on the caret's row, or closed. A closed fold
@@ -391,7 +391,7 @@ El* Textarea::New(Ctx* cx, InputState* state,
         col->BoundsOut(&state->contentBox);
     }
     if (text.len == 0) {
-        state->rowBoxes.Clear();
+        VecClear(state->rowBoxes);
         if (caret) {
             col->Caret(0, style.caret);
         }
@@ -423,10 +423,10 @@ El* Textarea::New(Ctx* cx, InputState* state,
     // are last frame's until this frame paints — clearing them would leave
     // every reader with zeros for the length of a frame.
     if (!wrap) {
-        state->rowBoxes.Clear();
+        VecClear(state->rowBoxes);
     } else if (state->rowBoxes.len != rows) {
-        state->rowBoxes.Clear();
-        if (Bounds* slots = state->rowBoxes.AppendBlanks(rows)) {
+        VecClear(state->rowBoxes);
+        if (Bounds* slots = VecAppendBlanks(state->rowBoxes, rows)) {
             for (int i = 0; i < rows; i++) {
                 slots[i] = Bounds{};
             }
@@ -449,7 +449,7 @@ El* Textarea::New(Ctx* cx, InputState* state,
     // every candidate line would read as noise. This is last frame's boxes,
     // which is one frame stale and is what Rust's hitbox is too.
     bool gutterHover = folding && GutterHovered(state, cx->win, numW + foldW);
-    state->foldIcons.Clear();
+    VecClear(state->foldIcons);
     if (folding) {
         VecReserve(state->foldIcons, state->folds.candidates.len);
     }
@@ -1213,10 +1213,10 @@ void FoldMapSetCandidates(FoldMap* m, const FoldRange* ranges, int n) {
     if (!m) {
         return;
     }
-    m->candidates.Clear();
+    VecClear(m->candidates);
     for (int i = 0; i < n; i++) {
         if (ranges[i].startLine <= ranges[i].endLine) {
-            m->candidates.Append(ranges[i]);
+            VecAppend(m->candidates, ranges[i]);
         }
     }
     FoldSort(&m->candidates);
@@ -1239,7 +1239,7 @@ void FoldMapSetFolded(FoldMap* m, int startLine, bool folded) {
         if (ix < 0 || FoldFindAt(m->folded, startLine) >= 0) {
             return;
         }
-        m->folded.Append(m->candidates[ix]);
+        VecAppend(m->folded, m->candidates[ix]);
         FoldSort(&m->folded);
         m->needsRebuild = true;
         return;
@@ -1265,7 +1265,7 @@ bool FoldMapIsCandidate(const FoldMap* m, int startLine) {
 
 void FoldMapClearFolds(FoldMap* m) {
     if (m && m->folded.len > 0) {
-        m->folded.Clear();
+        VecClear(m->folded);
         m->needsRebuild = true;
     }
 }
@@ -1320,8 +1320,8 @@ void FoldMapRebuild(FoldMap* m, int lineCount) {
     }
     m->cachedLineCount = lineCount;
     m->needsRebuild = false;
-    m->visibleLines.Clear();
-    m->lineToDisplayRow.Clear();
+    VecClear(m->visibleLines);
+    VecClear(m->lineToDisplayRow);
     // With nothing folded the projection is the identity, and the two vectors
     // are left empty rather than filled with it — every reader below answers
     // from `cachedLineCount` in that case, which is the whole point of the
@@ -1329,7 +1329,7 @@ void FoldMapRebuild(FoldMap* m, int lineCount) {
     if (m->folded.len == 0) {
         return;
     }
-    if (int* rows = m->lineToDisplayRow.AppendBlanks(lineCount)) {
+    if (int* rows = VecAppendBlanks(m->lineToDisplayRow, lineCount)) {
         for (int i = 0; i < lineCount; i++) {
             rows[i] = -1;
         }
@@ -1350,7 +1350,7 @@ void FoldMapRebuild(FoldMap* m, int lineCount) {
             continue;
         }
         m->lineToDisplayRow[line] = m->visibleLines.len;
-        m->visibleLines.Append(line);
+        VecAppend(m->visibleLines, line);
     }
 }
 
@@ -2339,7 +2339,7 @@ Str InputCompletionDocumentation(InputState* s) {
 }
 
 CompletionSession::~CompletionSession() {
-    items.Reset();
+    VecReset(items);
     StrFree(query);
     if (arena) {
         ArenaDelete(arena);
@@ -2357,7 +2357,7 @@ void InputDismissCompletion(InputState* s) {
     s->completion.open = false;
     s->completion.triggerStart = -1;
     s->completion.selected = 0;
-    s->completion.items.Clear();
+    VecClear(s->completion.items);
     StrFree(s->completion.query);
     s->completion.query = {};
     s->completion.revision++;
@@ -2397,9 +2397,9 @@ void InputRequestCompletion(InputState* s, App* app, Window* win, bool force) {
             return;
         }
     }
-    s->completion.items.Clear();
+    VecClear(s->completion.items);
     for (int i = 0; i < n; i++) {
-        s->completion.items.Append(items.els[i]);
+        VecAppend(s->completion.items, items.els[i]);
     }
     s->completion.open = n > 0;
     Str queryCopy = query.len > 0 ? StrDup(query) : Str{};
@@ -2447,11 +2447,11 @@ void InputAcceptCompletion(InputState* s, App* app, Window* win) {
     TextEditItem primary = {};
     primary.range = range;
     primary.newText = StrDup(GetTempArena(), text);
-    edits.Append(primary);
+    VecAppend(edits, primary);
     for (int i = 0; i < item.nAdditionalEdits; i++) {
         TextEditItem edit = item.additionalEdits[i];
         edit.newText = StrDup(GetTempArena(), edit.newText);
-        edits.Append(edit);
+        VecAppend(edits, edit);
     }
     InputDismissCompletion(s);
     s->silentReplace = true;
@@ -2471,9 +2471,9 @@ void InputPresentCompletionItems(InputState* s, int triggerStart, Str query,
     if (!s) {
         return;
     }
-    s->completion.items.Clear();
+    VecClear(s->completion.items);
     for (int i = 0; i < n; i++) {
-        s->completion.items.Append(items[i]);
+        VecAppend(s->completion.items, items[i]);
     }
     s->completion.triggerStart = triggerStart;
     s->completion.offset = InputCursor(s);
@@ -2490,9 +2490,9 @@ void InputPresentCodeActions(InputState* s, const CodeActionItem* items,
     if (!s) {
         return;
     }
-    s->codeActions.items.Reset();
+    VecReset(s->codeActions.items);
     for (int i = 0; i < n; i++) {
-        s->codeActions.items.Append(items[i]);
+        VecAppend(s->codeActions.items, items[i]);
     }
     s->codeActions.selected = 0;
     s->codeActions.open = n > 0;
@@ -2580,11 +2580,11 @@ void InputInsertCompletion(InputState* s, App* app, Window* win,
     TextEditItem primary = {};
     primary.range = range;
     primary.newText = StrDup(GetTempArena(), text);
-    edits.Append(primary);
+    VecAppend(edits, primary);
     for (int i = 0; i < item->nAdditionalEdits; i++) {
         TextEditItem edit = item->additionalEdits[i];
         edit.newText = StrDup(GetTempArena(), edit.newText);
-        edits.Append(edit);
+        VecAppend(edits, edit);
     }
     // completion_inserting: the write is not typing, so it opens no menu and
     // asks for no suggestion.
@@ -2682,9 +2682,9 @@ void InputUpdateDocumentColors(InputState* s) {
     // document_colors_from_response sorts by range start; an LSP response is
     // not required to arrive in document order.
     qsort(buf.els, (size_t)n, sizeof(DocumentColor), DocumentColorCompare);
-    s->documentColors.Clear();
+    VecClear(s->documentColors);
     for (int i = 0; i < n; i++) {
-        s->documentColors.Append(buf[i]);
+        VecAppend(s->documentColors, buf[i]);
     }
 }
 
@@ -2895,9 +2895,9 @@ void InputLspReset(InputState* s) {
     if (!s) {
         return;
     }
-    s->documentColors.Clear();
+    VecClear(s->documentColors);
     s->documentColorsDirty = true;
-    s->semanticTokens.Clear();
+    VecClear(s->semanticTokens);
     s->semanticTokensDirty = true;
     InputClearInlineCompletion(s);
     InputDismissLspOverlays(s);
@@ -2937,17 +2937,17 @@ void InputUpdateSemanticTokens(InputState* s) {
     }
     int m = SemanticTokensDecode(buf.els, n, s->semanticLegend,
                                  s->nSemanticLegend, decoded.els, n);
-    s->semanticTokens.Clear();
+    VecClear(s->semanticTokens);
     for (int i = 0; i < m; i++) {
-        s->semanticTokens.Append(decoded[i]);
+        VecAppend(s->semanticTokens, decoded[i]);
     }
 }
 
 // ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
 
 HoverDefinition::~HoverDefinition() {
-    locations.Reset();
-    lastLocations.Reset();
+    VecReset(locations);
+    VecReset(lastLocations);
     if (arena) {
         ArenaDelete(arena);
     }
@@ -2965,12 +2965,12 @@ void InputClearHoverDefinition(InputState* s) {
     // the modifier comes up, and the action still has to know where the
     // symbol under the caret went.
     s->hoverDef.lastRange = s->hoverDef.symbolRange;
-    s->hoverDef.lastLocations.Reset();
+    VecReset(s->hoverDef.lastLocations);
     for (int i = 0; i < s->hoverDef.locations.len; i++) {
-        s->hoverDef.lastLocations.Append(s->hoverDef.locations[i]);
+        VecAppend(s->hoverDef.lastLocations, s->hoverDef.locations[i]);
     }
     s->hoverDef.symbolRange = Selection{};
-    s->hoverDef.locations.Reset();
+    VecReset(s->hoverDef.locations);
     s->hoverDef.bounds = Bounds{};
 }
 
@@ -3032,7 +3032,7 @@ void InputHoverDefinition(InputState* s, int offset) {
     }
     s->hoverDef.symbolRange = symbol;
     for (int i = 0; i < n; i++) {
-        s->hoverDef.locations.Append(buf[i]);
+        VecAppend(s->hoverDef.locations, buf[i]);
     }
 }
 
@@ -3095,7 +3095,7 @@ void InputGoToDefinition(InputState* s, App* app, Window* win) {
 }
 
 CodeActionSession::~CodeActionSession() {
-    items.Reset();
+    VecReset(items);
     if (arena) {
         ArenaDelete(arena);
     }
@@ -3106,7 +3106,7 @@ void InputDismissCodeActions(InputState* s) {
         return;
     }
     s->codeActions.open = false;
-    s->codeActions.items.Reset();
+    VecReset(s->codeActions.items);
     s->codeActions.selected = 0;
     s->codeActions.revision++;
 }
@@ -3121,15 +3121,15 @@ void InputAddCodeActionProvider(InputState* s, CodeActionFn fn, void* data,
         // A caller may have used the original one-provider field and then
         // added another. Preserve that first registration when the Vec is
         // materialized.
-        s->codeActionProviders.Append(
-            {s->codeActionProvider, s->codeActionData, nullptr});
+        VecAppend(s->codeActionProviders,
+                  {s->codeActionProvider, s->codeActionData, nullptr});
     }
     if (!hadDirectProvider) {
         // The first one is the field the one-provider callers already write.
         s->codeActionProvider = fn;
         s->codeActionData = data;
     }
-    s->codeActionProviders.Append({fn, data, perform});
+    VecAppend(s->codeActionProviders, {fn, data, perform});
 }
 
 // Every provider, in the order they were registered, with the field the
@@ -3169,7 +3169,7 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
         ArenaDelete(s->codeActions.arena);
         s->codeActions.arena = ArenaNew();
     }
-    s->codeActions.items.Reset();
+    VecReset(s->codeActions.items);
     // Every provider is asked and the answers go in one list, each item
     // remembering which one it came from.
     int nProviders = CodeActionProviderCount(s);
@@ -3202,7 +3202,7 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
         }
         for (int i = 0; i < n; i++) {
             buf[i].provider = p;
-            s->codeActions.items.Append(buf[i]);
+            VecAppend(s->codeActions.items, buf[i]);
         }
     }
     int n = s->codeActions.items.len;
@@ -3263,7 +3263,7 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
         for (int i = 0; i < item.nEdits; i++) {
             TextEditItem edit = item.edits[i];
             edit.newText = StrDup(GetTempArena(), edit.newText);
-            edits.Append(edit);
+            VecAppend(edits, edit);
         }
     } else {
         if (!VecReserve(edits, 1)) {
@@ -3272,7 +3272,7 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
         TextEditItem edit = {};
         edit.range = item.range;
         edit.newText = StrDup(GetTempArena(), item.newText);
-        edits.Append(edit);
+        VecAppend(edits, edit);
     }
     // perform_code_action: the provider that answered with it does it, if it
     // said it would. Its edits are what the editor applies otherwise.
@@ -4489,7 +4489,7 @@ static Str MatcherText(const SearchMatcher* m) {
 // update_matches. `stream_find_iter` answers leftmost non-overlapping
 // matches, which is what stepping past the end of each one comes to.
 static void MatcherUpdateMatches(SearchMatcher* m) {
-    m->ranges.Clear();
+    VecClear(m->ranges);
     m->ranges.len = 0;
     if (m->query.len > 0) {
         Str hay = MatcherText(m);
@@ -4499,7 +4499,7 @@ static void MatcherUpdateMatches(SearchMatcher* m) {
             if (lo < 0) {
                 break;
             }
-            m->ranges.Append(Selection{lo, lo + m->query.len});
+            VecAppend(m->ranges, Selection{lo, lo + m->query.len});
             at = lo + m->query.len;
         }
     }
@@ -4529,7 +4529,7 @@ void SearchMatcherUpdate(SearchMatcher* m, Str text) {
     }
     m->text.len = 0;
     if (text.len > 0) {
-        char* dst = m->text.AppendBlanks(text.len);
+        char* dst = VecAppendBlanks(m->text, text.len);
         if (dst) {
             memcpy(dst, text.s, (size_t)text.len);
         }
@@ -5359,7 +5359,7 @@ static void PushTransaction(UndoManager* m, Change change, EditIntent intent) {
     UndoTransaction t = {};
     t.intent = intent;
     TransactionPush(&t, change);
-    m->undos.Append(t);
+    VecAppend(m->undos, t);
     m->coalescingBoundary = intent == EditIntent::Atomic;
 }
 
@@ -5458,7 +5458,7 @@ const UndoTransaction* UndoPopUndo(UndoManager* m) {
     }
     UndoTransaction t = m->undos[m->undos.len - 1];
     m->undos.len--;
-    m->redos.Append(t);
+    VecAppend(m->redos, t);
     m->coalescingBoundary = true;
     // The caller applies the changes in reverse, which is what Rust's
     // `.iter().rev()` hands it.
@@ -5472,7 +5472,7 @@ const UndoTransaction* UndoPopRedo(UndoManager* m) {
     }
     UndoTransaction t = m->redos[m->redos.len - 1];
     m->redos.len--;
-    m->undos.Append(t);
+    VecAppend(m->undos, t);
     m->coalescingBoundary = true;
     return &m->undos[m->undos.len - 1];
 }

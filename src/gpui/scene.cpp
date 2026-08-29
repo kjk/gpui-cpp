@@ -297,18 +297,18 @@ static Prim* Emit(PaintCtx* ctx, uint8_t kind, Bounds bbox) {
     p.seq = gSeq++;
     p.mask = gClip;
     p.bbox = Intersect(bbox, gClip);
-    gCur.Append(p);
+    VecAppend(gCur, p);
     return &gCur[gCur.len - 1];
 }
 
 void FrameBegin(PaintCtx* ctx) {
     gRecording = true;
     gSkipPresent = false;
-    gCur.Clear();
-    gPaths.Clear();
-    gVerbs.Clear();
-    gPts.Clear();
-    gClipStack.Clear();
+    VecClear(gCur);
+    VecClear(gPaths);
+    VecClear(gVerbs);
+    VecClear(gPts);
+    VecClear(gClipStack);
     gSeq = 0;
     gViewW = ctx ? ctx->viewW : 0;
     gViewH = ctx ? ctx->viewH : 0;
@@ -400,10 +400,10 @@ void RecEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
 void RecPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
     (void)ctx;
     gStats.clipPushes++;
-    gClipStack.Append(gClip.x);
-    gClipStack.Append(gClip.y);
-    gClipStack.Append(gClip.w);
-    gClipStack.Append(gClip.h);
+    VecAppend(gClipStack, gClip.x);
+    VecAppend(gClipStack, gClip.y);
+    VecAppend(gClipStack, gClip.w);
+    VecAppend(gClipStack, gClip.h);
     gClip = Intersect(gClip, Bounds{x, y, w, h});
 }
 
@@ -440,7 +440,7 @@ Path* RecPathNew(bool winding) {
     pr.winding = winding;
     pr.verbFirst = gVerbs.len;
     pr.ptFirst = gPts.len;
-    gPaths.Append(pr);
+    VecAppend(gPaths, pr);
     return PathHandle(gPaths.len - 1);
 }
 
@@ -452,14 +452,14 @@ void RecPathFree(Path* p) {
 }
 
 static void Verb(PathRec* pr, uint8_t v) {
-    gVerbs.Append(v);
+    VecAppend(gVerbs, v);
     pr->verbCount++;
     pr->hashed = false;
 }
 
 static void Pt(PathRec* pr, float x, float y) {
-    gPts.Append(x);
-    gPts.Append(y);
+    VecAppend(gPts, x);
+    VecAppend(gPts, y);
     pr->ptCount += 2;
     if (!pr->any) {
         pr->any = true;
@@ -511,11 +511,11 @@ void RecPathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
     Verb(pr, (uint8_t)(kVArc | (clockwise ? 0x80 : 0)));
     // Five values, and the bounding box of the whole circle: an arc's extent
     // is not its endpoints, and the damage rectangle may only be too big.
-    gPts.Append(cx);
-    gPts.Append(cy);
-    gPts.Append(r);
-    gPts.Append(a0);
-    gPts.Append(a1);
+    VecAppend(gPts, cx);
+    VecAppend(gPts, cy);
+    VecAppend(gPts, r);
+    VecAppend(gPts, a0);
+    VecAppend(gPts, a1);
     pr->ptCount += 5;
     pr->hashed = false;
     if (!pr->any) {
@@ -649,14 +649,14 @@ static void SortByLayer(Vec<Prim>& v) {
         at += counts[i];
     }
     Vec<Prim> out;
-    out.AppendBlanks(v.len);
+    VecAppendBlanks(out, v.len);
     for (int i = 0; i < v.len; i++) {
         out[start[v[i].layer]++] = v[i];
     }
     for (int i = 0; i < v.len; i++) {
         v[i] = out[i];
     }
-    out.Reset();
+    VecReset(out);
 }
 
 // ─── the path cache ──────────────────────────────────────────────────────
@@ -739,7 +739,7 @@ static void CacheSweep() {
 }
 
 void Invalidate() {
-    gPrev.Clear();
+    VecClear(gPrev);
     gHavePrev = false;
     gPrevFrameHash = 0;
     for (int i = 0; i < kBufferDepth; i++) {
@@ -869,10 +869,10 @@ static void BagBuild(HashBag& b, const Vec<Prim>& v) {
         cap *= 2;
     }
     b.mask = cap - 1;
-    b.keys.Clear();
-    b.counts.Clear();
-    b.keys.AppendBlanks(cap);
-    b.counts.AppendBlanks(cap);
+    VecClear(b.keys);
+    VecClear(b.counts);
+    VecAppendBlanks(b.keys, cap);
+    VecAppendBlanks(b.counts, cap);
     for (int i = 0; i < cap; i++) {
         b.keys[i] = 0;
         b.counts[i] = 0;
@@ -1011,9 +1011,9 @@ bool FrameEnd(PaintCtx* ctx, Bounds* damage) {
 
     // This frame becomes the one the next is compared against, whether or not
     // it was drawn: what is on screen did not change either way.
-    gPrev.Clear();
+    VecClear(gPrev);
     for (int i = 0; i < gCur.len; i++) {
-        gPrev.Append(gCur[i]);
+        VecAppend(gPrev, gCur[i]);
     }
     gPrevFrameHash = frameHash;
     gHavePrev = true;

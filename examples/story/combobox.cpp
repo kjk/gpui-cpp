@@ -396,7 +396,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
             owner->Searchable(true)->Multiple(kSpecs[i].multiple);
             for (int k = 0; k < kSpecs[i].count; k++) {
                 if (kSpecs[i].selected & (1u << k)) {
-                    s->selected.Append(k);
+                    VecAppend(s->selected, k);
                 }
             }
             owner->SyncSnapshot();

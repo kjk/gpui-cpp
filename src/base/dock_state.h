@@ -100,11 +100,11 @@ struct DockAreaState {
 
     ~DockAreaState() {
         for (int i = 0; i < nodes.len; i++) {
-            nodes[i].children.Reset();
-            nodes[i].sizes.Reset();
-            nodes[i].metas.Reset();
+            VecReset(nodes[i].children);
+            VecReset(nodes[i].sizes);
+            VecReset(nodes[i].metas);
         }
-        nodes.Reset();
+        VecReset(nodes);
     }
 };
 

@@ -31,7 +31,7 @@ static AccessibilityFrame NewAccessibilityFrame() {
 }
 
 static void FreeAccessibilityFrame(AccessibilityFrame* f) {
-    f->win->accessibility.Reset();
+    VecReset(f->win->accessibility);
     WindowKeyedFree(f->win);
     delete f->win;
     f->win = nullptr;

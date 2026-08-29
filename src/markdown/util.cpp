@@ -278,7 +278,7 @@ static int32_t BucketFor(const Vec<int32_t>& buckets,
 
 // Grow to `wanted` buckets (a power of two) and re-place every entry.
 static void RehashBuckets(EditMap& map, int32_t wanted) {
-    map.buckets.Reset();
+    VecReset(map.buckets);
     VecReserve(map.buckets, wanted);
     map.buckets.len = wanted;
     memset((void*)map.buckets.els, 0, (size_t)wanted * sizeof(int32_t));
@@ -317,7 +317,7 @@ static void AddImpl(EditMap& map, int32_t at, int32_t remove, const Event* add,
     e.at = at;
     e.remove = remove;
     e.add.AppendMany(map.a, add, addLen);
-    map.map.Append(e);
+    VecAppend(map.map, e);
     map.buckets[bucket] = map.map.len;
 }
 
@@ -388,7 +388,7 @@ void EditMapConsume(EditMap& map, Vec<Event>& events) {
         removeAcc += map.map[index].remove;
         addAcc += map.map[index].add.len;
         Jump j = {map.map[index].at, removeAcc, addAcc};
-        jumps.Append(j);
+        VecAppend(jumps, j);
     }
 
     ShiftLinks(events, jumps);
@@ -401,18 +401,18 @@ void EditMapConsume(EditMap& map, Vec<Event>& events) {
     for (int32_t i = 0; i < map.map.len; i++) {
         const EditMap::Entry& e = map.map[i];
         for (int32_t j = index; j < e.at; j++) {
-            out.Append(events[j]);
+            VecAppend(out, events[j]);
         }
         for (const Event& ev : e.add) {
-            out.Append(ev);
+            VecAppend(out, ev);
         }
         index = e.at + e.remove;
     }
     for (int32_t j = index; j < events.len; j++) {
-        out.Append(events[j]);
+        VecAppend(out, events[j]);
     }
 
-    events.Reset();
+    VecReset(events);
     events.els = out.els;
     events.len = out.len;
     events.cap = out.cap;

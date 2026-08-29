@@ -93,7 +93,7 @@ CallScopeGuard ScopeEnter(Window* window, App* app, ScopePhase phase,
     if (generation == 0) generation = gNextGeneration++;
     ScopeFrame frame = {window, app,        phase,   generation, 0,
                         view,   heldPolicy, runtime, application};
-    gScopeStack.Append(frame);
+    VecAppend(gScopeStack, frame);
     return CallScopeGuard(generation);
 }
 

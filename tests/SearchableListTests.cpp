@@ -24,7 +24,7 @@ static void Apply(SearchableListState* s, int index) {
     Vec<SearchableListChange> changes;
     SearchableListChangesFor(s, kItems, kN, index, &changes);
     SearchableListApply(s, kItems, kN, changes.els, changes.len);
-    changes.Reset();
+    VecReset(changes);
 }
 
 static void TheQueryIsACaseInsensitiveSubstringOfTheTitle() {
@@ -195,7 +195,7 @@ static void StateAccessorsUseGroupedIndexPaths() {
     utassert(base::StrEq(values[1], "apple"));
     utassert(!s.IsOpen());
     utassert(s.Focus() == &s.triggerFocus);
-    values.Reset();
+    VecReset(values);
 }
 
 struct DelegateHooks {

@@ -970,7 +970,7 @@ static HMENU BuildMenu(Window* win, const PlatMenuItem* items, int n,
                 info.fMask = MIIM_BITMAP;
                 info.hbmpItem = bmp;
                 SetMenuItemInfoW(menu, position, TRUE, &info);
-                gMenuBitmaps.Append(bmp);
+                VecAppend(gMenuBitmaps, bmp);
             }
         }
         position++;
@@ -1015,7 +1015,7 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     for (int i = 0; i < gMenuBitmaps.len; i++) {
         DeleteObject(gMenuBitmaps[i]);
     }
-    gMenuBitmaps.Reset();
+    VecReset(gMenuBitmaps);
     return selected;
 }
 

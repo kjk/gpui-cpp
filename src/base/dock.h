@@ -401,12 +401,12 @@ struct DockState {
 
     ~DockState() {
         for (int i = 0; i < nodes.len; i++) {
-            nodes[i].child.Reset();
-            nodes[i].size.Reset();
-            nodes[i].panel.Reset();
+            VecReset(nodes[i].child);
+            VecReset(nodes[i].size);
+            VecReset(nodes[i].panel);
         }
-        nodes.Reset();
-        panels.Reset();
+        VecReset(nodes);
+        VecReset(panels);
     }
 };
 

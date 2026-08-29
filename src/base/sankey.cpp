@@ -78,11 +78,11 @@ static void ReorderNodeLinks(SankeyGraph* g, int index) {
 static void ComputeNodeLinks(SankeyGraph* g) {
     int n = g->nodes.len;
     int m = g->links.len;
-    g->srcLinks.Reset();
-    g->tgtLinks.Reset();
+    VecReset(g->srcLinks);
+    VecReset(g->tgtLinks);
     if (m > 0) {
-        g->srcLinks.AppendBlanks(m);
-        g->tgtLinks.AppendBlanks(m);
+        VecAppendBlanks(g->srcLinks, m);
+        VecAppendBlanks(g->tgtLinks, m);
     }
     // Count, then the running start of each node's slice, then fill.
     for (int i = 0; i < n; i++) {
@@ -141,16 +141,16 @@ static SankeyError ComputeNodeRanks(SankeyGraph* g) {
     Vec<int> depths;
     Vec<int> heights;
     if (n > 0) {
-        incoming.AppendBlanks(n);
-        depths.AppendBlanks(n);
-        heights.AppendBlanks(n);
+        VecAppendBlanks(incoming, n);
+        VecAppendBlanks(depths, n);
+        VecAppendBlanks(heights, n);
     }
     for (int i = 0; i < n; i++) {
         incoming[i] = g->nodes[i].tgtCount;
         depths[i] = 0;
         heights[i] = 0;
         if (incoming[i] == 0) {
-            order.Append(i);
+            VecAppend(order, i);
         }
     }
 
@@ -167,7 +167,7 @@ static SankeyError ComputeNodeRanks(SankeyGraph* g) {
             }
             incoming[target]--;
             if (incoming[target] == 0) {
-                order.Append(target);
+                VecAppend(order, target);
             }
         }
     }
@@ -547,16 +547,16 @@ static void CenterColumns(const Sankey* s, SankeyGraph* g) {
     Vec<float> lo;
     Vec<float> hi;
     Vec<float> offsets;
-    lo.AppendBlanks(layers);
-    hi.AppendBlanks(layers);
-    offsets.AppendBlanks(layers);
+    VecAppendBlanks(lo, layers);
+    VecAppendBlanks(hi, layers);
+    VecAppendBlanks(offsets, layers);
     for (int l = 0; l < layers; l++) {
         lo[l] = 0;
         hi[l] = 0;
         offsets[l] = 0;
     }
     Vec<bool> seen;
-    seen.AppendBlanks(layers);
+    VecAppendBlanks(seen, layers);
     for (int l = 0; l < layers; l++) {
         seen[l] = false;
     }
@@ -597,10 +597,10 @@ static void StaggerFlatColumns(const Sankey* s, SankeyGraph* g) {
     Vec<int> single;
     Vec<float> heights;
     Vec<float> offsets;
-    count.AppendBlanks(layers);
-    single.AppendBlanks(layers);
-    heights.AppendBlanks(layers);
-    offsets.AppendBlanks(layers);
+    VecAppendBlanks(count, layers);
+    VecAppendBlanks(single, layers);
+    VecAppendBlanks(heights, layers);
+    VecAppendBlanks(offsets, layers);
     for (int l = 0; l < layers; l++) {
         count[l] = 0;
         single[l] = -1;
@@ -693,14 +693,14 @@ SankeyError SankeyTopology(const Sankey* s, int nodeCount,
     }
 
     if (nodeCount > 0) {
-        out->nodes.AppendBlanks(nodeCount);
+        VecAppendBlanks(out->nodes, nodeCount);
         for (int i = 0; i < nodeCount; i++) {
             out->nodes[i] = SankeyNodeLayout{};
             out->nodes[i].index = i;
         }
     }
     if (nLinks > 0) {
-        out->links.AppendBlanks(nLinks);
+        VecAppendBlanks(out->links, nLinks);
         for (int i = 0; i < nLinks; i++) {
             SankeyLinkLayout& l = out->links[i];
             l = SankeyLinkLayout{};
@@ -737,9 +737,9 @@ void SankeyLayoutFrom(const Sankey* s, SankeyGraph* g) {
     Vec<int> colStart;
     Vec<int> colCount;
     Vec<int> colItems;
-    colStart.AppendBlanks(layers);
-    colCount.AppendBlanks(layers);
-    colItems.AppendBlanks(g->nodes.len);
+    VecAppendBlanks(colStart, layers);
+    VecAppendBlanks(colCount, layers);
+    VecAppendBlanks(colItems, g->nodes.len);
     for (int l = 0; l < layers; l++) {
         colStart[l] = 0;
         colCount[l] = 0;

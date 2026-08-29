@@ -41,8 +41,8 @@ struct TextSelectionParticipantState {
         for (int i = 0; i < runs.len; i++) {
             if (runs[i].layout) TextLayoutRelease(runs[i].layout);
         }
-        runs.Reset();
-        textBounds.Reset();
+        VecReset(runs);
+        VecReset(textBounds);
         StrFree(fallbackCopyText);
         StrFree(projectedCopyText);
     }
@@ -370,7 +370,7 @@ static void WindowSelectionPublish(Window* window) {
     selection->publishing = true;
     Vec<EntityId> participants;
     for (int i = 0; i < selection->participants.len; i++) {
-        participants.Append(selection->participants[i]);
+        VecAppend(participants, selection->participants[i]);
     }
     for (int i = 0; i < participants.len; i++) {
         EntityId id = participants[i];
@@ -394,7 +394,7 @@ static void WindowSelectionPublish(Window* window) {
         if (!state || state->window != window) continue;
         ParticipantSetSnapshot(state, window->app, has, snapshot);
     }
-    participants.Reset();
+    VecReset(participants);
     selection->publishing = false;
 }
 
@@ -466,9 +466,9 @@ void TextSelectionHandle::Register(TextSelectionRegistration value,
     participant->window = window;
     participant->registered = true;
     participant->registration = value;
-    participant->textBounds.Reset();
+    VecReset(participant->textBounds);
     for (int i = 0; i < value.textBoundsCount; i++) {
-        participant->textBounds.Append(value.textBounds[i]);
+        VecAppend(participant->textBounds, value.textBounds[i]);
     }
     participant->registration.textBounds = participant->textBounds.els;
     participant->registration.textBoundsCount = participant->textBounds.len;
@@ -481,7 +481,7 @@ void TextSelectionHandle::Register(TextSelectionRegistration value,
             break;
         }
     }
-    if (!found) selection->participants.Append(state.id);
+    if (!found) VecAppend(selection->participants, state.id);
     WindowSelectionPublish(window);
 }
 
@@ -565,16 +565,16 @@ TextSelectionProjection TextSelectionHandle::UpdateRuns(
             TextLayoutRelease(participant->runs[i].layout);
         }
     }
-    participant->runs.Reset();
+    VecReset(participant->runs);
     for (int i = 0; i < count; i++) {
-        participant->runs.Append(values[i]);
+        VecAppend(participant->runs, values[i]);
         if (values[i].layout) TextLayoutAddRef(values[i].layout);
     }
     out.active = participant->hasSnapshot;
     for (int i = 0; i < count; i++) {
-        out.ranges.Append(participant->hasSnapshot
-                              ? ProjectRun(values[i], participant->snapshot)
-                              : TextSelectionRange{});
+        VecAppend(out.ranges, participant->hasSnapshot
+                                  ? ProjectRun(values[i], participant->snapshot)
+                                  : TextSelectionRange{});
     }
 
     Vec<int> order;
@@ -586,7 +586,7 @@ TextSelectionProjection TextSelectionHandle::UpdateRuns(
                    values[i].documentOrder) {
             insert--;
         }
-        order.Append(0);
+        VecAppend(order, 0);
         for (int j = order.len - 1; j > insert; j--) {
             order[j] = order[j - 1];
         }
@@ -599,7 +599,7 @@ TextSelectionProjection TextSelectionHandle::UpdateRuns(
         selected.Append(Str(values[ix].text.s + range.start,
                             range.end - range.start));
     }
-    order.Reset();
+    VecReset(order);
     StrFree(participant->projectedCopyText);
     participant->projectedCopyText = selected.TakeStr();
     participant->hasProjectedCopyText = true;
@@ -706,7 +706,7 @@ WindowSelection* WindowSelectionOf(Window* win) {
 void WindowSelectionFree(Window* win) {
     if (win && win->sel) {
         WindowSelectionClear(win);
-        win->sel->participants.Reset();
+        VecReset(win->sel->participants);
         delete win->sel;
         win->sel = nullptr;
     }
@@ -727,7 +727,7 @@ void WindowSelectionClear(Window* win) {
     if (win->app) {
         Vec<EntityId> participants;
         for (int i = 0; i < s->participants.len; i++) {
-            participants.Append(s->participants[i]);
+            VecAppend(participants, s->participants[i]);
         }
         for (int i = 0; i < participants.len; i++) {
             TextSelectionParticipantState* participant =
@@ -750,7 +750,7 @@ void WindowSelectionClear(Window* win) {
                        &selectionChanged);
             if (clear) clear(clearUser, win->app);
         }
-        participants.Reset();
+        VecReset(participants);
     }
     s->clearing = false;
 }
@@ -1022,7 +1022,7 @@ int TextSelection::SelectedText(Window* window, App* app, char* out, int cap) {
                active[insert - 1].documentOrder > item.documentOrder) {
             insert--;
         }
-        active.Append({});
+        VecAppend(active, {});
         for (int j = active.len - 1; j > insert; j--) {
             active[j] = active[j - 1];
         }
@@ -1047,7 +1047,7 @@ int TextSelection::SelectedText(Window* window, App* app, char* out, int cap) {
         emitted = true;
     }
     for (int i = 0; i < active.len; i++) StrFree(active[i].text);
-    active.Reset();
+    VecReset(active);
     out[written] = 0;
     if (written > 0) return written;
     return WindowSelectionText(window, out, cap);
@@ -1139,7 +1139,7 @@ void WindowSelectionFinishFrame(Window* win) {
     // participant vector while invoking them.
     Vec<EntityId> participants;
     for (int i = 0; i < selection->participants.len; i++) {
-        participants.Append(selection->participants[i]);
+        VecAppend(participants, selection->participants[i]);
     }
     for (int i = 0; i < participants.len; i++) {
         EntityId id = participants[i];
@@ -1178,7 +1178,7 @@ void WindowSelectionFinishFrame(Window* win) {
             if (clear) clear(clearUser, win->app);
         }
     }
-    participants.Reset();
+    VecReset(participants);
     selection->frameGeneration++;
     WindowSelectionPublish(win);
 }

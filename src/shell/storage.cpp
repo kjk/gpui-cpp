@@ -28,7 +28,7 @@ Storage::Storage(bool writes) : persisted(writes) {}
 Storage::~Storage() {
     ResetEntries();
     for (int i = 0; i < waiters.len; i++) delete waiters[i];
-    waiters.Reset();
+    VecReset(waiters);
     StrFree(path);
 }
 
@@ -38,7 +38,7 @@ void Storage::ResetEntries() {
         StrFree(entries[i]->value);
         delete entries[i];
     }
-    entries.Reset();
+    VecReset(entries);
 }
 
 bool Storage::SetPath(Str value, Str* error) {
@@ -112,7 +112,7 @@ bool Storage::Load(Str* error) {
         entry->key = StrDup(item->key);
         entry->value = StrDup(item->str);
         if ((!entry->key.s && item->key.len) ||
-            (!entry->value.s && item->str.len) || !entries.Append(entry)) {
+            (!entry->value.s && item->str.len) || !VecAppend(entries, entry)) {
             StrFree(entry->key);
             StrFree(entry->value);
             delete entry;
@@ -212,7 +212,7 @@ bool Storage::Set(Str key, Str value, Str* error) {
     StorageEntry* entry = new StorageEntry();
     entry->key = StrDup(key);
     entry->value = copy;
-    if ((!entry->key.s && key.len != 0) || !entries.Append(entry)) {
+    if ((!entry->key.s && key.len != 0) || !VecAppend(entries, entry)) {
         StrFree(entry->key);
         StrFree(entry->value);
         delete entry;
@@ -299,8 +299,7 @@ void Storage::ReadyThrough(uint64_t through,
     int keep = 0;
     for (int i = 0; i < waiters.len; i++) {
         StorageWaiter* waiter = waiters[i];
-        if (waiter->revision <= through && ready &&
-            ready->Append(waiter)) {
+        if (waiter->revision <= through && ready && VecAppend(*ready, waiter)) {
             continue;
         } else if (waiter->revision <= through && !ready) {
             delete waiter;
@@ -346,7 +345,7 @@ bool Storage::Wait(Func1<StorageOutcome> settle, StorageWaiter** waiter,
     StorageWaiter* pending = new StorageWaiter();
     pending->revision = revision;
     pending->settle = settle;
-    if (!waiters.Append(pending)) {
+    if (!VecAppend(waiters, pending)) {
         delete pending;
         StorageError(error, StrL("allocating a localStorage flush waiter failed"));
         return false;

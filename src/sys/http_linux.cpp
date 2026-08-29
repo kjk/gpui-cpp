@@ -39,7 +39,7 @@ static size_t OnBody(char* data, size_t size, size_t n, void* userp) {
     if ((int64_t)out->body.len + (int64_t)want > (int64_t)kHttpMaxBody) {
         return 0;
     }
-    uint8_t* dst = out->body.AppendBlanks((int)want);
+    uint8_t* dst = VecAppendBlanks(out->body, (int)want);
     if (!dst) {
         return 0;
     }
@@ -111,7 +111,7 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
     curl_easy_cleanup(c);
     Free(nullptr, u);
     if (!ok) {
-        out->body.Reset();
+        VecReset(out->body);
     }
     return ok;
 }

@@ -117,7 +117,7 @@ static void SourceTokenDefaultsKeepTypographyAndShadowStructure() {
     ShadowTokens elevated = ShadowTokens::Elevations(Rgba8(1, 2, 3, 4));
     utassert(elevated.sm.len == 1 && elevated.md.len == 1 &&
              elevated.lg.len == 1);
-    elevated.md.Append(BoxShadow{1, 2, 3, 4, Rgb(5, 6, 7), true});
+    VecAppend(elevated.md, BoxShadow{1, 2, 3, 4, Rgb(5, 6, 7), true});
     utassert(elevated.md.len == 2);
     utassert(elevated.md[1].inset && elevated.md[1].spread == 4.f);
 }
@@ -234,9 +234,9 @@ static void TypedSemanticSchemaParsesAndAppliesArrays() {
              tokens.shadow.sm[0].blur == 3.f &&
              tokens.shadow.sm[0].spread == 4.f &&
              tokens.shadow.sm[0].inset);
-    tokens.shadow.sm.Reset();
-    tokens.shadow.md.Reset();
-    tokens.shadow.lg.Reset();
+    VecReset(tokens.shadow.sm);
+    VecReset(tokens.shadow.md);
+    VecReset(tokens.shadow.lg);
     ArenaDelete(arena);
 }
 

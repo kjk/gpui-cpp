@@ -133,7 +133,7 @@ static bool ReadResponse(HINTERNET req, const wchar_t* base,
             return false; // refused, not truncated
         }
         int at = out->body.len;
-        uint8_t* dst = out->body.AppendBlanks((int)avail);
+        uint8_t* dst = VecAppendBlanks(out->body, (int)avail);
         if (!dst) {
             return false;
         }
@@ -220,7 +220,7 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
     Free(nullptr, path);
     Free(nullptr, wurl);
     if (!ok) {
-        out->body.Reset();
+        VecReset(out->body);
     }
     return ok;
 }

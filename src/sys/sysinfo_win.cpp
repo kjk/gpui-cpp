@@ -15,8 +15,8 @@ static uint64_t FtToU64(FILETIME ft) {
 }
 
 void SysStateInit(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
     s->cpu = 0;
     s->mem = 0;
     s->memTotal = 0;
@@ -33,8 +33,8 @@ void SysStateInit(SysState* s) {
 }
 
 void SysStateFree(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
 }
 
 static void RefreshCpu(SysState* s) {
@@ -171,18 +171,18 @@ static void RefreshProcesses(SysState* s) {
                     ProcSample sm;
                     sm.pid = pi.pid;
                     sm.cpu100ns = cpu;
-                    samples.Append(sm);
+                    VecAppend(samples, sm);
                 }
                 CloseHandle(h);
             }
-            next.Append(pi);
+            VecAppend(next, pi);
         } while (Process32NextW(snap, &pe));
     }
     CloseHandle(snap);
 
-    s->prevProcs.Reset();
+    VecReset(s->prevProcs);
     s->prevProcs = samples;
-    s->procs.Reset();
+    VecReset(s->procs);
     s->procs = next;
 }
 

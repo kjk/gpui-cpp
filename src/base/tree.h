@@ -131,8 +131,8 @@ struct TreeState {
     static void OnScroll(TreeState* self, Ctx* cx, const ScrollEvent* ev);
 
     ~TreeState() {
-        items.Reset();
-        entries.Reset();
+        VecReset(items);
+        VecReset(entries);
     }
 };
 

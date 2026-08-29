@@ -747,9 +747,9 @@ El* Highlighter::IntoEl() {
     if (state) {
         // The set the caller published, kept on the state so the row builder
         // and a hover both read the same one.
-        state->diagnostics.Clear();
+        VecClear(state->diagnostics);
         for (int i = 0; i < nDiagnostics; i++) {
-            state->diagnostics.Append(diagnostics[i]);
+            VecAppend(state->diagnostics, diagnostics[i]);
         }
     }
     if (state) {

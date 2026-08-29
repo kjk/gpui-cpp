@@ -390,7 +390,7 @@ void SelectClear(SearchableListState* s, Ctx* cx) {
     if (!s) {
         return;
     }
-    s->selected.Clear();
+    VecClear(s->selected);
     Notify(cx);
 }
 

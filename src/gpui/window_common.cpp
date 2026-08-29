@@ -119,10 +119,10 @@ static void FrameBenchTick(Window* win, float secs) {
         warm++;
         return;
     }
-    samples.Append(secs * 1000.f);
-    build.Append((float)(gFrameBuildSecs * 1000.0));
-    layout.Append((float)(gFrameLayoutSecs * 1000.0));
-    paint.Append((float)(gFramePaintSecs * 1000.0));
+    VecAppend(samples, secs * 1000.f);
+    VecAppend(build, (float)(gFrameBuildSecs * 1000.0));
+    VecAppend(layout, (float)(gFrameLayoutSecs * 1000.0));
+    VecAppend(paint, (float)(gFramePaintSecs * 1000.0));
     if (++seen < want) {
         return;
     }
@@ -358,7 +358,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // Accessibility strings and callbacks point into the frame arena. Drop
     // the old projection before that arena is reset, so no stale semantic
     // record survives while the next view tree is being built.
-    win->accessibility.Clear();
+    VecClear(win->accessibility);
     if (win->frameArena) {
         win->frameArena->Reset();
     } else {
@@ -367,10 +367,10 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     ResetTempArena();
     // element_opacity starts at 1 each frame, the way GPUI's window does.
     win->paint.opacity = 1.f;
-    win->paint.hits.Clear();
-    win->paint.scrolls.Clear();
-    win->paint.texts.Clear();
-    win->paint.inputs.Clear();
+    VecClear(win->paint.hits);
+    VecClear(win->paint.scrolls);
+    VecClear(win->paint.texts);
+    VecClear(win->paint.inputs);
     win->paint.textDocLen = 0;
     win->paint.selA = -1;
     win->paint.selB = -1;
@@ -1598,7 +1598,7 @@ void WindowStopPropagation(Ctx* cx) {
 // that contains the point: two absolutely placed siblings can overlap without
 // either being inside the other, so the chain is the one the paint recorded.
 static void HitChain(Window* win, float x, float y, Vec<int>* out) {
-    out->Clear();
+    VecClear(*out);
     int leaf = -1;
     for (int i = win->paint.hits.len - 1; i >= 0; i--) {
         if (win->paint.hits[i].bounds.Contains({x, y})) {
@@ -1607,7 +1607,7 @@ static void HitChain(Window* win, float x, float y, Vec<int>* out) {
         }
     }
     for (int i = leaf; i >= 0; i = win->paint.hits[i].parent) {
-        out->Append(i);
+        VecAppend(*out, i);
     }
 }
 
@@ -1690,7 +1690,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
             win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
             }, true);
-        chain.Reset();
+        VecReset(chain);
         DispatchMouseDownOut(win, in);
         ClearPendingClick(win);
         AppInvalidate(win);
@@ -1765,7 +1765,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
                 break;
             }
         }
-        chain.Reset();
+        VecReset(chain);
     }
     if (focusTarget) {
         WindowSetFocusId(win, focusTarget);
@@ -1784,7 +1784,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
             win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
             }, true);
-        chain.Reset();
+        VecReset(chain);
     }
     DispatchMouseDownOut(win, in);
     // A semantic control can suppress selection without consuming the mouse
@@ -1799,7 +1799,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
                 break;
             }
         }
-        chain.Reset();
+        VecReset(chain);
     }
     if (hit && hit->slider) {
         BaseSuppressTextSelection(win->app);
@@ -1863,7 +1863,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
             win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseUpPhase == phase ? hr.onMouseUp : Listener{};
             });
-        chain.Reset();
+        VecReset(chain);
     }
     // on_mouse_up_out: every element that asked for the release it did not
     // get. Rust hears one wherever the pointer is, so this walks the frame
@@ -1944,7 +1944,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
                     break;
                 }
             }
-            chain.Reset();
+            VecReset(chain);
         }
         if (!handled && win->onClick.IsValid() && !(hit && hit->slider)) {
             // A press on a slider is handled by the slider, so it is not the
@@ -2472,7 +2472,7 @@ Window* WindowAlloc(App* app, WinOpts opts) {
     win->anim = opts.anim;
     // The factories and the font cache live on App; each window borrows them.
     win->paint.pa = app->paint;
-    app->windows.Append(win);
+    VecAppend(app->windows, win);
     return win;
 }
 
@@ -2599,12 +2599,12 @@ void AppFree(App* app) {
         w->layout = nullptr;
         WindowSelectionFree(w);
         PaintTargetFree(&w->paint);
-        w->timers.Reset();
+        VecReset(w->timers);
         WindowKeyedFree(w);
         WindowMotionFree(w);
         delete w;
     }
-    app->windows.Reset();
+    VecReset(app->windows);
     // The decoded images outlive a window but not the backend that made
     // them, so they go before it does.
     ImageCacheClear();
@@ -2806,7 +2806,7 @@ void AppQuitAll(App* app) {
     // another one on its way out is not visited twice.
     Vec<Window*> windows;
     for (int i = 0; i < app->windows.len; i++) {
-        windows.Append(app->windows[i]);
+        VecAppend(windows, app->windows[i]);
     }
     for (int i = 0; i < windows.len; i++) {
         Window* win = windows[i];
@@ -2818,7 +2818,7 @@ void AppQuitAll(App* app) {
             AppQuit(win);
         }
     }
-    windows.FreeEls();
+    VecReset(windows);
 }
 
 bool AppIsMaximized(Window* win) {
@@ -2842,7 +2842,7 @@ struct AppMenuState {
     Vec<AppMenuBinding> rows;
 
     ~AppMenuState() {
-        rows.Reset();
+        VecReset(rows);
         if (arena) {
             ArenaDelete(arena);
         }
@@ -2884,7 +2884,7 @@ static PlatMenuItem* AppMenuToPlat(AppMenuState* state, Arena* a,
         if (r.disabled) {
             continue;
         }
-        state->rows.Append(AppMenuBinding{r.action, r.arg});
+        VecAppend(state->rows, AppMenuBinding{r.action, r.arg});
         p.id = state->rows.len;
         // The shortcut beside the label, out of the keymap rather than typed
         // into the row: the menu bar matches it itself, and what it fires is
@@ -2923,7 +2923,7 @@ void AppSetMenus(App* app, const MenuDef* menus, int n) {
         return;
     }
     gAppMenuApp = app;
-    state->rows.Reset();
+    VecReset(state->rows);
     state->arena->Reset();
     if (!menus || n <= 0) {
         PlatSetAppMenu(app, nullptr, 0);

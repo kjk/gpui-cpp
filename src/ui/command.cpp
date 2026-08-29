@@ -113,7 +113,7 @@ static bool SameQuery(Str a, Str b) {
 static void SetApplied(CommandState* s, Str q) {
     s->applied.len = 0;
     for (int i = 0; i < q.len; i++) {
-        s->applied.Append(q.s[i]);
+        VecAppend(s->applied, q.s[i]);
     }
 }
 
@@ -195,7 +195,7 @@ static void UpdateMatches(CommandState* s, Str query) {
             if (pendingSeparator) {
                 CommandRow sep;
                 sep.kind = CommandRowKind::Separator;
-                s->rows.Append(sep);
+                VecAppend(s->rows, sep);
                 pendingSeparator = false;
             }
             CommandMatch m;
@@ -205,11 +205,11 @@ static void UpdateMatches(CommandState* s, Str query) {
             m.row = s->rows.len;
             m.disabled = e.item.disabled;
             m.data = e.item.data;
-            s->matched.Append(m);
+            VecAppend(s->matched, m);
             CommandRow row;
             row.kind = CommandRowKind::Item;
             row.match = s->matched.len - 1;
-            s->rows.Append(row);
+            VecAppend(s->rows, row);
             continue;
         }
 
@@ -228,7 +228,7 @@ static void UpdateMatches(CommandState* s, Str query) {
         if (pendingSeparator) {
             CommandRow sep;
             sep.kind = CommandRowKind::Separator;
-            s->rows.Append(sep);
+            VecAppend(s->rows, sep);
             pendingSeparator = false;
         }
         // The heading is hidden while every item in the group is filtered out,
@@ -237,7 +237,7 @@ static void UpdateMatches(CommandState* s, Str query) {
             CommandRow heading;
             heading.kind = CommandRowKind::Heading;
             heading.heading = e.group.heading;
-            s->rows.Append(heading);
+            VecAppend(s->rows, heading);
         }
         for (int i = 0; i < e.group.nItems; i++) {
             const CommandItem& it = e.group.items[i];
@@ -251,16 +251,16 @@ static void UpdateMatches(CommandState* s, Str query) {
             m.row = s->rows.len;
             m.disabled = it.disabled;
             m.data = it.data;
-            s->matched.Append(m);
+            VecAppend(s->matched, m);
             CommandRow row;
             row.kind = CommandRowKind::Item;
             row.match = s->matched.len - 1;
-            s->rows.Append(row);
+            VecAppend(s->rows, row);
         }
     }
 
     for (int i = 0; i < s->rows.len; i++) {
-        s->rowSizes.Append(RowHeight(s, s->rows[i]));
+        VecAppend(s->rowSizes, RowHeight(s, s->rows[i]));
     }
     if (s->selected >= s->matched.len) {
         s->selected = -1;

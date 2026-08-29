@@ -633,7 +633,7 @@ static void CompletionAndActionEditListsGrowPastThirtyTwo() {
     Vec<TextEditItem> additions;
     VecReserve(additions, 40);
     for (int i = 0; i < 40; i++) {
-        additions.Append({Selection{0, 0}, StrL("a")});
+        VecAppend(additions, {Selection{0, 0}, StrL("a")});
     }
 
     InputState completion;
@@ -2192,7 +2192,7 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     diagnostic.range = {0, 1};
     diagnostic.severity = DiagnosticSeverity::Warning;
     diagnostic.message = StrL("**warning**");
-    state.diagnostics.Append(diagnostic);
+    VecAppend(state.diagnostics, diagnostic);
     state.hoverDiagnosticX = 20;
     state.hoverDiagnosticY = 30;
     state.popoverTriggerBounds = {10, 20, 30, 16};
@@ -2484,12 +2484,12 @@ static void LspFacadesInstallCapabilitiesAndExposeOverlayState() {
     utassert(hoverState.open && hoverState.symbolRange.end == 5);
     utassert(base::StrEq(hoverState.hover, "documentation"));
 
-    state.documentColors.Append({{0, 2}, Rgb(1, 2, 3)});
+    VecAppend(state.documentColors, {{0, 2}, Rgb(1, 2, 3)});
     DocumentColor colors[1] = {};
     utassert(lsp.DocumentColorsForRange({0, 1}, colors, 1) == 1);
     utassert(colors[0].range.start == 0 && colors[0].range.end == 2);
 
-    state.semanticTokens.Append({0, 0, 2, StrL("keyword")});
+    VecAppend(state.semanticTokens, {0, 0, 2, StrL("keyword")});
     TextSpan spans[1] = {};
     HighlightStyleResolver resolver;
     resolver.style = ResolveKeyword;
@@ -2547,7 +2547,7 @@ static void SoftWrapBoundariesKeepTheVisualRowAffinity() {
         state.inputBounds = state.lastBounds;
         state.lastFont = font;
         state.lastLineH = font * lineMult;
-        state.rowBoxes.Append(state.lastBounds);
+        VecAppend(state.rowBoxes, state.lastBounds);
 
         bool affinity = false;
         int at = InputIndexForPosition(

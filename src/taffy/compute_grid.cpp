@@ -189,16 +189,16 @@ struct CellOccupancyMatrix {
         rows = rws;
         nRows = rws.Len();
         nCols = cols.Len();
-        inner.Reset();
+        VecReset(inner);
         int n = nRows * nCols;
         if (n > 0) {
-            uint8_t* p = inner.AppendBlanks(n);
+            uint8_t* p = VecAppendBlanks(inner, n);
             if (p) {
                 memset(p, 0, (size_t)n);
             }
         }
     }
-    void Free() { inner.Reset(); }
+    void Free() { VecReset(inner); }
 
     CellOccupancyState Get(int row, int col) const {
         if (row < 0 || row >= nRows || col < 0 || col >= nCols) {
@@ -243,7 +243,7 @@ struct CellOccupancyMatrix {
         int newColCount = oldColCount + reqNegCols + reqPosCols;
 
         Vec<uint8_t> data;
-        uint8_t* p = data.AppendBlanks(newRowCount * newColCount);
+        uint8_t* p = VecAppendBlanks(data, newRowCount * newColCount);
         if (!p) {
             return;
         }
@@ -254,7 +254,7 @@ struct CellOccupancyMatrix {
                     inner[row * nCols + col];
             }
         }
-        inner.Reset();
+        VecReset(inner);
         inner = data;
         data.els = nullptr;
         data.len = 0;
@@ -606,13 +606,13 @@ struct NamedLineResolver {
 
     void Free() {
         for (int i = 0; i < rowLines.len; i++) {
-            rowLines[i].lines.Reset();
+            VecReset(rowLines[i].lines);
         }
         for (int i = 0; i < columnLines.len; i++) {
-            columnLines[i].lines.Reset();
+            VecReset(columnLines[i].lines);
         }
-        rowLines.Reset();
-        columnLines.Reset();
+        VecReset(rowLines);
+        VecReset(columnLines);
     }
 
     static void Upsert(Vec<LineNameEntry>* map, Str name, NameSuffix suffix,
@@ -625,15 +625,15 @@ struct NamedLineResolver {
                         return;
                     }
                 }
-                e.lines.Append(value);
+                VecAppend(e.lines, value);
                 return;
             }
         }
         LineNameEntry e;
         e.name = name;
         e.suffix = suffix;
-        e.lines.Append(value);
-        map->Append(e);
+        VecAppend(e.lines, value);
+        VecAppend(*map, e);
     }
 
     static const Vec<uint16_t>* Find(const Vec<LineNameEntry>& map, Str name,
@@ -1175,9 +1175,9 @@ void CreateImplicitTracks(Vec<GridTrack>* tracks, uint16_t count,
                           NextTrack nextTrack, LengthPercentage gap) {
     for (uint16_t i = 0; i < count; i++) {
         TrackSizingFunction def = nextTrack();
-        tracks->Append(
-            GridTrack::New(def.MinSizingFunction(), def.MaxSizingFunction()));
-        tracks->Append(GridTrack::Gutter(gap));
+        VecAppend(*tracks, GridTrack::New(def.MinSizingFunction(),
+                                          def.MaxSizingFunction()));
+        VecAppend(*tracks, GridTrack::Gutter(gap));
     }
 }
 
@@ -1199,7 +1199,7 @@ void InitializeGridTracks(Vec<GridTrack>* tracks, TrackCounts counts,
     }
 
     tracks->len = 0;
-    tracks->Append(GridTrack::Gutter(gap));
+    VecAppend(*tracks, GridTrack::Gutter(gap));
 
     int autoTrackCount = autoTracks.len;
     uint16_t nonAutoRepeatingTrackCount = 0;
@@ -1244,9 +1244,10 @@ void InitializeGridTracks(Vec<GridTrack>* tracks, TrackCounts counts,
         for (int i = 0; i < trackTemplate.len; i++) {
             const GridTemplateComponent& c = trackTemplate[i];
             if (!c.isRepeat) {
-                tracks->Append(GridTrack::New(c.single.MinSizingFunction(),
-                                              c.single.MaxSizingFunction()));
-                tracks->Append(GridTrack::Gutter(gap));
+                VecAppend(*tracks,
+                          GridTrack::New(c.single.MinSizingFunction(),
+                                         c.single.MaxSizingFunction()));
+                VecAppend(*tracks, GridTrack::Gutter(gap));
                 currentTrackIndex += 1;
                 continue;
             }
@@ -1256,9 +1257,9 @@ void InitializeGridTracks(Vec<GridTrack>* tracks, TrackCounts counts,
                 for (int k = 0; k < total; k++) {
                     TrackSizingFunction f =
                         c.repeat.tracks[k % c.repeat.tracks.len];
-                    tracks->Append(GridTrack::New(f.MinSizingFunction(),
-                                                  f.MaxSizingFunction()));
-                    tracks->Append(GridTrack::Gutter(gap));
+                    VecAppend(*tracks, GridTrack::New(f.MinSizingFunction(),
+                                                      f.MaxSizingFunction()));
+                    VecAppend(*tracks, GridTrack::Gutter(gap));
                     currentTrackIndex += 1;
                 }
                 continue;
@@ -1278,8 +1279,8 @@ void InitializeGridTracks(Vec<GridTrack>* tracks, TrackCounts counts,
                     track.Collapse();
                     gutter.Collapse();
                 }
-                tracks->Append(track);
-                tracks->Append(gutter);
+                VecAppend(*tracks, track);
+                VecAppend(*tracks, gutter);
                 currentTrackIndex += 1;
             }
 
@@ -1771,7 +1772,7 @@ void RecordGridPlacement(CellOccupancyMatrix* matrix, Vec<GridItem>* items,
     item.margin = s.margin;
     item.alignSelf = s.alignSelf.UnwrapOr(parentAlignItems);
     item.justifySelf = s.justifySelf.UnwrapOr(parentJustifyItems);
-    items->Append(item);
+    VecAppend(*items, item);
 }
 
 LineOzl PlaceDefiniteGridItemAxis(const PlacementChild& child,
@@ -3778,8 +3779,8 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
                             .IntoOriginZero(explicitColCount);
         pc.vertical = nameResolver.ResolveRowNames(cs.gridRow)
                           .IntoOriginZero(explicitRowCount);
-        children.Append(pc);
-        childPlacements.Append({cs.gridColumn, cs.gridRow});
+        VecAppend(children, pc);
+        VecAppend(childPlacements, {cs.gridColumn, cs.gridRow});
     }
 
     // 3. Estimate the implicit track counts, which pre-sizes the occupancy
@@ -3900,11 +3901,11 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
                                                      .VerticalAxisSum())};
 
     if (runMode == RunMode::ComputeSize) {
-        items.Reset();
-        columns.Reset();
-        rows.Reset();
-        children.Reset();
-        childPlacements.Reset();
+        VecReset(items);
+        VecReset(columns);
+        VecReset(rows);
+        VecReset(children);
+        VecReset(childPlacements);
         cellOccupancyMatrix.Free();
         nameResolver.Free();
         return LayoutOutput::FromOuterSize(containerBorderBox);
@@ -4238,11 +4239,11 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
             PointFOpt{None(), Some(gridContainerBaseline)});
     }
 
-    items.Reset();
-    columns.Reset();
-    rows.Reset();
-    children.Reset();
-    childPlacements.Reset();
+    VecReset(items);
+    VecReset(columns);
+    VecReset(rows);
+    VecReset(children);
+    VecReset(childPlacements);
     cellOccupancyMatrix.Free();
     nameResolver.Free();
     return out;
@@ -4282,13 +4283,13 @@ void GridSizeEstimateForTest(uint16_t explicitColCount,
                              uint16_t* outColCounts, uint16_t* outRowCounts) {
     Vec<ChildPlacementStyles> children;
     for (int i = 0; i < n; i++) {
-        children.Append({columns[i], rows[i]});
+        VecAppend(children, {columns[i], rows[i]});
     }
     TrackCounts cols;
     TrackCounts rws;
     ComputeGridSizeEstimate(explicitColCount, explicitRowCount, direction,
                             children.els, children.len, &cols, &rws);
-    children.Reset();
+    VecReset(children);
     outColCounts[0] = cols.negativeImplicit;
     outColCounts[1] = cols.explicitCount;
     outColCounts[2] = cols.positiveImplicit;
@@ -4313,7 +4314,7 @@ int GridInitTracksForTest(const Style& style, AbsoluteAxis axis,
         out[i].min = tracks[i].minTrackSizingFunction.raw;
         out[i].max = tracks[i].maxTrackSizingFunction.raw;
     }
-    tracks.Reset();
+    VecReset(tracks);
     return n;
 }
 
@@ -4343,8 +4344,8 @@ int GridPlaceForTest(TaffyTree* tree, NodeId parent, uint16_t explicitColCount,
                             .IntoOriginZero(explicitColCount);
         pc.vertical = nameResolver.ResolveRowNames(cs.gridRow)
                           .IntoOriginZero(explicitRowCount);
-        children.Append(pc);
-        childPlacements.Append({cs.gridColumn, cs.gridRow});
+        VecAppend(children, pc);
+        VecAppend(childPlacements, {cs.gridColumn, cs.gridRow});
     }
 
     TrackCounts estCols;
@@ -4376,9 +4377,9 @@ int GridPlaceForTest(TaffyTree* tree, NodeId parent, uint16_t explicitColCount,
     outRowCounts[1] = rws.explicitCount;
     outRowCounts[2] = rws.positiveImplicit;
 
-    items.Reset();
-    children.Reset();
-    childPlacements.Reset();
+    VecReset(items);
+    VecReset(children);
+    VecReset(childPlacements);
     matrix.Free();
     nameResolver.Free();
     return n;

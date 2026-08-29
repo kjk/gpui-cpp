@@ -194,13 +194,13 @@ void PopupMenuPerform(PopupMenuState* s, Ctx* cx, PopupMenuAction act,
 
 void PopupMenuBeginRows(PopupMenuState* s) {
     if (s) {
-        s->rows.Clear();
+        VecClear(s->rows);
     }
 }
 
 void PopupMenuAddRow(PopupMenuState* s, const PopupMenuRow& row) {
     if (s) {
-        s->rows.Append(row);
+        VecAppend(s->rows, row);
     }
 }
 

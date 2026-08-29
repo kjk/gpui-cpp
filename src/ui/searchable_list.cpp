@@ -152,14 +152,14 @@ SearchableGroup* SearchableGroup::New(Str value) {
 }
 
 SearchableGroup* SearchableGroup::Item(const SearchableListItem& value) {
-    items.Append(value);
+    VecAppend(items, value);
     return this;
 }
 
 SearchableGroup* SearchableGroup::Items(const SearchableListItem* values,
                                         int count) {
     for (int i = 0; i < count; i++) {
-        items.Append(values[i]);
+        VecAppend(items, values[i]);
     }
     return this;
 }
@@ -180,23 +180,23 @@ SearchableVec* SearchableVec::New(const SearchableListItem* values,
                                   int count) {
     SearchableVec* out = new SearchableVec();
     for (int i = 0; i < count; i++) {
-        out->items.Append(values[i]);
-        out->matchedItems.Append(values[i]);
+        VecAppend(out->items, values[i]);
+        VecAppend(out->matchedItems, values[i]);
     }
     return out;
 }
 
 SearchableVec* SearchableVec::Push(const SearchableListItem& value) {
-    items.Append(value);
-    matchedItems.Append(value);
+    VecAppend(items, value);
+    VecAppend(matchedItems, value);
     return this;
 }
 
 void SearchableVec::PerformSearch(Str query) {
-    matchedItems.Clear();
+    VecClear(matchedItems);
     for (int i = 0; i < items.len; i++) {
         if (SearchableItemMatches(&items[i], query)) {
-            matchedItems.Append(items[i]);
+            VecAppend(matchedItems, items[i]);
         }
     }
 }
@@ -356,11 +356,11 @@ void SearchableListState::SelectedValues(Vec<Str>* out) const {
     if (!out) {
         return;
     }
-    out->Clear();
+    VecClear(*out);
     for (int i = 0; i < selected.len; i++) {
         int ix = selected[i];
         if (items && ix >= 0 && ix < nItems) {
-            out->Append(items[ix].value);
+            VecAppend(*out, items[ix].value);
         }
     }
 }
@@ -375,7 +375,7 @@ bool SearchableListState::AddSelectedIndex(IndexPath index) {
             return false;
         }
     }
-    selected.Append(flat);
+    VecAppend(selected, flat);
     return true;
 }
 
@@ -395,7 +395,7 @@ bool SearchableListState::RemoveSelectedIndex(IndexPath index) {
 }
 
 void SearchableListState::SetSelectedIndices(const IndexPath* indices, int n) {
-    selected.Clear();
+    VecClear(selected);
     for (int i = 0; i < n; i++) {
         AddSelectedIndex(indices[i]);
     }
@@ -414,11 +414,11 @@ void SearchableListSearch(SearchableListState* s, const SearchableItem* items,
     // changing.
     s->items = items;
     s->nItems = nItems;
-    s->matches.Clear();
+    VecClear(s->matches);
     for (int i = 0; i < nItems; i++) {
         if (s->hasDelegate ? s->delegate.Matches(&items[i], query)
                            : SearchableItemMatches(&items[i], query)) {
-            s->matches.Append(i);
+            VecAppend(s->matches, i);
         }
     }
     s->list.count = s->matches.len;
@@ -428,9 +428,9 @@ void SearchableListSelectOnly(SearchableListState* s, int index) {
     if (!s) {
         return;
     }
-    s->selected.Clear();
+    VecClear(s->selected);
     if (index >= 0) {
-        s->selected.Append(index);
+        VecAppend(s->selected, index);
     }
 }
 
@@ -485,23 +485,24 @@ bool SearchableListIsEnabled(const SearchableListState* s,
 void SearchableListChangesFor(const SearchableListState* s,
                               const SearchableItem* items, int nItems,
                               int index, Vec<SearchableListChange>* out) {
-    out->Clear();
+    VecClear(*out);
     if (s->mode == SearchableListMode::Single) {
         // The single-select strategy: everything that was selected comes out,
         // and the one that was clicked goes in.
         for (int i = 0; i < s->selected.len; i++) {
-            out->Append({SearchableListChangeKind::Deselect, s->selected[i]});
+            VecAppend(*out,
+                      {SearchableListChangeKind::Deselect, s->selected[i]});
         }
-        out->Append({SearchableListChangeKind::Select, index});
+        VecAppend(*out, {SearchableListChangeKind::Select, index});
         return;
     }
     // Multi toggles the row that was clicked and leaves the rest alone. What
     // it is toggling is the item's value, which is what the check beside it
     // goes by.
     bool selected = SearchableListIsChecked(s, items, nItems, index);
-    out->Append({selected ? SearchableListChangeKind::Deselect
-                          : SearchableListChangeKind::Select,
-                 index});
+    VecAppend(*out, {selected ? SearchableListChangeKind::Deselect
+                              : SearchableListChangeKind::Select,
+                     index});
 }
 
 static void SelectionRemoveAt(SearchableListState* s, int at) {
@@ -529,7 +530,7 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
             }
             // A value already in the selection is not added twice.
             if (at < 0) {
-                s->selected.Append(ch.index);
+                VecAppend(s->selected, ch.index);
             }
             continue;
         }
@@ -555,7 +556,7 @@ bool SearchableListClick(SearchableListState* s, int index) {
     } else {
         SearchableListApply(s, s->items, s->nItems, changes.els, changes.len);
     }
-    changes.Reset();
+    VecReset(changes);
     return s->mode == SearchableListMode::Single && s->closeOnSelect;
 }
 

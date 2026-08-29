@@ -111,7 +111,7 @@ struct SearchableGroup {
     SearchableGroup* Item(const SearchableListItem& item);
     SearchableGroup* Items(const SearchableListItem* items, int nItems);
     bool Matches(Str query) const;
-    ~SearchableGroup() { items.Reset(); }
+    ~SearchableGroup() { VecReset(items); }
 };
 
 // SearchableVec's in-memory item specialization. Generic Rust item traits
@@ -128,8 +128,8 @@ struct SearchableVec {
     const SearchableListItem* Item(IndexPath path) const;
     bool Position(Str value, IndexPath* out) const;
     ~SearchableVec() {
-        items.Reset();
-        matchedItems.Reset();
+        VecReset(items);
+        VecReset(matchedItems);
     }
 };
 
@@ -245,8 +245,8 @@ struct SearchableListState {
                              const ActionEvent* ev);
 
     ~SearchableListState() {
-        selected.Reset();
-        matches.Reset();
+        VecReset(selected);
+        VecReset(matches);
     }
 };
 

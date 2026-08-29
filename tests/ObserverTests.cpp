@@ -33,7 +33,7 @@ struct Watcher {
 static Window* FakeWindow(App* app) {
     Window* win = new Window();
     win->app = app;
-    app->windows.Append(win);
+    VecAppend(app->windows, win);
     return win;
 }
 
@@ -58,7 +58,7 @@ static void AnObserverHearsTheEntityThatNotified() {
     NotifyEntity(&app, other.id, win);
     utassert(watcher.Get(&app)->seen == 1);
 
-    app.windows.Reset();
+    VecReset(app.windows);
     delete win;
     EntityDropAll(&app);
 }
@@ -77,7 +77,7 @@ static void TwoObserversBothHearIt() {
     NotifyEntity(&app, model.id, win);
     utassert(a.Get(&app)->seen == 1 && b.Get(&app)->seen == 1);
 
-    app.windows.Reset();
+    VecReset(app.windows);
     delete win;
     EntityDropAll(&app);
 }
@@ -97,7 +97,7 @@ static void AnObservationCanBeGivenUp() {
     NotifyEntity(&app, model.id, win);
     utassert(watcher.Get(&app)->seen == 1);
 
-    app.windows.Reset();
+    VecReset(app.windows);
     delete win;
     EntityDropAll(&app);
 }
@@ -116,7 +116,7 @@ static void AnObserverThatWentAwayIsSwept() {
     // The notify still runs; there is simply nobody left to hear it.
     NotifyEntity(&app, model.id, win);
 
-    app.windows.Reset();
+    VecReset(app.windows);
     delete win;
     EntityDropAll(&app);
 }
@@ -143,7 +143,7 @@ static void ANotifyNamesTheWindowsThatRenderedIt() {
     utassert(a->rendered.len == 2);
 
     ArenaDelete(arena);
-    app.windows.Reset();
+    VecReset(app.windows);
     delete a;
     delete b;
     EntityDropAll(&app);

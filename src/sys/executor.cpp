@@ -67,7 +67,7 @@ void ExecPost(Func0 f) {
         gMainLock.Unlock();
         return;
     }
-    gMainQueue.Append(t);
+    VecAppend(gMainQueue, t);
     Func0 wake = gWake;
     gMainLock.Unlock();
     // Outside the lock: waking is an OS call, and the loop it wakes takes the
@@ -116,7 +116,7 @@ int ExecDrain() {
         batch[i].f.Call();
     }
     int n = batch.len;
-    batch.Reset();
+    VecReset(batch);
     return n;
 }
 
@@ -235,7 +235,7 @@ TaskId ExecSpawn(Func0 work, Func0 done) {
     job.id = gNextTaskId++;
     job.work = work;
     job.done = done;
-    if (!gJobs.Append(job)) {
+    if (!VecAppend(gJobs, job)) {
         gPoolLock.Unlock();
         return 0;
     }
@@ -335,7 +335,7 @@ void ExecShutdown() {
 
     gPoolLock.Lock();
     gPoolStop = true;
-    gJobs.Reset();
+    VecReset(gJobs);
     gPoolLock.Unlock();
     gPoolWake.WakeAll();
 
@@ -349,7 +349,7 @@ void ExecShutdown() {
 
     gMainLock.Lock();
     gStopping = true;
-    gMainQueue.Reset();
+    VecReset(gMainQueue);
     gWake = Func0{};
     gMainThreadId = 0;
     gMainLock.Unlock();

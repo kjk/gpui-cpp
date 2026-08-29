@@ -151,7 +151,7 @@ struct CallbackArena {
         entry->policy = PolicyRetain(policy);
         entry->application = application;
         entry->registeredIn = registeredIn;
-        entries.Append(entry);
+        VecAppend(entries, entry);
         return entry->id;
     }
 
@@ -168,7 +168,7 @@ struct CallbackArena {
         entry->application = application;
         entry->registeredIn = shell::ScopeCurrentGeneration();
         entry->committed = true;
-        entries.Append(entry);
+        VecAppend(entries, entry);
         return entry->id;
     }
 
@@ -256,7 +256,7 @@ struct CallbackArena {
             PolicyRelease(entry->policy);
             delete entry;
         }
-        entries.Reset();
+        VecReset(entries);
         building = false;
         buildingStart = 0;
     }
@@ -391,7 +391,7 @@ struct ProcessJob {
 
     void Free() {
         for (int i = 0; i < args.len; i++) StrFree(args[i]);
-        args.Reset();
+        VecReset(args);
         StrFree(command);
         output.Free();
         StrFree(error);
@@ -583,7 +583,7 @@ static uint32_t NewTask(ShellRuntimeImpl* impl, ShellTaskKind kind,
     task->application = (AppModule*)shell::ScopeCurrentApplication();
     task->app = app;
     task->window = window;
-    impl->tasks.Append(task);
+    VecAppend(impl->tasks, task);
     return task->id;
 }
 
@@ -947,7 +947,7 @@ static void WakeStorageWaiters(Vec<shell::StorageWaiter*>* ready,
         delete waiter;
         settle.Call(outcome);
     }
-    ready->Reset();
+    VecReset(*ready);
 }
 
 static void StorageWriteDone(StorageWriteJob* job) {
@@ -2127,7 +2127,7 @@ static JSValue NativeViewNew(JSContext* ctx, JSValueConst, int argc,
     nested.policy = PolicyRetain(policy);
     nested.application = type->application;
     nested.app = app;
-    impl->nestedViews.Append(nested);
+    VecAppend(impl->nestedViews, nested);
     ViewTypeRelease(type);
     return JS_NewUint32(ctx, token);
 }
@@ -2216,7 +2216,7 @@ static JSValue NativeViewSetProps(JSContext* ctx, JSValueConst, int argc,
         for (int i = 0; i < retired.len; i++) {
             impl->callbacks.RetireId(ctx, retired[i]);
         }
-        retired.Reset();
+        VecReset(retired);
         RollbackNestedViews(impl, nestedCheckpoint);
         JS_FreeValue(ctx, restore);
         if (restoreError.IsSet()) {
@@ -3114,7 +3114,7 @@ static JSValue NativeRetainedRelease(JSContext* ctx, JSValueConst, int argc,
     for (int i = 0; impl && i < callbacks.len; i++) {
         impl->callbacks.RetireId(ctx, callbacks[i]);
     }
-    callbacks.Reset();
+    VecReset(callbacks);
     return JS_NewBool(ctx, released);
 }
 
@@ -4294,7 +4294,7 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
             HostValue* converted = new HostValue();
             bool ok = !JS_IsException(item) &&
                       HostFromJs(ctx, item, depth + 1, converted) &&
-                      out->array.Append(converted);
+                      VecAppend(out->array, converted);
             JS_FreeValue(ctx, item);
             if (!ok) {
                 converted->Free();
@@ -4334,7 +4334,7 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
             field.value = new HostValue();
             ok = name && !JS_IsException(item) && field.name.s &&
                  HostFromJs(ctx, item, depth + 1, field.value) &&
-                 out->object.Append(field);
+                 VecAppend(out->object, field);
             if (name) JS_FreeCString(ctx, name);
             JS_FreeValue(ctx, item);
             if (!ok) {
@@ -4373,7 +4373,7 @@ static bool HostArgumentsFromJs(JSContext* ctx, JSValueConst array,
         JSValue item = JS_GetPropertyUint32(ctx, array, (uint32_t)i);
         HostValue* value = new HostValue();
         bool ok = !JS_IsException(item) && HostFromJs(ctx, item, 0, value) &&
-                  arguments->values.Append(value);
+                  VecAppend(arguments->values, value);
         JS_FreeValue(ctx, item);
         if (!ok) {
             value->Free();
@@ -4988,7 +4988,7 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
             break;
         }
         Str copy = StrDup(argument);
-        if (!copy.s || !job->args.Append(copy)) {
+        if (!copy.s || !VecAppend(job->args, copy)) {
             StrFree(copy);
             JS_ThrowOutOfMemory(ctx);
             ok = false;
@@ -5109,7 +5109,7 @@ static JSValue NativeRandom(JSContext* ctx, JSValueConst, int argc,
     }
     int count = (int)requested;
     Vec<uint8_t> bytes;
-    if ((count > 0 && !bytes.AppendBlanks(count)) ||
+    if ((count > 0 && !VecAppendBlanks(bytes, count)) ||
         !shell::SecureRandom(bytes.els, count)) {
         return JS_ThrowInternalError(ctx, "the platform secure random generator failed");
     }
@@ -6233,7 +6233,7 @@ ShellRuntime::~ShellRuntime() {
             for (int i = impl->tasks.len - 1; i >= 0; i--) {
                 DestroyTask(impl, impl->tasks[i], true);
             }
-            impl->tasks.Reset();
+            VecReset(impl->tasks);
             if (impl->taskDriver.IsValid() && impl->taskApp) {
                 ShellTaskDriver* driver = impl->taskDriver.Get(impl->taskApp);
                 if (driver) driver->runtime = nullptr;
@@ -6245,7 +6245,7 @@ ShellRuntime::~ShellRuntime() {
             for (int i = 0; i < retired.len; i++) {
                 impl->callbacks.RetireId(impl->context, retired[i]);
             }
-            retired.Reset();
+            VecReset(retired);
             impl->callbacks.Clear(impl->context);
         }
         delete impl->scratch;
@@ -6253,9 +6253,9 @@ ShellRuntime::~ShellRuntime() {
             StrFree(impl->modules[i]->root);
             delete impl->modules[i];
         }
-        impl->modules.Reset();
-        impl->views.Reset();
-        impl->nestedViews.Reset();
+        VecReset(impl->modules);
+        VecReset(impl->views);
+        VecReset(impl->nestedViews);
         if (impl->context) {
             JS_SetContextOpaque(impl->context, nullptr);
             JS_FreeContext(impl->context);
@@ -6406,7 +6406,7 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
     if (application->generation == 0) {
         application->generation = impl->nextModuleGeneration++;
     }
-    impl->modules.Append(application);
+    VecAppend(impl->modules, application);
 
     Str source = {};
     if (!ReadFileBounded(Str(canonical), &source, error)) return nullptr;
@@ -6447,7 +6447,7 @@ static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
         for (int i = 0; i < retired.len; i++) {
             impl->callbacks.RetireId(impl->context, retired[i]);
         }
-        retired.Reset();
+        VecReset(retired);
         while (impl->tasks.len > taskCheckpoint) {
             ForgetTask(impl, impl->tasks[impl->tasks.len - 1]->id);
         }
@@ -6476,7 +6476,7 @@ static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
         for (int i = 0; i < retired.len; i++) {
             impl->callbacks.RetireId(impl->context, retired[i]);
         }
-        retired.Reset();
+        VecReset(retired);
         while (impl->tasks.len > taskCheckpoint) {
             ForgetTask(impl, impl->tasks[impl->tasks.len - 1]->id);
         }
@@ -6646,7 +6646,7 @@ void ShellRuntime::RegisterScriptView(EntityId view, bool* dirty) {
     for (int i = 0; i < impl->views.len; i++) {
         if (impl->views[i].view == view && impl->views[i].dirty == dirty) return;
     }
-    impl->views.Append({view, dirty});
+    VecAppend(impl->views, {view, dirty});
 }
 
 void ShellRuntime::UnregisterScriptView(EntityId view, bool* dirty) {
@@ -6690,7 +6690,7 @@ void ShellRuntime::ReleaseOwnedEntities(EntityId view) {
     for (int i = 0; i < callbacks.len; i++) {
         impl->callbacks.RetireId(impl->context, callbacks[i]);
     }
-    callbacks.Reset();
+    VecReset(callbacks);
 }
 
 void ShellRuntime::ReleaseApplicationState(ViewObject* object) {
@@ -6717,7 +6717,7 @@ void ShellRuntime::ReleaseApplicationState(ViewObject* object) {
     for (int i = 0; i < callbacks.len; i++) {
         impl->callbacks.RetireId(impl->context, callbacks[i]);
     }
-    callbacks.Reset();
+    VecReset(callbacks);
     impl->callbacks.RetireApplication(impl->context, application);
 }
 
@@ -6916,7 +6916,7 @@ static void RetainedCallbackIds(const shell::RetainedEntry* entry,
     if (!entry) return;
     for (int i = 0; i < entry->callbacks.len; i++) {
         if (entry->callbacks[i].event == event) {
-            out->Append(entry->callbacks[i].callback);
+            VecAppend(*out, entry->callbacks[i].callback);
         }
     }
 }
@@ -6951,7 +6951,7 @@ void ShellRuntime::DispatchInputEvent(shell::EntityHandle handle,
         }
         Dispatch(this, callbacks[i], payload, window, app);
     }
-    callbacks.Reset();
+    VecReset(callbacks);
 }
 
 void ShellRuntime::DispatchSliderEvent(shell::EntityHandle handle,
@@ -6969,7 +6969,7 @@ void ShellRuntime::DispatchSliderEvent(shell::EntityHandle handle,
                               : JS_NewFloat64(impl->context, event.value.hi);
         Dispatch(this, callbacks[i], payload, window, app);
     }
-    callbacks.Reset();
+    VecReset(callbacks);
 }
 
 void ShellRuntime::DispatchOtpEvent(shell::EntityHandle handle,
@@ -6988,7 +6988,7 @@ void ShellRuntime::DispatchOtpEvent(shell::EntityHandle handle,
     for (int i = 0; i < callbacks.len; i++) {
         Dispatch(this, callbacks[i], JS_NewObject(impl->context), window, app);
     }
-    callbacks.Reset();
+    VecReset(callbacks);
 }
 
 void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
@@ -7049,7 +7049,7 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                 succeeded = !JS_IsException(item) &&
                             ElementId(impl->context, item, &root);
                 JS_FreeValue(impl->context, item);
-                if (succeeded) roots.Append(root);
+                if (succeeded) VecAppend(roots, root);
             }
         }
         JS_FreeValue(impl->context, produced);
@@ -7073,11 +7073,11 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                 }
             }
             if (succeeded) {
-                seen.Append(text);
-                itemKeys.Append(StrDup(cx->a, text));
+                VecAppend(seen, text);
+                VecAppend(itemKeys, StrDup(cx->a, text));
             }
         }
-        seen.Reset();
+        VecReset(seen);
         ArenaDelete(keys);
     }
     impl->scratch = outer;
@@ -7111,8 +7111,8 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
             }
         }
     }
-    itemKeys.Reset();
-    roots.Reset();
+    VecReset(itemKeys);
+    VecReset(roots);
     delete batch;
     double elapsed = TimeNow() - started;
     shell::MetricsAdd(&impl->metrics, shell::MetricsTimerKind::VirtualItems,

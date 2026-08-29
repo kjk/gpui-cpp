@@ -255,14 +255,14 @@ El* List::IntoEl() {
                 sections = 1;
             }
             if (delegate.itemsCount) {
-                s->sectionCounts.Clear();
+                VecClear(s->sectionCounts);
                 s->count = 0;
                 for (int section = 0; section < sections; section++) {
                     int n = delegate.itemsCount(cx, delegate.data, section);
                     if (n < 0) {
                         n = 0;
                     }
-                    s->sectionCounts.Append(n);
+                    VecAppend(s->sectionCounts, n);
                     s->count += n;
                 }
                 s->sectionHeaders = delegate.renderSectionHeader != nullptr;

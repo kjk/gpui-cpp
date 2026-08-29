@@ -110,7 +110,7 @@ static void ALongChainStillResolves() {
     const int kCount = 50000;
     Vec<SankeyLink> links;
     for (int i = 0; i < kCount - 1; i++) {
-        links.Append(L(i, i + 1, 1));
+        VecAppend(links, L(i, i + 1, 1));
     }
     Sankey s;
     SankeyGraph g;

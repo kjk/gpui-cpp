@@ -1,23 +1,23 @@
-/* `Vec`'s borrowed storage in src/base.h — `VecUseInline`, which lends a vec
- * an array on the caller's stack to start in so that a vec which never
- * outgrows it costs no allocation at all. The capacity rides in the sign of
- * `cap`, and the two things that have to tell owned storage from borrowed are
- * growing (the block cannot be realloc'd, so it is copied out of) and freeing
- * (it must not be), which is what these check. Taffy's flex line list is the
- * caller it was written for. */
+/* Vec's borrowed storage and free-function API, kept aligned with Sumatra's
+ * src/base/Vec.h. */
 
 #include "Test.h"
+
+template <typename T>
+static int VecCap(const Vec<T>& v) {
+    return v.cap < 0 ? -v.cap : v.cap;
+}
 
 static void AnInlineVecStartsInTheBufferAndDoesNotAllocate() {
     int buf[4] = {};
     Vec<int> v;
-    VecUseInline(v, buf);
+    VecUseExternalBuffer(v, buf);
     utassert(v.len == 0);
-    utassert(v.Cap() == 4);
+    utassert(VecCap(v) == 4);
     utassert(v.els == buf);
 
     for (int i = 0; i < 4; i++) {
-        utassert(v.Append(i * 7));
+        utassert(VecAppend(v, i * 7));
     }
     utassert(v.len == 4);
     // Still the caller's array: the elements were written straight into it,
@@ -32,17 +32,17 @@ static void AnInlineVecStartsInTheBufferAndDoesNotAllocate() {
 static void TheAppendPastTheBufferMovesToTheHeapWithTheElements() {
     int buf[4] = {};
     Vec<int> v;
-    VecUseInline(v, buf);
+    VecUseExternalBuffer(v, buf);
     for (int i = 0; i < 4; i++) {
-        v.Append(i * 7);
+        VecAppend(v, i * 7);
     }
-    utassert(v.Append(99));
+    utassert(VecAppend(v, 99));
 
     // Off the buffer and onto a block of its own, carrying everything that
     // was already there.
     utassert(v.els != buf);
     utassert(v.cap > 0);
-    utassert(v.Cap() >= 5);
+    utassert(VecCap(v) >= 5);
     utassert(v.len == 5);
     for (int i = 0; i < 4; i++) {
         utassert(v[i] == i * 7);
@@ -55,7 +55,7 @@ static void TheAppendPastTheBufferMovesToTheHeapWithTheElements() {
 
     // And it goes on growing the ordinary way from there.
     for (int i = 0; i < 200; i++) {
-        v.Append(1000 + i);
+        VecAppend(v, 1000 + i);
     }
     utassert(v.len == 205);
     utassert(v[204] == 1199);
@@ -65,13 +65,13 @@ static void TheAppendPastTheBufferMovesToTheHeapWithTheElements() {
 static void AReserveStraightPastTheBufferAlsoCarries() {
     int buf[4] = {};
     Vec<int> v;
-    VecUseInline(v, buf);
-    v.Append(1);
-    v.Append(2);
+    VecUseExternalBuffer(v, buf);
+    VecAppend(v, 1);
+    VecAppend(v, 2);
     // One jump, rather than an append at a time.
     utassert(VecReserve(v, 64) != nullptr);
     utassert(v.els != buf);
-    utassert(v.Cap() >= 64);
+    utassert(VecCap(v) >= 64);
     utassert(v.len == 2);
     utassert(v[0] == 1 && v[1] == 2);
 }
@@ -79,19 +79,19 @@ static void AReserveStraightPastTheBufferAlsoCarries() {
 static void ResetGivesTheBufferBackWithoutFreeingIt() {
     int buf[4] = {7, 7, 7, 7};
     Vec<int> v;
-    VecUseInline(v, buf);
-    v.Append(1);
+    VecUseExternalBuffer(v, buf);
+    VecAppend(v, 1);
     // The interesting half: `Reset` must not hand a stack address to free().
     // Reaching the end of this test at all is the assertion; the rest says
     // the vec is empty afterwards and the array is untouched.
-    v.Reset();
+    VecReset(v);
     utassert(v.len == 0);
-    utassert(v.Cap() == 0);
+    utassert(VecCap(v) == 0);
     utassert(v.els == nullptr);
     utassert(buf[0] == 1);
 
     // Empty and owning nothing, it allocates the way any other vec does.
-    v.Append(5);
+    VecAppend(v, 5);
     utassert(v.len == 1 && v[0] == 5);
     utassert(v.els != buf);
 }
@@ -100,9 +100,9 @@ static void ADestructorOnABorrowedVecFreesNothing() {
     int buf[4] = {};
     {
         Vec<int> v;
-        VecUseInline(v, buf);
-        v.Append(3);
-        v.Append(4);
+        VecUseExternalBuffer(v, buf);
+        VecAppend(v, 3);
+        VecAppend(v, 4);
     }
     // Same: the point is that the scope closed without free() seeing the
     // stack array.
@@ -112,9 +112,9 @@ static void ADestructorOnABorrowedVecFreesNothing() {
 static void ACopyOfABorrowedVecOwnsItsOwnElements() {
     int buf[4] = {};
     Vec<int> v;
-    VecUseInline(v, buf);
-    v.Append(11);
-    v.Append(22);
+    VecUseExternalBuffer(v, buf);
+    VecAppend(v, 11);
+    VecAppend(v, 22);
 
     Vec<int> copy = v;
     utassert(copy.len == 2);
@@ -130,13 +130,13 @@ static void ACopyOfABorrowedVecOwnsItsOwnElements() {
 static void ClearOnABorrowedVecZeroesTheBuffer() {
     int buf[4] = {};
     Vec<int> v;
-    VecUseInline(v, buf);
+    VecUseExternalBuffer(v, buf);
     for (int i = 0; i < 4; i++) {
-        v.Append(i + 1);
+        VecAppend(v, i + 1);
     }
     // Clear zeroes the whole capacity, and the capacity here is the array —
     // the size of it is what the sign of `cap` has to be read through.
-    v.Clear();
+    VecClear(v);
     utassert(v.len == 0);
     for (int i = 0; i < 4; i++) {
         utassert(buf[i] == 0);
@@ -145,20 +145,20 @@ static void ClearOnABorrowedVecZeroesTheBuffer() {
 
 static void AnOrdinaryVecIsUnaffected() {
     Vec<int> v;
-    utassert(v.Cap() == 0);
+    utassert(VecCap(v) == 0);
     for (int i = 0; i < 100; i++) {
-        v.Append(i);
+        VecAppend(v, i);
     }
     utassert(v.len == 100);
-    utassert(v.cap >= 100 && v.Cap() == v.cap);
+    utassert(v.cap >= 100 && VecCap(v) == v.cap);
     utassert(v[99] == 99);
-    v.Reset();
+    VecReset(v);
     utassert(v.len == 0 && v.cap == 0 && v.els == nullptr);
 }
 
-// The caller `VecUseInline` was written for, driven past its buffer. Taffy's
-// flex line list is the only one in the tree, and no layout anywhere in the
-// tree — the taffy suite, the story gallery, the showcase, the benchmarks —
+// The caller `VecUseExternalBuffer` was written for, driven past its buffer.
+// Taffy's flex line list is the only one in the tree, and no layout anywhere in
+// the tree — the taffy suite, the story gallery, the showcase, the benchmarks —
 // produces more than one flex line, so nothing else would ever move it off
 // the stack. A wrapping row twelve items wide makes six lines, and what is
 // checked is that the lines the buffer already held came through the move
@@ -192,6 +192,60 @@ static void TaffyFlexLinesSurviveOutgrowingTheBuffer() {
     }
 }
 
+static void TheFreeFunctionSurfaceKeepsVecSemantics() {
+    Vec<int> v;
+    utassert(VecReserve(v, 0) == nullptr);
+    utassert(VecAppend(v, 2));
+    int more[] = {4, 6};
+    utassert(VecAppendN(v, more, 2));
+    utassert(VecInsertAt(v, 1, 3));
+    utassert(v.len == 4 && v[0] == 2 && v[1] == 3 && v[2] == 4 && v[3] == 6);
+    utassert(VecFind(v, 4) == 2);
+    utassert(VecContains(v, 6));
+    utassert(VecLast(v) == 6);
+    utassert(VecIsValidIndex(v, 3) && !VecIsValidIndex(v, 4));
+
+    utassert(VecPopAt(v, 1) == 3);
+    VecRemoveAtN(v, 0, 2);
+    utassert(v.len == 1 && v[0] == 6);
+    utassert(VecAppend(v, 8));
+    VecRemoveAtFast(v, 0);
+    utassert(v.len == 1 && v[0] == 8);
+    VecRemoveLast(v);
+    utassert(v.len == 0);
+
+    utassert(VecResize(v, 3));
+    utassert(v.len == 3 && v[0] == 0 && v[1] == 0 && v[2] == 0);
+    v[0] = 10;
+    v[1] = 20;
+    v[2] = 30;
+    utassert(VecPop(v) == 30);
+    utassert(VecRemove(v, 10) == 0);
+    utassert(v.len == 1 && v[0] == 20);
+
+    Vec<int> other;
+    utassert(VecAppend(other, 40));
+    utassert(VecAppendVec(v, other));
+    utassert(v.len == 2 && v[1] == 40);
+    int* taken = VecTake(v);
+    utassert(taken && taken[0] == 20 && taken[1] == 40);
+    utassert(v.len == 0 && v.cap == 0 && v.els == nullptr);
+    Free(nullptr, taken);
+}
+
+static void TakingBorrowedStorageReturnsAnOwnedCopy() {
+    int buf[2] = {};
+    Vec<int> v;
+    VecUseExternalBuffer(v, buf);
+    VecAppend(v, 7);
+    VecAppend(v, 9);
+    int* taken = VecTake(v);
+    utassert(taken && taken != buf && taken[0] == 7 && taken[1] == 9);
+    utassert(v.len == 0 && v.cap == 0 && v.els == nullptr);
+    utassert(buf[0] == 7 && buf[1] == 9);
+    Free(nullptr, taken);
+}
+
 void TestVec() {
     TestSuite("vec");
     AnInlineVecStartsInTheBufferAndDoesNotAllocate();
@@ -203,4 +257,6 @@ void TestVec() {
     ClearOnABorrowedVecZeroesTheBuffer();
     AnOrdinaryVecIsUnaffected();
     TaffyFlexLinesSurviveOutgrowingTheBuffer();
+    TheFreeFunctionSurfaceKeepsVecSemantics();
+    TakingBorrowedStorageReturnsAnOwnedCopy();
 }

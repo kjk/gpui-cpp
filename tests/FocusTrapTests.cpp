@@ -17,7 +17,7 @@ static Window* WindowWithFocusables(const int* ids, const int* traps, int n) {
         FocusRect fr;
         fr.id = ids[i];
         fr.trapId = traps[i];
-        win->focusEls.Append(fr);
+        VecAppend(win->focusEls, fr);
     }
     return win;
 }

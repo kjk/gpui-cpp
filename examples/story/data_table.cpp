@@ -939,8 +939,8 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
             cells.len > 0 ? cells[0] : Str(), cells.len > 1 ? cells[1] : Str(),
             cells.len > 2 ? cells[2] : Str()));
         StrFree(headLine);
-        heads.Reset();
-        cells.Reset();
+        VecReset(heads);
+        VecReset(cells);
     }
     El* box = table->IntoEl();
 

@@ -1013,7 +1013,7 @@ struct ToggleGroupState {
     Vec<bool> checked;
     Listener onClick = {};
 
-    ~ToggleGroupState() { checked.Reset(); }
+    ~ToggleGroupState() { VecReset(checked); }
 
     static void OnChildClick(ToggleGroupState* self, Ctx* cx,
                              const ClickEvent*, intptr_t ix) {
@@ -1032,8 +1032,9 @@ El* ToggleGroup::IntoEl() {
             cx, id, StrL("gpui::component::ToggleGroupState"));
         stored = state.Get(cx);
         if (stored) {
-            stored->checked.Clear();
-            for (Toggle* item : items) stored->checked.Append(item->checked);
+            VecClear(stored->checked);
+            for (Toggle* item : items)
+                VecAppend(stored->checked, item->checked);
             stored->onClick = onClick;
         }
     }
@@ -1364,11 +1365,11 @@ struct ButtonGroupState {
                 }
                 next.len--;
             } else {
-                next.Append((int)childIndex);
+                VecAppend(next, (int)childIndex);
             }
         } else {
-            next.Clear();
-            next.Append((int)childIndex);
+            VecClear(next);
+            VecAppend(next, (int)childIndex);
         }
 
         ButtonGroupEvent ev{next.els, next.len};
@@ -1384,10 +1385,10 @@ El* ButtonGroup::IntoEl() {
             cx, id, StrL("gpui::component::ButtonGroupState"));
         stateValue = state.Get(cx->app);
         if (stateValue) {
-            stateValue->selected.Clear();
+            VecClear(stateValue->selected);
             for (int i = 0; i < children.len; i++) {
                 if (children[i]->selected) {
-                    stateValue->selected.Append(i);
+                    VecAppend(stateValue->selected, i);
                 }
             }
             stateValue->multiple = multiple;

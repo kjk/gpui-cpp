@@ -35,7 +35,7 @@ bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,
     PendingDirectory root;
     memcpy(root.path, directory.s, (size_t)directory.len);
     root.path[directory.len] = 0;
-    if (!pending.Append(root)) {
+    if (!VecAppend(pending, root)) {
         ShellErrorSet(error, StrL("out of memory while scanning source tree"));
         return false;
     }
@@ -80,7 +80,7 @@ bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,
                 int n = snprintf(child.path, sizeof(child.path), "%s/%s",
                                  dir.path, item.name);
                 if (n <= 0 || n >= (int)sizeof(child.path) ||
-                    !pending.Append(child)) {
+                    !VecAppend(pending, child)) {
                     ShellErrorSet(error,
                                   StrL("source path is too long or could not be recorded"));
                     ok = false;

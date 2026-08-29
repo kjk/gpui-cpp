@@ -183,11 +183,11 @@ static void ScrollableMasksChainAndTrapLikeTheSource() {
     // transparent ScrollableMask elements are in GPUI.
     HitRect outerHit = {};
     outerHit.bounds = {0, 0, 100, 100};
-    win->paint.hits.Append(outerHit);
+    VecAppend(win->paint.hits, outerHit);
     HitRect innerHit = {};
     innerHit.bounds = {0, 0, 100, 60};
     innerHit.parent = 0;
-    win->paint.hits.Append(innerHit);
+    VecAppend(win->paint.hits, innerHit);
 
     ScrollRect outer = TestScrollRect(
         1, {0, 0, 100, 100}, 100, 500, 2, 0,
@@ -195,8 +195,8 @@ static void ScrollableMasksChainAndTrapLikeTheSource() {
     ScrollRect inner = TestScrollRect(
         2, {0, 0, 100, 60}, 100, 300, 2, 1,
         ListenTo(entity, &ScrollRecorder::Inner));
-    win->paint.scrolls.Append(outer);
-    win->paint.scrolls.Append(inner);
+    VecAppend(win->paint.scrolls, outer);
+    VecAppend(win->paint.scrolls, inner);
 
     DispatchWheel(win, 0, -40);
     utassertnear(state->innerY, 40);
@@ -257,13 +257,13 @@ static void ScrollableMasksChainAndTrapLikeTheSource() {
     // receives the wheel.
     HitRect overlay = {};
     overlay.bounds = {0, 0, 100, 100};
-    win->paint.hits.Append(overlay);
+    VecAppend(win->paint.hits, overlay);
     int calls = state->innerCalls + state->outerCalls;
     DispatchWheel(win, -40, 0);
     utassert(state->innerCalls + state->outerCalls == calls);
 
-    win->paint.hits.Reset();
-    win->paint.scrolls.Reset();
+    VecReset(win->paint.hits);
+    VecReset(win->paint.scrolls);
     delete win;
     EntityDropAll(&app);
 }
@@ -278,7 +278,7 @@ static void ATrackPressMovesOnceAndOnlyAThumbPressDrags() {
         51, {0, 0, 100, 100}, 100, 400, 0, -1,
         ListenTo(entity, &ScrollRecorder::Inner));
     scroll.trackWidth = 20;
-    win->paint.scrolls.Append(scroll);
+    VecAppend(win->paint.scrolls, scroll);
 
     PlatformInput track =
         InputMouseDown(MouseButton::Left, 85, 90, {}, 1, false);
@@ -293,7 +293,7 @@ static void ATrackPressMovesOnceAndOnlyAThumbPressDrags() {
     utassert(win->scrollDragId == 51);
     utassert(!win->scrollDragHorizontal);
 
-    win->paint.scrolls.Reset();
+    VecReset(win->paint.scrolls);
     delete win;
     EntityDropAll(&app);
 }

@@ -197,10 +197,10 @@ static void StackBuilderUsesStableMeasurementsAndSourceMotion() {
     Ctx cx = {&app, win, a, {}};
     ToastStackState state;
     state.bounds = {0, 0, 300, 94};
-    state.heights.Append({(uint32_t)HashClickId(StrL("first")),
-                          {0, 0, 300, 40}});
-    state.heights.Append({(uint32_t)HashClickId(StrL("second")),
-                          {0, 0, 300, 80}});
+    VecAppend(state.heights,
+              {(uint32_t)HashClickId(StrL("first")), {0, 0, 300, 40}});
+    VecAppend(state.heights,
+              {(uint32_t)HashClickId(StrL("second")), {0, 0, 300, 80}});
 
     MotionSetReduced(true);
     El* collapsed =

@@ -337,7 +337,7 @@ State LabelStartImageAfter(Tokenizer* t) {
     start.kind = LabelKind::Image;
     start.startA = t->events.len - 6;
     start.startB = t->events.len - 1;
-    t->tokenizeState.labelStarts.Append(start);
+    VecAppend(t->tokenizeState.labelStarts, start);
     RegisterResolverBefore(t, ResolveName::Label);
     return StateOk();
 }
@@ -357,7 +357,7 @@ State LabelStartLinkStart(Tokenizer* t) {
         mark.kind = LabelKind::Link;
         mark.startA = start;
         mark.startB = t->events.len - 1;
-        t->tokenizeState.labelStarts.Append(mark);
+        VecAppend(t->tokenizeState.labelStarts, mark);
         RegisterResolverBefore(t, ResolveName::Label);
         return StateOk();
     }
@@ -597,7 +597,7 @@ static void GetSequences(Tokenizer* t, Vec<Sequence>& sequences) {
                                      ? (close && (after != CharKind::Other || !open))
                                      : close;
                 sequence.marker = marker;
-                sequences.Append(sequence);
+                VecAppend(sequences, sequence);
             }
         } else if (enter.kind == Kind::Enter) {
             stack.Append(a, index);

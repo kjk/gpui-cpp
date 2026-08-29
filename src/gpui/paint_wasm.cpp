@@ -1015,7 +1015,7 @@ static void Push(Path* p, float cmd, float a = 0, float b = 0, float c = 0,
     }
     const float vals[8] = {cmd, a, b, c, d, e, f, g};
     for (int i = 0; i < 8; i++) {
-        p->ops.Append(vals[i]);
+        VecAppend(p->ops, vals[i]);
     }
     // A path that is edited after it was drawn has to be rebuilt.
     if (p->js) {

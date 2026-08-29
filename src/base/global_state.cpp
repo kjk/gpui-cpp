@@ -58,7 +58,7 @@ void BaseSetAppMenus(App* app, const MenuDef* menus, int count) {
     if (!state->appMenuArena) {
         state->appMenuArena = ArenaNew();
     }
-    state->appMenus.Clear();
+    VecClear(state->appMenus);
     state->appMenuArena->Reset();
     if (menus && count > 0) {
         VecReserve(state->appMenus, count);
@@ -67,7 +67,7 @@ void BaseSetAppMenus(App* app, const MenuDef* menus, int count) {
             copy.name = StrDup(state->appMenuArena, menus[i].name);
             copy.items = CopyMenuRows(state->appMenuArena, menus[i].items,
                                       menus[i].n);
-            state->appMenus.Append(copy);
+            VecAppend(state->appMenus, copy);
         }
     }
     AppSetMenus(app, state->appMenus.els, state->appMenus.len);
@@ -86,7 +86,7 @@ void BaseDeferredPopoverSet(App* app, EntityId popover, bool open) {
         }
     }
     if (open && found < 0) {
-        state->deferredPopovers.Append(popover);
+        VecAppend(state->deferredPopovers, popover);
     } else if (!open && found >= 0) {
         for (int i = found; i < state->deferredPopovers.len - 1; i++) {
             state->deferredPopovers[i] = state->deferredPopovers[i + 1];

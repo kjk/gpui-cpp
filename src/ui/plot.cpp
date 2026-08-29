@@ -402,7 +402,7 @@ Str TruncateTextToWidth(PaintCtx* ctx, Arena* arena, Str text, float fontSize,
         }
         at += n;
         if (at < text.len) {
-            cuts.Append(at);
+            VecAppend(cuts, at);
         }
     }
     int best = -1;
@@ -791,7 +791,7 @@ static Vec<Point> ResolveLinePoints(const Line& line, Bounds bounds) {
         float x = 0, y = 0;
         if (PlotValue(line.x, line.items, i, line.xUser, &x) &&
             PlotValue(line.y, line.items, i, line.yUser, &y)) {
-            points.Append(OriginPoint(x, y, {bounds.x, bounds.y}));
+            VecAppend(points, OriginPoint(x, y, {bounds.x, bounds.y}));
         }
     }
     return points;
@@ -882,7 +882,7 @@ void Area::Paint(PaintCtx* ctx, Bounds bounds) const {
         }
         float py = 0;
         if (hasPx && PlotValue(y1, items, i, y1User, &py)) {
-            points.Append(OriginPoint(px, py, {bounds.x, bounds.y}));
+            VecAppend(points, OriginPoint(px, py, {bounds.x, bounds.y}));
         }
     }
     if (points.len <= 0) {
@@ -1304,8 +1304,8 @@ void RadialLine::Paint(PaintCtx* ctx, Bounds bounds) const {
         if (PlotValue(angle, items, i, angleUser, &a) &&
             PlotValue(radius, items, i, radiusUser, &r)) {
             a -= kPi * .5f;
-            points.Append({bounds.x + bounds.w * .5f + r * cosf(a),
-                           bounds.y + bounds.h * .5f + r * sinf(a)});
+            VecAppend(points, {bounds.x + bounds.w * .5f + r * cosf(a),
+                               bounds.y + bounds.h * .5f + r * sinf(a)});
         }
     }
     if (hasFill && points.len >= 3) {
@@ -1365,7 +1365,7 @@ void Stack::Series(Arena* arena, ArenaVec<StackSeries>* out) const {
     }
     Vec<float> baseline;
     for (int i = 0; i < items.count; i++) {
-        baseline.Append(0);
+        VecAppend(baseline, 0);
     }
     for (int keyIndex = 0; keyIndex < keyCount; keyIndex++) {
         StackSeries series = {};

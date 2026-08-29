@@ -310,8 +310,8 @@ static void APanelNothingAnswersToBecomesInvalid() {
     state.nodes[tabs].kind = PanelInfoKind::Tabs;
     int known = state.NewNode(StrL("AlphaPanel"));
     int missing = state.NewNode(StrL("GitGraphPanel"));
-    state.nodes[tabs].children.Append(known);
-    state.nodes[tabs].children.Append(missing);
+    VecAppend(state.nodes[tabs].children, known);
+    VecAppend(state.nodes[tabs].children, missing);
     state.nodes[tabs].activeIndex = 1;
     state.center = tabs;
 
@@ -718,7 +718,7 @@ static void DockLayoutDescribesWithoutBuildingUi() {
     Vec<PanelId> panels;
     tree->Panels(&panels);
     utassert(panels.len == 3);
-    panels.Reset();
+    VecReset(panels);
     delete tree;
     delete layout;
 }
@@ -745,7 +745,7 @@ static void ThePanelRegistryRebuildsPersistedPanels() {
     saved.nodes[tabs].kind = PanelInfoKind::Tabs;
     int leaf = saved.NewNode(StrL("Probe"));
     saved.nodes[leaf].kind = PanelInfoKind::Panel;
-    saved.nodes[tabs].children.Append(leaf);
+    VecAppend(saved.nodes[tabs].children, leaf);
     saved.center = tabs;
 
     Entity<DockState> state = EntityNewState<DockState>(&app);

@@ -16,8 +16,8 @@ struct BaseGlobalState {
     bool suppressTextSelection = false;
 
     ~BaseGlobalState() {
-        deferredPopovers.Reset();
-        appMenus.Reset();
+        VecReset(deferredPopovers);
+        VecReset(appMenus);
         if (appMenuArena) {
             ArenaDelete(appMenuArena);
         }

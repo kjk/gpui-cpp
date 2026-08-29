@@ -66,11 +66,11 @@ int ListPrevIndex(const ListState* s) {
 
 void ListSetSections(ListState* s, const int* counts, int n, bool headers,
                      bool footers) {
-    s->sectionCounts.Clear();
+    VecClear(s->sectionCounts);
     s->count = 0;
     for (int i = 0; i < n; i++) {
         int c = counts[i] < 0 ? 0 : counts[i];
-        s->sectionCounts.Append(c);
+        VecAppend(s->sectionCounts, c);
         s->count += c;
     }
     s->sectionHeaders = headers;
@@ -157,7 +157,7 @@ void ListPrepareRowHeights(ListState* s, float itemH, float headerH,
         float h = row.kind == ListRowKind::SectionHeader   ? headerH
                   : row.kind == ListRowKind::SectionFooter ? footerH
                                                            : itemH;
-        s->rowHeights.Append(h);
+        VecAppend(s->rowHeights, h);
     }
 }
 

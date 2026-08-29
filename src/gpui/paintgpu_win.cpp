@@ -818,7 +818,7 @@ static void EnsureTriPhase() {
 
 static void Push(const Inst& i) {
     EnsureQuadPhase();
-    gB.insts.Append(i);
+    VecAppend(gB.insts, i);
 }
 
 // The one place a primitive is made, so the content mask and the opacity in
@@ -853,7 +853,7 @@ static void TriVertex(float x, float y, Rgba c) {
     v.y = y;
     SetColor(v.color, c);
     memcpy(v.clip, gB.clip, sizeof(v.clip));
-    gB.tris.Append(v);
+    VecAppend(gB.tris, v);
 }
 
 // ─── target lifecycle ────────────────────────────────────────────────────
@@ -1298,7 +1298,7 @@ void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
     // costs four floats and never breaks a batch. That is the whole reason
     // GPUI carries a content mask per primitive.
     for (int i = 0; i < 4; i++) {
-        gB.clipStack.Append(gB.clip[i]);
+        VecAppend(gB.clipStack, gB.clip[i]);
     }
     float x0 = x > gB.clip[0] ? x : gB.clip[0];
     float y0 = y > gB.clip[1] ? y : gB.clip[1];
@@ -1341,8 +1341,8 @@ void PathFree(Path* path) {
 }
 
 static void PathPoint(GpuPath* p, float x, float y) {
-    p->pts.Append(x);
-    p->pts.Append(y);
+    VecAppend(p->pts, x);
+    VecAppend(p->pts, y);
     if (x < p->minX) {
         p->minX = x;
     }
@@ -1358,7 +1358,7 @@ static void PathPoint(GpuPath* p, float x, float y) {
 }
 
 static void MoveTo(GpuPath* p, float x, float y) {
-    p->starts.Append(p->pts.len / 2);
+    VecAppend(p->starts, p->pts.len / 2);
     PathPoint(p, x, y);
     p->open = true;
 }
@@ -1488,7 +1488,7 @@ static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto) {
     i.rect[3] = (p->maxY - p->minY) + 2;
     memcpy(i.clip, gB.clip, sizeof(i.clip));
     gB.insts.len = 0;
-    gB.insts.Append(i);
+    VecAppend(gB.insts, i);
     (void)ctx;
 
     // Straight out rather than through FlushQuads: this one draw needs the
@@ -1753,7 +1753,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
     static Vec<uint8_t> rgb;
     static Vec<uint8_t> gray;
     rgb.len = 0;
-    if (!rgb.AppendBlanks(w * h * 3)) {
+    if (!VecAppendBlanks(rgb, w * h * 3)) {
         an->Release();
         return false;
     }
@@ -1764,7 +1764,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
         return false;
     }
     gray.len = 0;
-    if (!gray.AppendBlanks(w * h)) {
+    if (!VecAppendBlanks(gray, w * h)) {
         return false;
     }
     for (int i = 0; i < w * h; i++) {

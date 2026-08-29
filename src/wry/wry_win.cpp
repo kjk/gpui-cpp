@@ -2038,7 +2038,7 @@ static void FreeDropPaths(Vec<Str>* paths) {
     for (int i = 0; i < paths->len; i++) {
         StrFree(paths->els[i]);
     }
-    paths->FreeEls();
+    VecReset(*paths);
 }
 
 // `DragDropTarget::iterate_filenames`. The HDROP is returned because the
@@ -2064,7 +2064,7 @@ static bool GetDropPaths(IDataObject* data, Vec<Str>* paths, HDROP* hdropOut) {
         UINT charCount = DragQueryFileW(hdrop, i, nullptr, 0);
         WCHAR* path = new WCHAR[(size_t)charCount + 1];
         if (DragQueryFileW(hdrop, i, path, charCount + 1) == charCount) {
-            paths->Append(StrDup(WstrToUtf8Temp(path, (int)charCount)));
+            VecAppend(*paths, StrDup(WstrToUtf8Temp(path, (int)charCount)));
         }
         delete[] path;
     }
@@ -2157,7 +2157,7 @@ struct DragDropController {
             RevokeDragDrop(target->hwnd);
             target->Release();
         }
-        targets.FreeEls();
+        VecReset(targets);
     }
 };
 
@@ -2175,7 +2175,7 @@ static BOOL CALLBACK InjectDragDropTarget(HWND hwnd, LPARAM param) {
     target->fn = ctx->handler;
     HRESULT revoked = RevokeDragDrop(hwnd);
     if (revoked != DRAGDROP_E_INVALIDHWND && SUCCEEDED(RegisterDragDrop(hwnd, target))) {
-        ctx->controller->targets.Append(target);
+        VecAppend(ctx->controller->targets, target);
     } else {
         target->Release();
     }
@@ -2277,7 +2277,7 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         for (int i = 0; i < customSchemeRegistrations.len; i++) {
             customSchemeRegistrations[i]->Release();
         }
-        customSchemeRegistrations.FreeEls();
+        VecReset(customSchemeRegistrations);
     }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
@@ -2420,11 +2420,11 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         }
         Vec<IUnknown*> copy;
         for (UINT32 i = 0; i < count; i++) {
-            if (!values[i] || !copy.Append(values[i])) {
+            if (!values[i] || !VecAppend(copy, values[i])) {
                 for (int j = 0; j < copy.len; j++) {
                     copy[j]->Release();
                 }
-                copy.FreeEls();
+                VecReset(copy);
                 return values[i] ? E_OUTOFMEMORY : E_POINTER;
             }
             values[i]->AddRef();
@@ -2432,7 +2432,7 @@ struct EnvironmentOptions : ICoreWebView2EnvironmentOptions,
         for (int i = 0; i < customSchemeRegistrations.len; i++) {
             customSchemeRegistrations[i]->Release();
         }
-        customSchemeRegistrations.FreeEls();
+        VecReset(customSchemeRegistrations);
         customSchemeRegistrations = copy;
         return S_OK;
     }
@@ -3366,7 +3366,7 @@ static HRESULT PrepareRequest(WebView* wv, ICoreWebView2WebResourceRequest* req,
             Header h;
             h.name = TakePwstrTemp(name);
             h.value = TakePwstrTemp(value);
-            if (!headerStore->Append(h)) {
+            if (!VecAppend(*headerStore, h)) {
                 hr = E_OUTOFMEMORY;
             }
         } else {
@@ -3397,7 +3397,7 @@ static HRESULT PrepareRequest(WebView* wv, ICoreWebView2WebResourceRequest* req,
             if (FAILED(hr) || read == 0) {
                 break;
             }
-            uint8_t* dst = bodyStore->AppendBlanks((int)read);
+            uint8_t* dst = VecAppendBlanks(*bodyStore, (int)read);
             if (!dst) {
                 hr = E_OUTOFMEMORY;
                 break;
@@ -3456,8 +3456,8 @@ static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
         ICoreWebView2WebResourceResponse* response = MakeBadRequest(wv->env, hr);
         HRESULT responseHr = response ? args->put_Response(response) : E_FAIL;
         Rel(&response);
-        headerStore.FreeEls();
-        bodyStore.FreeEls();
+        VecReset(headerStore);
+        VecReset(bodyStore);
         return responseHr;
     }
 
@@ -3480,8 +3480,8 @@ static HRESULT OnWebResourceRequested(void* ctx, ICoreWebView2*,
         Respond(responder, &response);
     }
 
-    headerStore.FreeEls();
-    bodyStore.FreeEls();
+    VecReset(headerStore);
+    VecReset(bodyStore);
     return S_OK;
 }
 
@@ -4094,7 +4094,7 @@ WebView* WebViewNew(void* parentWindow, const WebViewAttributes* attrs, bool asC
         p.name = StrDup(attrs->customProtocols[i].name);
         p.ctx = attrs->customProtocols[i].ctx;
         p.handler = attrs->customProtocols[i].handler;
-        wv->protocols.Append(p);
+        VecAppend(wv->protocols, p);
     }
 
     if (attrs->hasTheme) {
@@ -4251,7 +4251,7 @@ void WebViewFree(WebView* wv) {
     for (int i = 0; i < wv->protocols.len; i++) {
         StrFree(wv->protocols[i].name);
     }
-    wv->protocols.FreeEls();
+    VecReset(wv->protocols);
     StrFree(wv->id);
     delete wv;
 }
@@ -4618,7 +4618,7 @@ static bool CookiesInner(WebView* wv, LPCWSTR uri, Vec<Cookie>* out) {
             return false;
         }
         Cookie cookie;
-        if (CookieFromWebView2(source, &cookie) && !out->Append(cookie)) {
+        if (CookieFromWebView2(source, &cookie) && !VecAppend(*out, cookie)) {
             FreeCookieFields(&cookie);
             Rel(&source);
             Rel(&cookies);

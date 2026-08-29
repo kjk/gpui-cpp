@@ -96,7 +96,7 @@ static void TypedRemovalAndForwardingMethodsUseWindowState() {
     input.focusWin = window;
     HitRect inputHit;
     inputHit.input = &input;
-    window->paint.hits.Append(inputHit);
+    VecAppend(window->paint.hits, inputHit);
     utassert(WindowFocusedInput(&cx) == &input);
     utassert(WindowHasFocusedInput(&cx));
     window->paint.hits.len = 0;

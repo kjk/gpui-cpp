@@ -40,7 +40,7 @@ void AppGlobalSetRaw(App* app, const void* key, void* value,
         slot.freeValue = freeValue;
         return;
     }
-    app->globals.Append(AppGlobalSlot{key, value, freeValue});
+    VecAppend(app->globals, AppGlobalSlot{key, value, freeValue});
 }
 
 bool AppGlobalRemoveRaw(App* app, const void* key) {
@@ -77,7 +77,7 @@ void AppGlobalClear(App* app) {
             slot.freeValue(slot.value);
         }
     }
-    app->globals.Reset();
+    VecReset(app->globals);
 }
 
 // Slot 0 is never handed out so a zeroed EntityId reads as null.
@@ -92,7 +92,7 @@ EntityId EntityNewRaw(App* app, void* ptr, RenderFn render, DropFn drop) {
         app->freeSlots.len--;
     } else {
         EntitySlot fresh = {};
-        app->entities.Append(fresh);
+        VecAppend(app->entities, fresh);
         ix = (int32_t)(app->entities.len - 1);
     }
     EntitySlot& s = app->entities[ix];
@@ -137,7 +137,7 @@ void EntityDrop(App* app, EntityId id) {
     if (s.gen == 0) {
         s.gen = 1;
     }
-    app->freeSlots.Append(id.index);
+    VecAppend(app->freeSlots, id.index);
 }
 
 void EntityDropAll(App* app) {
@@ -153,8 +153,8 @@ void EntityDropAll(App* app) {
         s.render = nullptr;
         s.drop = nullptr;
     }
-    app->entities.Reset();
-    app->freeSlots.Reset();
+    VecReset(app->entities);
+    VecReset(app->freeSlots);
 }
 
 El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
@@ -173,7 +173,7 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
     // What the window has on it, for Notify to aim at. GPUI records the same
     // set while it renders, as `Window::dirty_views`.
     if (win) {
-        win->rendered.Append(id);
+        VecAppend(win->rendered, id);
     }
     return s.render(s.ptr, &cx);
 }
@@ -453,7 +453,7 @@ static int WindowArmTimer(Window* win, int ms, Listener l, bool repeat) {
     t.dueAt = TimeNow() + (double)ms / 1000.0;
     t.repeat = repeat;
     t.l = l;
-    win->timers.Append(t);
+    VecAppend(win->timers, t);
     PlatSetTimer(win, WindowTimerMs(win));
     return t.id;
 }
@@ -500,7 +500,7 @@ void* WindowKeyedState(Window* win, uint32_t key, void* fresh, DropFn drop) {
     s.key = key;
     s.ptr = fresh;
     s.drop = drop;
-    if (!win->keyed.Append(s)) {
+    if (!VecAppend(win->keyed, s)) {
         drop(fresh);
         return nullptr;
     }
@@ -538,7 +538,7 @@ EntityId WindowKeyedEntity(Window* win, App* app, uint32_t key, void* fresh,
     KeyedSlot s = {};
     s.key = key;
     s.entity = EntityNewRaw(app, fresh, nullptr, drop);
-    win->keyed.Append(s);
+    VecAppend(win->keyed, s);
     return s.entity;
 }
 
@@ -556,7 +556,7 @@ void* WindowMotionState(Window* win, uint32_t key, int size) {
     s.key = key;
     s.frame = win->frameSeq;
     s.ptr = AllocZero(1, size);
-    win->motionSlots.Append(s);
+    VecAppend(win->motionSlots, s);
     return s.ptr;
 }
 
@@ -582,7 +582,7 @@ void WindowMotionFree(Window* win) {
     for (int i = 0; i < win->motionSlots.len; i++) {
         Free(nullptr, win->motionSlots[i].ptr);
     }
-    win->motionSlots.Reset();
+    VecReset(win->motionSlots);
 }
 
 void WindowKeyedFree(Window* win) {
@@ -600,7 +600,7 @@ void WindowKeyedFree(Window* win) {
             }
         }
     }
-    win->keyed.Reset();
+    VecReset(win->keyed);
 }
 
 // ─── EventEmitter ─────────────────────────────────────────────────────────
@@ -630,7 +630,7 @@ Subscription EntityObserveRaw(App* app, EntityId observed, Listener handler) {
     s.id = app->nextSubId++;
     s.emitter = observed;
     s.handler = handler;
-    app->observers.Append(s);
+    VecAppend(app->observers, s);
     sub.id = s.id;
     return sub;
 }
@@ -674,7 +674,7 @@ Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler) {
     s.id = app->nextSubId++;
     s.emitter = emitter;
     s.handler = handler;
-    app->subs.Append(s);
+    VecAppend(app->subs, s);
     sub.id = s.id;
     return sub;
 }

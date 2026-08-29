@@ -91,7 +91,7 @@ struct SvgIcon {
 };
 
 static void AddOp(SvgIcon* ic, SvgOp op) {
-    ic->ops.Append(op);
+    VecAppend(ic->ops, op);
 }
 
 static void AddMove(SvgIcon* ic, float x, float y) {
@@ -811,7 +811,7 @@ static void EndShape(SvgIcon* ic, int start, Str tag, const SvgMatrix& m) {
         sh.hasStroke = true;
         ic->hasOwnColors = true;
     }
-    ic->shapes.Append(sh);
+    VecAppend(ic->shapes, sh);
 }
 
 // Shapes inside one of these are a definition, not a drawing: a clip path, a
@@ -981,7 +981,7 @@ static void AddTextRun(SvgIcon* ic, const SvgCtx& cur, const char* p,
     sh.textFlags = cur.anchor | (cur.bold ? (uint32_t)kTextBold : 0u);
     sh.hasFill = cur.hasFill;
     sh.fill = cur.fill;
-    ic->shapes.Append(sh);
+    VecAppend(ic->shapes, sh);
     ic->hasText = true;
     // A string cannot be drawn by the single-path encoding, so the file goes
     // down the per-shape route whether or not anything named a colour.
@@ -989,8 +989,8 @@ static void AddTextRun(SvgIcon* ic, const SvgCtx& cur, const char* p,
 }
 
 static void ParseSvg(Str xml, SvgIcon* ic) {
-    ic->ops.Reset();
-    ic->shapes.Reset();
+    VecReset(ic->ops);
+    VecReset(ic->shapes);
     // Nine Lucide icons in ten come out under 32 ops and 16 shapes
     // (`bun cmd/vec-log.ts tests`), so both lists are one allocation.
     VecReserve(ic->ops, 32);
@@ -1007,7 +1007,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->stroked = false;
     ic->hasOwnColors = false;
     ic->hasText = false;
-    ic->gradients.Reset();
+    VecReset(ic->gradients);
     if (!xml.s || xml.len <= 0) {
         return;
     }
@@ -1083,7 +1083,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
                                "radialGradient")) {
                     SvgGradient g;
                     if (GetAttrStr(tag, "id", &g.id)) {
-                        ic->gradients.Append(g);
+                        VecAppend(ic->gradients, g);
                         gradIx = ic->gradients.len - 1;
                     }
                 }

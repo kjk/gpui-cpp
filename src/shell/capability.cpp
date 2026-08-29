@@ -6,12 +6,12 @@ static void FreeStrings(Vec<Str>* values) {
     for (int i = 0; i < values->len; i++) {
         StrFree((*values)[i]);
     }
-    values->Reset();
+    VecReset(*values);
 }
 
 static void CopyStrings(Vec<Str>* into, const Vec<Str>& values) {
     for (int i = 0; i < values.len; i++) {
-        into->Append(StrDup(values[i]));
+        VecAppend(*into, StrDup(values[i]));
     }
 }
 
@@ -58,7 +58,7 @@ ExecuteGrant ExecuteGrant::Allowed(const Str* names, int count) {
     ExecuteGrant out;
     out.kind = ExecuteGrantKind::Allowed;
     for (int i = 0; names && i < count; i++)
-        out.commands.Append(StrDup(names[i]));
+        VecAppend(out.commands, StrDup(names[i]));
     return out;
 }
 
@@ -130,17 +130,17 @@ HttpRequestGrant& HttpRequestGrant::Port(uint16_t value) {
 }
 
 HttpRequestGrant& HttpRequestGrant::AddMethod(Str value) {
-    methods.Append(Upper(value));
+    VecAppend(methods, Upper(value));
     return *this;
 }
 
 HttpRequestGrant& HttpRequestGrant::AddPath(Str value) {
-    paths.Append(StrDup(value));
+    VecAppend(paths, StrDup(value));
     return *this;
 }
 
 HttpRequestGrant& HttpRequestGrant::AddPathPrefix(Str value) {
-    pathPrefixes.Append(StrDup(value));
+    VecAppend(pathPrefixes, StrDup(value));
     return *this;
 }
 
@@ -242,7 +242,7 @@ void Capabilities::Clear() {
     FreeStrings(&writeRoots);
     FreeStrings(&networkHosts);
     for (int i = 0; i < httpRequests.len; i++) delete httpRequests[i];
-    httpRequests.Reset();
+    VecReset(httpRequests);
     execute = ExecuteGrant::Denied();
 }
 
@@ -252,7 +252,7 @@ void Capabilities::CopyFrom(const Capabilities& other) {
     execute = other.execute;
     CopyStrings(&networkHosts, other.networkHosts);
     for (int i = 0; i < other.httpRequests.len; i++) {
-        httpRequests.Append(new HttpRequestGrant(*other.httpRequests[i]));
+        VecAppend(httpRequests, new HttpRequestGrant(*other.httpRequests[i]));
     }
     storage = other.storage;
     clipboardRead = other.clipboardRead;
@@ -261,11 +261,11 @@ void Capabilities::CopyFrom(const Capabilities& other) {
 }
 
 Capabilities& Capabilities::AddReadRoot(Str root) {
-    readRoots.Append(StrDup(root));
+    VecAppend(readRoots, StrDup(root));
     return *this;
 }
 Capabilities& Capabilities::AddWriteRoot(Str root) {
-    writeRoots.Append(StrDup(root));
+    VecAppend(writeRoots, StrDup(root));
     return *this;
 }
 Capabilities& Capabilities::SetExecute(const ExecuteGrant& grant) {
@@ -273,11 +273,11 @@ Capabilities& Capabilities::SetExecute(const ExecuteGrant& grant) {
     return *this;
 }
 Capabilities& Capabilities::AddNetworkHost(Str host) {
-    networkHosts.Append(Lower(host));
+    VecAppend(networkHosts, Lower(host));
     return *this;
 }
 Capabilities& Capabilities::AddHttpRequest(const HttpRequestGrant& grant) {
-    httpRequests.Append(new HttpRequestGrant(grant));
+    VecAppend(httpRequests, new HttpRequestGrant(grant));
     return *this;
 }
 Capabilities& Capabilities::Storage(bool allowed) {
@@ -384,7 +384,7 @@ static Str NormalizePath(Arena* arena, Str path, bool* escaped) {
                 parts.len--;
             }
         } else {
-            parts.Append(part);
+            VecAppend(parts, part);
         }
         at = end + 1;
     }

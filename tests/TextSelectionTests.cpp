@@ -82,7 +82,7 @@ static void AddRun(Window* win, float y, const char* text, int scope) {
     h.maxW = 100;
     h.docOff = win->paint.textDocLen;
     h.scope = scope;
-    win->paint.texts.Append(h);
+    VecAppend(win->paint.texts, h);
     // The gap of one, which is where CopyTextHits puts the newline between
     // two runs.
     win->paint.textDocLen += h.text.len + 1;

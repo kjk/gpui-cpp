@@ -535,7 +535,7 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     b.list = it.list;
     b.defIndex = it.defIndex;
     intptr_t ix = (intptr_t)st->fields.len;
-    st->fields.Append(b);
+    VecAppend(st->fields, b);
 
     Listener click = ListenTo(s->state, &SettingsState::OnFieldClick, ix);
     // layout(Axis): a field beside the text is w_32, one under it fills.
@@ -687,7 +687,7 @@ El* Settings::IntoEl() {
             st->page = defaultSelectedIndex.pageIx;
             st->group = defaultSelectedIndex.groupIx;
         }
-        st->fields.Clear();
+        VecClear(st->fields);
     }
 
     // The whole settings pane is one widget, so its name is what scopes the

@@ -404,7 +404,7 @@ static bool ReadDirectory(HANDLE root, Str rootName, Str relative,
                     name,
                     (entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
                         (entry->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0};
-                if (!result->entries.Append(value)) {
+                if (!VecAppend(result->entries, value)) {
                     StrFree(name);
                     FsError(error, StrL("allocating an fs.readdir result failed"));
                     ok = false;

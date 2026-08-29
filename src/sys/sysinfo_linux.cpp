@@ -27,8 +27,8 @@ static uint64_t TickTo100ns() {
 }
 
 void SysStateInit(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
     s->cpu = 0;
     s->mem = 0;
     s->memTotal = 0;
@@ -41,8 +41,8 @@ void SysStateInit(SysState* s) {
 }
 
 void SysStateFree(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
 }
 
 // Read a whole small /proc or /sys file. Those report st_size 0, so the size
@@ -290,14 +290,14 @@ static void RefreshProcesses(SysState* s) {
         ProcSample sm;
         sm.pid = pid;
         sm.cpu100ns = cpu;
-        samples.Append(sm);
-        next.Append(pi);
+        VecAppend(samples, sm);
+        VecAppend(next, pi);
     }
     closedir(d);
 
-    s->prevProcs.Reset();
+    VecReset(s->prevProcs);
     s->prevProcs = samples;
-    s->procs.Reset();
+    VecReset(s->procs);
     s->procs = next;
 }
 

@@ -44,7 +44,7 @@ struct ThemeColorsStory {
     InputState filter;
     bool seeded = false;
 
-    ~ThemeColorsStory() { themeItems.Reset(); }
+    ~ThemeColorsStory() { VecReset(themeItems); }
 
     static El* Render(ThemeColorsStory* self, Ctx* cx);
 };
@@ -62,7 +62,7 @@ static void FillThemeItems(ThemeColorsStory* self, App* app) {
         it.title = cfg->name;
         it.value = cfg->name;
         it.section = cfg->mode == ThemeMode::Dark ? 1 : 0;
-        self->themeItems.Append(it);
+        VecAppend(self->themeItems, it);
     }
 }
 

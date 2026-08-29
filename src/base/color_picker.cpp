@@ -402,7 +402,7 @@ static void ColorPickerInitKeys(const char* context) {
         KeymapBind(bindings, 2);
         return;
     }
-    gColorPickerBoundKeys.Append({id, generation});
+    VecAppend(gColorPickerBoundKeys, {id, generation});
     KeyBinding bindings[] = {{"enter", action::Confirm(), context},
                              {"escape", action::Cancel(), context}};
     KeymapBind(bindings, 2);

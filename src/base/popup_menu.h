@@ -129,7 +129,7 @@ struct PopupMenuState {
     static void OnContextDown(PopupMenuState* self, Ctx* cx,
                               const MouseDownEvent* ev);
 
-    ~PopupMenuState() { rows.Reset(); }
+    ~PopupMenuState() { VecReset(rows); }
 };
 
 // Open and close, which are `PopupMenu::show` and `dismiss(&Cancel)`. A menu

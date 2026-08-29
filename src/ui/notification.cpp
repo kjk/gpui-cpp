@@ -163,7 +163,7 @@ struct NotificationSystemState {
     Vec<NotificationSystemEntry> entries;
 
     ~NotificationSystemState() {
-        entries.Reset();
+        VecReset(entries);
         if (gSysApp == app) {
             gSysApp = nullptr;
         }
@@ -225,7 +225,7 @@ void NotificationSystemInsert(const NotificationSystemEntry& e) {
     if (state->entries.len >= kNotificationSystemMax) {
         SysEntryRemoveAt(state, 0);
     }
-    state->entries.Append(e);
+    VecAppend(state->entries, e);
 }
 
 const NotificationSystemEntry* NotificationSystemFind(int id, Window* win) {
@@ -457,7 +457,7 @@ NotificationListState::~NotificationListState() {
     for (int i = 0; i < items.len; i++) {
         NotificationFreeOwned(&items[i]);
     }
-    items.Reset();
+    VecReset(items);
 }
 
 bool NotificationListState::IsExpanded() const {
@@ -553,7 +553,7 @@ int NotificationPush(NotificationListState* s, Ctx* cx, Notification item,
     // visible() while rendering; ending entries remain mounted and visible
     // until their exit completes.
     Notification owned = NotificationOwnedCopy(item);
-    if (!s->items.Append(owned)) {
+    if (!VecAppend(s->items, owned)) {
         NotificationFreeOwned(&owned);
         return item.id;
     }

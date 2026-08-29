@@ -48,7 +48,7 @@ EntityHandle RetainedStore::Push(RetainedEntry* entry) {
         return 0;
     }
     entry->id = nextId++;
-    entries.Append(entry);
+    VecAppend(entries, entry);
     return ((uint64_t)storeId << 32) | entry->id;
 }
 
@@ -149,7 +149,7 @@ bool RetainedStore::AddCallback(EntityHandle handle, RetainedEvent event,
             }
         }
     }
-    entry->callbacks.Append({event, callback});
+    VecAppend(entry->callbacks, {event, callback});
     return true;
 }
 
@@ -158,10 +158,10 @@ void RetainedStore::Destroy(RetainedEntry* entry,
     if (!entry) return;
     if (callbacks) {
         for (int i = 0; i < entry->callbacks.len; i++) {
-            callbacks->Append(entry->callbacks[i].callback);
+            VecAppend(*callbacks, entry->callbacks[i].callback);
         }
     }
-    entry->callbacks.Reset();
+    VecReset(entry->callbacks);
     if (entry->input) {
         if (entry->app && entry->input->blink.IsValid()) {
             EntityDrop(entry->app, entry->input->blink);
@@ -227,7 +227,7 @@ void RetainedStore::Rollback(uint32_t checkpoint,
 
 void RetainedStore::Clear(Vec<CallbackId>* callbacks) {
     for (int i = 0; i < entries.len; i++) Destroy(entries[i], callbacks);
-    entries.Reset();
+    VecReset(entries);
 }
 
 } // namespace gpui::shell

@@ -142,7 +142,7 @@ NativeMenu::NativeMenu() {
 }
 
 NativeMenu::~NativeMenu() {
-    items.Reset();
+    VecReset(items);
     if (arena) {
         ArenaDelete(arena);
     }
@@ -159,14 +159,14 @@ NativeMenu& NativeMenu::MenuWithDisabled(Str label, bool disabled,
     item.label = arena ? StrDup(arena, label) : label;
     item.disabled = disabled;
     item.action = action;
-    items.Append(item);
+    VecAppend(items, item);
     return *this;
 }
 
 NativeMenu& NativeMenu::Separator() {
     if (items.len > 0 &&
         items[items.len - 1].kind != NativeMenuItemKind::Separator) {
-        items.Append(NativeMenuItem{});
+        VecAppend(items, NativeMenuItem{});
     }
     return *this;
 }

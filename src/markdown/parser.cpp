@@ -75,7 +75,7 @@ void DivideEvents(EditMap& map, const Vec<Event>& events, int32_t linkIndex,
         if (current.index > end.index ||
             (current.index == end.index && current.vs > end.vs)) {
             DivideSlice slice = {linkIndex, sliceStart};
-            slices.Append(slice);
+            VecAppend(slices, slice);
             sliceStart = childIndex;
             linkIndex = events[linkIndex].link.next;
         }
@@ -107,7 +107,7 @@ void DivideEvents(EditMap& map, const Vec<Event>& events, int32_t linkIndex,
 
     if (childEvents.len > 0) {
         DivideSlice slice = {linkIndex, sliceStart};
-        slices.Append(slice);
+        VecAppend(slices, slice);
     }
 
     // Splice the child events into the parent, back to front so the indices
@@ -224,11 +224,11 @@ Vec<Event> Parse(ParseState* parseState) {
 
     for (;;) {
         for (int32_t i = 0; i < result.gfmFootnoteDefinitions.len; i++) {
-            parseState->gfmFootnoteDefinitions.Append(
-                result.gfmFootnoteDefinitions[i]);
+            VecAppend(parseState->gfmFootnoteDefinitions,
+                      result.gfmFootnoteDefinitions[i]);
         }
         for (int32_t i = 0; i < result.definitions.len; i++) {
-            parseState->definitions.Append(result.definitions[i]);
+            VecAppend(parseState->definitions, result.definitions[i]);
         }
         result.gfmFootnoteDefinitions.len = 0;
         result.definitions.len = 0;

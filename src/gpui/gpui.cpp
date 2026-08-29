@@ -1018,12 +1018,12 @@ static ScrollFade* ScrollFadeFor(int id, float y, float x) {
     f.id = id;
     f.y = y;
     f.x = x;
-    gScrollFades.Append(f);
+    VecAppend(gScrollFades, f);
     return &gScrollFades[gScrollFades.len - 1];
 }
 
 void ScrollFadeClear() {
-    gScrollFades.Reset();
+    VecReset(gScrollFades);
 }
 
 ScrollbarMotion ScrollbarMotionFor(ScrollbarMode mode) {
@@ -1187,7 +1187,7 @@ void StyleOverrideSet(int clickId, uint32_t fields, const Style& style) {
     o.clickId = clickId;
     o.fields = fields;
     o.style = style;
-    gStyleOverrides.Append(o);
+    VecAppend(gStyleOverrides, o);
 }
 
 void StyleOverrideClear(int clickId) {
@@ -1203,7 +1203,7 @@ void StyleOverrideClear(int clickId) {
 }
 
 void StyleOverrideClearAll() {
-    gStyleOverrides.Reset();
+    VecReset(gStyleOverrides);
 }
 
 void StyleApplyFields(Style* into, const Style& over, uint32_t fields) {
@@ -3305,7 +3305,7 @@ static LayoutNode* LayoutNodeTake(LayoutCache* lc, El* e) {
         lc->spare.len--;
     } else {
         n = new LayoutNode();
-        lc->pool.Append(n);
+        VecAppend(lc->pool, n);
     }
     n->el = e;
     n->measKey = 0;
@@ -3318,7 +3318,7 @@ static void LayoutNodeGiveBack(LayoutCache* lc, LayoutNode* n) {
         return;
     }
     n->el = nullptr;
-    lc->spare.Append(n);
+    VecAppend(lc->spare, n);
 }
 
 // Everything a measured leaf's size depends on that its style does not say.
@@ -3404,7 +3404,7 @@ static taffy::NodeId LayoutBuild(LayoutSyncCtx* sc, El* e, bool isRoot) {
     for (El* c = e->first; c; c = c->next) {
         if (c->style.fixed) {
             // Placed against the window, so it hangs off the root instead.
-            gLayoutFixed.Append(c);
+            VecAppend(gLayoutFixed, c);
             continue;
         }
         lc->tree.AddChild(id, LayoutBuild(sc, c, false));
@@ -3463,7 +3463,7 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
     int i = 0;
     for (El* c = e->first; c; c = c->next) {
         if (c->style.fixed) {
-            gLayoutFixed.Append(c);
+            VecAppend(gLayoutFixed, c);
             continue;
         }
         if (i < had) {
@@ -3503,7 +3503,7 @@ static void LayoutCacheReset(LayoutCache* lc) {
     lc->spare.len = 0;
     for (int i = 0; i < lc->pool.len; i++) {
         lc->pool[i]->el = nullptr;
-        lc->spare.Append(lc->pool[i]);
+        VecAppend(lc->spare, lc->pool[i]);
     }
     lc->hasRoot = false;
     lc->root = taffy::NodeId{};
@@ -3959,8 +3959,8 @@ void LayoutCacheFree(LayoutCache* lc) {
     for (int i = 0; i < lc->pool.len; i++) {
         delete lc->pool[i];
     }
-    lc->pool.Reset();
-    lc->spare.Reset();
+    VecReset(lc->pool);
+    VecReset(lc->spare);
     lc->tree.Free();
     delete lc;
 }
@@ -3976,8 +3976,8 @@ void LayoutScratchFree() {
     for (int i = 0; i < gMeasureCache.pool.len; i++) {
         delete gMeasureCache.pool[i];
     }
-    gMeasureCache.pool.Reset();
-    gMeasureCache.spare.Reset();
+    VecReset(gMeasureCache.pool);
+    VecReset(gMeasureCache.spare);
     gMeasureCache.tree.Free();
     gMeasureCache.ready = false;
     gMeasureCache.hasRoot = false;
@@ -5070,7 +5070,7 @@ static void LineClampCollect(El* e, Vec<LineSpan>* spans,
         return;
     }
     if (e->lineSpan && e->lineSpanHeight > 0) {
-        spans->Append(LineSpan{e->y, e->y + e->h, e->lineSpanHeight});
+        VecAppend(*spans, LineSpan{e->y, e->y + e->h, e->lineSpanHeight});
     }
     for (El* c = e->first; c; c = c->next) {
         // Deferred controls over a code block and window-level overlays are
@@ -5102,7 +5102,7 @@ static bool ResolveLineClamp(PaintCtx* ctx, El* e, float* clipBottom) {
     bool tighter = clamped &&
                    LineSafeClipBottom(spans.els, spans.len, boxBottom,
                                       contentBottom, clipBottom);
-    spans.Reset();
+    VecReset(spans);
     return tighter;
 }
 
@@ -5333,7 +5333,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.stopClick = e->stopClick;
         hr.stopMouseDown = e->stopMouseDown;
         hr.suppressTextSelection = e->suppressTextSelection;
-        ctx->hits.Append(hr);
+        VecAppend(ctx->hits, hr);
         // Everything under this element names it as the ancestor its events
         // pass through, which is the chain the two phases walk.
         ctx->hitParent = ctx->hits.len - 1;
@@ -5366,7 +5366,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.maskHit = e->scrollMaskAxes ? ctx->hitParent : -1;
         sr.onScroll = e->onScroll;
         sr.input = e->input;
-        ctx->scrolls.Append(sr);
+        VecAppend(ctx->scrolls, sr);
     }
 
     // focus_ring_style: a focused control that explicitly opted in has its
@@ -5500,7 +5500,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             if (e->style.overflowX == Overflow::Scroll) {
                 e->input->contentW = e->contentW;
             }
-            ctx->inputs.Append(e->input);
+            VecAppend(ctx->inputs, e->input);
         }
     }
     // An inline image takes a place in the document order without taking any
@@ -5517,7 +5517,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         th.join = e->selJoin;
         th.atom = true;
         th.scope = e->style.trapId;
-        ctx->texts.Append(th);
+        VecAppend(ctx->texts, th);
         ctx->textDocLen += 1;
     }
     if (e->kind == ElKind::Text) {
@@ -5547,7 +5547,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             // The trap this run sits in — a dialog, a sheet — which is the
             // TextSelectionScopeId a gesture inside it stays within.
             th.scope = e->style.trapId;
-            ctx->texts.Append(th);
+            VecAppend(ctx->texts, th);
             ctx->textDocLen += e->text.len + 1;
             int a = ctx->selA;
             int b = ctx->selB;
@@ -6409,13 +6409,13 @@ static void CollectFocus(El* e, Window* win, int trap, Listener increment,
     if (e->style.keyContext) {
         DispatchNode n;
         n.context = e->style.keyContext;
-        win->dispatch.Append(n);
+        VecAppend(win->dispatch, n);
     }
     for (ActionSlot* slot = e->actions; slot; slot = slot->next) {
         DispatchNode n;
         n.action = slot->action;
         n.fn = slot->fn;
-        win->dispatch.Append(n);
+        VecAppend(win->dispatch, n);
     }
     if (e->style.focusId) {
         e->style.trapId = trap;
@@ -6431,13 +6431,13 @@ static void CollectFocus(El* e, Window* win, int trap, Listener increment,
         // end of the subtree beside it and pick up that sibling's context.
         DispatchNode marker;
         fr.dispatchIx = win->dispatch.len;
-        win->dispatch.Append(marker);
+        VecAppend(win->dispatch, marker);
         fr.bounds = e->Bounds();
         fr.accessibilityIncrement = increment;
         fr.accessibilityDecrement = decrement;
         fr.accessibilityIncrementDirect = incrementDirect;
         fr.accessibilityDecrementDirect = decrementDirect;
-        win->focusEls.Append(fr);
+        VecAppend(win->focusEls, fr);
     }
     for (El* c = e->first; c; c = c->next) {
         CollectFocus(c, win, trap, increment, decrement, incrementDirect,
@@ -6732,11 +6732,11 @@ struct IdSeen {
 static void IdCheckCollect(El* e, Vec<IdSeen>* seen) {
     if (e->clickId > 0) {
         IdSeen s = {e->clickId, e->id};
-        seen->Append(s);
+        VecAppend(*seen, s);
     }
     if (e->style.focusId > 0 && e->style.focusId != e->clickId) {
         IdSeen s = {e->style.focusId, e->id};
-        seen->Append(s);
+        VecAppend(*seen, s);
     }
     for (El* c = e->first; c; c = c->next) {
         IdCheckCollect(c, seen);
@@ -6759,7 +6759,7 @@ static void IdCheck(El* root) {
         }
     }
     logf("id-check: %d ids, %d shared", seen.len, dups);
-    seen.Reset();
+    VecReset(seen);
 }
 
 void IdsCollect(El* root) {
@@ -7011,7 +7011,7 @@ static void AccessibilityCollectNode(El* e, Vec<AccessibilityNode>* out,
             !node.input->readonly) {
             node.actions |= AccessibilityActionSetValue;
         }
-        out->Append(node);
+        VecAppend(*out, node);
         childParent = out->len - 1;
     }
     for (El* child = e->first; child; child = child->next) {
@@ -7023,14 +7023,14 @@ void AccessibilityCollect(El* root, Vec<AccessibilityNode>* out) {
     if (!out) {
         return;
     }
-    out->Clear();
+    VecClear(*out);
     uint32_t nextId = 1;
     AccessibilityCollectNode(root, out, -1, &nextId);
 }
 
 void FocusCollect(Window* win, El* root) {
-    win->focusEls.Clear();
-    win->dispatch.Clear();
+    VecClear(win->focusEls);
+    VecClear(win->dispatch);
     CollectFocus(root, win, 0, {}, {}, {}, {});
     // The traversal order is the tab index first and the paint order within
     // it, so the sort has to be a stable one: an insertion sort over a list

@@ -9883,3 +9883,26 @@ Direct2D's per-line tessellation remains the native backend's main cost, while
 `GPUI_PAINT=gpu` was already about twice as fast for this deliberately
 line-heavy example. MSVC release passes all 21,437 checks, and both MSVC and
 clang-cl release builds of `fps_monitor` pass.
+
+## Vec follows Sumatra's type-erased free-function API
+
+The 2026-08-28/29 `Vec.h` series from SumatraPDF (`ade643193` through
+`e67266ca2`) is replicated in the curated base. `Vec<T>` now keeps only the
+operations that cannot be free functions; reserve, resize, insertion,
+removal, clearing, taking and copying delegate to one out-of-line
+`VecNonTemplated` implementation instead of emitting those bodies for every
+element type. The public API is organized as `Vec*()` free functions,
+`VecReserve` returns the element pointer, vector append is `VecAppendVec`, and
+removal distinguishes `VecRemoveAtN`, `VecRemoveAt` and `VecPopAt`.
+
+All Vec method call sites in the portable sources, platform backends,
+examples and tests were migrated. `StrBuilder` now begins with the same
+`{len, cap, els}` layout so generic reserve remains a zero-cost erased cast.
+The local measured first-allocation floor, caller-owned external buffer,
+debug growth instrumentation and segmented `ArenaVec` remain intact. The
+erased view carries GCC/Clang's narrow `may_alias` annotation: without that
+contract, optimized g++ may retain stale `Vec<T>` fields across an erased
+reset and free the prior allocation twice. New Vec tests cover the
+free-function surface and taking borrowed storage. MSVC and clang-cl release
+both pass 21,464 checks, g++ release passes 21,443, and wasm passes 20,683;
+every MSVC release example and a debug amalgam build pass as well.

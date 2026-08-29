@@ -311,7 +311,7 @@ struct SettingsState {
     InputState search;
     Vec<SettingBinding> fields;
 
-    ~SettingsState() { fields.Reset(); }
+    ~SettingsState() { VecReset(fields); }
 
     static void OnPageClick(SettingsState* self, Ctx* cx, const ClickEvent* ev,
                             intptr_t page);

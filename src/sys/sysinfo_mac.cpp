@@ -18,8 +18,8 @@
 namespace gpui {
 
 void SysStateInit(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
     s->cpu = 0;
     s->mem = 0;
     s->memTotal = 0;
@@ -31,8 +31,8 @@ void SysStateInit(SysState* s) {
 }
 
 void SysStateFree(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
 }
 
 static void RefreshCpu(SysState* s) {
@@ -187,7 +187,7 @@ static void RefreshProcesses(SysState* s) {
     // The count can grow between the two calls; ask for some slack.
     int nPids = cap / (int)sizeof(pid_t) + 32;
     Vec<pid_t> pids;
-    pid_t* buf = pids.AppendBlanks(nPids);
+    pid_t* buf = VecAppendBlanks(pids, nPids);
     if (!buf) {
         return;
     }
@@ -237,13 +237,13 @@ static void RefreshProcesses(SysState* s) {
         ProcSample sm;
         sm.pid = pi.pid;
         sm.cpu100ns = cpu;
-        samples.Append(sm);
-        next.Append(pi);
+        VecAppend(samples, sm);
+        VecAppend(next, pi);
     }
 
-    s->prevProcs.Reset();
+    VecReset(s->prevProcs);
     s->prevProcs = samples;
-    s->procs.Reset();
+    VecReset(s->procs);
     s->procs = next;
 }
 

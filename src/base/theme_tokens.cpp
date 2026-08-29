@@ -4,9 +4,9 @@ namespace gpui {
 
 ShadowTokens ShadowTokens::Elevations(Rgba color) {
     ShadowTokens out;
-    out.sm.Append(BoxShadow{0, 1, 2, 0, color, false});
-    out.md.Append(BoxShadow{0, 4, 8, -2, color, false});
-    out.lg.Append(BoxShadow{0, 12, 24, -4, color, false});
+    VecAppend(out.sm, BoxShadow{0, 1, 2, 0, color, false});
+    VecAppend(out.md, BoxShadow{0, 4, 8, -2, color, false});
+    VecAppend(out.lg, BoxShadow{0, 12, 24, -4, color, false});
     return out;
 }
 

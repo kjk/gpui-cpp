@@ -1865,8 +1865,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
 // App Global; this has the same lifetime and isolates loaded/active themes
 // between applications.
 ThemeRegistry::~ThemeRegistry() {
-    themes.Reset();
-    loadedDirs.Reset();
+    VecReset(themes);
+    VecReset(loadedDirs);
     if (arena) {
         ArenaDelete(arena);
         arena = nullptr;
@@ -1907,7 +1907,7 @@ static void InsertSorted(ThemeRegistry* state, const ThemeConfig& cfg) {
             break;
         }
     }
-    state->themes.InsertAt(at, cfg);
+    VecInsertAt(state->themes, at, cfg);
 }
 
 static float JsonFloatOr(const JsonValue* v, const char* key, float fallback) {
@@ -2060,14 +2060,14 @@ static void ApplyShadowLevel(const JsonValue* obj, const char* key,
         // Source Vec<BoxShadow> replaces the elevation when an array is
         // supplied. Retain the port's one-object shorthand as a partial
         // overlay on the existing first shadow.
-        level->Clear();
+        VecClear(*level);
     } else if (level->len == 0) {
-        level->Append(BoxShadow{});
+        VecAppend(*level, BoxShadow{});
     }
     const JsonValue* item = v->kind == JsonKind::Array ? v->first : v;
     for (; item; item = v->kind == JsonKind::Array ? item->next : nullptr) {
         if (item->kind != JsonKind::Object) continue;
-        if (v->kind == JsonKind::Array) level->Append(BoxShadow{});
+        if (v->kind == JsonKind::Array) VecAppend(*level, BoxShadow{});
         BoxShadow* out = v->kind == JsonKind::Array
                              ? &(*level)[level->len - 1]
                              : &(*level)[0];
@@ -2393,7 +2393,7 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
             return 0;
         }
     }
-    state->loadedDirs.Append(StrDup(state->arena, dirKey));
+    VecAppend(state->loadedDirs, StrDup(state->arena, dirKey));
     // Rust reads the whole directory; a hundred entries is more themes than
     // anyone ships and the listing is a fixed buffer either way.
     const int kMaxEntries = 128;

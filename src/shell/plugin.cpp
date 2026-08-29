@@ -41,7 +41,7 @@ static bool ReadBoundedFile(Str path, int limit, Str* out) {
                 ok = false;
                 break;
             }
-            memcpy(bytes.AppendBlanks((int)read), block, read);
+            memcpy(VecAppendBlanks(bytes, (int)read), block, read);
         }
         if (read != sizeof(block)) {
             if (ferror(file)) ok = false;
@@ -57,7 +57,7 @@ static bool ReadBoundedFile(Str path, int limit, Str* out) {
         bytes.cap = 0;
         *out = Str(data, size);
     }
-    bytes.Reset();
+    VecReset(bytes);
     return ok;
 }
 
@@ -199,7 +199,7 @@ static bool ParseStringArray(Arena* arena, const JsonValue* value,
             SetError(error, fmt("%s entries must be non-empty strings", field));
             return false;
         }
-        out->Append(StrDup(arena, item->str));
+        VecAppend(*out, StrDup(arena, item->str));
     }
     return true;
 }
@@ -354,7 +354,7 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
                     }
                 }
             }
-            out->http.Append(parsed);
+            VecAppend(out->http, parsed);
         }
     }
     const JsonValue* clipboard = JsonGet(value, "clipboard");
@@ -392,16 +392,16 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
 PluginManifest::PluginManifest() : arena(ArenaNew()) {}
 
 PluginManifest::~PluginManifest() {
-    readRoots.Reset();
-    writeRoots.Reset();
-    execute.Reset();
-    networkHosts.Reset();
+    VecReset(readRoots);
+    VecReset(writeRoots);
+    VecReset(execute);
+    VecReset(networkHosts);
     for (int i = 0; i < http.len; i++) {
-        http[i]->methods.Reset();
-        http[i]->paths.Reset();
-        http[i]->pathPrefixes.Reset();
+        VecReset(http[i]->methods);
+        VecReset(http[i]->paths);
+        VecReset(http[i]->pathPrefixes);
     }
-    http.Reset();
+    VecReset(http);
     ArenaDelete(arena);
 }
 
@@ -692,15 +692,15 @@ static void FreePlugin(Plugin* plugin, App* app) {
 PluginManager::~PluginManager() {
     for (int i = 0; i < loaded.len; i++)
         FreePlugin(loaded[i], loaded[i]->app);
-    loaded.Reset();
+    VecReset(loaded);
     ClearCatalog();
     for (int i = 0; i < directories.len; i++) StrFree(directories[i]);
-    directories.Reset();
+    VecReset(directories);
     StrFree(dataHome);
 }
 
 PluginManager& PluginManager::AddDirectory(Str directory) {
-    directories.Append(StrDup(directory));
+    VecAppend(directories, StrDup(directory));
     return *this;
 }
 
@@ -716,7 +716,7 @@ void PluginManager::ClearCatalog() {
         StrFree(catalog[i].root);
         StrFree(catalog[i].error);
     }
-    catalog.Reset();
+    VecReset(catalog);
 }
 
 static bool ManifestAt(Str root) {
@@ -739,7 +739,7 @@ const Vec<PluginDiscovery>& PluginManager::Discover() {
     Vec<Str> roots;
     for (int d = 0; d < directories.len; d++) {
         if (ManifestAt(directories[d])) {
-            roots.Append(StrDup(directories[d]));
+            VecAppend(roots, StrDup(directories[d]));
             continue;
         }
         if (directories[d].len >= kMaxPath) continue;
@@ -753,7 +753,7 @@ const Vec<PluginDiscovery>& PluginManager::Discover() {
             if (!entries[i].isDir || entries[i].isSymlink) continue;
             Arena* scratch = ArenaNew();
             Str root = Join(scratch, directories[d], Str(entries[i].name));
-            if (ManifestAt(root)) directoryRoots.Append(StrDup(root));
+            if (ManifestAt(root)) VecAppend(directoryRoots, StrDup(root));
             ArenaDelete(scratch);
         }
         free(entries);
@@ -761,10 +761,10 @@ const Vec<PluginDiscovery>& PluginManager::Discover() {
             qsort(directoryRoots.els, (size_t)directoryRoots.len, sizeof(Str),
                   ComparePaths);
         for (int i = 0; i < directoryRoots.len; i++) {
-            roots.Append(directoryRoots[i]);
+            VecAppend(roots, directoryRoots[i]);
             directoryRoots[i] = {};
         }
-        directoryRoots.Reset();
+        VecReset(directoryRoots);
     }
     for (int i = 0; i < roots.len; i++) {
         PluginDiscovery found;
@@ -788,10 +788,10 @@ const Vec<PluginDiscovery>& PluginManager::Discover() {
             }
             found.manifest = manifest;
         }
-        catalog.Append(found);
+        VecAppend(catalog, found);
         ShellErrorClear(&error);
     }
-    roots.Reset();
+    VecReset(roots);
     return catalog;
 }
 
@@ -876,7 +876,7 @@ bool PluginManager::Load(ShellRuntime* runtime, Str id,
     plugin->assets = new AppAssets(selected->root);
     plugin->assets->Install();
     plugin->app = app;
-    loaded.Append(plugin);
+    VecAppend(loaded, plugin);
     ArenaDelete(scratch);
     return true;
 }

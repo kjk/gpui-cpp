@@ -69,8 +69,8 @@ EM_JS(int, GpJsBatteryCharging, (), {
 // clang-format on
 
 void SysStateInit(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
     s->cpu = 0;
     s->mem = 0;
     s->memTotal = 0;
@@ -86,8 +86,8 @@ void SysStateInit(SysState* s) {
 }
 
 void SysStateFree(SysState* s) {
-    s->prevProcs.Reset();
-    s->procs.Reset();
+    VecReset(s->prevProcs);
+    VecReset(s->procs);
 }
 
 void SysRefresh(SysState* s) {
@@ -122,7 +122,7 @@ void SysRefresh(SysState* s) {
 
     // No process table: a page is not told what else is running, and there is
     // nothing to approximate it with.
-    s->procs.Reset();
+    VecReset(s->procs);
 }
 
 } // namespace gpui

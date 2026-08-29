@@ -205,8 +205,8 @@ void ItemSizeLayoutBuild(ItemSizeLayout* layout, Axis axis,
     for (int i = 0; i < count; i++) {
         float item = itemSizes ? itemSizes[i] : uniformItemSize;
         float extent = item + (i + 1 < count ? gap : 0.f);
-        layout->origins.Append(origin);
-        layout->sizes.Append(extent);
+        VecAppend(layout->origins, origin);
+        VecAppend(layout->sizes, extent);
         origin += extent;
     }
     if (axis == Axis::Horizontal) {

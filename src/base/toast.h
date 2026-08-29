@@ -154,7 +154,7 @@ struct ToastManager {
         entry.hasTimeout = options.hasTimeout;
         entry.timeoutRemainingMs = options.timeoutMs;
         entry.lastAdvanceMs = nowMs;
-        return entries.Append(entry);
+        return VecAppend(entries, entry);
     }
 
     bool Dismiss(const I& id, int64_t nowMs) {
@@ -182,7 +182,7 @@ struct ToastManager {
             entry.status = ToastTransitionStatus::Ending;
             entry.transitionElapsedMs = 0;
             entry.lastAdvanceMs = nowMs;
-            changed.Append(entry.id);
+            VecAppend(changed, entry.id);
         }
         return changed;
     }
@@ -202,7 +202,7 @@ struct ToastManager {
                     if (entry.transitionElapsedMs >= transitionDurationMs) {
                         entry.status = ToastTransitionStatus::Present;
                         entry.transitionElapsedMs = 0;
-                        out.presented.Append(entry.id);
+                        VecAppend(out.presented, entry.id);
                         out.changed = true;
                     }
                     break;
@@ -213,7 +213,7 @@ struct ToastManager {
                             entry.timeoutRemainingMs = 0;
                             entry.status = ToastTransitionStatus::Ending;
                             entry.transitionElapsedMs = 0;
-                            out.ending.Append(entry.id);
+                            VecAppend(out.ending, entry.id);
                             out.changed = true;
                         }
                     }
@@ -232,7 +232,7 @@ struct ToastManager {
                 continue;
             }
             ToastRemoved<I, T> removed = {entry.id, entry.value};
-            if (!out.removed.Append(removed)) {
+            if (!VecAppend(out.removed, removed)) {
                 index++;
                 continue;
             }

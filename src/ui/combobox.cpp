@@ -89,9 +89,9 @@ Str ComboboxState::SelectedValue() const {
 }
 
 void ComboboxState::SyncSnapshot() {
-    selectionSnapshot.Clear();
+    VecClear(selectionSnapshot);
     for (int i = 0; i < state.selected.len; i++) {
-        selectionSnapshot.Append(state.selected[i]);
+        VecAppend(selectionSnapshot, state.selected[i]);
     }
 }
 
@@ -99,7 +99,7 @@ void ComboboxState::SetSelectedValues(const Str* values, int nValues,
                                       Ctx* cx) {
     InputSetValue(&queryInput, Str{});
     SearchableListSearch(&state, state.items, state.nItems, Str{});
-    state.selected.Clear();
+    VecClear(state.selected);
     for (int v = 0; v < nValues; v++) {
         int found = -1;
         IndexPath path;
@@ -130,7 +130,7 @@ void ComboboxState::SetSelectedValues(const Str* values, int nValues,
             seen = seen || state.selected[i] == found;
         }
         if (!seen) {
-            state.selected.Append(found);
+            VecAppend(state.selected, found);
         }
     }
     SyncSnapshot();
@@ -178,11 +178,11 @@ void ComboboxState::Emit(Ctx* cx, ComboboxEventKind kind) {
     SelectedValues(&values);
     ComboboxEvent event = {kind, values.els, values.len};
     EntityEmit(cx->app, cx->win, self, &event);
-    values.Reset();
+    VecReset(values);
 }
 
 void ComboboxState::ClearSelection(Ctx* cx) {
-    state.selected.Clear();
+    VecClear(state.selected);
     SyncSnapshot();
     Emit(cx, ComboboxEventKind::Change);
     if (cx) {

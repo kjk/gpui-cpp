@@ -24,7 +24,7 @@ bool ToastPush(ToastStackState* s, int id, int timeoutMs) {
     e.hasTimeout = timeoutMs > 0;
     e.timeoutRemainingMs = timeoutMs;
     e.elapsedMs = 0;
-    return s->entries.Append(e);
+    return VecAppend(s->entries, e);
 }
 
 static void ToastEraseAt(ToastStackState* s, int i) {
@@ -156,7 +156,7 @@ static ToastMeasurement* ToastStackMeasurement(ToastStackState* state,
     }
     ToastMeasurement measurement;
     measurement.id = id;
-    if (!state->heights.Append(measurement)) {
+    if (!VecAppend(state->heights, measurement)) {
         return nullptr;
     }
     return &state->heights[state->heights.len - 1];

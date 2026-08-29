@@ -83,11 +83,11 @@ PaneNode::~PaneNode() {
     for (int i = 0; i < children.len; i++) {
         delete children[i];
     }
-    children.Reset();
-    sizes.Reset();
-    sizeKnown.Reset();
-    panels.Reset();
-    tiles.Reset();
+    VecReset(children);
+    VecReset(sizes);
+    VecReset(sizeKnown);
+    VecReset(panels);
+    VecReset(tiles);
 }
 
 InsertTarget InsertTarget::Tabs(NodeId node, int ix, bool activate) {
@@ -202,7 +202,7 @@ bool PaneTree::ContainsPanel(PanelId panel) const {
 }
 
 static void CollectNodeIds(Vec<NodeId>* out, const PaneNode* node) {
-    out->Append(node->nodeId);
+    VecAppend(*out, node->nodeId);
 }
 
 void PaneTree::NodeIds(Vec<NodeId>* out) const {
@@ -214,11 +214,11 @@ void PaneTree::NodeIds(Vec<NodeId>* out) const {
 static void CollectPanelsRec(const PaneNode* node, Vec<PanelId>* out) {
     if (node->paneKind == PaneKind::Tabs) {
         for (int i = 0; i < node->panels.len; i++) {
-            out->Append(node->panels[i]);
+            VecAppend(*out, node->panels[i]);
         }
     } else if (node->paneKind == PaneKind::Tiles) {
         for (int i = 0; i < node->tiles.len; i++) {
-            out->Append(node->tiles[i].panel);
+            VecAppend(*out, node->tiles[i].panel);
         }
     } else {
         for (int i = 0; i < node->children.len; i++) {
@@ -247,7 +247,7 @@ NodeId PaneTree::SetRootSplit(Axis axis) {
 NodeId PaneTree::SetRootTabs(const PanelId* values, int count, int active) {
     PaneNode* node = PaneNode::Tabs(AllocateNodeId());
     for (int i = 0; values && i < count; i++) {
-        node->panels.Append(values[i]);
+        VecAppend(node->panels, values[i]);
     }
     node->activeIx = active;
     SetRoot(this, node);
@@ -257,7 +257,7 @@ NodeId PaneTree::SetRootTabs(const PanelId* values, int count, int active) {
 NodeId PaneTree::SetRootTiles(const TilePanel* values, int count) {
     PaneNode* node = PaneNode::Tiles(AllocateNodeId());
     for (int i = 0; values && i < count; i++) {
-        node->tiles.Append(values[i]);
+        VecAppend(node->tiles, values[i]);
     }
     SetRoot(this, node);
     return node->nodeId;
@@ -268,9 +268,9 @@ static bool AppendChild(PaneNode* parent, PaneNode* child,
     if (!parent || parent->paneKind != PaneKind::Split || !child) {
         return false;
     }
-    parent->children.Append(child);
-    parent->sizes.Append(size ? *size : 0);
-    parent->sizeKnown.Append(size ? 1 : 0);
+    VecAppend(parent->children, child);
+    VecAppend(parent->sizes, size ? *size : 0);
+    VecAppend(parent->sizeKnown, size ? 1 : 0);
     return true;
 }
 
@@ -287,7 +287,7 @@ NodeId PaneTree::AddTabs(NodeId parent, const PanelId* values, int count,
                          const float* size) {
     PaneNode* child = PaneNode::Tabs(AllocateNodeId());
     for (int i = 0; values && i < count; i++) {
-        child->panels.Append(values[i]);
+        VecAppend(child->panels, values[i]);
     }
     if (!AppendChild(FindNode(parent), child, size)) {
         delete child;
@@ -366,7 +366,7 @@ bool PaneTree::DetachPanel(PanelId panel) {
 
 int PaneTree::MaxZIndex() const {
     Vec<const PaneNode*> stack;
-    stack.Append(root);
+    VecAppend(stack, root);
     int top = 0;
     while (stack.len > 0) {
         const PaneNode* node = stack[--stack.len];
@@ -376,7 +376,7 @@ int PaneTree::MaxZIndex() const {
             }
         } else if (node->paneKind == PaneKind::Split) {
             for (int i = 0; i < node->children.len; i++) {
-                stack.Append(node->children[i]);
+                VecAppend(stack, node->children[i]);
             }
         }
     }
@@ -394,7 +394,7 @@ bool PaneTree::ApplyInsert(PanelId panel, InsertTarget target) {
         }
         int at = target.ix < 0 ? node->panels.len
                                : std::min(target.ix, node->panels.len);
-        if (!node->panels.InsertAt(at, panel)) {
+        if (!VecInsertAt(node->panels, at, panel)) {
             return false;
         }
         if (target.activate) {
@@ -408,8 +408,8 @@ bool PaneTree::ApplyInsert(PanelId panel, InsertTarget target) {
         if (node->paneKind != PaneKind::Tiles) {
             return false;
         }
-        node->tiles.Append(TilePanel::New(panel, target.bounds)
-                               .WithZIndex(MaxZIndex() + 1));
+        VecAppend(node->tiles, TilePanel::New(panel, target.bounds)
+                                   .WithZIndex(MaxZIndex() + 1));
         return true;
     }
     const float* size = target.hasSize ? &target.size : nullptr;
@@ -423,7 +423,7 @@ bool PaneTree::InsertBeside(NodeId at, PanelId panel, Placement placement,
         return false;
     }
     PaneNode* group = PaneNode::Tabs(AllocateNodeId());
-    group->panels.Append(panel);
+    VecAppend(group->panels, panel);
     bool before = placement == Placement::Left ||
                   placement == Placement::Top;
     Axis axis = PlacementAxis(placement);
@@ -438,9 +438,9 @@ bool PaneTree::InsertBeside(NodeId at, PanelId panel, Placement placement,
             parent->sizes[ix] = newSize;
             known = 1;
         }
-        parent->children.InsertAt(insertAt, group);
-        parent->sizes.InsertAt(insertAt, newSize);
-        parent->sizeKnown.InsertAt(insertAt, known);
+        VecInsertAt(parent->children, insertAt, group);
+        VecInsertAt(parent->sizes, insertAt, newSize);
+        VecInsertAt(parent->sizeKnown, insertAt, known);
         return true;
     }
 
@@ -530,9 +530,9 @@ static bool NormalizeNode(PaneNode* node) {
             PaneNode* child = node->children[i];
             if (child->paneKind != PaneKind::Split ||
                 child->axis != node->axis) {
-                children.Append(child);
-                sizes.Append(node->sizes[i]);
-                known.Append(node->sizeKnown[i]);
+                VecAppend(children, child);
+                VecAppend(sizes, node->sizes[i]);
+                VecAppend(known, node->sizeKnown[i]);
                 continue;
             }
             float total = 0;
@@ -544,9 +544,9 @@ static bool NormalizeNode(PaneNode* node) {
             bool scale = node->sizeKnown[i] && allKnown && total > 0;
             float ratio = scale ? node->sizes[i] / total : 1.f;
             for (int k = 0; k < child->children.len; k++) {
-                children.Append(child->children[k]);
-                sizes.Append(child->sizes[k] * ratio);
-                known.Append(child->sizeKnown[k]);
+                VecAppend(children, child->children[k]);
+                VecAppend(sizes, child->sizes[k] * ratio);
+                VecAppend(known, child->sizeKnown[k]);
             }
             child->children.len = 0;
             delete child;
@@ -745,26 +745,26 @@ DockLayout* DockLayout::Tiles() {
 
 DockLayout* DockLayout::Child(DockLayout* child, const float* size) {
     if (kind == PaneKind::Split && child) {
-        children.Append(child);
-        sizes.Append(size ? *size : 0);
-        sizeKnown.Append(size ? 1 : 0);
+        VecAppend(children, child);
+        VecAppend(sizes, size ? *size : 0);
+        VecAppend(sizeKnown, size ? 1 : 0);
     }
     return this;
 }
 
 DockLayout* DockLayout::Panel(PanelId id, DockPanelDef view) {
     if (kind == PaneKind::Tabs) {
-        panelIds.Append(id);
-        panelViews.Append(view);
+        VecAppend(panelIds, id);
+        VecAppend(panelViews, view);
     }
     return this;
 }
 
 DockLayout* DockLayout::Tile(PanelId id, Bounds bounds, DockPanelDef view) {
     if (kind == PaneKind::Tiles) {
-        panelIds.Append(id);
-        panelViews.Append(view);
-        tileBounds.Append(bounds);
+        VecAppend(panelIds, id);
+        VecAppend(panelViews, view);
+        VecAppend(tileBounds, bounds);
     }
     return this;
 }
@@ -780,12 +780,12 @@ DockLayout::~DockLayout() {
     for (int i = 0; i < children.len; i++) {
         delete children[i];
     }
-    children.Reset();
-    sizes.Reset();
-    sizeKnown.Reset();
-    panelIds.Reset();
-    panelViews.Reset();
-    tileBounds.Reset();
+    VecReset(children);
+    VecReset(sizes);
+    VecReset(sizeKnown);
+    VecReset(panelIds);
+    VecReset(panelViews);
+    VecReset(tileBounds);
 }
 
 static PaneNode* BuildLayoutNode(PaneTree* tree, const DockLayout* layout,
@@ -806,9 +806,9 @@ static PaneNode* BuildLayoutNode(PaneTree* tree, const DockLayout* layout,
         PaneNode* node = PaneNode::Tabs(id);
         node->activeIx = layout->activeIx;
         for (int i = 0; i < layout->panelIds.len; i++) {
-            node->panels.Append(layout->panelIds[i]);
+            VecAppend(node->panels, layout->panelIds[i]);
             if (collected && i < layout->panelViews.len) {
-                collected->Append(layout->panelViews[i]);
+                VecAppend(*collected, layout->panelViews[i]);
             }
         }
         return node;
@@ -817,10 +817,10 @@ static PaneNode* BuildLayoutNode(PaneTree* tree, const DockLayout* layout,
     for (int i = 0; i < layout->panelIds.len; i++) {
         Bounds bounds = i < layout->tileBounds.len ? layout->tileBounds[i]
                                                    : Bounds{};
-        node->tiles.Append(TilePanel::New(layout->panelIds[i], bounds)
-                               .WithZIndex(i));
+        VecAppend(node->tiles, TilePanel::New(layout->panelIds[i], bounds)
+                                   .WithZIndex(i));
         if (collected && i < layout->panelViews.len) {
-            collected->Append(layout->panelViews[i]);
+            VecAppend(*collected, layout->panelViews[i]);
         }
     }
     return node;

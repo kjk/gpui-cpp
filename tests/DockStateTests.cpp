@@ -158,10 +158,10 @@ static void ALayoutSurvivesTheRoundTrip() {
     int two = s.NewNode(StrL("TabPanel"));
     PanelStateNode& tiles = s.nodes[s.center];
     tiles.kind = PanelInfoKind::Tiles;
-    tiles.children.Append(one);
-    tiles.children.Append(two);
-    tiles.metas.Append(TileMeta{{16, 24, 300, 200}, 0});
-    tiles.metas.Append(TileMeta{{340, 24, 260, 160}, 3});
+    VecAppend(tiles.children, one);
+    VecAppend(tiles.children, two);
+    VecAppend(tiles.metas, TileMeta{{16, 24, 300, 200}, 0});
+    VecAppend(tiles.metas, TileMeta{{340, 24, 260, 160}, 3});
     s.left.present = true;
     s.left.node = s.NewNode(StrL("TabPanel"));
     s.left.placement = DockPlacement::Left;

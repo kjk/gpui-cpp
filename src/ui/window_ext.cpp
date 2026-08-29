@@ -20,7 +20,7 @@ WindowLayers::~WindowLayers() {
         }
         component::NotificationSystemDismissAll(win);
     }
-    dialogs.Reset();
+    VecReset(dialogs);
 }
 
 WindowLayers* WindowLayersOf(Window* win) {
@@ -61,7 +61,7 @@ void WindowOpenDialog(Ctx* cx, EntityId view, bool overlay) {
     WindowLayer layer;
     layer.view = view;
     layer.overlay = overlay;
-    l->dialogs.Append(layer);
+    VecAppend(l->dialogs, layer);
     Notify(cx);
 }
 

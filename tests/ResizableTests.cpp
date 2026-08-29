@@ -77,18 +77,18 @@ static void ProgrammaticResizeAndDynamicPanelsUseTheSameState() {
     cx.win = win;
     ResizableState state;
     state.bounds = {0, 0, 400, 100};
-    state.sizes.Append(200);
-    state.sizes.Append(200);
-    state.mins.Append(100);
-    state.mins.Append(100);
-    state.maxs.Append(1e9f);
-    state.maxs.Append(1e9f);
-    state.grows.Append(false);
-    state.grows.Append(false);
-    state.shown.Append(true);
-    state.shown.Append(true);
-    state.laid.Append({});
-    state.laid.Append({});
+    VecAppend(state.sizes, 200);
+    VecAppend(state.sizes, 200);
+    VecAppend(state.mins, 100);
+    VecAppend(state.mins, 100);
+    VecAppend(state.maxs, 1e9f);
+    VecAppend(state.maxs, 1e9f);
+    VecAppend(state.grows, false);
+    VecAppend(state.grows, false);
+    VecAppend(state.shown, true);
+    VecAppend(state.shown, true);
+    VecAppend(state.laid, {});
+    VecAppend(state.laid, {});
 
     // The last panel is driven through the preceding handle, as upstream.
     utassert(state.ResizePanel(&cx, 1, 180));

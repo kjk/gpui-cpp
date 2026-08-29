@@ -273,7 +273,7 @@ static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
     HitRect hr = {};
     hr.bounds = {0, 0, 100, 100};
     hr.onMouseDownOut = content->onMouseDownOut;
-    win->paint.hits.Append(hr);
+    VecAppend(win->paint.hits, hr);
     PlatformInput outside = {};
     outside.kind = PlatformInputKind::MouseDown;
     outside.mouseDown.x = 240;
@@ -288,7 +288,7 @@ static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
     // The trigger is outside the popup content. Its ordinary mouse-down must
     // toggle first; the content's mouse-down-out then sees the already closed
     // state and does not turn the same press into a second dismissal.
-    win->paint.hits.Clear();
+    VecClear(win->paint.hits);
     El* closeTrigger = Div(a)->W(50)->H(20);
     El* closeContent = Div(a)->W(100)->H(100);
     gpui::Popover::New(&cx, StrL("lifecycle"), state)
@@ -301,11 +301,11 @@ static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
     HitRect openContent = {};
     openContent.bounds = {100, 100, 100, 100};
     openContent.onMouseDownOut = closeContent->onMouseDownOut;
-    win->paint.hits.Append(openContent);
+    VecAppend(win->paint.hits, openContent);
     HitRect openTrigger = {};
     openTrigger.bounds = {0, 0, 50, 20};
     openTrigger.onMouseDown = closeTrigger->onMouseDown;
-    win->paint.hits.Append(openTrigger);
+    VecAppend(win->paint.hits, openTrigger);
     PlatformInput triggerAgain = {};
     triggerAgain.kind = PlatformInputKind::MouseDown;
     triggerAgain.mouseDown.x = 10;
@@ -344,7 +344,7 @@ static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
     utassert(PopoverIsOpen(&cx, state));
     utassert(seen->changes == 5 && seen->lastOpen);
 
-    win->paint.hits.Reset();
+    VecReset(win->paint.hits);
     AppGlobalClear(&app);
     WindowKeyedFree(win);
     delete win;

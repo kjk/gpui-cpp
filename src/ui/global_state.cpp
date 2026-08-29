@@ -32,7 +32,7 @@ uint64_t UiSelectionNextDocumentOrder(App* app) {
 
 void UiTextViewStatePush(App* app, EntityId view) {
     if (UiGlobalState* state = UiGlobalStateOf(app)) {
-        state->textViewStateStack.Append(view);
+        VecAppend(state->textViewStateStack, view);
     }
 }
 
