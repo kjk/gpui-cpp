@@ -157,17 +157,24 @@ function main(): void {
     "-include", "gpui/svg.h",
     "-include", "gpui/accessibility_win.h",
     "-include", "sys/executor.h",
-    ...(wasmInclude ? ["-I", wasmInclude] : []),
     ...(plat === "win" ? ["-DWIN_BACKEND_ALL=1", "-DUNICODE", "-D_UNICODE"] : []),
     ...extraArgs,
   ];
   const cCompileArgs = ["-std=c11", ...extraArgs];
+  const wasmCompileArgs = wasmInclude
+    ? ["-std=c++20", "-I", "src", "-I", "src/gpui", "-I", wasmInclude,
+       "-U_WIN32", "-D__EMSCRIPTEN__=1", ...extraArgs]
+    : cxxCompileArgs;
 
   console.log(`Running ${exe} on ${files.length} source files${hostOnly ? ` (${plat})` : ""}`);
   for (let i = 0; i < files.length; i++) {
     const file = files[i]!;
     console.log(`${i + 1}/${files.length} ${file}`);
-    const compileArgs = file.endsWith(".c") ? cCompileArgs : cxxCompileArgs;
+    const compileArgs = file.endsWith(".c")
+      ? cCompileArgs
+      : /_wasm\.cpp$/.test(file)
+        ? wasmCompileArgs
+        : cxxCompileArgs;
     const result = Bun.spawnSync([exe, ...tidyArgs, file, "--", ...compileArgs], {
       cwd: root,
       stdout: "inherit",
