@@ -2168,7 +2168,9 @@ struct DragDropEnumCtx {
 };
 
 static BOOL CALLBACK InjectDragDropTarget(HWND hwnd, LPARAM param) {
-    DragDropEnumCtx* ctx = (DragDropEnumCtx*)param;
+    // EnumWindows transports the callback context through LPARAM, which is
+    // the Win32-defined integer-sized pointer slot.
+    DragDropEnumCtx* ctx = reinterpret_cast<DragDropEnumCtx*>(param); // NOLINT(performance-no-int-to-ptr)
     DragDropTarget* target = new DragDropTarget();
     target->hwnd = hwnd;
     target->ctx = ctx->handlerCtx;
