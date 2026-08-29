@@ -2601,7 +2601,7 @@ static void PaintWavyRun(PaintCtx* ctx, float x, float y, float w, Rgba color) {
     bool up = true;
     const float kHalfPeriod = kPeriod * 0.5f;
     for (uint32_t i = 1;; ++i) {
-        const float at = i * kHalfPeriod;
+        const float at = static_cast<float>(i) * kHalfPeriod;
         if (!(at < w)) {
             break;
         }
