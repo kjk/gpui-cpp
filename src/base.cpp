@@ -640,8 +640,8 @@ GPUI_NOINLINE void* ArenaVecAlloc(Arena* a, int count, int elSize, int align,
     if (count > (INT_MAX - hdrSize) / elSize) {
         return nullptr;
     }
-    return a
-        ->Push((uint64_t)(hdrSize + count * elSize), (uint64_t)align, false);
+    return a->Push((uint64_t)hdrSize + (uint64_t)count * (uint64_t)elSize,
+                   (uint64_t)align, false);
 }
 
 GPUI_NOINLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,

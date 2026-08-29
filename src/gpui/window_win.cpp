@@ -63,7 +63,7 @@ static int ImeStringUtf8(HIMC imc, DWORD which, char* out, int cap) {
         wlen = (int)(sizeof(wbuf) / sizeof(wbuf[0]));
     }
     ImmGetCompositionStringW(imc, which, wbuf,
-                             (DWORD)(wlen * (int)sizeof(wchar_t)));
+                              (DWORD)wlen * (DWORD)sizeof(wchar_t));
     int n =
         WideCharToMultiByte(CP_UTF8, 0, wbuf, wlen, out, cap, nullptr, nullptr);
     return n;

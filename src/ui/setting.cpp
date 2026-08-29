@@ -783,8 +783,8 @@ El* Settings::IntoEl() {
             }
             sub->Child(TextEl(a, group.title)->Font(16)->Fg(th.foreground));
             BindClick(sub, StrDup(a, fmt("group-%d-%d", i, g)),
-                      ListenTo(state, &SettingsState::OnGroupClick,
-                               (intptr_t)(i * 64 + g)));
+                       ListenTo(state, &SettingsState::OnGroupClick,
+                                (intptr_t)i * 64 + (intptr_t)g));
             side->Child(sub);
         }
     }

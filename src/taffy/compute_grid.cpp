@@ -247,7 +247,7 @@ struct CellOccupancyMatrix {
         if (!p) {
             return;
         }
-        memset(p, 0, (size_t)(newRowCount * newColCount));
+        memset(p, 0, (size_t)newRowCount * (size_t)newColCount);
         for (int row = 0; row < oldRowCount; row++) {
             for (int col = 0; col < oldColCount; col++) {
                 p[(row + reqNegRows) * newColCount + (col + reqNegCols)] =

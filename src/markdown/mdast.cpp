@@ -348,11 +348,11 @@ ArenaAlign ArenaAlignNew(Arena* a, int32_t count) {
     int32_t bytes = (count + 3) / 4;
     // Byte-aligned, like a string: the block is a count and some bits, and
     // rounding it up to eight would give back what the varint just saved.
-    char* mem = (char*)a->Push((uint64_t)(head + bytes), 1, false);
+    char* mem = (char*)a->Push((uint64_t)head + (uint64_t)bytes, 1, false);
     if (!mem) {
         return kArenaAlignNone;
     }
-    memset(mem, 0, (size_t)(head + bytes));
+    memset(mem, 0, (size_t)head + (size_t)bytes);
     base::VarintPut(mem, (uint32_t)count);
     return (ArenaAlign)base::ArenaOffsetOf(a, mem);
 }
