@@ -86,7 +86,7 @@ namespace base {
 // Array count for source files compiled independently. The declaration is
 // enough: sizeof only needs the returned reference's bound and never calls it.
 template <typename T, size_t N>
-char (&DimofSizeHelper(T (&array)[N]))[N];
+char (&DimofSizeHelper(T (&array)[N]) noexcept)[N];
 #ifndef dimof
 #define dimof(array) (sizeof(base::DimofSizeHelper(array)))
 #endif
@@ -103,7 +103,7 @@ struct Str {
     char* s;
     int len;
 
-    Str() : s(nullptr), len(0) {}
+    constexpr Str() noexcept : s(nullptr), len(0) {}
     // Explicit, so that a `const char*` cannot become a Str by accident:
     // a string literal should go through StrL(), which knows the length at
     // compile time, and a runtime pointer should say `Str(p)` where it means
@@ -112,9 +112,9 @@ struct Str {
     explicit Str(const char* s_) : s((char*)s_), len(0) {
         len = s_ ? (int)strlen(s_) : 0;
     }
-    explicit Str(const char* s_, int len_) : s((char*)s_), len(len_) {}
+    constexpr explicit Str(const char* s_, int len_) noexcept : s((char*)s_), len(len_) {}
     explicit Str(char* s_) : s(s_), len(0) { len = s ? (int)strlen(s) : 0; }
-    explicit Str(char* s_, int len_) : s(s_), len(len_) {}
+    constexpr explicit Str(char* s_, int len_) noexcept : s(s_), len(len_) {}
 
     explicit operator bool() const { return len > 0 && s; }
 };
