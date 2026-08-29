@@ -48,20 +48,23 @@ bun cmd/run.ts -rel -compare story
 
 On Windows, the renderer is selected at compile time. With no definition the
 build contains only Direct2D, the compatibility default. The repository build
-script accepts the same choice through `GPUI_WIN_BACKEND`:
+script accepts the same choice through `--win-backend`:
 
 ```powershell
-$env:GPUI_WIN_BACKEND = "d3d11"; bun cmd/build.ts -rel story
-$env:GPUI_WIN_BACKEND = "d3d12"; bun cmd/build.ts -rel story
-$env:GPUI_WIN_BACKEND = "all"; bun cmd/build.ts -rel story
+bun cmd/build.ts -rel --win-backend=d3d11 story
+bun cmd/build.ts -rel --win-backend=d3d12 story
+bun cmd/run.ts -rel --win-backend=all story -- __paint=d3d12 __msaa=4 __scene=damage
 ```
 
 Library users can instead define exactly one of `WIN_BACKEND_DIRECT2D`,
 `WIN_BACKEND_D3D11` or `WIN_BACKEND_D3D12`. Defining `WIN_BACKEND_ALL`
-compiles all three and retains the process-start `GPUI_PAINT=d2d|d3d11|d3d12`
-selector (`gpu` is an alias for `d3d11`). A fixed build ignores `GPUI_PAINT`.
-`GPUI_PAINT_MSAA=1|2|4|8` controls the custom renderers' sample count (4 by
-default).
+compiles all three and retains the process-start
+`__paint=d2d|d3d11|d3d12` selector. A fixed build ignores unavailable backend
+choices. `__msaa=1|2|4|8` controls the custom renderers' sample count (4 by
+default). `__scene=off|replay|cache|skip|damage` selects how much scene work is
+enabled, with `skip` as the default. Windows consumes all three reserved
+arguments before calling `GpuiMain`, so application argument parsing never
+sees them. See `src/gpui/paint.h` for the quality, cost and caching tradeoffs.
 
 Markdown defaults to the complete CommonMark + GFM parser. Applications that
 prefer a smaller executable can select the basic parser at build time:

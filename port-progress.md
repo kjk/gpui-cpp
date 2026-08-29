@@ -58,7 +58,7 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 
 ## Remaining gaps vs Rust
 
-- **The GPU path stops at the tessellator.** Painting goes to a DXGI flip-model swap chain with an `ID2D1DeviceContext` on its back buffer, which is the shape GPUI's `directx_renderer.rs` has. What is still not GPUI's is what happens above that: D2D tessellates strokes and paths on the CPU (`FillNonOverlappingRectangles_SlowPath`) where GPUI rasterizes them in a shader, so a scene made of many thin antialiased paths costs more here — 59% of `fps_monitor`'s frame is D2D widening and tessellating ~2300 hairlines, and the same frame costs 1.02 ms on Direct2D against 0.364 ms under `GPUI_PAINT=gpu`. See "Thirty-two frames a second, and where they went" at the end of this file for the profile and the numbers.
+- **The GPU path stops at the tessellator.** Painting goes to a DXGI flip-model swap chain with an `ID2D1DeviceContext` on its back buffer, which is the shape GPUI's `directx_renderer.rs` has. What is still not GPUI's is what happens above that: D2D tessellates strokes and paths on the CPU (`FillNonOverlappingRectangles_SlowPath`) where GPUI rasterizes them in a shader, so a scene made of many thin antialiased paths costs more here — 59% of `fps_monitor`'s frame is D2D widening and tessellating ~2300 hairlines, and the same frame costs 1.02 ms on Direct2D against 0.364 ms under an all-backend build launched with `__paint=d3d11`. See "Thirty-two frames a second, and where they went" at the end of this file for the profile and the numbers.
 - **Process CPU %** is a Win32 times delta, not `sysinfo`; first sample is 0; values are in the same ballpark, not bit-identical.
 - **Icons** are Lucide's own SVG files: `AppNew` registers the default asset roots when nothing else has, so any app finds `assets/icons/*.svg` without asking. Where the folder is genuinely missing they fall back to the stroke sketches in `DrawIcon`, which cover all 74 `IconName`s.
 - **Markdown is the crate, ported.** `src/markdown/` is markdown-rs 1.0.0 — the `markdown` crate `crates/ui` parses with — so a `TextView` reads the same mdast Rust does. HTML is `src/ui/html.cpp` in html5ever's place, folding into the same tree. Headings, lists, tables, quotes, images, footnotes, task lists, inline HTML and raw HTML blocks. The code fences are coloured by the scanner below rather than by tree-sitter.
@@ -10036,14 +10036,14 @@ the sanitizer's first-chance access violations and continuing to exit 0.
 
 2026-08-29: Windows builds can now define exactly one of
 `WIN_BACKEND_DIRECT2D`, `WIN_BACKEND_D3D11` or `WIN_BACKEND_D3D12`, or define
-`WIN_BACKEND_ALL` to compile all three and retain the existing process-start
-`GPUI_PAINT=d2d|d3d11|d3d12` selector. A fixed build ignores `GPUI_PAINT`.
+`WIN_BACKEND_ALL` to compile all three and retain the process-start
+`__paint=d2d|d3d11|d3d12` selector. A fixed build ignores unavailable choices.
 With none of the four macros defined, `paint.h` selects Direct2D: it is the
 compatibility default because it has the mature driver path and WARP fallback
 and preserves DirectWrite's ClearType text.
 
 `cmd/build.ts` exposes the same choice as
-`GPUI_WIN_BACKEND=d2d|d3d11|d3d12|all`, defaulting to `d2d`, and links only the
+`--win-backend=d2d|d3d11|d3d12|all`, defaulting to `d2d`, and links only the
 renderer import libraries the selected build needs. MSVC release smoke builds
 of `hello_world` pass in all four modes: the fixed Direct2D executable
 links D2D1/D3D11/DXGI, fixed D3D11 links D3D11/DXGI/D3DCompiler, fixed D3D12
@@ -10054,8 +10054,32 @@ and 1,033,728 bytes.
 MSVC release passes all 21,500 checks in each of the four modes; MSVC debug
 and clang-cl release build `hello_world` in all four with the same narrowed
 link sets. Each fixed executable runs through the 31-frame automatic smoke
-loop while `GPUI_PAINT` requests a different backend, proving the environment
-cannot override the compile-time choice. One `WIN_BACKEND_ALL` executable runs
+loop while the old environment selector requests a different backend, proving
+it cannot override the compile-time choice. One `WIN_BACKEND_ALL` executable runs
 the same loop successfully as Direct2D, D3D11 and D3D12. A direct amalgam
 compile with none of the selector macros defined also links against the
 Direct2D-only renderer set and passes that smoke loop.
+
+## Windows paint and scene options move from the environment to argv
+
+2026-08-29: The runtime no longer reads `GPUI_PAINT`, `GPUI_PAINT_MSAA` or
+`GPUI_SCENE`. Windows owns typed `WinPaintBackend`, `WinPaintMsaa`,
+`WinSceneMode` and `WinPaintOptions` values, exposed through
+`WinPaintOptionsGet()`. Before `wWinMain` calls `GpuiMain`, the existing
+runtime-argument pass consumes `__paint=d2d|d3d11|d3d12`, `__msaa=1|2|4|8`
+and `__scene=off|replay|cache|skip|damage`, applies valid choices and compacts
+`argv`; the application never sees the three reserved arguments. Invalid
+values and unavailable fixed backends are also consumed but leave the selected
+defaults unchanged. Scene defaults to `skip` as before.
+
+The scripts no longer read `GPUI_WIN_BACKEND`. `build.ts`, `run.ts`, `test.ts`
+and `bench.ts` share `--win-backend=d2d|d3d11|d3d12|all` through `BuildFlags`;
+`run.ts` passes `__paint`, `__msaa` and `__scene` unchanged after its `--`
+separator for the Windows startup pass to take. MSVC release originally passed
+21,509 checks in all four compile configurations; after adding the scene-mode
+assertion, Direct2D and all-backend builds pass 21,510. A second invocation
+through `run.ts` with all three reserved options interleaved with an application
+argument passes 21,511, proving they were removed before `GpuiMain`; an
+all-backend `hello_world` also launches with D3D12, four samples and `damage`.
+Before the scene addition, MSVC debug and clang-cl release all-backend suites
+passed 21,509 checks under `/W4 /WX`.

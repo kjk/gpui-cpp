@@ -3,7 +3,7 @@
 
 #include "gpui/paint.h"
 // The custom GPU renderer beside this one. In WIN_BACKEND_ALL builds,
-// GPUI_PAINT=d3d11|d3d12 selects it (gpu aliases d3d11); fixed custom builds
+// __paint=d3d11|d3d12 selects it; fixed custom builds
 // always hand every entry point to their one submission half.
 #include "gpui/paintgpu.h"
 #include "gpui/scene.h"
@@ -21,6 +21,83 @@
 #include <wincodec.h>
 
 namespace gpui {
+
+static WinPaintOptions gWinPaintOptions = {
+#if WIN_BACKEND_D3D11 && !WIN_BACKEND_ALL
+    WinPaintBackend::D3D11,
+#elif WIN_BACKEND_D3D12 && !WIN_BACKEND_ALL
+    WinPaintBackend::D3D12,
+#else
+    WinPaintBackend::Direct2D,
+#endif
+    WinPaintMsaa::X4,
+    WinSceneMode::Skip,
+};
+
+const WinPaintOptions& WinPaintOptionsGet() {
+    return gWinPaintOptions;
+}
+
+static bool WinPaintBackendAvailable(WinPaintBackend backend) {
+    return (backend == WinPaintBackend::Direct2D && WIN_BACKEND_DIRECT2D) ||
+           (backend == WinPaintBackend::D3D11 && WIN_BACKEND_D3D11) ||
+           (backend == WinPaintBackend::D3D12 && WIN_BACKEND_D3D12);
+}
+
+bool WinPaintOptionsTakeArg(Str arg) {
+    const Str paint = StrL("__paint=");
+    if (base::StrStartsWith(arg, paint)) {
+        Str value(arg.s + paint.len, arg.len - paint.len);
+        WinPaintBackend backend = WinPaintBackend::Direct2D;
+        bool valid = true;
+        if (base::StrEqI(value, "d2d")) {
+            backend = WinPaintBackend::Direct2D;
+        } else if (base::StrEqI(value, "d3d11")) {
+            backend = WinPaintBackend::D3D11;
+        } else if (base::StrEqI(value, "d3d12")) {
+            backend = WinPaintBackend::D3D12;
+        } else {
+            valid = false;
+        }
+        if (valid && WinPaintBackendAvailable(backend)) {
+            gWinPaintOptions.backend = backend;
+        }
+        return true;
+    }
+
+    const Str msaa = StrL("__msaa=");
+    if (base::StrStartsWith(arg, msaa)) {
+        Str value(arg.s + msaa.len, arg.len - msaa.len);
+        if (base::StrEq(value, "1")) {
+            gWinPaintOptions.msaa = WinPaintMsaa::X1;
+        } else if (base::StrEq(value, "2")) {
+            gWinPaintOptions.msaa = WinPaintMsaa::X2;
+        } else if (base::StrEq(value, "4")) {
+            gWinPaintOptions.msaa = WinPaintMsaa::X4;
+        } else if (base::StrEq(value, "8")) {
+            gWinPaintOptions.msaa = WinPaintMsaa::X8;
+        }
+        return true;
+    }
+
+    const Str scene = StrL("__scene=");
+    if (!base::StrStartsWith(arg, scene)) {
+        return false;
+    }
+    Str value(arg.s + scene.len, arg.len - scene.len);
+    if (base::StrEqI(value, "off")) {
+        gWinPaintOptions.scene = WinSceneMode::Off;
+    } else if (base::StrEqI(value, "replay")) {
+        gWinPaintOptions.scene = WinSceneMode::Replay;
+    } else if (base::StrEqI(value, "cache")) {
+        gWinPaintOptions.scene = WinSceneMode::Cache;
+    } else if (base::StrEqI(value, "skip")) {
+        gWinPaintOptions.scene = WinSceneMode::Skip;
+    } else if (base::StrEqI(value, "damage")) {
+        gWinPaintOptions.scene = WinSceneMode::Damage;
+    }
+    return true;
+}
 
 static inline D2D1_COLOR_F ToD2D(Rgba c) {
     return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);

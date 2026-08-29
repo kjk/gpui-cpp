@@ -60,6 +60,7 @@ type DebuggerKind = "windbg" | "cdb" | "gdb" | "lldb";
 const self = scriptPath("run.ts");
 
 const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
+                     [--win-backend=d2d|d3d11|d3d12|all]
                      [-debugger|-windbg|-cdb|-gdb|-lldb] [-compare]
                      [-no-build] [-no-open] [-port N] <example> [-- <args...>]
        bun ${self} -versions
@@ -70,6 +71,9 @@ const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
   -clang      Windows: build with clang-cl instead of cl.exe
   -clean      delete out/<dir>/ before building
   -no-build   launch what is already in out/, without compiling
+  --win-backend=d2d|d3d11|d3d12|all
+              Windows renderer implementations compiled into the executable;
+              d2d is the default
 
   -debugger   run under whichever debugger this machine has
               Windows: windbg, then cdb.  Linux: gdb, then lldb.  macOS: lldb.
@@ -88,7 +92,10 @@ const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
   -wasm       build for the browser, serve out/wasm/<cfg>/ and open a tab
   -no-open    -wasm: do not launch a browser
   -port N     -wasm: listen on N (default 8000; the next free port if taken)
-  --          pass every remaining argument unchanged to the selected binary
+  --          pass every remaining argument unchanged to the selected binary;
+              Windows consumes __paint=d2d|d3d11|d3d12 and __msaa=1|2|4|8
+              plus __scene=off|replay|cache|skip|damage before the
+              application's GpuiMain sees argv
 
 The target name is the last argument before --. -all is not accepted — pick one binary.`;
 

@@ -36,7 +36,8 @@ const flags = defaultBuildFlags();
 // Flags the build knows about; everything else is the binary's.
 const runFlags: string[] = [];
 for (const a of Bun.argv.slice(2)) {
-  if (takeBuildFlag(a.replace(/^--/, "-"), flags)) {
+  const buildArg = a.startsWith("--win-backend=") ? a : a.replace(/^--/, "-");
+  if (takeBuildFlag(buildArg, flags)) {
     continue;
   }
   runFlags.push(a);

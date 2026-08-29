@@ -1,4 +1,5 @@
-// Build and run the test suite: bun cmd/test.ts [-dbg|-rel] [-asan] [-clang] [-clean]
+// Build and run the test suite: bun cmd/test.ts [-dbg|-rel] [-asan] [-clang]
+//                                      [-clean] [--win-backend=<backend>]
 //
 // The tests live in tests/ and are ports of the pure-logic ones in
 // .work/gpui-component at the SHA pinned in cmd/run.ts. The runner is an
@@ -29,7 +30,8 @@ function die(msg: string): never {
 const flags = defaultBuildFlags();
 for (const a of Bun.argv.slice(2)) {
   // --dbg and friends have always been accepted here too.
-  if (takeBuildFlag(a.replace(/^--/, "-"), flags)) {
+  const buildArg = a.startsWith("--win-backend=") ? a : a.replace(/^--/, "-");
+  if (takeBuildFlag(buildArg, flags)) {
     continue;
   }
   die(`Unknown flag: ${a}`);

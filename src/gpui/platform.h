@@ -101,8 +101,9 @@ void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH);
 // there afterwards and laying out twice. False when the flag was not given.
 // Applied on Windows; the other platforms accept the flag and ignore it.
 bool WindowGeomRequested(int* x, int* y, int* w, int* h);
-// Takes the -gpui-* flags out of argv before the app parses it, so an example
-// that reads argv[1] never sees one. Returns the argument count that is left.
+// Takes runtime-owned flags out of argv before the app parses it, so an
+// example that reads argv[1] never sees one. On Windows those include
+// __paint, __msaa and __scene. Returns the argument count that is left.
 int GpuiTakeRuntimeArgs(int argc, char** argv);
 
 // ─── implemented per platform ────────────────────────────────────────────

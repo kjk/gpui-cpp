@@ -40,11 +40,13 @@ bun run.ts gpui_shell -- examples/js_todolist --dev
 loads and renders once without opening a window, and `types <directory>` writes
 the matching `gpui.d.ts` declarations.
 
-Windows builds Direct2D by default. Set `GPUI_WIN_BACKEND=d3d11`, `d3d12` or
-`all` while running `build.ts` to choose what the executable contains. An
-`all` build retains the process-start `GPUI_PAINT=d2d|d3d11|d3d12` selector
-(`gpu` aliases `d3d11`); a fixed build ignores it. `GPUI_PAINT_MSAA=1|2|4|8`
-controls the custom renderers' sample count.
+Windows builds Direct2D by default. Pass
+`--win-backend=d2d|d3d11|d3d12|all` to `build.ts` or `run.ts` to choose what
+the executable contains. An `all` build retains the process-start
+`__paint=d2d|d3d11|d3d12` selector; `__msaa=1|2|4|8` controls the custom
+renderers' sample count, and `__scene=off|replay|cache|skip|damage` selects the
+scene optimization level (`skip` by default). Pass those after `run.ts`'s
+`--`; Windows removes them from `argv` before calling `GpuiMain`.
 
 ## What is here
 

@@ -28,7 +28,7 @@
    Antialiasing comes from two places. Quads and glyphs carry their own: the
    SDF gives analytic coverage, and a glyph is a coverage texture. Paths and
    strokes have no analytic form here, so they get theirs from the sample
-   count — GPUI_PAINT_MSAA, 4 by default. That is the one real architectural
+   count — __msaa, 4 by default. That is the one real architectural
    difference from Blade, which renders paths to an antialiased mask instead;
    MSAA is a prototype's version of the same answer, and having it as a knob
    is what makes its cost visible.
@@ -54,66 +54,16 @@
 
 namespace gpui {
 
-enum GpuApi : int {
-    kGpuUnknown = -1,
-    kGpuOff = 0,
-    kGpuD3d11 = 11,
-    kGpuD3d12 = 12,
-};
-
-// Read once. `gpu` was the original spelling and remains the D3D11 alias.
-// Anything else — unset, "d2d", nonsense — leaves Direct2D in place.
-#if WIN_BACKEND_ALL
-static int PaintGpuApi() {
-    static int api = kGpuUnknown;
-    if (api == kGpuUnknown) {
-        char buf[16] = {};
-        DWORD n = GetEnvironmentVariableA("GPUI_PAINT", buf, sizeof(buf));
-        Str value = n > 0 && n < sizeof(buf) ? Str(buf) : Str{};
-        api = base::StrEqI(value, "gpu") || base::StrEqI(value, "d3d11")
-                  ? kGpuD3d11
-              : base::StrEqI(value, "d3d12") ? kGpuD3d12
-                                               : kGpuOff;
-        if (api != kGpuOff) {
-            logf("paint: GPU backend (D3D%d, GPUI_PAINT=%s)", api,
-                 value);
-        }
-    }
-    return api;
-}
-#endif
-
 bool PaintGpuOn() {
-#if WIN_BACKEND_ALL
-    return PaintGpuApi() != kGpuOff;
-#else
-    return true;
-#endif
+    return WinPaintOptionsGet().backend != WinPaintBackend::Direct2D;
 }
 
 bool PaintD3d12On() {
-#if WIN_BACKEND_ALL
-    return PaintGpuApi() == kGpuD3d12;
-#else
-    return WIN_BACKEND_D3D12 != 0;
-#endif
+    return WinPaintOptionsGet().backend == WinPaintBackend::D3D12;
 }
 
 int PaintGpuSamples() {
-    static int n = -1;
-    if (n < 0) {
-        char buf[16] = {};
-        DWORD got =
-            GetEnvironmentVariableA("GPUI_PAINT_MSAA", buf, sizeof(buf));
-        n = 4;
-        if (got > 0 && got < sizeof(buf)) {
-            int v = atoi(buf);
-            if (v == 1 || v == 2 || v == 4 || v == 8) {
-                n = v;
-            }
-        }
-    }
-    return n;
+    return (int)WinPaintOptionsGet().msaa;
 }
 
 namespace gpuw {
@@ -3214,7 +3164,7 @@ namespace gpui {
 
 bool PaintGpuOn() { return false; }
 bool PaintD3d12On() { return false; }
-int PaintGpuSamples() { return 1; }
+int PaintGpuSamples() { return (int)WinPaintOptionsGet().msaa; }
 
 namespace gpuw {
 

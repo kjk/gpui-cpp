@@ -234,10 +234,26 @@ export type BuildFlags = {
   clean: boolean;
   /** Compile the library's individual source files instead of gpui.cpp. */
   nonAmalgam: boolean;
+  /** Windows renderer implementations compiled into the executable. */
+  winBackend: WindowsBackend;
+  sawWinBackend: boolean;
 };
 
+export type WindowsBackend = "d2d" | "d3d11" | "d3d12" | "all";
+
 export function defaultBuildFlags(): BuildFlags {
-  return { sawRel: false, sawDbg: false, debug: false, asan: false, clang: false, wasm: false, clean: false, nonAmalgam: false };
+  return {
+    sawRel: false,
+    sawDbg: false,
+    debug: false,
+    asan: false,
+    clang: false,
+    wasm: false,
+    clean: false,
+    nonAmalgam: false,
+    winBackend: "d2d",
+    sawWinBackend: false,
+  };
 }
 
 /**
@@ -245,6 +261,12 @@ export function defaultBuildFlags(): BuildFlags {
  * build flag, which is how cmd/run.ts layers its own on top of these.
  */
 export function takeBuildFlag(arg: string, f: BuildFlags): boolean {
+  const winBackend = arg.match(/^--win-backend=(d2d|d3d11|d3d12|all)$/i);
+  if (winBackend) {
+    f.winBackend = winBackend[1]!.toLowerCase() as WindowsBackend;
+    f.sawWinBackend = true;
+    return true;
+  }
   switch (arg) {
     case "-rel":
       f.sawRel = true;
@@ -293,6 +315,9 @@ export function checkBuildFlags(f: BuildFlags, plat: Platform, fail: (msg: strin
   }
   if (f.clang && plat === "wasm") {
     fail("-clang means nothing with -wasm: emscripten is clang.");
+  }
+  if (f.sawWinBackend && plat !== "win") {
+    fail("--win-backend is only available for native Windows builds.");
   }
 }
 
@@ -878,16 +903,6 @@ export function findToolchain(plat: Platform, f: BuildFlags, fail: (msg: string)
 
 // ─── platform link inputs ─────────────────────────────────────────────────
 
-type WindowsBackend = "d2d" | "d3d11" | "d3d12" | "all";
-
-function windowsBackend(fail: (msg: string) => never): WindowsBackend {
-  const value = (process.env.GPUI_WIN_BACKEND ?? "d2d").toLowerCase();
-  if (value === "d2d" || value === "d3d11" || value === "d3d12" || value === "all") {
-    return value;
-  }
-  return fail(`GPUI_WIN_BACKEND must be d2d, d3d11, d3d12 or all, got "${value}"`);
-}
-
 const winCommonLibs = [
   "dwrite.lib",
   "dwmapi.lib",
@@ -915,8 +930,8 @@ const winCommonLibs = [
   "pdh.lib",
 ];
 
-function winLibs(fail: (msg: string) => never): string[] {
-  const backend = windowsBackend(fail);
+function winLibs(f: BuildFlags): string[] {
+  const backend = f.winBackend;
   const renderer =
     backend === "d2d"
       ? ["d2d1.lib", "d3d11.lib", "dxgi.lib"]
@@ -977,7 +992,7 @@ function linuxDeps(fail: (msg: string) => never): LinuxDeps {
 
 function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): string[] {
   if (tc.plat === "win") {
-    const backend = windowsBackend(fail);
+    const backend = f.winBackend;
     const backendDefine =
       backend === "all"
         ? "/DWIN_BACKEND_ALL=1"
@@ -1425,7 +1440,7 @@ function link(
       "/NODEFAULTLIB:ucrtd.lib",
       "/NODEFAULTLIB:vcruntime.lib",
       "/NODEFAULTLIB:vcruntimed.lib",
-      ...winLibs(fail),
+      ...winLibs(f),
     ];
     if (!f.debug) {
       // /DEBUG implies /OPT:NOREF unless we opt back in.
@@ -1561,7 +1576,8 @@ const amalgamLine = isDist
   : `Always writes .work/gpui.h, .work/gpui.cpp and .work/quickjs/, then compiles examples
 against that source set.`;
 
-const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean] [-all] [<example>]
+const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean] [-all]
+                     [--win-backend=d2d|d3d11|d3d12|all] [<example>]
 
   -rel    release (default)
   -dbg    debug
@@ -1573,8 +1589,8 @@ const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang]
   -all    build every example (amalgamation + compile); print total elapsed
 
 Windows renderer (compile-time, default d2d):
-  GPUI_WIN_BACKEND=d2d|d3d11|d3d12|all
-  "all" retains the GPUI_PAINT process-start selector; fixed builds ignore it.
+  --win-backend=d2d|d3d11|d3d12|all
+  "all" retains the __paint process-start selector; fixed builds ignore it.
 
 ${amalgamLine}
 

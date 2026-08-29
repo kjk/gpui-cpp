@@ -5,7 +5,7 @@
    carrying its own content mask and its layer, rather than issued to a
    backend as the tree walks.
 
-   It is on, at the `skip` level, and GPUI_SCENE is how to turn it down or
+   It is on, at the `skip` level, and __scene is how to turn it down or
    off. It earns that on the scenes this tree draws — see the note at the end
    of this header for the numbers, and for the one scene it costs rather than
    pays on.
@@ -29,7 +29,7 @@
      what lets the tessellation — the single most expensive thing the D2D
      backend does per frame — be built once and drawn many times.
 
-   The levels, from GPUI_SCENE, each one including the ones before it:
+   The levels, from __scene, each one including the ones before it:
 
      off      the element tree draws straight to the backend, as it used to
      replay   collect and replay; measures what the scene itself costs
@@ -37,10 +37,10 @@
      skip     + a frame identical to the last one is not drawn at all  (default)
      damage   + a frame that differs in part is drawn in part
 
-   `GPUI_SCENE=1` means `replay`, `0` means `off`, and an unset variable — or
-   one set to something that is not a level — means `skip`. `off` is what a
-   bisect wants, and what to reach for if a frame ever comes out stale: this
-   is the only thing in the tree that can decide not to draw.
+   An absent `__scene=` argument means `skip`; an invalid value is consumed
+   and leaves the current/default selection unchanged. `off` is what a bisect
+   wants, and what to reach for if a frame ever comes out stale: this is the
+   only thing in the tree that can decide not to draw.
 
    Only paint_win.cpp dispatches into the recorder. The other three backends
    draw the way they always did, so the default differs by platform until
@@ -61,8 +61,8 @@ enum SceneLevel : int {
     kSceneDamage = 4
 };
 
-// Read once, from GPUI_SCENE. Nothing re-reads it, and the level cannot
-// change while a frame is open.
+// Read from the process-start options, which cannot change while a frame is
+// open.
 int SceneLevelOn();
 inline bool SceneOn() {
     return SceneLevelOn() > kSceneOff;

@@ -20,10 +20,9 @@
    uploads. Native D3D11 and D3D12 submission halves consume the same data;
    D3D12 does not pass through D3D11On12.
 
-   In a WIN_BACKEND_ALL build, `GPUI_PAINT=d3d11|d3d12` in the environment
-   picks its native submission API (`gpu` remains an alias for d3d11), read
-   once at startup. A fixed build ignores GPUI_PAINT.
-   `GPUI_PAINT_MSAA=1|2|4|8` sets the sample count (default 4): quads and
+   In a WIN_BACKEND_ALL build, `__paint=d2d|d3d11|d3d12` on the command line
+   picks its native submission API. A fixed build ignores unavailable choices.
+   `__msaa=1|2|4|8` sets the sample count (default 4): quads and
    glyphs carry their own analytic coverage, but tessellated paths and
    expanded strokes get their antialiasing from the sample count, and its
    cost is worth being able to see.
@@ -42,8 +41,7 @@
 
 namespace gpui {
 
-// In an ALL build these are read once from GPUI_PAINT. In a single-backend
-// build they are compile-time constants and the environment is ignored.
+// These project WinPaintOptions into the shared custom-renderer front end.
 bool PaintGpuOn();
 // Which native submission half the shared GPU renderer uses.
 bool PaintD3d12On();

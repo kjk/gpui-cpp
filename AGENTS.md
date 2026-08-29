@@ -32,10 +32,10 @@ bun cmd/build.ts -wasm system_monitor
 bun cmd/build.ts -clang -rel showcase   # Windows: clang-cl, not cl.exe
 bun cmd/run.ts -wasm showcase
 
-GPUI_WIN_BACKEND=d3d11 bun cmd/build.ts -rel story  # fixed custom D3D11 build
-GPUI_WIN_BACKEND=d3d12 bun cmd/build.ts -rel story  # fixed native D3D12 build
-GPUI_WIN_BACKEND=all bun cmd/build.ts -rel story    # retain GPUI_PAINT runtime choice
-GPUI_SCENE=off out/rel/story.exe            # draw straight, without the scene
+bun cmd/build.ts -rel --win-backend=d3d11 story    # fixed custom D3D11 build
+bun cmd/build.ts -rel --win-backend=d3d12 story    # fixed native D3D12 build
+bun cmd/run.ts -rel --win-backend=all story -- __paint=d3d12 __msaa=4 __scene=damage
+out/rel/story.exe __scene=off               # draw straight, without the scene
 GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
 GPUI_LAYOUT_DUMP=lay.txt out/rel/story.exe  # every frame's laid-out tree
 GPUI_LAYOUT_REUSE=off out/rel/story.exe     # rebuild the taffy tree each frame
@@ -97,7 +97,7 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   than a tree; no offscreen mask cache; no batching across windows; and only
   `paint_win.cpp` dispatches into it, so the other three backends draw the way
   they always did. Both headers say what they are worth and what they are
-  short of, and `GPUI_SCENE=off` is how to take the scene back out. We do have
+  short of, and `__scene=off` is how to take the scene back out. We do have
   `App`/`Window`/`Entity`/`Ctx`, actions and a keymap, `EventEmitter`, window
   subscriptions and an executor — see below — but not refcounted entities,
   observers, futures, or a `Task<T>` that cancels by being dropped.
@@ -236,9 +236,9 @@ time. Define exactly one of `WIN_BACKEND_DIRECT2D`, `WIN_BACKEND_D3D11` or
 `WIN_BACKEND_D3D12`; if none is defined, Direct2D is selected because its
 mature driver path, WARP fallback and DirectWrite ClearType output make it the
 widest compatibility choice. `WIN_BACKEND_ALL` compiles all three and retains
-the process-start `GPUI_PAINT=d2d|d3d11|d3d12` selector (`gpu` remains an alias
-for `d3d11`). Fixed builds ignore `GPUI_PAINT`. The repository build script's
-equivalent is `GPUI_WIN_BACKEND=d2d|d3d11|d3d12|all`.
+the process-start `__paint=d2d|d3d11|d3d12` selector. Fixed builds ignore an
+unavailable backend choice. The repository build script's equivalent is
+`--win-backend=d2d|d3d11|d3d12|all`.
 
 `paint_win.cpp` implements Direct2D on a D3D11 device over a flip-model swap
 chain — already on the GPU, and what the default build and screenshots use.
@@ -248,8 +248,11 @@ are evaluated in the pixel shader, and path fills go through stencil-and-cover
 rather than a tessellator. The CPU batching, shaders, atlas and path machinery
 are shared; only native resource and command submission differ. The D3D12 half
 owns a command queue, triple-buffered allocators, persistent upload heaps and
-descriptor tables; it does not use D3D11On12. `GPUI_PAINT_MSAA` sets the
-custom renderers' sample count.
+descriptor tables; it does not use D3D11On12. `__msaa=1|2|4|8` sets the
+custom renderers' sample count. `WinPaintBackend`, `WinPaintMsaa`,
+`WinSceneMode` and `WinPaintOptions` hold all three selections; Windows fills
+them while stripping the reserved arguments before `GpuiMain`, and
+`WinPaintOptionsGet()` is the paint backends' typed accessor.
 
 All three share everything device-independent rather than writing it three
 times: the DirectWrite factory and its formats, the `IDWriteTextLayout` a
@@ -267,7 +270,7 @@ close first (subpixel glyph positioning, dashes on a rounded rect).
 tree's drawing is collected as a flat array of primitives rather than issued to
 a backend as it walks, and the array is then replayed through the same
 `paint.h` entry points — so all three Windows backends draw it and none can tell.
-It is on at the `skip` level; `GPUI_SCENE=off|replay|cache|skip|damage` turns it
+It is on at the `skip` level; `__scene=off|replay|cache|skip|damage` turns it
 down, and `off` is the first thing to try if a frame ever comes out stale, since
 this is the only thing in the tree that can decide not to draw. On the story
 gallery it takes the paint phase from 1.41 ms to 0.24 on Direct2D and from 0.59
@@ -766,7 +769,8 @@ cmd/imgdiff.ts         compare two shots, or two directories of them, and exit 1
                        It passes -gpui-window=X,Y,W,H, a runtime flag every example
                        understands: the window opens at that outer rect instead of
                        being moved into it, so the tree is laid out once. The runtime
-                       takes -gpui-* out of argv before the example parses it.
+                       takes its runtime flags, including Windows' __paint,
+                       __msaa and __scene, out of argv before the example parses it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/update-dist.ts     amalgamate src/** into gpui.h + gpui.cpp (`.work/` for

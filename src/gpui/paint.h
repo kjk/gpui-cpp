@@ -9,8 +9,8 @@
 #include "gpui/gpui.h"
 
 // Windows renderer selection is a compile-time choice. Defining
-// WIN_BACKEND_ALL preserves the runtime GPUI_PAINT=d2d|d3d11|d3d12 selector;
-// otherwise exactly one backend is compiled and GPUI_PAINT is ignored. With
+// WIN_BACKEND_ALL preserves the runtime __paint=d2d|d3d11|d3d12 selector;
+// otherwise exactly one backend is compiled and __paint is ignored. With
 // no definition, Direct2D is the compatibility default: it is available back
 // to Windows 7 with the platform update, falls back through WARP, and keeps
 // DirectWrite's ClearType text and mature driver path.
@@ -57,6 +57,63 @@
 #define WIN_BACKEND_GPU (WIN_BACKEND_D3D11 || WIN_BACKEND_D3D12)
 
 namespace gpui {
+
+#if GPUI_OS_WINDOWS
+enum class WinPaintBackend : uint8_t {
+    Direct2D,
+    D3D11,
+    D3D12,
+};
+
+// __msaa=1|2|4|8 controls only the custom D3D11/D3D12 renderer; Direct2D
+// uses its own antialiasing and ignores it. Quads, rounded rectangles and
+// glyphs have analytic shader coverage, so changing this mostly affects
+// tessellated paths and expanded strokes. X1 is cheapest but leaves those
+// edges jagged. Each higher value smooths them with proportionally more
+// multisample storage, raster work and resolve bandwidth; X4 is the quality /
+// cost default, while X8 is primarily useful for comparison or path-heavy UI.
+enum class WinPaintMsaa : uint8_t {
+    X1 = 1,
+    X2 = 2,
+    X4 = 4,
+    X8 = 8,
+};
+
+// __scene=off|replay|cache|skip|damage controls the scene collected in front
+// of either Windows renderer. Levels are cumulative:
+//
+//   Off      draws immediately. It uses no scene recording and is the best
+//            diagnostic when scene replay might be producing a stale frame.
+//   Replay   records, sorts and replays every primitive, paying that overhead
+//            without caching or suppressing any drawing.
+//   Cache    also retains realized path geometry by hash, trading cache memory
+//            for avoiding repeated path construction/tessellation.
+//   Skip     also hashes whole frames and omits drawing and presenting an
+//            unchanged frame. This is the measured, safe default.
+//   Damage   also redraws only the union of changed primitive bounds. It can
+//            save work on localized changes, but is the most experimental
+//            mode and carries prior damage across the triple-buffered chain.
+enum class WinSceneMode : uint8_t {
+    Off,
+    Replay,
+    Cache,
+    Skip,
+    Damage,
+};
+
+struct WinPaintOptions {
+    WinPaintBackend backend = WinPaintBackend::Direct2D;
+    WinPaintMsaa msaa = WinPaintMsaa::X4;
+    WinSceneMode scene = WinSceneMode::Skip;
+};
+
+// Process-start renderer options. WinPaintOptionsTakeArg consumes the
+// reserved __paint=, __msaa= and __scene= arguments before GpuiMain sees
+// argv; invalid values are still consumed and leave the current/default
+// choice unchanged.
+const WinPaintOptions& WinPaintOptionsGet();
+bool WinPaintOptionsTakeArg(Str arg);
+#endif
 
 // Text weight byte: the weight in the low bits plus family / decoration
 // flags, so the shaped-text cache keys mono and proportional runs apart on

@@ -28,8 +28,14 @@ bool TestNear(float a, float b) {
 }
 
 int GpuiMain(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
+    TestSuite("runtime argv");
+    utassert(argc >= 1 && argv && argv[argc] == nullptr);
+    for (int i = 0; i < argc; i++) {
+        Str arg(argv[i]);
+        utassert(!base::StrStartsWith(arg, "__paint=") &&
+                 !base::StrStartsWith(arg, "__msaa=") &&
+                 !base::StrStartsWith(arg, "__scene="));
+    }
 
     // No test reaches the network. A suite that did would fail on a machine
     // without one and be slow on a machine with one, so the client is off for
@@ -139,6 +145,8 @@ int GpuiMain(int argc, char** argv) {
     TestForm();
     TestQuickJs();
     TestShellCore();
+    // Last because it deliberately changes the process-wide paint options.
+    TestRuntimeArgs();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

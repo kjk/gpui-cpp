@@ -10,47 +10,22 @@
 
 #include "gpui/scene.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 namespace gpui {
 
 int SceneLevelOn() {
-    static int lvl = -1;
-    if (lvl >= 0) {
-        return lvl;
-    }
-    char buf[16] = {};
-    const char* env = getenv("GPUI_SCENE");
-    if (env) {
-        StrCopyZ(buf, (int)sizeof(buf), env);
-    }
-    // `skip` unless told otherwise. Every level below it is a step on the
-    // way to it and none of them is what a build wants; `damage` is above it
-    // and is the one part of this that is not measured.
-    lvl = kSceneSkip;
-    if (!buf[0]) {
-        return lvl;
-    }
-    Str value(buf);
-    if (base::StrEqI(value, "0") || base::StrEqI(value, "off")) {
-        lvl = kSceneOff;
-    } else if (base::StrEqI(value, "1") || base::StrEqI(value, "replay") ||
-               base::StrEqI(value, "on")) {
-        lvl = kSceneReplay;
-    } else if (base::StrEqI(value, "cache")) {
-        lvl = kSceneCache;
-    } else if (base::StrEqI(value, "skip")) {
-        lvl = kSceneSkip;
-    } else if (base::StrEqI(value, "damage")) {
-        lvl = kSceneDamage;
-    } else {
-        logf("paint: GPUI_SCENE=%s is not a level; leaving it at skip",
-             Str(buf));
-        return lvl;
-    }
-    logf("paint: scene layer at %s (GPUI_SCENE)", Str(buf));
-    return lvl;
+#if GPUI_OS_WINDOWS
+    static_assert((int)WinSceneMode::Off == kSceneOff);
+    static_assert((int)WinSceneMode::Replay == kSceneReplay);
+    static_assert((int)WinSceneMode::Cache == kSceneCache);
+    static_assert((int)WinSceneMode::Skip == kSceneSkip);
+    static_assert((int)WinSceneMode::Damage == kSceneDamage);
+    return (int)WinPaintOptionsGet().scene;
+#else
+    // Only the Windows paint front end records a scene today.
+    return kSceneSkip;
+#endif
 }
 
 namespace scene {

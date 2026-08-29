@@ -2738,6 +2738,11 @@ int GpuiTakeRuntimeArgs(int argc, char** argv) {
     for (int i = 0; i < argc; i++) {
         const char* a = argv[i];
         size_t kGeomLen = strlen(kGeom);
+#if GPUI_OS_WINDOWS
+        if (i > 0 && a && WinPaintOptionsTakeArg(Str(a))) {
+            continue;
+        }
+#endif
         if (i > 0 && a && strcmp(a, "-gpui-inspector") == 0) {
             gInspectorAsked = true;
             continue;
