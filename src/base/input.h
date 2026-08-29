@@ -42,10 +42,16 @@ struct InputEditorStyle {
     // either one turning it on is enough.
     bool mask = false;
     int align = 0;
-    // The highlighted runs over the whole document, in order, as UTF-8
-    // offsets into it: a syntax highlighter's captures and an editor's
-    // TextDecorations both arrive this way. The rows slice what falls inside
-    // them out of it, so a run may span more than one.
+    // highlight_styles: how the installed InputHighlighter's capture names
+    // resolve to colours. The themed layer projects it, the element passes
+    // it into styles(), and base itself interprets nothing — the shape
+    // highlighting.rs gives the resolver.
+    HighlightStyleResolver highlightStyles = {};
+    // The decoration runs over the whole document, in order, as UTF-8
+    // offsets into it: semantic tokens and an editor's TextDecorations both
+    // arrive this way, and the element lays them over what the highlighter
+    // answers for the visible range. The rows slice what falls inside them
+    // out of the composed list, so a run may span more than one.
     const TextSpan* spans = nullptr;
     int nSpans = 0;
     // The search matches over the whole document, in order, as UTF-8 offsets

@@ -3661,6 +3661,93 @@ enum class InputOverlayKind : uint8_t {
 using OverlayActionFn = bool (*)(void* data, InputOverlayKind kind,
                                  InputAction action);
 
+// tree_sitter::InputEdit: where an edit began and where the old and new text
+// end, in bytes and in points. `oldEndByte` of -1 is Rust's `edit: None` —
+// the edit could not be tracked (several splices piled up, or the whole
+// value was replaced) and an incremental implementation should re-scan the
+// document. The text funnels fill only the byte half; `New` computes the
+// points from the old text for an implementation that wants them.
+// (Lived in input_rope.h until InputState carried one.)
+struct InputEdit {
+    int startByte = 0;
+    int oldEndByte = 0;
+    int newEndByte = 0;
+    RopePoint startPosition = {};
+    RopePoint oldEndPosition = {};
+    RopePoint newEndPosition = {};
+
+    static InputEdit New(Str oldText, Selection range, Str inserted);
+};
+
+// highlighting.rs HighlightStyleResolver: semantic capture names resolved
+// into renderable styles. Base deliberately knows nothing about a concrete
+// syntax theme; the themed layer provides the resolver.
+struct HighlightStyleResolver {
+    void* data = nullptr;
+    bool (*style)(void* data, Str name, TextSpan* out) = nullptr;
+
+    bool Style(Str name, TextSpan* out) const;
+};
+
+using SharedHighlightStyleResolver = HighlightStyleResolver;
+
+/* crates/base/src/input/editor/highlighting.rs `InputHighlighter`: the
+   parser-independent highlighting seam the editor consumes. Implementations
+   own parsing, incremental state and language behaviour; the element only
+   asks for styled runs over a range and for fold candidates. Rust spells it
+   as a trait object behind a factory, and upstream's tree-sitter lives
+   *behind* this seam as an optional cargo feature — crates/base itself
+   depends on no parser, and the wasm build highlights nothing. Here it is
+   function pointers and a data word, the way the LSP providers are carried;
+   the one implementation is the hand-written lexer in src/ui/highlighter.cpp,
+   and a tree-sitter port would be a second implementation of these entries,
+   not a rewrite. (Lived unwired in input_editor.h until the editor consumed
+   it; moved here when InputState grew the installed instance.)
+
+   What the simplification drops: `update` runs synchronously where Rust
+   hands a too-large parse to the background executor and shows stale styles
+   meanwhile. */
+struct InputHighlighter {
+    void* data = nullptr;
+    Str (*language)(void* data) = nullptr;
+    // The document changed: bring whatever is cached up to date. `edit` null
+    // means re-scan whole, the way Rust's `edit: None` does. The driver
+    // gates calls on InputState::docVersion, which is the flat-buffer
+    // spelling of upstream's `self.text.eq(text)` early-out.
+    void (*update)(void* data, const InputEdit* edit, Str text,
+                   bool folding) = nullptr;
+    // Ordered, non-overlapping runs covering `range`, allocated from `a`;
+    // answers how many. A gap between runs is unstyled text. Only ever asked
+    // for the visible band — element.rs groups the visible lines and asks
+    // per group — which is what lets a document of any size highlight
+    // correctly with no whole-document span list anywhere.
+    int (*styles)(void* data, Selection range,
+                  const HighlightStyleResolver* resolver, Arena* a,
+                  TextSpan** out) = nullptr;
+    // Every foldable block, allocated from `a`. `changedRange` is
+    // fold_ranges_for_edit's refinement; an implementation may ignore it and
+    // answer for the whole document.
+    int (*foldRanges)(void* data, Str text, Selection changedRange, Arena* a,
+                      FoldRange** out) = nullptr;
+    // The state is going away; free `data`.
+    void (*drop)(void* data) = nullptr;
+
+    Str Language() const;
+    void Update(const InputEdit* edit, Str text, bool folding) const;
+    int Styles(Selection range, const HighlightStyleResolver* resolver,
+               Arena* a, TextSpan** out) const;
+    int FoldRanges(Str text, Selection changedRange, Arena* a,
+                   FoldRange** out) const;
+};
+
+// element.rs compose_decoration_collections, flat: the `decs` win over the
+// `spans` they overlap — every span is cut back to what the decorations
+// leave it, and the decorations go in whole. Both lists are ordered by `lo`
+// and so is the result, written back into `spans` through the caller's
+// scratch `tmp` (at least `cap` long).
+int InputComposeSpans(TextSpan* spans, int n, const TextSpan* decs, int nDecs,
+                      int cap, TextSpan* tmp);
+
 struct InputState {
     InputKind kind = InputKind::Input;
     LayoutMode mode = {};
@@ -3683,24 +3770,18 @@ struct InputState {
     Vec<int> lineStarts;
     uint64_t lineStartsVersion = 0;
     bool lineStartsValid = false;
-    // The whole-document lex, cached across frames. Re-lexing an unchanged
-    // document on every frame was ~30% of a scroll frame in the editor
-    // example (winperf, wheel + click drive), and both halves are functions
-    // of (document, language, theme) alone, so they are keyed on exactly
-    // that. `synThemeKey` folds in the theme mode and the foreground the
-    // spans were coloured with; the fold candidates never look at colours,
-    // so their key is just the document and the language.
-    // The lang fields are SyntaxLang (an int8_t this header cannot name);
-    // -2 is "never lexed", one below SyntaxLangNone.
-    Vec<TextSpan> synSpans;
-    uint64_t synSpansVersion = 0;
-    int8_t synSpansLang = -2;
-    uint64_t synThemeKey = 0;
-    bool synSpansValid = false;
-    Vec<FoldRange> synFolds;
-    uint64_t synFoldsVersion = 0;
-    int8_t synFoldsLang = -2;
-    bool synFoldsValid = false;
+    // The installed highlighter, if any — Rust's
+    // `Rc<RefCell<Option<Box<dyn InputHighlighter>>>>` on the editor mode.
+    // The facade that knows the language installs one; the destructor drops
+    // it. The element queries it for the visible range every frame; the
+    // implementation caches across frames and keys on docVersion.
+    InputHighlighter highlighter = {};
+    // The edit envelope since the highlighter last updated, recorded by the
+    // text funnels — what Rust passes to `update` from on_text_changed. One
+    // splice is kept exactly; a second before it is consumed collapses it to
+    // the whole-document marker (oldEndByte -1).
+    InputEdit pendingEdit = {};
+    bool hasPendingEdit = false;
     Selection selectedRange = {};
     bool selectionReversed = false;
     // selected_word_range: what a double click took, kept so dragging out of

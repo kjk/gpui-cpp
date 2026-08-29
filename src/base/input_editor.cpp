@@ -208,21 +208,19 @@ static Selection AdjustDecorationRange(Selection range, Selection edit,
                                        int insertedLen) {
     int removedLen = std::max(0, edit.end - edit.start);
     int delta = insertedLen - removedLen;
-    auto shift = [delta](int offset) {
-        return std::max(0, offset + delta);
-    };
+    auto shift = [delta](int offset) { return std::max(0, offset + delta); };
     if (edit.start == edit.end) {
         int start = range.start < edit.start ? range.start : shift(range.start);
         int end = range.end <= edit.start ? range.end : shift(range.end);
         return {start, end};
     }
     int insertedEnd = edit.start + insertedLen;
-    int start = range.start <= edit.start
-                    ? range.start
-                    : range.start >= edit.end ? shift(range.start) : edit.start;
-    int end = range.end <= edit.start
-                  ? range.end
-                  : range.end >= edit.end ? shift(range.end) : insertedEnd;
+    int start = range.start <= edit.start ? range.start
+                : range.start >= edit.end ? shift(range.start)
+                                          : edit.start;
+    int end = range.end <= edit.start ? range.end
+              : range.end >= edit.end ? shift(range.end)
+                                      : insertedEnd;
     return {start, end};
 }
 
@@ -301,8 +299,7 @@ int DecorationCollections::BuildSpans(TextSpan* out, int cap) const {
     if (accepted.len > 1) {
         std::sort(accepted.els, accepted.els + accepted.len,
                   [](const TextSpan& a, const TextSpan& b) {
-                      return a.lo < b.lo ||
-                             (a.lo == b.lo && a.hi < b.hi);
+                      return a.lo < b.lo || (a.lo == b.lo && a.hi < b.hi);
                   });
     }
     for (int i = 0; out && i < accepted.len && i < cap; i++) {
@@ -361,7 +358,8 @@ void DiagnosticSet::Reset(Str value) {
 
 void DiagnosticSet::Push(const Diagnostic& diagnostic) {
     DiagnosticEntry entry;
-    entry.range.start = RopeClipOffset(text, diagnostic.range.start, Bias::Left);
+    entry.range
+        .start = RopeClipOffset(text, diagnostic.range.start, Bias::Left);
     entry.range.end = RopeClipOffset(text, diagnostic.range.end, Bias::Right);
     if (entry.range.end < entry.range.start) {
         entry.range.end = entry.range.start;
@@ -369,8 +367,8 @@ void DiagnosticSet::Push(const Diagnostic& diagnostic) {
     entry.diagnostic = CloneDiagnostic(arena, diagnostic);
     entry.diagnostic.range = entry.range;
     int at = 0;
-    while (at < diagnostics.len &&
-           diagnostics[at].range.start <= entry.range.start) {
+    while (at < diagnostics.len && diagnostics[at].range.start <= entry.range
+                                                                      .start) {
         at++;
     }
     VecInsertAt(diagnostics, at, entry);
@@ -423,7 +421,8 @@ const DiagnosticEntry* DiagnosticSet::ForOffset(int offset) const {
 }
 
 const DiagnosticEntry* DiagnosticSet::At(int index) const {
-    return index >= 0 && index < diagnostics.len ? &diagnostics[index] : nullptr;
+    return index >= 0 && index < diagnostics.len ? &diagnostics[index]
+                                                 : nullptr;
 }
 
 DisplayMap::DisplayMap(int columns) : wrapColumns(std::max(0, columns)) {
@@ -699,8 +698,7 @@ void DisplayMap::Rebuild() {
         int row = 0;
         while (start < value.len) {
             int columns = row == 0 ? wrapColumns : continuation;
-            int end =
-                DisplayAdvanceColumns(value, start, columns, tab.tabSize);
+            int end = DisplayAdvanceColumns(value, start, columns, tab.tabSize);
             VecAppend(rows, {line, start, end});
             start = end;
             row++;
@@ -724,14 +722,14 @@ void InputHighlighter::Update(const InputEdit* edit, Str text,
 }
 
 int InputHighlighter::Styles(Selection range,
-                             const HighlightStyleResolver* resolver,
-                             TextSpan* out, int cap) const {
-    return styles ? styles(data, range, resolver, out, cap) : 0;
+                             const HighlightStyleResolver* resolver, Arena* a,
+                             TextSpan** out) const {
+    return styles ? styles(data, range, resolver, a, out) : 0;
 }
 
-int InputHighlighter::FoldRanges(Str text, Selection changedRange,
-                                 FoldRange* out, int cap) const {
-    return foldRanges ? foldRanges(data, text, changedRange, out, cap) : 0;
+int InputHighlighter::FoldRanges(Str text, Selection changedRange, Arena* a,
+                                 FoldRange** out) const {
+    return foldRanges ? foldRanges(data, text, changedRange, a, out) : 0;
 }
 
 bool InputHighlighterFactory::Create(Str language,

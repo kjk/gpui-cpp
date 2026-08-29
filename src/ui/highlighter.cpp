@@ -437,50 +437,15 @@ El* HoverPopover::IntoEl() {
         ->IntoEl();
 }
 
-// The language's captures over the whole document, as runs the rows slice
-// out of. Rust runs tree-sitter's highlights.scm and looks the capture names
-// up in the HighlightTheme; the scanner in syntax.cpp answers a subset of the
-// same names off the same table.
-static int HighlightSpans(Ctx* cx, Str text, SyntaxLang lang, TextSpan* out,
-                          int cap) {
-    if (lang == SyntaxLangNone || !text.s) {
-        return 0;
-    }
-    const Theme& th = ThemeNow(cx->app);
-    ThemeMode mode = ThemeGet(cx->app);
-    SyntaxLexer lx;
-    SyntaxLexStart(&lx, lang, text);
-    int n = 0;
-    while (SyntaxLexNext(&lx) && n < cap) {
-        if (lx.tok == SyntaxTok::Text) {
-            continue;
-        }
-        Rgba c = SyntaxTokColor(lx.tok, mode, th.foreground);
-        int lo = (int)(lx.text.s - text.s);
-        int hi = lo + lx.text.len;
-        // Adjacent runs of one colour are one span, which keeps a document
-        // of a few hundred lines to a few hundred of them.
-        if (n > 0 && out[n - 1].hi == lo && RgbaEq(out[n - 1].color, c)) {
-            out[n - 1].hi = hi;
-            continue;
-        }
-        out[n].lo = lo;
-        out[n].hi = hi;
-        out[n].color = c;
-        out[n].bg = Rgba8(0, 0, 0, 0);
-        out[n].underline = false;
-        n++;
-    }
-    return n;
-}
-
-// HighlightTheme::style, for the names a semantic token carries. Rust looks
-// the name up in the theme, which holds every tree-sitter capture name;
-// this tree's palette is the handful of kinds `syntax.cpp` scans for, so a
-// name is mapped onto one of those. A dotted name falls back to its head —
-// `keyword.modifier` is a keyword — which is the rule registry.rs applies,
-// and a name nothing recognises has no style and is skipped.
-static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
+// HighlightTheme::style — what registry.rs resolves a capture name with.
+// Rust's theme holds every tree-sitter capture name; this tree's palette is
+// the handful of kinds `syntax.cpp` scans for, so a name is mapped onto one
+// of those. A dotted name falls back to its head — `keyword.modifier` is a
+// keyword — which is the rule registry.rs applies, and a name nothing
+// recognises has no style and is skipped. Shared by the resolver the facade
+// projects into the highlighter and by the semantic-token colours.
+static bool HighlightNameColor(Str name, ThemeMode mode, Rgba fallback,
+                               Rgba* out) {
     static const struct {
         const char* name;
         SyntaxTok tok;
@@ -495,13 +460,11 @@ static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
         {"boolean", SyntaxTok::Boolean},   {"comment", SyntaxTok::Comment},
         {"tag", SyntaxTok::Tag},           {"attribute", SyntaxTok::Attribute},
     };
-    const Theme& th = ThemeNow(cx->app);
-    ThemeMode mode = ThemeGet(cx->app);
     Str head = name;
     for (int pass = 0; pass < 2; pass++) {
         for (const auto& row : kMap) {
             if (base::StrEqI(head, row.name)) {
-                *out = SyntaxTokColor(row.tok, mode, th.foreground);
+                *out = SyntaxTokColor(row.tok, mode, fallback);
                 return true;
             }
         }
@@ -519,6 +482,316 @@ static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
         head = Str(head.s, dot);
     }
     return false;
+}
+
+/* The lexer-backed InputHighlighter — this tree's
+   crates/ui/src/highlighter/input_adapter.rs, without tree-sitter. Upstream
+   wraps a tree-sitter parser behind the parser-independent seam
+   crates/base defines (and even there tree-sitter is an optional cargo
+   feature — base depends on no parser, and the wasm build highlights
+   nothing); this wraps the scanner in syntax.cpp behind the same seam. A
+   tree-sitter port would be a second implementation beside it.
+
+   What is cached: the document's token runs and the brace-pair fold
+   candidates, both produced by one lex per document version. Runs keep the
+   token *kind*; styles() resolves kinds to colours from the palette the
+   facade projects each render, so a theme flip restyles without a re-lex —
+   the resolver half of Rust's `styles(range, resolver)`, folded into the
+   implementation. */
+
+struct HlRun {
+    int lo;
+    int hi;
+    SyntaxTok tok;
+};
+
+struct SyntaxInputHighlighter {
+    SyntaxLang lang = SyntaxLangNone;
+    uint64_t version = 0;
+    bool valid = false;
+    // Ordered, non-overlapping, Text runs omitted — a gap is unstyled.
+    Vec<HlRun> runs;
+    Vec<FoldRange> folds;
+    // The palette styles() resolves with, projected by the facade every
+    // render the way crates/ui projects the whole editor style.
+    ThemeMode mode = ThemeMode::Light;
+    Rgba foreground = {};
+};
+
+/* Fold candidates — upstream's extract_fold_ranges walks the tree-sitter
+   tree and offers every named node spanning two rows or more; with no tree,
+   this counts brace pairs outside strings and comments, the way the
+   showcase's own highlighter does (`brace_fold_ranges` in
+   examples/showcase/syntect_highlighter.rs), sharing the one lex that also
+   produces the token runs. A language with no braces has no candidates,
+   which is where this stops short of the tree: Rust would fold a Python
+   suite and this cannot see one. */
+static void SynHlLex(SyntaxInputHighlighter* hl, Str text) {
+    VecClear(hl->runs);
+    VecClear(hl->folds);
+    if (hl->lang == SyntaxLangNone || text.len == 0) {
+        return;
+    }
+    // Brace nesting deeper than this folds no further; startLine per open
+    // brace, and the line each byte is on walked alongside the scan.
+    int starts[64];
+    int nOpen = 0;
+    int line = 0;
+    int at = 0;
+    SyntaxLexer lx;
+    SyntaxLexStart(&lx, hl->lang, text);
+    while (SyntaxLexNext(&lx)) {
+        int tokStart = (int)(lx.text.s - text.s);
+        for (; at < tokStart && at < text.len; at++) {
+            if (text.s[at] == '\n') {
+                line++;
+            }
+        }
+        bool literal =
+            lx.tok == SyntaxTok::String || lx.tok == SyntaxTok::Comment;
+        for (int i = 0; i < lx.text.len; i++) {
+            char c = lx.text.s[i];
+            if (c == '\n') {
+                line++;
+                continue;
+            }
+            if (literal) {
+                continue;
+            }
+            if (c == '{') {
+                if (nOpen < (int)(sizeof(starts) / sizeof(starts[0]))) {
+                    starts[nOpen] = line;
+                }
+                nOpen++;
+            } else if (c == '}' && nOpen > 0) {
+                nOpen--;
+                if (nOpen >= (int)(sizeof(starts) / sizeof(starts[0]))) {
+                    continue;
+                }
+                int startLine = starts[nOpen];
+                // A block that opens and closes on one line has nothing to
+                // hide, and Rust drops it the same way.
+                if (startLine < line) {
+                    FoldRange fr;
+                    fr.startLine = startLine;
+                    fr.endLine = line;
+                    VecAppend(hl->folds, fr);
+                }
+            }
+        }
+        at = tokStart + lx.text.len;
+        if (lx.tok == SyntaxTok::Text) {
+            continue;
+        }
+        // Adjacent runs of one kind are one run, which keeps a document of a
+        // few hundred lines to a few hundred of them.
+        int hi = tokStart + lx.text.len;
+        if (hl->runs.len > 0 && hl->runs[hl->runs.len - 1].hi == tokStart &&
+            hl->runs[hl->runs.len - 1].tok == lx.tok) {
+            hl->runs[hl->runs.len - 1].hi = hi;
+            continue;
+        }
+        HlRun run;
+        run.lo = tokStart;
+        run.hi = hi;
+        run.tok = lx.tok;
+        VecAppend(hl->runs, run);
+    }
+}
+
+static Str SynHlLanguage(void* data) {
+    return SyntaxLangName(((SyntaxInputHighlighter*)data)->lang);
+}
+
+static void SynHlUpdate(void* data, const InputEdit* edit, Str text,
+                        bool folding) {
+    auto* hl = (SyntaxInputHighlighter*)data;
+    // A tree-sitter implementation would hand `edit` to its tree and reparse
+    // incrementally; the lexer keeps no incremental state and re-lexes the
+    // document whole. The facade gates calls on docVersion, which is
+    // upstream's `self.text.eq(text)` early-out one level up, and the folds
+    // ride along in the same pass whether or not the gutter shows them.
+    (void)edit;
+    (void)folding;
+    SynHlLex(hl, text);
+}
+
+// The canonical capture name each token kind carries, which is what the
+// resolver is asked about — upstream's queries capture `@keyword`,
+// `@string` and the rest, and registry.rs resolves those names.
+static Str SynHlTokName(SyntaxTok tok) {
+    switch (tok) {
+        case SyntaxTok::Keyword:
+            return StrL("keyword");
+        case SyntaxTok::Type:
+            return StrL("type");
+        case SyntaxTok::Function:
+            return StrL("function");
+        case SyntaxTok::Property:
+            return StrL("property");
+        case SyntaxTok::String:
+            return StrL("string");
+        case SyntaxTok::Number:
+            return StrL("number");
+        case SyntaxTok::Boolean:
+            return StrL("boolean");
+        case SyntaxTok::Comment:
+            return StrL("comment");
+        case SyntaxTok::Tag:
+            return StrL("tag");
+        case SyntaxTok::Attribute:
+            return StrL("attribute");
+        default:
+            return Str{};
+    }
+}
+
+static int SynHlStyles(void* data, Selection range,
+                       const HighlightStyleResolver* resolver, Arena* a,
+                       TextSpan** out) {
+    auto* hl = (SyntaxInputHighlighter*)data;
+    *out = nullptr;
+    if (hl->runs.len == 0 || range.end <= range.start) {
+        return 0;
+    }
+    // The first run that ends after the range starts, then every run that
+    // begins before it ends.
+    int lo = 0;
+    int hi = hl->runs.len;
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (hl->runs[mid].hi <= range.start) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    int first = lo;
+    int count = 0;
+    while (first + count < hl->runs.len && hl->runs[first + count]
+                                                   .lo < range.end) {
+        count++;
+    }
+    if (count == 0) {
+        return 0;
+    }
+    auto* spans = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * count);
+    if (!spans) {
+        return 0;
+    }
+    int n = 0;
+    for (int i = 0; i < count; i++) {
+        const HlRun& r = hl->runs[first + i];
+        int spanLo = r.lo < range.start ? range.start : r.lo;
+        int spanHi = r.hi > range.end ? range.end : r.hi;
+        if (spanHi <= spanLo) {
+            continue;
+        }
+        // The resolver first — upstream looks the capture name up in the
+        // HighlightTheme — and the scanner's own palette where it has no
+        // answer or there is none.
+        Rgba c = SyntaxTokColor(r.tok, hl->mode, hl->foreground);
+        TextSpan resolved = {};
+        if (resolver && resolver->Style(SynHlTokName(r.tok), &resolved)) {
+            c = resolved.color;
+        }
+        // Two kinds the palette gives one colour still merge.
+        if (n > 0 && spans[n - 1].hi == spanLo &&
+            RgbaEq(spans[n - 1].color, c)) {
+            spans[n - 1].hi = spanHi;
+            continue;
+        }
+        TextSpan sp = {};
+        sp.lo = spanLo;
+        sp.hi = spanHi;
+        sp.color = c;
+        sp.bg = Rgba8(0, 0, 0, 0);
+        spans[n++] = sp;
+    }
+    *out = spans;
+    return n;
+}
+
+static int SynHlFoldRanges(void* data, Str, Selection, Arena* a,
+                           FoldRange** out) {
+    // fold_ranges_for_edit's changedRange refinement is unused: the whole
+    // list is cached, so answering all of it is a copy either way.
+    auto* hl = (SyntaxInputHighlighter*)data;
+    *out = nullptr;
+    if (hl->folds.len == 0) {
+        return 0;
+    }
+    auto* folds = (FoldRange*)Alloc(a, (int)sizeof(FoldRange) * hl->folds.len);
+    if (!folds) {
+        return 0;
+    }
+    memcpy(folds, hl->folds.els, (size_t)hl->folds.len * sizeof(FoldRange));
+    *out = folds;
+    return hl->folds.len;
+}
+
+static void SynHlDrop(void* data) {
+    delete (SyntaxInputHighlighter*)data;
+}
+
+// input_highlighter_factory: what the factory answers for a language this
+// tree can scan. Installed onto the state the first time the facade renders
+// with a language, retargeted when the language changes, dropped when there
+// is none — upstream returns None from the factory then, and an editor with
+// no highlighter neither styles nor folds.
+static SyntaxInputHighlighter* SynHlEnsure(InputState* s, SyntaxLang lang) {
+    if (lang == SyntaxLangNone) {
+        if (s->highlighter.drop) {
+            s->highlighter.drop(s->highlighter.data);
+        }
+        s->highlighter = InputHighlighter{};
+        return nullptr;
+    }
+    if (s->highlighter.data && s->highlighter.update == &SynHlUpdate) {
+        auto* hl = (SyntaxInputHighlighter*)s->highlighter.data;
+        if (hl->lang != lang) {
+            hl->lang = lang;
+            hl->valid = false;
+        }
+        return hl;
+    }
+    if (s->highlighter.drop) {
+        s->highlighter.drop(s->highlighter.data);
+    }
+    auto* hl = new SyntaxInputHighlighter();
+    hl->lang = lang;
+    s->highlighter.data = hl;
+    s->highlighter.language = &SynHlLanguage;
+    s->highlighter.update = &SynHlUpdate;
+    s->highlighter.styles = &SynHlStyles;
+    s->highlighter.foldRanges = &SynHlFoldRanges;
+    s->highlighter.drop = &SynHlDrop;
+    return hl;
+}
+
+// The resolver the facade projects into styles(): capture names looked up
+// in the scanner's palette, the same table SemanticTokColor answers from —
+// what registry.rs's HighlightTheme is here.
+struct SynHlResolver {
+    ThemeMode mode = ThemeMode::Light;
+    Rgba foreground = {};
+};
+
+static bool SynHlResolveStyle(void* data, Str name, TextSpan* out) {
+    auto* r = (SynHlResolver*)data;
+    Rgba c;
+    if (!HighlightNameColor(name, r->mode, r->foreground, &c)) {
+        return false;
+    }
+    *out = TextSpan{};
+    out->color = c;
+    return true;
+}
+
+// The names a semantic token carries, resolved with the same table.
+static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
+    const Theme& th = ThemeNow(cx->app);
+    return HighlightNameColor(name, ThemeGet(cx->app), th.foreground, out);
 }
 
 // The semantic tokens a provider published, over the document, as runs the
@@ -556,54 +829,6 @@ static int SemanticSpans(Ctx* cx, InputState* state, Str text, TextSpan* out,
     return m;
 }
 
-// The decorations win over the captures they overlap: every capture is cut
-// back to what the decorations leave it, and the decorations go in whole.
-// Both lists are in order, and so is the result.
-static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
-                            int nDecs, int cap, TextSpan* tmp) {
-    auto* out = spans + 0;
-    // Build into the caller's scratch, then copy back — the two runs
-    // interleave, and the scratch is as long as the result may be, so a
-    // document with more captures than a fixed one would hold does not lose
-    // the tail of its colours.
-    int m = 0;
-    int i = 0;
-    for (int d = 0; d < nDecs && m < cap; d++) {
-        const TextSpan& dec = decs[d];
-        for (; i < n && m < cap; i++) {
-            TextSpan sp = spans[i];
-            if (sp.hi <= dec.lo) {
-                tmp[m++] = sp;
-                continue;
-            }
-            if (sp.lo >= dec.hi) {
-                break;
-            }
-            // The part before the decoration survives; the part after it is
-            // put back for the next decoration to look at.
-            if (sp.lo < dec.lo && m < cap) {
-                TextSpan head = sp;
-                head.hi = dec.lo;
-                tmp[m++] = head;
-            }
-            if (sp.hi > dec.hi) {
-                spans[i].lo = dec.hi;
-                break;
-            }
-        }
-        if (m < cap) {
-            tmp[m++] = dec;
-        }
-    }
-    for (; i < n && m < cap; i++) {
-        tmp[m++] = spans[i];
-    }
-    for (int k = 0; k < m; k++) {
-        out[k] = tmp[k];
-    }
-    return m;
-}
-
 Highlighter* Highlighter::Diagnostics(const Diagnostic* items, int n) {
     diagnostics = items;
     nDiagnostics = n;
@@ -618,83 +843,6 @@ Highlighter* Highlighter::Folding(bool v) {
 Highlighter* Highlighter::Searchable(bool v) {
     searchable = v;
     return this;
-}
-
-/* Fold candidates — crates/ui/src/highlighter/input_adapter.rs
-   extract_fold_ranges.
-
-   Rust walks the tree-sitter tree and offers every named node that spans two
-   rows or more; the showcase's own highlighter, which has no tree either,
-   scans the text for brace pairs instead (`brace_fold_ranges` in
-   examples/showcase/syntect_highlighter.rs). This is the second of the two,
-   run over the lexer rather than over raw characters — so a brace inside a
-   string or a comment is not a brace, which is what the hand-rolled quote and
-   `//` tracking in Rust's version is doing by hand and does less well.
-
-   A language with no braces has no candidates, which is where this stops
-   short of the tree: Rust would fold a Python suite and this cannot see one.
-*/
-
-// Rust bounds this by the tree; a document with more foldable blocks than
-// this has more chevrons than a gutter can show anyway.
-static const int kMaxFoldRanges = 512;
-
-static int FoldCandidates(Str text, SyntaxLang lang, FoldRange* out, int cap) {
-    if (text.len == 0 || cap <= 0) {
-        return 0;
-    }
-    // The line each byte is on, walked alongside the scan so a token's line
-    // is known without searching for it.
-    int starts[64];
-    int nOpen = 0;
-    int n = 0;
-    int line = 0;
-    int at = 0;
-    SyntaxLexer lx = {};
-    SyntaxLexStart(&lx, lang, text);
-    while (SyntaxLexNext(&lx)) {
-        int tokStart = (int)(lx.text.s - text.s);
-        // Everything between the last token and this one, plus the token
-        // itself when it is not one that can hold a brace.
-        for (; at < tokStart && at < text.len; at++) {
-            if (text.s[at] == '\n') {
-                line++;
-            }
-        }
-        bool literal =
-            lx.tok == SyntaxTok::String || lx.tok == SyntaxTok::Comment;
-        for (int i = 0; i < lx.text.len; i++) {
-            char c = lx.text.s[i];
-            if (c == '\n') {
-                line++;
-                continue;
-            }
-            if (literal) {
-                continue;
-            }
-            if (c == '{') {
-                if (nOpen < (int)(sizeof(starts) / sizeof(starts[0]))) {
-                    starts[nOpen] = line;
-                }
-                nOpen++;
-            } else if (c == '}' && nOpen > 0) {
-                nOpen--;
-                if (nOpen >= (int)(sizeof(starts) / sizeof(starts[0]))) {
-                    continue;
-                }
-                int startLine = starts[nOpen];
-                // A block that opens and closes on one line has nothing to
-                // hide, and Rust drops it the same way.
-                if (startLine < line && n < cap) {
-                    out[n].startLine = startLine;
-                    out[n].endLine = line;
-                    n++;
-                }
-            }
-        }
-        at = tokStart + lx.text.len;
-    }
-    return n;
 }
 
 El* Highlighter::IntoEl() {
@@ -750,88 +898,60 @@ El* Highlighter::IntoEl() {
         state->mode.folding = folding;
     }
     Str text = state ? InputValue(state) : Str{};
-    if (state && folding) {
-        // The candidates are a function of (document, language) alone; the
-        // fold map keeps its own open/closed state, so only the scan is
-        // skipped when neither changed. Re-lexing the whole document every
-        // frame here and in HighlightSpans below was ~30% of a scroll frame
-        // in the editor example.
-        if (!state->synFoldsValid ||
-            state->synFoldsVersion != state->docVersion ||
-            state->synFoldsLang != lang) {
-            FoldRange ranges[kMaxFoldRanges];
-            int nRanges = FoldCandidates(text, lang, ranges, kMaxFoldRanges);
-            VecClear(state->synFolds);
-            if (nRanges > 0) {
-                if (FoldRange* dst =
-                        VecAppendBlanks(state->synFolds, nRanges)) {
-                    memcpy(dst, ranges, (size_t)nRanges * sizeof(FoldRange));
-                }
+    if (state) {
+        // drive_highlighter: install the implementation for the language,
+        // project the palette onto it, and hand over the edit envelope the
+        // text funnels recorded. The call is gated on docVersion — the
+        // flat-buffer spelling of upstream update()'s text-equality
+        // early-out — so driving it every render costs nothing.
+        SyntaxInputHighlighter* hl = SynHlEnsure(state, lang);
+        if (hl) {
+            hl->mode = ThemeGet(cx->app);
+            hl->foreground = th.foreground;
+            if (!hl->valid || hl->version != state->docVersion) {
+                InputEdit whole = {};
+                whole.oldEndByte = -1;
+                whole.newEndByte = text.len;
+                const InputEdit* edit =
+                    state->hasPendingEdit ? &state->pendingEdit : &whole;
+                state->highlighter.Update(edit, text, folding);
+                hl->valid = true;
+                hl->version = state->docVersion;
             }
-            state->synFoldsValid = true;
-            state->synFoldsVersion = state->docVersion;
-            state->synFoldsLang = lang;
+            state->hasPendingEdit = false;
+            if (folding) {
+                FoldRange* ranges = nullptr;
+                int nRanges = state->highlighter.FoldRanges(
+                    text, Selection{0, text.len}, a, &ranges);
+                InputSetFoldCandidates(state, ranges, nRanges);
+            }
+            // highlight_styles: how the element resolves what the
+            // highlighter answers, projected fresh each render the way
+            // crates/ui projects the whole editor style.
+            auto* resolver = ArenaNew<SynHlResolver>(a);
+            resolver->mode = hl->mode;
+            resolver->foreground = th.foreground;
+            style.highlightStyles.data = resolver;
+            style.highlightStyles.style = &SynHlResolveStyle;
         }
-        InputSetFoldCandidates(state, state->synFolds.els, state->synFolds.len);
     }
-    // The language's captures first, the caller's decorations laid over them:
-    // a decoration takes the range it covers away from whatever the scanner
-    // said about it, which is what a TextDecorationCollection does.
+    // The decoration collection the element lays over what the highlighter
+    // answers: the semantic tokens first, the caller's runs over them —
+    // Rust's `combine_highlights` folds overlapping styles out of a HashSet,
+    // so which wins where both speak is not defined there. It is here: what
+    // the server said wins, which is what the protocol means by layering
+    // semantic tokens over a lexer. The syntax runs no longer pass through
+    // this list — the element queries the highlighter for the visible range
+    // (Textarea::New) — so the cap bounds only the decorations, which are
+    // tens of runs, never a document's worth.
     const int kMaxSpans = 4096;
     auto* spans = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
-    int n;
-    // What the spans were coloured with, so a theme flip re-lexes: the mode
-    // picks the palette and the foreground is SyntaxTokColor's fallback.
-    const Rgba hlFg = th.foreground;
-    const uint64_t themeKey =
-        ((uint64_t)(int)ThemeGet(cx->app) << 32) | ((uint64_t)hlFg.r << 24) |
-        ((uint64_t)hlFg.g << 16) | ((uint64_t)hlFg.b << 8) | (uint64_t)hlFg.a;
-    if (state) {
-        if (!state->synSpansValid ||
-            state->synSpansVersion != state->docVersion ||
-            state->synSpansLang != lang || state->synThemeKey != themeKey) {
-            int m = HighlightSpans(cx, text, lang, spans, kMaxSpans);
-            VecClear(state->synSpans);
-            if (m > 0) {
-                if (TextSpan* dst = VecAppendBlanks(state->synSpans, m)) {
-                    memcpy(dst, spans, (size_t)m * sizeof(TextSpan));
-                }
-            }
-            state->synSpansValid = true;
-            state->synSpansVersion = state->docVersion;
-            state->synSpansLang = lang;
-            state->synThemeKey = themeKey;
-        }
-        // Into the frame's own copy: MergeDecorations below edits the runs in
-        // place, and the cache has to survive the frame untouched.
-        n = state->synSpans.len;
-        if (n > 0) {
-            memcpy(spans, state->synSpans.els, (size_t)n * sizeof(TextSpan));
-        }
-    } else {
-        n = HighlightSpans(cx, text, lang, spans, kMaxSpans);
-    }
-    // The semantic tokens over the language's own captures. Rust composes
-    // the two with `combine_highlights`, which folds the overlapping styles
-    // out of a HashSet — so which of them wins where both speak is not
-    // defined there. It is here: what the server said wins, which is what
-    // the protocol means by layering semantic tokens over a lexer, and it is
-    // the half that can tell a type from a variable.
-    {
-        auto* sem = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
-        int nSem = sem ? SemanticSpans(cx, state, text, sem, kMaxSpans) : 0;
-        if (nSem > 0) {
-            auto* tmp = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
-            if (tmp) {
-                n = MergeDecorations(spans, n, sem, nSem, kMaxSpans, tmp);
-            }
-        }
-    }
-    if (nDecorations > 0) {
+    int n = spans ? SemanticSpans(cx, state, text, spans, kMaxSpans) : 0;
+    if (nDecorations > 0 && spans) {
         auto* tmp = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
         if (tmp) {
-            n = MergeDecorations(spans, n, decorations, nDecorations, kMaxSpans,
-                                 tmp);
+            n = InputComposeSpans(spans, n, decorations, nDecorations,
+                                  kMaxSpans, tmp);
         }
     }
     style.spans = n > 0 ? spans : nullptr;

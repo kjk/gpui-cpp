@@ -173,33 +173,9 @@ struct DisplayMap {
     void Rebuild();
 };
 
-struct HighlightStyleResolver {
-    void* data = nullptr;
-    bool (*style)(void* data, Str name, TextSpan* out) = nullptr;
-
-    bool Style(Str name, TextSpan* out) const;
-};
-
-using SharedHighlightStyleResolver = HighlightStyleResolver;
-
-struct InputHighlighter {
-    void* data = nullptr;
-    Str (*language)(void* data) = nullptr;
-    void (*update)(void* data, const InputEdit* edit, Str text,
-                   bool folding) = nullptr;
-    int (*styles)(void* data, Selection range,
-                  const HighlightStyleResolver* resolver, TextSpan* out,
-                  int cap) = nullptr;
-    int (*foldRanges)(void* data, Str text, Selection changedRange,
-                      FoldRange* out, int cap) = nullptr;
-
-    Str Language() const;
-    void Update(const InputEdit* edit, Str text, bool folding) const;
-    int Styles(Selection range, const HighlightStyleResolver* resolver,
-               TextSpan* out, int cap) const;
-    int FoldRanges(Str text, Selection changedRange, FoldRange* out,
-                   int cap) const;
-};
+// HighlightStyleResolver and InputHighlighter moved to gpui/gpui.h when
+// InputState grew the installed instance; this header keeps the pieces only
+// the themed layer reaches for.
 
 struct InputHighlighterFactory {
     void* data = nullptr;

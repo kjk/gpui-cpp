@@ -6,18 +6,8 @@
 
 namespace gpui {
 
-// The source calls this Point; RopePoint is the unambiguous public spelling
-// because gpui::Point is already the runtime's DIP geometry type.
-struct InputEdit {
-    int startByte = 0;
-    int oldEndByte = 0;
-    int newEndByte = 0;
-    RopePoint startPosition = {};
-    RopePoint oldEndPosition = {};
-    RopePoint newEndPosition = {};
-
-    static InputEdit New(Str oldText, Selection range, Str inserted);
-};
+// InputEdit moved to gpui/gpui.h when InputState grew the pending-edit
+// envelope the highlighter seam consumes.
 
 struct RopeLines {
     Str rope = {};

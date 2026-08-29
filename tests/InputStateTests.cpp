@@ -774,7 +774,8 @@ static void DocumentationIsResolvedOnce() {
     utassert(gResolveCalls == 1);
     // Asked once: the answer is written back into the item, and the frame
     // after this one reads it rather than asking again.
-    utassert(base::StrEq(InputCompletionDocumentation(&s), "Exit a loop immediately."));
+    utassert(base::StrEq(InputCompletionDocumentation(&s),
+                         "Exit a loop immediately."));
     utassert(gResolveCalls == 1);
 }
 
@@ -1772,8 +1773,7 @@ static int Complete(void* data, Str, int, Str query, CompletionItem* out,
         if (query.len > item.label.len) {
             continue;
         }
-        if (query.len > 0 &&
-            !StrEq(Str(item.label.s, query.len), query)) {
+        if (query.len > 0 && !StrEq(Str(item.label.s, query.len), query)) {
             continue;
         }
         if (n < cap && out) {
@@ -2152,8 +2152,8 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     utassert(state.mode.folding);
     utassert(state.readonly && state.disabled);
     utassert(editor->style.tabIndex == 3);
-    utassert(editor->accessibility.role ==
-             AccessibilityRole::MultilineTextInput);
+    utassert(editor->accessibility
+                 .role == AccessibilityRole::MultilineTextInput);
     utassert((editor->refineSet & StyleFieldWidth) != 0);
     utassert(state.focus.IsValid());
 
@@ -2196,14 +2196,14 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     state.hoverDiagnosticX = 20;
     state.hoverDiagnosticY = 30;
     state.popoverTriggerBounds = {10, 20, 30, 16};
-    El* diagnosticEl =
-        component::DiagnosticPopover::New(&cx, &state, 0)->IntoEl();
+    El* diagnosticEl = component::DiagnosticPopover::New(&cx, &state, 0)
+                           ->IntoEl();
     utassert(diagnosticEl && diagnosticEl->style.explicitPositioner);
     state.hoverX = 40;
     state.hoverY = 50;
-    El* hoverEl = component::HoverPopover::New(&cx, &state, {0, 1},
-                                               StrL("`hover`"))
-                      ->IntoEl();
+    El* hoverEl =
+        component::HoverPopover::New(&cx, &state, {0, 1}, StrL("`hover`"))
+            ->IntoEl();
     utassert(hoverEl && hoverEl->style.explicitPositioner);
 
     InputBlur(&state, &app, win);
@@ -2260,10 +2260,9 @@ static void BaseInputCoreKeepsTheSourceModeAndPresentationSeams() {
     styles.Focused(focus, StyleFieldColor)
         .Disabled(disabled, StyleFieldOpacity);
     styles.Apply(&normal, true, true);
-    utassert(normal.color.r == focus.color.r &&
-             normal.color.g == focus.color.g &&
-             normal.color.b == focus.color.b &&
-             normal.color.a == focus.color.a);
+    utassert(
+        normal.color.r == focus.color.r && normal.color.g == focus.color.g &&
+        normal.color.b == focus.color.b && normal.color.a == focus.color.a);
     utassertnear(normal.opacity, 0.5f);
 
     NativeMenu menu;
@@ -2284,10 +2283,8 @@ static void DecorationsAreIndependentClippedAndTrackEdits() {
     firstStyle.color = Rgb(1, 2, 3);
     TextSpan secondStyle;
     secondStyle.bg = Rgb(4, 5, 6);
-    TextDecoration firstValue =
-        TextDecoration::New({2, 4}, firstStyle);
-    TextDecoration secondValue =
-        TextDecoration::New({5, 100}, secondStyle);
+    TextDecoration firstValue = TextDecoration::New({2, 4}, firstStyle);
+    TextDecoration secondValue = TextDecoration::New({5, 100}, secondStyle);
     TextDecorationCollection first = collections.Create(&firstValue, 1);
     TextDecorationCollection second = collections.Create(&secondValue, 1);
 
@@ -2315,7 +2312,8 @@ static void DecorationsAreIndependentClippedAndTrackEdits() {
 }
 
 static void DiagnosticSetOwnsMetadataAndAnswersRanges() {
-    DiagnosticSet set(StrL("Hello, 你好warld!\nThis is a test.\nGoodbye, world!"));
+    DiagnosticSet set(
+        StrL("Hello, 你好warld!\nThis is a test.\nGoodbye, world!"));
     DiagnosticRelatedInformation related = {
         StrL("file:///other.cpp"), {1, 2}, StrL("first declared here")};
     DiagnosticTag tag = DiagnosticTag::Deprecated;
@@ -2339,10 +2337,11 @@ static void DiagnosticSetOwnsMetadataAndAnswersRanges() {
     utassert(set.Summary().start == 7 && set.Summary().end == 50);
 
     const DiagnosticEntry* found = set.ForOffset(10);
-    utassert(found && base::StrEq(found->diagnostic.message, "Spelling mistake"));
+    utassert(found &&
+             base::StrEq(found->diagnostic.message, "Spelling mistake"));
     utassert(found->diagnostic.nRelatedInformation == 1);
     utassert(base::StrEq(found->diagnostic.relatedInformation[0].message,
-                "first declared here"));
+                         "first declared here"));
     utassert(found->diagnostic.tags[0] == DiagnosticTag::Deprecated);
     utassert(set.ForOffset(30) == nullptr);
 
@@ -2365,17 +2364,17 @@ static Str HighlighterLanguage(void*) {
 }
 
 static int HighlighterStyles(void*, Selection range,
-                             const HighlightStyleResolver* resolver,
-                             TextSpan* out, int cap) {
+                             const HighlightStyleResolver* resolver, Arena* a,
+                             TextSpan** out) {
     TextSpan style;
     if (!resolver || !resolver->Style(StrL("keyword"), &style)) {
         return 0;
     }
     style.lo = range.start;
     style.hi = range.end;
-    if (out && cap > 0) {
-        out[0] = style;
-    }
+    auto* spans = (TextSpan*)a->Alloc((int)sizeof(TextSpan));
+    spans[0] = style;
+    *out = spans;
     return 1;
 }
 
@@ -2386,10 +2385,12 @@ static void HighlighterContractsAreDependencyFreeAndFunctional() {
     highlighter.language = HighlighterLanguage;
     highlighter.styles = HighlighterStyles;
     utassert(base::StrEq(highlighter.Language(), "cpp"));
-    TextSpan span;
-    utassert(highlighter.Styles({2, 5}, &resolver, &span, 1) == 1);
-    utassert(span.lo == 2 && span.hi == 5);
-    utassert(span.color.r == Rgb(10, 20, 30).r);
+    Arena* a = ArenaNew();
+    TextSpan* spans = nullptr;
+    utassert(highlighter.Styles({2, 5}, &resolver, a, &spans) == 1);
+    utassert(spans[0].lo == 2 && spans[0].hi == 5);
+    utassert(spans[0].color.r == Rgb(10, 20, 30).r);
+    ArenaDelete(a);
 }
 
 static int LspFacadeCompletions(void*, Str, int, Str, CompletionItem* out,
@@ -2404,8 +2405,8 @@ static CompletionTrigger LspFacadeTrigger(void*, Str, int, Str) {
     return CompletionTrigger::Continue;
 }
 
-static int LspFacadeActions(void*, Arena*, Str, Selection,
-                            CodeActionItem* out, int cap) {
+static int LspFacadeActions(void*, Arena*, Str, Selection, CodeActionItem* out,
+                            int cap) {
     if (out && cap > 0) {
         out[0].title = StrL("Fix");
     }
@@ -2529,8 +2530,8 @@ static void SoftWrapBoundariesKeepTheVisualRowAffinity() {
     float endY = 0, endH = 0, nextY = 0, nextH = 0;
     for (int i = 1; i < line.len; i++) {
         float endX = 0, nextX = 0;
-        if (TextPointAt(&ctx, line, font, width, true, i, &endX, &endY,
-                        &endH, false, lineMult, true) &&
+        if (TextPointAt(&ctx, line, font, width, true, i, &endX, &endY, &endH,
+                        false, lineMult, true) &&
             TextPointAt(&ctx, line, font, width, true, i, &nextX, &nextY,
                         &nextH, false, lineMult, false) &&
             endY + 0.5f < nextY) {
@@ -2550,8 +2551,8 @@ static void SoftWrapBoundariesKeepTheVisualRowAffinity() {
         VecAppend(state.rowBoxes, state.lastBounds);
 
         bool affinity = false;
-        int at = InputIndexForPosition(
-            &state, &ctx, width + 100, endY + endH * 0.5f, &affinity);
+        int at = InputIndexForPosition(&state, &ctx, width + 100,
+                                       endY + endH * 0.5f, &affinity);
         utassert(at == boundary && affinity);
         at = InputIndexForPosition(&state, &ctx, 0, nextY + nextH * 0.5f,
                                    &affinity);

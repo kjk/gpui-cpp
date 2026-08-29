@@ -348,6 +348,54 @@ static El* FoldChevron(Arena* a, InputState* state,
             ->Fg(style.mutedForeground));
 }
 
+// element.rs compose_decoration_collections, kept flat. Lived beside the
+// highlighter facade until the highlighter became an installed seam; the
+// element composes the decoration layers itself now, which is where Rust
+// does it.
+int InputComposeSpans(TextSpan* spans, int n, const TextSpan* decs, int nDecs,
+                      int cap, TextSpan* tmp) {
+    // The decorations win over the spans they overlap: every span is cut
+    // back to what the decorations leave it, and the decorations go in
+    // whole. Both lists are in order, and so is the result, built into the
+    // caller's scratch and copied back.
+    int m = 0;
+    int i = 0;
+    for (int d = 0; d < nDecs && m < cap; d++) {
+        const TextSpan& dec = decs[d];
+        for (; i < n && m < cap; i++) {
+            TextSpan sp = spans[i];
+            if (sp.hi <= dec.lo) {
+                tmp[m++] = sp;
+                continue;
+            }
+            if (sp.lo >= dec.hi) {
+                break;
+            }
+            // The part before the decoration survives; the part after it is
+            // put back for the next decoration to look at.
+            if (sp.lo < dec.lo && m < cap) {
+                TextSpan head = sp;
+                head.hi = dec.lo;
+                tmp[m++] = head;
+            }
+            if (sp.hi > dec.hi) {
+                spans[i].lo = dec.hi;
+                break;
+            }
+        }
+        if (m < cap) {
+            tmp[m++] = dec;
+        }
+    }
+    for (; i < n && m < cap; i++) {
+        tmp[m++] = spans[i];
+    }
+    for (int k = 0; k < m; k++) {
+        spans[k] = tmp[k];
+    }
+    return m;
+}
+
 El* Textarea::New(Ctx* cx, InputState* state) {
     return New(cx, state, InputEditorStyle{});
 }
@@ -651,6 +699,43 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
     // scans of the document — RopeSliceLine, three scans per row, was 13% of
     // a scroll frame in the editor example.
     const Vec<int>& lineStarts = InputLineStarts(state);
+    // The style runs the rows slice out of. With a highlighter installed the
+    // element asks it for the visible byte range only — element.rs groups
+    // the visible lines and calls styles() per group — and lays the
+    // decoration collection the caller projected (style.spans: semantic
+    // tokens, document colours, caller runs) over what it answered. Without
+    // one, style.spans is the whole collection, as it always was. Range
+    // queries are what free the highlighter from any whole-document span
+    // cap: a document of any size styles the band on screen.
+    const TextSpan* docSpans = style.spans;
+    int nDocSpans = style.nSpans;
+    if (state->highlighter.styles && firstRow < endRow &&
+        firstRow < lineStarts.len) {
+        Selection vis = {lineStarts[firstRow], endRow < lineStarts.len
+                                                   ? lineStarts[endRow]
+                                                   : text.len};
+        TextSpan* hl = nullptr;
+        int nHl = state->highlighter
+                      .Styles(vis, &style.highlightStyles, a, &hl);
+        if (style.nSpans > 0) {
+            // Compose in the arena: every decoration adds at most itself and
+            // one split, so the bound is exact.
+            int cap = nHl + 2 * style.nSpans;
+            auto* buf = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * cap);
+            auto* tmp = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * cap);
+            if (buf && tmp) {
+                if (nHl > 0) {
+                    memcpy(buf, hl, (size_t)nHl * sizeof(TextSpan));
+                }
+                nDocSpans = InputComposeSpans(buf, nHl, style.spans,
+                                              style.nSpans, cap, tmp);
+                docSpans = buf;
+            }
+        } else {
+            docSpans = hl;
+            nDocSpans = nHl;
+        }
+    }
     for (int row = firstRow; row < endRow; row++) {
         int start = lineStarts[row];
         int lineEnd =
@@ -670,7 +755,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
         // where the last row left off, so a range that does not start at the
         // top has to skip what came before it.
         if (row == firstRow) {
-            while (spanAt < style.nSpans && style.spans[spanAt].hi <= start) {
+            while (spanAt < nDocSpans && docSpans[spanAt].hi <= start) {
                 spanAt++;
             }
             while (matchAt < style.nMatches && style.matches[matchAt]
@@ -685,14 +770,14 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
         }
         // The runs that fall inside this row, rebased onto it. The document's
         // are in order, so the walk carries on where the last row left off.
-        if (style.nSpans > 0) {
-            while (spanAt < style.nSpans && style.spans[spanAt].hi <= start) {
+        if (nDocSpans > 0) {
+            while (spanAt < nDocSpans && docSpans[spanAt].hi <= start) {
                 spanAt++;
             }
             int first = spanAt;
             int count = 0;
-            while (first + count < style.nSpans &&
-                   style.spans[first + count].lo < start + line.len) {
+            while (first + count < nDocSpans &&
+                   docSpans[first + count].lo < start + line.len) {
                 count++;
             }
             if (count > 0) {
@@ -700,7 +785,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
                     (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * count);
                 int nRowSpans = 0;
                 for (int k = 0; k < count; k++) {
-                    const TextSpan& sp = style.spans[first + k];
+                    const TextSpan& sp = docSpans[first + k];
                     int lo = sp.lo - start;
                     int hi = sp.hi - start;
                     if (lo < 0) {
@@ -1139,6 +1224,9 @@ InputState::~InputState() {
     }
     StrFree(placeholder);
     MaskPatternFree(&maskPattern);
+    if (highlighter.drop) {
+        highlighter.drop(highlighter.data);
+    }
 }
 
 static void TextReserve(InputState* s, int want) {
@@ -1170,6 +1258,15 @@ static void TextSplice(InputState* s, int a, int b, Str ins) {
     s->text.len = out;
     s->text.els[out] = 0;
     s->docVersion++;
+    // The envelope InputHighlighter::update is handed. One splice is exact;
+    // a second before the last was consumed is more than one envelope can
+    // say, so it collapses to the whole-document marker.
+    if (s->hasPendingEdit) {
+        s->pendingEdit = InputEdit{0, -1, s->text.len};
+    } else {
+        s->pendingEdit = InputEdit{a, b, a + insLen};
+        s->hasPendingEdit = true;
+    }
 }
 
 static void TextSet(InputState* s, Str v) {
@@ -1184,6 +1281,8 @@ static void TextSet(InputState* s, Str v) {
     s->text.len = n;
     s->text.els[n] = 0;
     s->docVersion++;
+    s->pendingEdit = InputEdit{0, -1, n};
+    s->hasPendingEdit = true;
 }
 
 // ─── mode ─────────────────────────────────────────────────────────────────
