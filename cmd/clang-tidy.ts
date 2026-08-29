@@ -1,7 +1,8 @@
-// Run clang-tidy over the source translation units used by this host build.
+// Run clang-tidy over every source translation unit under src/.
 // The arguments before `--` are passed to clang-tidy; arguments after it are
 // appended to the compiler command line (for example, a project-specific
-// -D). The source list follows build.ts's platform suffix rules.
+// -D). Pass --host to restrict the list to the current platform's files when
+// system headers for the other platforms are unavailable.
 //
 //   bun cmd/clang-tidy.ts -checks=bugprone-*,performance-*
 //   bun cmd/clang-tidy.ts -fix -- -DGPUI_MARKDOWN_MINI=1
@@ -37,7 +38,7 @@ function sourcePlatform(rel: string, plat: Platform): boolean {
   return true;
 }
 
-function sourceFiles(rel: string, plat: Platform): string[] {
+function sourceFiles(rel: string, plat: Platform | null): string[] {
   const dir = join(root, rel);
   if (!existsSync(dir)) return [];
   const result: string[] = [];
@@ -45,7 +46,8 @@ function sourceFiles(rel: string, plat: Platform): string[] {
     const child = `${rel}/${ent.name}`;
     if (ent.isDirectory()) {
       result.push(...sourceFiles(child, plat));
-    } else if ((ent.name.endsWith(".cpp") || ent.name.endsWith(".c")) && sourcePlatform(child, plat)) {
+    } else if ((ent.name.endsWith(".cpp") || ent.name.endsWith(".c")) &&
+               (!plat || sourcePlatform(child, plat))) {
       result.push(child);
     }
   }
@@ -79,10 +81,13 @@ function findClangTidy(): string {
 function main(): void {
   const tidyArgs: string[] = [];
   const extraArgs: string[] = [];
+  let hostOnly = false;
   let afterSeparator = false;
   for (const arg of Bun.argv.slice(2)) {
     if (arg === "--") {
       afterSeparator = true;
+    } else if (!afterSeparator && arg === "--host") {
+      hostOnly = true;
     } else if (afterSeparator) {
       extraArgs.push(arg);
     } else {
@@ -91,9 +96,17 @@ function main(): void {
   }
 
   const plat = hostPlatform();
-  const files = sourceFiles("src", plat);
+  const files = sourceFiles("src", hostOnly ? plat : null);
   if (files.length === 0) die("No source files found under src/.");
   const exe = findClangTidy();
+  // The normal clang-tidy summary includes a repetitive hint about
+  // non-system headers whenever the project's HeaderFilterRegex suppresses
+  // diagnostics from them. Individual diagnostics remain visible; only that
+  // summary (and its hint) is quieted unless the caller explicitly asks for
+  // verbose output.
+  if (!tidyArgs.includes("-quiet") && !tidyArgs.includes("--quiet")) {
+    tidyArgs.unshift("-quiet");
+  }
   const cxxCompileArgs = [
     "-std=c++20",
     "-I", "src",
@@ -111,7 +124,7 @@ function main(): void {
   ];
   const cCompileArgs = ["-std=c11", ...extraArgs];
 
-  console.log(`Running ${exe} on ${files.length} source files (${plat})`);
+  console.log(`Running ${exe} on ${files.length} source files${hostOnly ? ` (${plat})` : ""}`);
   for (const file of files) {
     const compileArgs = file.endsWith(".c") ? cCompileArgs : cxxCompileArgs;
     const result = Bun.spawnSync([exe, ...tidyArgs, file, "--", ...compileArgs], {

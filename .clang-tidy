@@ -1,0 +1,4 @@
+Checks: '-*,bugprone-*,performance-*,-bugprone-easily-swappable-parameters'
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|/)src/'
+FormatStyle: file

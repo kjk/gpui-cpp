@@ -49,12 +49,13 @@ bun cmd/build-no-amalgam.ts -clang -rel   # Windows: clang-cl
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
 
-To lint every native source translation unit with LLVM's clang-tidy (using the
-same platform filtering and public include paths as the standalone build):
+To lint every source translation unit under `src/` with LLVM's clang-tidy (using
+the repository's `.clang-tidy` configuration):
 
 ```
 bun cmd/clang-tidy.ts
 bun cmd/clang-tidy.ts -checks=bugprone-*,performance-*
+bun cmd/clang-tidy.ts --host       # only this platform's source files
 ```
 
 On Windows, the renderer is selected at compile time. With no definition the
