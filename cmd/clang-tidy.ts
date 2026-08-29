@@ -125,7 +125,9 @@ function main(): void {
   const cCompileArgs = ["-std=c11", ...extraArgs];
 
   console.log(`Running ${exe} on ${files.length} source files${hostOnly ? ` (${plat})` : ""}`);
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]!;
+    console.log(`${i + 1}/${files.length} ${file}`);
     const compileArgs = file.endsWith(".c") ? cCompileArgs : cxxCompileArgs;
     const result = Bun.spawnSync([exe, ...tidyArgs, file, "--", ...compileArgs], {
       cwd: root,
