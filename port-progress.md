@@ -10011,3 +10011,23 @@ Validation: MSVC release and debug and clang-cl release each pass 21,500 checks;
 strict Linux g++ passes 21,479 applicable checks; wasm passes 20,719. Every MSVC
 release example builds with `/W4 /WX`, and both the flexbox and grid benchmark
 groups build and run in release mode.
+
+## ASan-safe Windows window shutdown
+
+2026-08-29: Replicated SumatraPDF file-manager fix
+`2b97bc3256830a693aa777a917d8cc21daf73574`. `WM_DESTROY` now retains the
+`PlatWindow` until `WindowClosed` has blurred the focused input and released
+the paint target, then deletes it; deleting platform state first was the
+heap-use-after-free ASan reported while closing a viewer window. Windows
+debugger launches continue C++ exceptions on first chance and, for an ASan
+build, now do the same for the access violations the sanitizer raises and
+handles while initializing.
+
+The documented MSVC release+ASan build had two latent blockers exposed while
+verifying the fix: the instrumented amalgam exceeded the small COFF section
+table, and QuickJS-NG's diagnostic allocation total becomes unused under this
+configuration. ASan builds now request `/bigobj` from cl.exe and narrowly
+suppress that upstream C warning. MSVC release+ASan passes all 21,500 checks;
+an ASan `hello_world` driven through 31 frames and automatic `WM_DESTROY`
+exits cleanly both directly and under cdb, with the latter visibly accepting
+the sanitizer's first-chance access violations and continuing to exit 0.

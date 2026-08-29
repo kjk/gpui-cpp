@@ -1005,6 +1005,10 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
     }
     if (f.asan) {
       flags.push("/fsanitize=address");
+      // Instrumenting the amalgam creates more COFF sections than the
+      // original object format can encode. clang-cl uses the extended format
+      // automatically; cl.exe needs it requested explicitly.
+      if (!f.clang) flags.push("/bigobj");
     }
     return flags;
   }
@@ -1081,7 +1085,12 @@ function quickjsCflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => n
         ? ["/Z7", "-Wno-unused-but-set-variable", "-Wno-unused-function", "-Wno-unused-command-line-argument"]
         : ["/FS", "/Zi"]),
     ];
-    if (f.asan) flags.push("/fsanitize=address");
+    if (f.asan) {
+      flags.push("/fsanitize=address");
+      // ASan makes QuickJS-NG's debug allocation total unused in this
+      // configuration; it is upstream diagnostic-only bookkeeping.
+      if (!f.clang) flags.push("/wd4189");
+    }
     return flags;
   }
   const flags = [

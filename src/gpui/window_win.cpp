@@ -646,10 +646,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_DESTROY: {
             KillTimer(hwnd, 1);
             App* app = win->app;
-            AccessibilityWinClose(win->plat->accessibility);
-            win->plat->accessibility = nullptr;
-            delete win->plat;
+            PlatWindow* plat = win->plat;
+            AccessibilityWinClose(plat->accessibility);
+            plat->accessibility = nullptr;
             WindowClosed(win);
+            delete plat;
             // The message loop ends when the last window closes.
             if (!AppAnyWindowOpen(app)) {
                 PostQuitMessage(0);

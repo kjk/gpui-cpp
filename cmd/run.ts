@@ -459,7 +459,7 @@ const debuggerHelp: Record<DebuggerKind, string> = {
  * flag named — and a named debugger that is not installed is an error with
  * the command that installs it, never a silent fallback to another one.
  */
-function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): DebugLaunch {
+function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string, asan: boolean): DebugLaunch {
   const order: DebuggerKind[] =
     want !== "any" ? [want] : plat === "win" ? ["windbg", "cdb"] : plat === "mac" ? ["lldb", "gdb"] : ["gdb", "lldb"];
 
@@ -470,12 +470,15 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
         continue;
       }
       // -c at the initial break: `sxd eh` makes C++ EH second-chance only
-      // (Windows, COM and DWrite throw and catch e06d7363 constantly), then
-      // `g` runs. -G still ignores the process-exit breakpoint. Do not use -g
-      // here: it skips the initial break, and -c would never run.
+      // (Windows, COM and DWrite throw and catch e06d7363 constantly). ASan
+      // also raises and handles access violations while its debugger support
+      // initializes, so those must be second-chance-only in sanitizer runs.
+      // Then `g` runs. -G still ignores the process-exit breakpoint. Do not
+      // use -g here: it skips the initial break, and -c would never run.
+      const init = asan ? "sxd eh; sxd av; g" : "sxd eh; g";
       const cmd = isSpawnableExe(dbg)
-        ? [dbg, "-c", "sxd eh; g", "-G", exe]
-        : ["cmd.exe", "/c", `"${dbg}" -c "sxd eh; g" -G "${exe}"`];
+        ? [dbg, "-c", init, "-G", exe]
+        : ["cmd.exe", "/c", `"${dbg}" -c "${init}" -G "${exe}"`];
       return { kind, cmd, foreground: false };
     }
     if (kind === "cdb") {
@@ -484,8 +487,9 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string): 
         continue;
       }
       // Console debugger: it owns this terminal, so it runs in the
-      // foreground. Same second-chance-only rule for C++ EH.
-      return { kind, cmd: [dbg, "-c", "sxd eh; g", "-G", exe], foreground: true };
+      // foreground. Same second-chance-only rules as WinDbg.
+      const init = asan ? "sxd eh; sxd av; g" : "sxd eh; g";
+      return { kind, cmd: [dbg, "-c", init, "-G", exe], foreground: true };
     }
     if (kind === "gdb") {
       if (!whichExe("gdb")) {
@@ -924,7 +928,7 @@ async function runNative(a: RunArgs): Promise<never> {
     console.log("");
   }
 
-  const dbg = a.debugger ? findDebugger(a.debugger, a.plat, exe) : null;
+  const dbg = a.debugger ? findDebugger(a.debugger, a.plat, exe, a.flags.asan) : null;
   const cppCmd = [...(dbg ? dbg.cmd : [exe]), ...a.appArgs];
 
   if (dbg?.foreground) {
