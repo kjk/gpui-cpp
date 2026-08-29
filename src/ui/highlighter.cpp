@@ -3,6 +3,7 @@
 #include "ui/popover.h"
 #include "ui/text.h"
 #include "base/positioner.h"
+#include "sys/executor.h"
 
 namespace gpui {
 
@@ -505,6 +506,8 @@ struct HlRun {
     SyntaxTok tok;
 };
 
+struct SynHlJob;
+
 struct SyntaxInputHighlighter {
     SyntaxLang lang = SyntaxLangNone;
     uint64_t version = 0;
@@ -516,6 +519,40 @@ struct SyntaxInputHighlighter {
     // render the way crates/ui projects the whole editor style.
     ThemeMode mode = ThemeMode::Light;
     Rgba foreground = {};
+    // The background lex in flight for a document past the sync budget, and
+    // the debounce in front of it — input_adapter.rs's parse_task and
+    // PARSE_DEBOUNCE, over ExecSpawn instead of the background executor.
+    SynHlJob* flight = nullptr;
+    TaskId flightTask = 0;
+    double lexDueAt = 0;
+    uint64_t lexDueVersion = ~(uint64_t)0;
+};
+
+/* input_adapter.rs's policy, constants and all: a document at or under
+   SYNC_PARSE_MAX_BYTES is lexed synchronously in update(); a bigger one
+   keeps showing its stale styles, waits out PARSE_DEBOUNCE, and is lexed on
+   the pool from a snapshot — the frame is the debounce clock, the way the
+   hover delay keeps time. What the simplification drops is the 2 ms
+   sync-parse timeout: the lexer cannot stop halfway the way tree-sitter's
+   progress callback can, so the size cap alone decides which side a
+   document lands on. */
+static const int kSyncLexMaxBytes = 256 * 1024;
+static const double kLexDebounce = 0.150;
+
+// The snapshot a pool thread lexes. The worker touches only the text and
+// the two result Vecs; `hl` is read and written on the main thread alone,
+// and SynHlDrop clears it when the implementation dies first — the job then
+// lands orphaned and frees itself.
+struct SynHlJob {
+    SyntaxInputHighlighter* hl = nullptr;
+    App* app = nullptr;
+    EntityId view = {};
+    uint64_t version = 0;
+    SyntaxLang lang = SyntaxLangNone;
+    char* text = nullptr; // owned
+    int len = 0;
+    Vec<HlRun> runs;
+    Vec<FoldRange> folds;
 };
 
 /* Fold candidates — upstream's extract_fold_ranges walks the tree-sitter
@@ -526,10 +563,11 @@ struct SyntaxInputHighlighter {
    produces the token runs. A language with no braces has no candidates,
    which is where this stops short of the tree: Rust would fold a Python
    suite and this cannot see one. */
-static void SynHlLex(SyntaxInputHighlighter* hl, Str text) {
-    VecClear(hl->runs);
-    VecClear(hl->folds);
-    if (hl->lang == SyntaxLangNone || text.len == 0) {
+static void SynHlLexInto(SyntaxLang lang, Str text, Vec<HlRun>* runs,
+                         Vec<FoldRange>* folds) {
+    VecClear(*runs);
+    VecClear(*folds);
+    if (lang == SyntaxLangNone || text.len == 0) {
         return;
     }
     // Brace nesting deeper than this folds no further; startLine per open
@@ -539,7 +577,7 @@ static void SynHlLex(SyntaxInputHighlighter* hl, Str text) {
     int line = 0;
     int at = 0;
     SyntaxLexer lx;
-    SyntaxLexStart(&lx, hl->lang, text);
+    SyntaxLexStart(&lx, lang, text);
     while (SyntaxLexNext(&lx)) {
         int tokStart = (int)(lx.text.s - text.s);
         for (; at < tokStart && at < text.len; at++) {
@@ -575,7 +613,7 @@ static void SynHlLex(SyntaxInputHighlighter* hl, Str text) {
                     FoldRange fr;
                     fr.startLine = startLine;
                     fr.endLine = line;
-                    VecAppend(hl->folds, fr);
+                    VecAppend(*folds, fr);
                 }
             }
         }
@@ -586,16 +624,16 @@ static void SynHlLex(SyntaxInputHighlighter* hl, Str text) {
         // Adjacent runs of one kind are one run, which keeps a document of a
         // few hundred lines to a few hundred of them.
         int hi = tokStart + lx.text.len;
-        if (hl->runs.len > 0 && hl->runs[hl->runs.len - 1].hi == tokStart &&
-            hl->runs[hl->runs.len - 1].tok == lx.tok) {
-            hl->runs[hl->runs.len - 1].hi = hi;
+        if (runs->len > 0 && (*runs)[runs->len - 1].hi == tokStart &&
+            (*runs)[runs->len - 1].tok == lx.tok) {
+            (*runs)[runs->len - 1].hi = hi;
             continue;
         }
         HlRun run;
         run.lo = tokStart;
         run.hi = hi;
         run.tok = lx.tok;
-        VecAppend(hl->runs, run);
+        VecAppend(*runs, run);
     }
 }
 
@@ -613,7 +651,43 @@ static void SynHlUpdate(void* data, const InputEdit* edit, Str text,
     // ride along in the same pass whether or not the gutter shows them.
     (void)edit;
     (void)folding;
-    SynHlLex(hl, text);
+    SynHlLexInto(hl->lang, text, &hl->runs, &hl->folds);
+}
+
+// The pool half and the landing half of the background lex. The worker
+// touches only the snapshot it was handed; the landing runs on the main
+// thread, swaps the answer in unless the implementation died first, and
+// notifies the view the way FpsResourceDone does — a stale entity makes
+// that a no-op rather than a crash.
+static void SynHlLexWork(SynHlJob* job) {
+    SynHlLexInto(job->lang, Str(job->text, job->len), &job->runs, &job->folds);
+}
+
+static void SynHlLexDone(SynHlJob* job) {
+    SyntaxInputHighlighter* hl = job->hl;
+    if (hl) {
+        hl->flight = nullptr;
+        hl->flightTask = 0;
+        VecClear(hl->runs);
+        if (job->runs.len > 0) {
+            if (HlRun* dst = VecAppendBlanks(hl->runs, job->runs.len)) {
+                memcpy(dst, job->runs.els,
+                       (size_t)job->runs.len * sizeof(HlRun));
+            }
+        }
+        VecClear(hl->folds);
+        if (job->folds.len > 0) {
+            if (FoldRange* dst = VecAppendBlanks(hl->folds, job->folds.len)) {
+                memcpy(dst, job->folds.els,
+                       (size_t)job->folds.len * sizeof(FoldRange));
+            }
+        }
+        hl->valid = true;
+        hl->version = job->version;
+        NotifyEntity(job->app, job->view, nullptr);
+    }
+    Free(nullptr, job->text);
+    delete job;
 }
 
 // The canonical capture name each token kind carries, which is what the
@@ -731,7 +805,18 @@ static int SynHlFoldRanges(void* data, Str, Selection, Arena* a,
 }
 
 static void SynHlDrop(void* data) {
-    delete (SyntaxInputHighlighter*)data;
+    auto* hl = (SyntaxInputHighlighter*)data;
+    // A flight in the air is orphaned, not waited for: the landing sees the
+    // null and frees the job. One still in the queue never runs at all —
+    // ExecCancel true is the fps destructor's cue to free it here.
+    if (hl->flight) {
+        hl->flight->hl = nullptr;
+        if (hl->flightTask && ExecCancel(hl->flightTask)) {
+            Free(nullptr, hl->flight->text);
+            delete hl->flight;
+        }
+    }
+    delete hl;
 }
 
 // input_highlighter_factory: what the factory answers for a language this
@@ -909,14 +994,52 @@ El* Highlighter::IntoEl() {
             hl->mode = ThemeGet(cx->app);
             hl->foreground = th.foreground;
             if (!hl->valid || hl->version != state->docVersion) {
-                InputEdit whole = {};
-                whole.oldEndByte = -1;
-                whole.newEndByte = text.len;
-                const InputEdit* edit =
-                    state->hasPendingEdit ? &state->pendingEdit : &whole;
-                state->highlighter.Update(edit, text, folding);
-                hl->valid = true;
-                hl->version = state->docVersion;
+                if (text.len <= kSyncLexMaxBytes) {
+                    InputEdit whole = {};
+                    whole.oldEndByte = -1;
+                    whole.newEndByte = text.len;
+                    const InputEdit* edit =
+                        state->hasPendingEdit ? &state->pendingEdit : &whole;
+                    state->highlighter.Update(edit, text, folding);
+                    hl->valid = true;
+                    hl->version = state->docVersion;
+                } else if (!hl->flight) {
+                    // Past the sync budget: stale styles stay up while the
+                    // debounce runs out, then a snapshot goes to the pool.
+                    // The frame is the clock, as it is for the hover delay.
+                    // A version that moves while a flight is up is caught
+                    // when it lands: the landed version still differs from
+                    // docVersion, so this path debounces again.
+                    if (hl->lexDueVersion != state->docVersion) {
+                        hl->lexDueVersion = state->docVersion;
+                        hl->lexDueAt = TimeNow() + kLexDebounce;
+                    }
+                    if (TimeNow() < hl->lexDueAt) {
+                        WindowRequestAnimationFrame(cx->win);
+                    } else {
+                        auto* job = new SynHlJob();
+                        job->hl = hl;
+                        job->app = cx->app;
+                        job->view = cx->self;
+                        job->version = state->docVersion;
+                        job->lang = hl->lang;
+                        job->text = (char*)Alloc(nullptr, text.len + 1);
+                        if (job->text) {
+                            memcpy(job->text, text.s, (size_t)text.len);
+                            job->text[text.len] = 0;
+                            job->len = text.len;
+                            hl->flightTask =
+                                ExecSpawn(MkFunc0(SynHlLexWork, job),
+                                          MkFunc0(SynHlLexDone, job));
+                        }
+                        if (job->text && hl->flightTask) {
+                            hl->flight = job;
+                        } else {
+                            Free(nullptr, job->text);
+                            delete job;
+                        }
+                    }
+                }
             }
             state->hasPendingEdit = false;
             if (folding) {
