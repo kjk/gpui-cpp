@@ -568,8 +568,8 @@ static bool GetAttrStr(Str tag, const char* name, Str* out) {
     return false;
 }
 
-// The same, copied and null-terminated, for the short ones an `atof` or a
-// colour parse wants as a C string.
+// The same, copied and null-terminated, for the short ones a colour parse
+// wants as a C string.
 static bool GetAttr(Str tag, const char* name, char* out, int outN) {
     Str v;
     if (!GetAttrStr(tag, name, &v)) {
@@ -587,7 +587,7 @@ static float AttrF(Str tag, const char* name, float def) {
     if (!GetAttr(tag, name, buf, 64)) {
         return def;
     }
-    return (float)atof(buf);
+    return StrToFloatUnchecked(Str(buf));
 }
 
 // `fill="#rrggbb"` on a shape. "none" and "currentColor" both leave the shape
@@ -892,7 +892,7 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
     }
     char buf[64];
     if (GetAttr(tag, "font-size", buf, 64)) {
-        float v = (float)atof(buf);
+        float v = StrToFloatUnchecked(Str(buf));
         if (v > 0) {
             cur.fontSize = v;
         }
@@ -914,7 +914,7 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
         }
     }
     if (GetAttr(tag, "fill-opacity", buf, 64)) {
-        float o = (float)atof(buf);
+        float o = StrToFloatUnchecked(Str(buf));
         if (o < 0) {
             o = 0;
         }
@@ -931,13 +931,13 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
     // continues where the last run left off -- but every file this reads
     // names both on whichever element carries the words.
     if (GetAttr(tag, "x", buf, 64)) {
-        cur.x = (float)atof(buf);
+        cur.x = StrToFloatUnchecked(Str(buf));
     }
     if (GetAttr(tag, "y", buf, 64)) {
-        cur.y = (float)atof(buf);
+        cur.y = StrToFloatUnchecked(Str(buf));
     }
     if (GetAttr(tag, "textLength", buf, 64)) {
-        cur.textLength = (float)atof(buf);
+        cur.textLength = StrToFloatUnchecked(Str(buf));
     }
     return cur;
 }
@@ -1106,7 +1106,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
                     // a tenth, and reading the colour without the opacity
                     // washes the plate out to grey.
                     if (GetAttr(tag, "stop-opacity", sc, 64)) {
-                        float o = (float)atof(sc);
+                        float o = StrToFloatUnchecked(Str(sc));
                         if (o < 0) {
                             o = 0;
                         }

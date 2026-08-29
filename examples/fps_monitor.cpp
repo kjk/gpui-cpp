@@ -428,7 +428,7 @@ int GpuiMain(int argc, char** argv) {
     int winH = 600;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-bench") == 0 && i + 1 < argc) {
-            self->benchSecs = atof(argv[++i]);
+            self->benchSecs = StrToFloatUnchecked(Str(argv[++i]));
         } else if (strcmp(argv[i], "-bench-out") == 0 && i + 1 < argc) {
             self->benchOut = argv[++i];
         } else if (strcmp(argv[i], "-curves") == 0 && i + 1 < argc) {

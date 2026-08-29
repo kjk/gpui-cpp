@@ -119,6 +119,10 @@ struct Str {
     explicit operator bool() const { return len > 0 && s; }
 };
 
+// Parse a floating-point value from a string slice. The input is assumed to
+// contain a valid number; malformed or empty input returns zero.
+float StrToFloatUnchecked(Str s);
+
 void log(Str s);
 
 using TempStr = Str;

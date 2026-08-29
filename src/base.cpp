@@ -14,6 +14,24 @@ namespace base {
 
 static int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
 
+float StrToFloatUnchecked(Str s) {
+    if (!s.s || s.len <= 0) {
+        return 0;
+    }
+    char local[128];
+    char* buf = local;
+    if (s.len >= (int)sizeof(local)) {
+        Str temp = AllocStrTemp(s.len);
+        if (!temp.s) {
+            return 0;
+        }
+        buf = temp.s;
+    }
+    memcpy(buf, s.s, (size_t)s.len);
+    buf[s.len] = 0;
+    return strtof(buf, nullptr);
+}
+
 void* AllocZero(int count, int size) {
     return calloc(count, size);
 }

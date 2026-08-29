@@ -139,11 +139,11 @@ struct DataTableStory {
 static float StockKey(const Stock& s, int col) {
     switch (col) {
         case 4:
-            return (float)atof(s.price);
+            return StrToFloatUnchecked(Str(s.price));
         case 5:
-            return (float)atof(s.chg);
+            return StrToFloatUnchecked(Str(s.chg));
         default:
-            return (float)atof(s.pct);
+            return StrToFloatUnchecked(Str(s.pct));
     }
 }
 
@@ -442,7 +442,7 @@ static Str DtCompact(Ctx* cx, float v) {
 // cell and the CSV go through here, the way Rust's render_td and cell_text
 // read the same struct.
 static DtCellVal DtValueFor(Ctx* cx, const Stock& s, int row, int col) {
-    float price = (float)atof(s.price);
+    float price = StrToFloatUnchecked(Str(s.price));
     DtQuote q = DtQuoteFor(row, price);
     DtCellVal v;
     auto num = [&](Str t) {
@@ -504,7 +504,7 @@ static DtCellVal DtValueFor(Ctx* cx, const Stock& s, int row, int col) {
         // prev_close is a change away from the price, which is the one field
         // that reads off the row's own Chg rather than off a draw.
         case 19:
-            fixed2(price - (float)atof(s.chg));
+            fixed2(price - StrToFloatUnchecked(Str(s.chg)));
             break;
         case 20:
             fixed2(q.high);
