@@ -2561,7 +2561,9 @@ struct TextHit {
     int scope = 0;
 };
 
-// Two-generation shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots.
+// Shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots. Entries live
+// for a second of frames so a virtualized editor scrolling back does not
+// reshape every line it just left.
 struct TextMeasCache {
     void* slots = nullptr;
     int cap = 0;

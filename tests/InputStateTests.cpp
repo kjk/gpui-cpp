@@ -2612,6 +2612,32 @@ static void ALongDocumentBuildsOnlyTheVisibleBand() {
     EntityDropAll(&app);
 }
 
+// A click in a scrolled editor must use scrollY, not the first row's last
+// painted box. That box is only written while row 0 is on screen; after
+// scrolling it is stale at the top of the viewport, so the press mapped
+// into lines 0..viewH/lineH and scroll_to jumped the view back there.
+static void AClickInAScrolledEditorMapsThroughScrollY() {
+    const int kLines = 400;
+    char* buf = (char*)Alloc(nullptr, kLines * 2);
+    utassert(buf);
+    for (int i = 0; i < kLines; i++) {
+        buf[i * 2] = 'x';
+        buf[i * 2 + 1] = '\n';
+    }
+    InputState state;
+    state.kind = InputKind::Editor;
+    InputSetValue(&state, Str(buf, kLines * 2));
+    Free(nullptr, buf);
+    state.lastLineH = 20;
+    state.lastFont = 14;
+    state.lastBounds = {12, 80, 200, 20};
+    state.inputBounds = {0, 80, 400, 400};
+    state.scrollY = 200.f * 20.f;
+    PaintCtx ctx = {};
+    int at = InputIndexForPosition(&state, &ctx, 12, 80.f + 100.f, nullptr);
+    utassert(at == InputLineStartOffset(&state, 205));
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2697,4 +2723,5 @@ void TestInputState() {
     LspFacadesInstallCapabilitiesAndExposeOverlayState();
     SoftWrapBoundariesKeepTheVisualRowAffinity();
     ALongDocumentBuildsOnlyTheVisibleBand();
+    AClickInAScrolledEditorMapsThroughScrollY();
 }

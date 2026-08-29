@@ -434,9 +434,9 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
     // line, so the map of where the rows are cannot be arithmetic.
     bool wrap = state->softWrap;
     El* col = Div(a)->FlexCol()->W(kFill)->BindInput(state);
-    if (wrap) {
-        col->BoundsOut(&state->contentBox);
-    }
+    // Document origin in window space: a click adds scrollY to the clip
+    // box when this has not been written yet, and uses this when it has.
+    col->BoundsOut(&state->contentBox);
     if (text.len == 0) {
         VecClear(state->rowBoxes);
         if (caret) {
@@ -4594,7 +4594,8 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
         return 0;
     }
     const Bounds& b = s->lastBounds;
-    if (b.w <= 0 && b.h <= 0) {
+    if (b.w <= 0 && b.h <= 0 && s->inputBounds.w <= 0 &&
+        s->inputBounds.h <= 0 && s->contentBox.h <= 0) {
         return 0;
     }
     float font = s->lastFont > 0 ? s->lastFont : 14.f;
@@ -4632,7 +4633,18 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
             relY = 0;
         }
     } else {
-        row = lineH > 0 ? (int)((y - b.y) / lineH) : 0;
+        // lastBounds is the first row's text, which is only painted while
+        // that row is on screen. A click after scrolling would then map
+        // into the viewport (line 0..viewH/lineH) and scroll_to would jump
+        // the caret — and the view — back there. The clip box plus scrollY
+        // (or the column's last laid-out origin) is the document.
+        float originY = b.y;
+        if (s->contentBox.h > 0) {
+            originY = s->contentBox.y;
+        } else if (s->inputBounds.h > 0) {
+            originY = s->inputBounds.y - s->scrollY;
+        }
+        row = lineH > 0 ? (int)((y - originY) / lineH) : 0;
         if (row < 0) {
             row = 0;
         }

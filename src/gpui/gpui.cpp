@@ -2360,11 +2360,18 @@ void TextMeasEndFrame(PaintCtx* ctx) {
     uint32_t frame = c->frame;
     TextMeasSlot* old = (TextMeasSlot*)c->slots;
     int oldCap = c->cap;
+    // Keep a second of frames, not just the previous one: a virtualized
+    // editor scrolling back otherwise reshapes every line it just left
+    // (CreateTextLayout of the visible band, every notch).
+    const uint32_t kKeep = 90;
     int keep = 0;
     for (int i = 0; i < oldCap; i++) {
-        if (old[i].occupied && old[i].lastUsed + 1 >= frame) {
+        if (old[i].occupied && old[i].lastUsed + kKeep >= frame) {
             keep++;
         }
+    }
+    if (keep == c->used) {
+        return;
     }
     int newCap = c->cap;
     if (keep * 4 < newCap && newCap > 256) {
@@ -2384,7 +2391,7 @@ void TextMeasEndFrame(PaintCtx* ctx) {
         if (!old[i].occupied) {
             continue;
         }
-        if (old[i].lastUsed + 1 < frame) {
+        if (old[i].lastUsed + kKeep < frame) {
             TextMeasFreeSlot(&old[i]);
             continue;
         }
