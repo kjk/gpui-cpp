@@ -2599,7 +2599,12 @@ static void PaintWavyRun(PaintCtx* ctx, float x, float y, float w, Rgba color) {
     }
     PathMoveTo(p, x, y);
     bool up = true;
-    for (float at = kPeriod * 0.5f; at < w; at += kPeriod * 0.5f) {
+    const float kHalfPeriod = kPeriod * 0.5f;
+    for (uint32_t i = 1;; ++i) {
+        const float at = i * kHalfPeriod;
+        if (!(at < w)) {
+            break;
+        }
         PathLineTo(p, x + at, y + (up ? -kAmp : kAmp));
         up = !up;
     }
