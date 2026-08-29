@@ -96,7 +96,7 @@ void TilesStory::OnRestore(TilesStory* self, Ctx* cx, const ClickEvent*) {
                                                    : node.metas.len;
         Vec<int> panels;
         for (int i = 0; i < n; i++) {
-            VecAppend(panels, atoi(state.nodes[node.children[i]].panelName.s));
+            VecAppend(panels, StrToIntUnchecked(Str(state.nodes[node.children[i]].panelName.s)));
         }
         TilesFromMetas(s, node.metas.els, panels.els, n);
         VecReset(panels);

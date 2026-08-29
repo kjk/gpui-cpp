@@ -90,13 +90,13 @@ static void FrameBenchTick(Window* win, float secs) {
         char buf[16] = {};
 #if GPUI_OS_WINDOWS
         DWORD n = GetEnvironmentVariableA("GPUI_FRAME_BENCH", buf, sizeof(buf));
-        want = (n > 0 && n < sizeof(buf)) ? atoi(buf) : 0;
+        want = (n > 0 && n < sizeof(buf)) ? StrToIntUnchecked(Str(buf)) : 0;
 #else
         const char* e = getenv("GPUI_FRAME_BENCH");
         if (e) {
             StrCopyZ(buf, (int)sizeof(buf), e);
         }
-        want = buf[0] ? atoi(buf) : 0;
+        want = buf[0] ? StrToIntUnchecked(Str(buf)) : 0;
 #endif
         if (want > 0) {
             // Back to back, so the measurement is of drawing and not of how

@@ -22,7 +22,7 @@ static bool ParseNum(const char* s, int* out) {
         n = n * 10 + (*p - '0');
         p++;
     }
-    *out = atoi(s);
+    *out = StrToIntUnchecked(Str(s));
     return true;
 }
 

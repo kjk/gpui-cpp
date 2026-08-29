@@ -172,7 +172,7 @@ static void RefreshBattery(SysState* s) {
             continue;
         }
         s->battery.present = true;
-        s->battery.pct = (float)atoi(buf);
+        s->battery.pct = (float)StrToIntUnchecked(Str(buf));
         snprintf(path, sizeof(path), "/sys/class/power_supply/%s/status",
                  ent->d_name);
         if (ReadSmallFile(path, buf, (int)sizeof(buf)) > 0) {

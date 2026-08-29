@@ -32,6 +32,28 @@ float StrToFloatUnchecked(Str s) {
     return strtof(buf, nullptr);
 }
 
+int StrToIntUnchecked(Str s) {
+    if (!s.s || s.len <= 0) {
+        return 0;
+    }
+    int i = 0;
+    while (i < s.len && s.s[i] <= ' ') {
+        i++;
+    }
+    bool negative = false;
+    if (i < s.len && (s.s[i] == '+' || s.s[i] == '-')) {
+        negative = s.s[i] == '-';
+        i++;
+    }
+    uint64_t value = 0;
+    while (i < s.len && s.s[i] >= '0' && s.s[i] <= '9') {
+        value = value * 10 + (uint64_t)(s.s[i] - '0');
+        i++;
+    }
+    int64_t signedValue = negative ? -(int64_t)value : (int64_t)value;
+    return (int)signedValue;
+}
+
 void* AllocZero(int count, int size) {
     return calloc(count, size);
 }

@@ -898,7 +898,7 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
         }
     }
     if (GetAttr(tag, "font-weight", buf, 64)) {
-        cur.bold = StrEqI(Str(buf), "bold") || atoi(buf) >= 600;
+        cur.bold = StrEqI(Str(buf), "bold") || StrToIntUnchecked(Str(buf)) >= 600;
     }
     if (GetAttr(tag, "text-anchor", buf, 64)) {
         Str v(buf);

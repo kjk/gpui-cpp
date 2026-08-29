@@ -15,6 +15,10 @@ namespace gpui {
 using namespace base;
 }
 
+namespace base {
+int StrToIntUnchecked(Str s);
+}
+
 // ─── color ────────────────────────────────────────────────────────────────
 
 namespace gpui {

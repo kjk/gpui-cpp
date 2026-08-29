@@ -3,6 +3,10 @@
 
 #include "base.h"
 
+namespace base {
+int StrToIntUnchecked(Str s);
+}
+
 namespace gpui {
 
 struct ProcessInfo {
