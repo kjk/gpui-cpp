@@ -1785,7 +1785,6 @@ static Str bufFmt(Str buf, const char* fmt, ...) {
 // default formatting for {n} positional and %v: format by the arg's runtime
 // type
 static void evalDefault(Fmt& fmt, const FmtArg& arg) {
-    TempStr s;
     Str buf(fmt.buf, (int)dimof(fmt.buf));
     switch (arg.t) {
         case FmtArg::Kind::Char:
