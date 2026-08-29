@@ -10031,3 +10031,31 @@ suppress that upstream C warning. MSVC release+ASan passes all 21,500 checks;
 an ASan `hello_world` driven through 31 frames and automatic `WM_DESTROY`
 exits cleanly both directly and under cdb, with the latter visibly accepting
 the sanitizer's first-chance access violations and continuing to exit 0.
+
+## Windows renderers are compile-time selectable
+
+2026-08-29: Windows builds can now define exactly one of
+`WIN_BACKEND_DIRECT2D`, `WIN_BACKEND_D3D11` or `WIN_BACKEND_D3D12`, or define
+`WIN_BACKEND_ALL` to compile all three and retain the existing process-start
+`GPUI_PAINT=d2d|d3d11|d3d12` selector. A fixed build ignores `GPUI_PAINT`.
+With none of the four macros defined, `paint.h` selects Direct2D: it is the
+compatibility default because it has the mature driver path and WARP fallback
+and preserves DirectWrite's ClearType text.
+
+`cmd/build.ts` exposes the same choice as
+`GPUI_WIN_BACKEND=d2d|d3d11|d3d12|all`, defaulting to `d2d`, and links only the
+renderer import libraries the selected build needs. MSVC release smoke builds
+of `hello_world` pass in all four modes: the fixed Direct2D executable
+links D2D1/D3D11/DXGI, fixed D3D11 links D3D11/DXGI/D3DCompiler, fixed D3D12
+links D3D12/DXGI/D3DCompiler, and `all` links their union. The corresponding
+release executable sizes on this checkout were 984,576, 1,004,544, 1,014,784
+and 1,033,728 bytes.
+
+MSVC release passes all 21,500 checks in each of the four modes; MSVC debug
+and clang-cl release build `hello_world` in all four with the same narrowed
+link sets. Each fixed executable runs through the 31-frame automatic smoke
+loop while `GPUI_PAINT` requests a different backend, proving the environment
+cannot override the compile-time choice. One `WIN_BACKEND_ALL` executable runs
+the same loop successfully as Direct2D, D3D11 and D3D12. A direct amalgam
+compile with none of the selector macros defined also links against the
+Direct2D-only renderer set and passes that smoke loop.

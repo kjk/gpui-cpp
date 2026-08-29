@@ -32,8 +32,9 @@ bun cmd/build.ts -wasm system_monitor
 bun cmd/build.ts -clang -rel showcase   # Windows: clang-cl, not cl.exe
 bun cmd/run.ts -wasm showcase
 
-GPUI_PAINT=d3d11 out/rel/story.exe          # custom renderer on D3D11 (`gpu` alias)
-GPUI_PAINT=d3d12 out/rel/story.exe          # custom renderer on native D3D12
+GPUI_WIN_BACKEND=d3d11 bun cmd/build.ts -rel story  # fixed custom D3D11 build
+GPUI_WIN_BACKEND=d3d12 bun cmd/build.ts -rel story  # fixed native D3D12 build
+GPUI_WIN_BACKEND=all bun cmd/build.ts -rel story    # retain GPUI_PAINT runtime choice
 GPUI_SCENE=off out/rel/story.exe            # draw straight, without the scene
 GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
 GPUI_LAYOUT_DUMP=lay.txt out/rel/story.exe  # every frame's laid-out tree
@@ -83,7 +84,8 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   here and neither is the whole. `src/gpui/paintgpu.h` is the renderer half —
   one instance buffer a frame, SDF rounded rects and borders, a glyph atlas,
   stencil-and-cover paths, which is what Blade and `directx_renderer.rs` do —
-  and it is off unless `GPUI_PAINT=d3d11|d3d12` (`gpu` aliases `d3d11`).
+  and it is compiled only with `WIN_BACKEND_D3D11`, `WIN_BACKEND_D3D12` or
+  `WIN_BACKEND_ALL`.
   `src/gpui/scene.h` is the collection
   half, and it *is* on: a frame's drawing gathered as a flat array of
   primitives, each carrying its own content mask and its layer, hashed against
@@ -229,12 +231,18 @@ files call into it.
 
 ### Three Windows backends
 
-`paint.h` has three implementations on Windows. `paint_win.cpp` is the default
-and is Direct2D on a D3D11 device over a flip-model swap chain — already on
-the GPU, and what every build and every screenshot uses.
-`paintgpu_win.cpp` is GPUI's own shape of renderer, reached with
-`GPUI_PAINT=d3d11` or `GPUI_PAINT=d3d12` in the environment (`gpu` remains a
-compatibility alias for `d3d11`): a frame is one instance buffer of rounded
+`paint.h` has three implementations on Windows and makes the choice at compile
+time. Define exactly one of `WIN_BACKEND_DIRECT2D`, `WIN_BACKEND_D3D11` or
+`WIN_BACKEND_D3D12`; if none is defined, Direct2D is selected because its
+mature driver path, WARP fallback and DirectWrite ClearType output make it the
+widest compatibility choice. `WIN_BACKEND_ALL` compiles all three and retains
+the process-start `GPUI_PAINT=d2d|d3d11|d3d12` selector (`gpu` remains an alias
+for `d3d11`). Fixed builds ignore `GPUI_PAINT`. The repository build script's
+equivalent is `GPUI_WIN_BACKEND=d2d|d3d11|d3d12|all`.
+
+`paint_win.cpp` implements Direct2D on a D3D11 device over a flip-model swap
+chain — already on the GPU, and what the default build and screenshots use.
+`paintgpu_win.cpp` is GPUI's own shape of renderer: a frame is one instance buffer of rounded
 rects, borders, glyphs, images and gradients, the shape and the content mask
 are evaluated in the pixel shader, and path fills go through stencil-and-cover
 rather than a tessellator. The CPU batching, shaders, atlas and path machinery

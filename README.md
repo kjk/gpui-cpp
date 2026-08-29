@@ -46,16 +46,22 @@ bun cmd/run.ts -rel -compare story
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
 
-On Windows, Direct2D is the default renderer. The GPUI-shaped custom renderer
-has native D3D11 and D3D12 submission paths selected at process startup:
+On Windows, the renderer is selected at compile time. With no definition the
+build contains only Direct2D, the compatibility default. The repository build
+script accepts the same choice through `GPUI_WIN_BACKEND`:
 
 ```powershell
-$env:GPUI_PAINT = "d3d11"; out/rel/story.exe # "gpu" is an alias
-$env:GPUI_PAINT = "d3d12"; out/rel/story.exe
+$env:GPUI_WIN_BACKEND = "d3d11"; bun cmd/build.ts -rel story
+$env:GPUI_WIN_BACKEND = "d3d12"; bun cmd/build.ts -rel story
+$env:GPUI_WIN_BACKEND = "all"; bun cmd/build.ts -rel story
 ```
 
-`GPUI_PAINT_MSAA=1|2|4|8` controls their sample count (4 by default). Unset
-`GPUI_PAINT`, or set it to `d2d`, for Direct2D.
+Library users can instead define exactly one of `WIN_BACKEND_DIRECT2D`,
+`WIN_BACKEND_D3D11` or `WIN_BACKEND_D3D12`. Defining `WIN_BACKEND_ALL`
+compiles all three and retains the process-start `GPUI_PAINT=d2d|d3d11|d3d12`
+selector (`gpu` is an alias for `d3d11`). A fixed build ignores `GPUI_PAINT`.
+`GPUI_PAINT_MSAA=1|2|4|8` controls the custom renderers' sample count (4 by
+default).
 
 Markdown defaults to the complete CommonMark + GFM parser. Applications that
 prefer a smaller executable can select the basic parser at build time:

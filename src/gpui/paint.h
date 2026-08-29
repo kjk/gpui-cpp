@@ -8,6 +8,54 @@
 
 #include "gpui/gpui.h"
 
+// Windows renderer selection is a compile-time choice. Defining
+// WIN_BACKEND_ALL preserves the runtime GPUI_PAINT=d2d|d3d11|d3d12 selector;
+// otherwise exactly one backend is compiled and GPUI_PAINT is ignored. With
+// no definition, Direct2D is the compatibility default: it is available back
+// to Windows 7 with the platform update, falls back through WARP, and keeps
+// DirectWrite's ClearType text and mature driver path.
+#if GPUI_OS_WINDOWS
+#ifndef WIN_BACKEND_ALL
+#define WIN_BACKEND_ALL 0
+#endif
+#if WIN_BACKEND_ALL
+#undef WIN_BACKEND_DIRECT2D
+#undef WIN_BACKEND_D3D11
+#undef WIN_BACKEND_D3D12
+#define WIN_BACKEND_DIRECT2D 1
+#define WIN_BACKEND_D3D11 1
+#define WIN_BACKEND_D3D12 1
+#else
+#if !defined(WIN_BACKEND_DIRECT2D) && !defined(WIN_BACKEND_D3D11) &&          \
+    !defined(WIN_BACKEND_D3D12)
+#define WIN_BACKEND_DIRECT2D 1
+#endif
+#ifndef WIN_BACKEND_DIRECT2D
+#define WIN_BACKEND_DIRECT2D 0
+#endif
+#ifndef WIN_BACKEND_D3D11
+#define WIN_BACKEND_D3D11 0
+#endif
+#ifndef WIN_BACKEND_D3D12
+#define WIN_BACKEND_D3D12 0
+#endif
+#if WIN_BACKEND_DIRECT2D + WIN_BACKEND_D3D11 + WIN_BACKEND_D3D12 != 1
+#error Define exactly one WIN_BACKEND_DIRECT2D, WIN_BACKEND_D3D11 or WIN_BACKEND_D3D12, or define WIN_BACKEND_ALL
+#endif
+#endif
+#else
+#undef WIN_BACKEND_ALL
+#undef WIN_BACKEND_DIRECT2D
+#undef WIN_BACKEND_D3D11
+#undef WIN_BACKEND_D3D12
+#define WIN_BACKEND_ALL 0
+#define WIN_BACKEND_DIRECT2D 0
+#define WIN_BACKEND_D3D11 0
+#define WIN_BACKEND_D3D12 0
+#endif
+
+#define WIN_BACKEND_GPU (WIN_BACKEND_D3D11 || WIN_BACKEND_D3D12)
+
 namespace gpui {
 
 // Text weight byte: the weight in the low bits plus family / decoration

@@ -1,9 +1,11 @@
 #ifndef GPUI_GPUI_PAINTGPU_H_
 #define GPUI_GPUI_PAINTGPU_H_
 /* The two custom Windows backends for Paint.h, which draw the way GPUI's own
-   renderer does. They are off by default and exist to be measured against
-   the Direct2D one; see the note at the end for what they are worth and what
-   they are still short of.
+   renderer does. A default build contains Direct2D only; define
+   WIN_BACKEND_D3D11 or WIN_BACKEND_D3D12 to compile one of these instead, or
+   WIN_BACKEND_ALL to compile all three and retain the runtime selector. See
+   the note at the end for what they are worth and what they are still short
+   of.
 
    The default Windows backend is already on the GPU: Direct2D on a D3D11
    device, presenting through a DXGI flip-model swap chain. What it is not is
@@ -18,9 +20,9 @@
    uploads. Native D3D11 and D3D12 submission halves consume the same data;
    D3D12 does not pass through D3D11On12.
 
-   `GPUI_PAINT=d3d11|d3d12` in the environment picks its native submission
-   API (`gpu` remains an alias for d3d11), read once at startup, so the D2D
-   backend stays the default and nothing about a normal build changes.
+   In a WIN_BACKEND_ALL build, `GPUI_PAINT=d3d11|d3d12` in the environment
+   picks its native submission API (`gpu` remains an alias for d3d11), read
+   once at startup. A fixed build ignores GPUI_PAINT.
    `GPUI_PAINT_MSAA=1|2|4|8` sets the sample count (default 4): quads and
    glyphs carry their own analytic coverage, but tessellated paths and
    expanded strokes get their antialiasing from the sample count, and its
@@ -40,8 +42,8 @@
 
 namespace gpui {
 
-// Read once, from GPUI_PAINT. The backend cannot change while a target is
-// alive, and nothing here re-reads it.
+// In an ALL build these are read once from GPUI_PAINT. In a single-backend
+// build they are compile-time constants and the environment is ignored.
 bool PaintGpuOn();
 // Which native submission half the shared GPU renderer uses.
 bool PaintD3d12On();

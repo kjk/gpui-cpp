@@ -1,9 +1,10 @@
-/* Direct2D + DirectWrite backend for Paint.h. */
+/* Windows Paint.h front end and the Direct2D backend. DirectWrite shaping and
+   WIC decode are shared with the fixed D3D11/D3D12 builds too. */
 
 #include "gpui/paint.h"
-// The custom GPU renderer beside this one. PaintGpuOn() is false unless
-// GPUI_PAINT=d3d11|d3d12 (gpu aliases d3d11), and then every entry point below
-// hands straight over to its selected native submission half.
+// The custom GPU renderer beside this one. In WIN_BACKEND_ALL builds,
+// GPUI_PAINT=d3d11|d3d12 selects it (gpu aliases d3d11); fixed custom builds
+// always hand every entry point to their one submission half.
 #include "gpui/paintgpu.h"
 #include "gpui/scene.h"
 
@@ -93,13 +94,17 @@ static void MakeFontFamily(PaintApp* pa, const wchar_t* family, float px,
 
 PaintApp* PaintAppNew() {
     auto* pa = new PaintApp();
-    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pa->d2d);
+    HRESULT hr;
+#if WIN_BACKEND_DIRECT2D
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pa->d2d);
     if (FAILED(hr)) {
         delete pa;
         return nullptr;
     }
+#endif
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                             __uuidof(IDWriteFactory), (IUnknown**)&pa->dwrite);
+                             __uuidof(IDWriteFactory),
+                             (IUnknown**)&pa->dwrite);
     if (FAILED(hr)) {
         Rel(&pa->d2d);
         delete pa;
@@ -164,7 +169,8 @@ void PaintTargetFree(PaintCtx* ctx) {
 // support is what lets D2D interop with the D3D device at all; the
 // single-threaded flag matches the single-threaded D2D factory above.
 static bool EnsureDevice(PaintApp* pa) {
-    if (pa->d2dDevice) {
+#if WIN_BACKEND_DIRECT2D || WIN_BACKEND_D3D11
+    if (pa->d3d) {
         return true;
     }
     UINT flags =
@@ -208,6 +214,7 @@ static bool EnsureDevice(PaintApp* pa) {
         Rel(&pa->d3d);
         return false;
     }
+#if WIN_BACKEND_DIRECT2D
     hr = pa->d2d->CreateDevice(pa->dxgi, &pa->d2dDevice);
     if (FAILED(hr)) {
         logf("ID2D1Factory1::CreateDevice failed %08x", (unsigned)hr);
@@ -216,7 +223,12 @@ static bool EnsureDevice(PaintApp* pa) {
         Rel(&pa->d3d);
         return false;
     }
+#endif
     return true;
+#else
+    (void)pa;
+    return false;
+#endif
 }
 
 // Point the device context at the swap chain's current back buffer. Called

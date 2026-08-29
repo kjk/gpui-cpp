@@ -878,13 +878,17 @@ export function findToolchain(plat: Platform, f: BuildFlags, fail: (msg: string)
 
 // ─── platform link inputs ─────────────────────────────────────────────────
 
-const winLibs = [
-  "d2d1.lib",
-  "d3d11.lib",
-  "d3d12.lib",
-  "dxgi.lib",
-  // src/gpui/paintgpu_win.cpp compiles its HLSL at startup with D3DCompile.
-  "d3dcompiler.lib",
+type WindowsBackend = "d2d" | "d3d11" | "d3d12" | "all";
+
+function windowsBackend(fail: (msg: string) => never): WindowsBackend {
+  const value = (process.env.GPUI_WIN_BACKEND ?? "d2d").toLowerCase();
+  if (value === "d2d" || value === "d3d11" || value === "d3d12" || value === "all") {
+    return value;
+  }
+  return fail(`GPUI_WIN_BACKEND must be d2d, d3d11, d3d12 or all, got "${value}"`);
+}
+
+const winCommonLibs = [
   "dwrite.lib",
   "dwmapi.lib",
   "psapi.lib",
@@ -910,6 +914,19 @@ const winLibs = [
   // Task Manager's GPU column shows.
   "pdh.lib",
 ];
+
+function winLibs(fail: (msg: string) => never): string[] {
+  const backend = windowsBackend(fail);
+  const renderer =
+    backend === "d2d"
+      ? ["d2d1.lib", "d3d11.lib", "dxgi.lib"]
+      : backend === "d3d11"
+        ? ["d3d11.lib", "dxgi.lib", "d3dcompiler.lib"]
+        : backend === "d3d12"
+          ? ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib"]
+          : ["d2d1.lib", "d3d11.lib", "d3d12.lib", "dxgi.lib", "d3dcompiler.lib"];
+  return [...renderer, ...winCommonLibs];
+}
 
 // Cocoa pulls in AppKit, Foundation and CoreGraphics; CoreText shapes the
 // glyphs and IOKit answers the battery question. WebKit is
@@ -960,6 +977,15 @@ function linuxDeps(fail: (msg: string) => never): LinuxDeps {
 
 function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): string[] {
   if (tc.plat === "win") {
+    const backend = windowsBackend(fail);
+    const backendDefine =
+      backend === "all"
+        ? "/DWIN_BACKEND_ALL=1"
+        : backend === "d3d11"
+          ? "/DWIN_BACKEND_D3D11=1"
+          : backend === "d3d12"
+            ? "/DWIN_BACKEND_D3D12=1"
+            : "/DWIN_BACKEND_DIRECT2D=1";
     const flags = [
       "/nologo",
       "/std:c++20",
@@ -968,6 +994,7 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
       ...(f.nonAmalgam
         ? ["/I", "src", "/I", "src/gpui", "/FI", "markdown/markdown.h", "/FI", "base/lib.h", "/FI", "ui/lib.h", "/FI", "gpui/paint.h", "/FI", "gpui/assets.h", "/FI", "gpui/svg.h", "/FI", "gpui/accessibility_win.h"]
         : ["/I", amalgamDir()]),
+      backendDefine,
       "/DUNICODE",
       "/D_UNICODE",
       "/W4",
@@ -1398,7 +1425,7 @@ function link(
       "/NODEFAULTLIB:ucrtd.lib",
       "/NODEFAULTLIB:vcruntime.lib",
       "/NODEFAULTLIB:vcruntimed.lib",
-      ...winLibs,
+      ...winLibs(fail),
     ];
     if (!f.debug) {
       // /DEBUG implies /OPT:NOREF unless we opt back in.
@@ -1544,6 +1571,10 @@ const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang]
   -wasm   build a page for the browser with emscripten, from any host
   -clean  delete out/<dir>/ before building
   -all    build every example (amalgamation + compile); print total elapsed
+
+Windows renderer (compile-time, default d2d):
+  GPUI_WIN_BACKEND=d2d|d3d11|d3d12|all
+  "all" retains the GPUI_PAINT process-start selector; fixed builds ignore it.
 
 ${amalgamLine}
 

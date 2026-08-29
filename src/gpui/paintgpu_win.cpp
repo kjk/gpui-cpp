@@ -1,5 +1,5 @@
-/* The GPUI-shaped GPU backend for Paint.h; see paintgpu.h for what it is,
-   how it is turned on, and what it is still short of.
+/* The GPUI-shaped GPU backend for Paint.h; see paintgpu.h for its compile-time
+   selection, ALL-build runtime selector, and remaining gaps.
 
    The frame is one instance buffer and as few draws as the content allows.
    Every rounded rect, border, ellipse, glyph, image and gradient is 96 bytes
@@ -42,7 +42,7 @@
 #include "gpui/paintgpu.h"
 #include "gpui/scene.h"
 
-#if GPUI_OS_WINDOWS
+#if GPUI_OS_WINDOWS && WIN_BACKEND_GPU
 
 #include <d3d11.h>
 #include <d3d12.h>
@@ -63,6 +63,7 @@ enum GpuApi : int {
 
 // Read once. `gpu` was the original spelling and remains the D3D11 alias.
 // Anything else — unset, "d2d", nonsense — leaves Direct2D in place.
+#if WIN_BACKEND_ALL
 static int PaintGpuApi() {
     static int api = kGpuUnknown;
     if (api == kGpuUnknown) {
@@ -80,13 +81,22 @@ static int PaintGpuApi() {
     }
     return api;
 }
+#endif
 
 bool PaintGpuOn() {
+#if WIN_BACKEND_ALL
     return PaintGpuApi() != kGpuOff;
+#else
+    return true;
+#endif
 }
 
 bool PaintD3d12On() {
+#if WIN_BACKEND_ALL
     return PaintGpuApi() == kGpuD3d12;
+#else
+    return WIN_BACKEND_D3D12 != 0;
+#endif
 }
 
 int PaintGpuSamples() {
@@ -733,6 +743,7 @@ static bool D12MakePipelines(int samples) {
     return true;
 }
 
+#if WIN_BACKEND_D3D12
 static bool D12EnsureGpu(PaintApp* pa) {
     D12Gpu* g = &gD12;
     if (g->ready) {
@@ -910,6 +921,9 @@ static bool D12EnsureGpu(PaintApp* pa) {
     g->ready = true;
     return true;
 }
+#else
+static bool D12EnsureGpu(PaintApp*) { return false; }
+#endif
 
 static bool MakeAtlas(Gpu* g) {
     D3D11_TEXTURE2D_DESC td = {};
@@ -3187,6 +3201,54 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
         gpuw::CanvasPopClip(ctx);
     }
 }
+
+} // namespace gpuw
+} // namespace gpui
+
+#elif GPUI_OS_WINDOWS
+
+// A Direct2D-only build keeps paint_win.cpp's dispatch shape but gives the
+// compiler/linker concrete dead-branch targets. No Direct3D renderer source
+// or API header is compiled in this configuration.
+namespace gpui {
+
+bool PaintGpuOn() { return false; }
+bool PaintD3d12On() { return false; }
+int PaintGpuSamples() { return 1; }
+
+namespace gpuw {
+
+bool PaintTargetBegin(PaintCtx*, void*, int, int) { return false; }
+bool PaintTargetBeginOffscreen(PaintCtx*, int, int) { return false; }
+bool PaintTargetEndOffscreen(PaintCtx*, uint8_t*) { return false; }
+bool PaintTargetEnd(PaintCtx*) { return false; }
+void PaintTargetFree(PaintCtx*) {}
+void CanvasClear(PaintCtx*, Rgba) {}
+void CanvasFillRect(PaintCtx*, float, float, float, float, Rgba) {}
+void CanvasFillRound(PaintCtx*, float, float, float, float, float, Rgba) {}
+void CanvasStrokeRound(PaintCtx*, float, float, float, float, float, float,
+                       Rgba, const float*) {}
+void CanvasLine(PaintCtx*, float, float, float, float, float, Rgba,
+                const float*) {}
+void CanvasEllipse(PaintCtx*, float, float, float, float, float, Rgba) {}
+void CanvasPushClip(PaintCtx*, float, float, float, float) {}
+void CanvasPopClip(PaintCtx*) {}
+Path* PathNew(PaintCtx*, bool) { return nullptr; }
+void PathFree(Path*) {}
+void PathMoveTo(Path*, float, float) {}
+void PathLineTo(Path*, float, float) {}
+void PathCubicTo(Path*, float, float, float, float, float, float) {}
+void PathArcTo(Path*, float, float, float, float, float, bool) {}
+void PathClose(Path*) {}
+void PathFill(PaintCtx*, Path*, Rgba) {}
+void PathFillGradient(PaintCtx*, Path*, float, float, float, float, Rgba,
+                      Rgba) {}
+void PathStroke(PaintCtx*, Path*, float, Rgba, bool) {}
+void PathRealize(PaintCtx*, Path*) {}
+void ImageDraw(PaintCtx*, Image*, Bounds, float) {}
+void TextLayoutDraw(PaintCtx*, TextLayout*, float, float, Rgba, bool, float) {}
+static FrameStats gEmptyStats;
+const FrameStats& LastFrameStats() { return gEmptyStats; }
 
 } // namespace gpuw
 } // namespace gpui
