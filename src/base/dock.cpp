@@ -458,12 +458,10 @@ static bool DockNormalizePass(DockState* s) {
             DockNode& n = s->nodes[i];
             // Rule 4.
             int clamped = n.activeIx;
-            if (n.panel.len == 0) {
+            if (n.panel.len == 0 || clamped < 0) {
                 clamped = 0;
             } else if (clamped >= n.panel.len) {
                 clamped = n.panel.len - 1;
-            } else if (clamped < 0) {
-                clamped = 0;
             }
             if (clamped != n.activeIx) {
                 n.activeIx = clamped;

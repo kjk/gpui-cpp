@@ -428,7 +428,9 @@ Str HtmlAttrValue(Arena* a, Str attrs, const char* name) {
 // children and no box of its own.
 static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
     *level = 0;
-    if (base::StrEqI(n, "p")) {
+    if (base::StrEqI(n, "p") || base::StrEqI(n, "dt") ||
+        base::StrEqI(n, "dd") || base::StrEqI(n, "summary") ||
+        base::StrEqI(n, "figcaption")) {
         *kind = MdKind::Paragraph;
     } else if (n.len == 2 && base::StrStartsWithI(n, "h") &&
                n.s[1] >= '1' && n.s[1] <= '6') {
@@ -448,11 +450,6 @@ static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
         *kind = MdKind::Row;
     } else if (base::StrEqI(n, "td") || base::StrEqI(n, "th")) {
         *kind = MdKind::Cell;
-    } else if (base::StrEqI(n, "dt") || base::StrEqI(n, "dd") ||
-               base::StrEqI(n, "summary") || base::StrEqI(n, "figcaption")) {
-        // A term, a definition and a caption are each a line of prose, so
-        // they read as paragraphs rather than as anonymous containers.
-        *kind = MdKind::Paragraph;
     } else if (base::StrEqI(n, "div") || base::StrEqI(n, "section") ||
                base::StrEqI(n, "article") || base::StrEqI(n, "main") ||
                base::StrEqI(n, "header") || base::StrEqI(n, "footer") ||

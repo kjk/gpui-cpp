@@ -877,8 +877,6 @@ void SearchableListState::OnAction(SearchableListState* self, Ctx* cx,
     }
     switch (SelectActionOf(ev->action, self->open, false)) {
         case SelectAction::Open:
-            SelectToggleOpen(self, cx);
-            return;
         case SelectAction::Dismiss:
             SelectToggleOpen(self, cx);
             return;

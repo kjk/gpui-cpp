@@ -49,7 +49,6 @@ static void ApplyDialogButtonVariant(Button* button, ButtonVariant variant) {
             // dialog's compatibility setter accepts only the discriminator,
             // so a payload-free Custom is the default button rather than a
             // fabricated custom palette.
-            break;
         case ButtonVariant::Default:
             break;
     }

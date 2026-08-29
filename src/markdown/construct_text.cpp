@@ -99,12 +99,9 @@ State TextBefore(Tokenizer* t) {
             TokenizerAttempt(t, StateNext(StateName::TextBefore),
                              StateNext(StateName::TextBeforeData));
             return StateRetry(StateName::LabelEndStart);
-        case '{':
-            // An MDX expression, which is not ported: the construct always
-            // fails, and its failure is data, which is where the default arm
-            // goes too.
-            return StateRetry(StateName::TextBeforeData);
         default:
+            // An MDX expression (and any other unknown character), which is
+            // not ported, follows the default data path.
             return StateRetry(StateName::TextBeforeData);
     }
 }

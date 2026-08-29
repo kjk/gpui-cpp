@@ -578,9 +578,8 @@ HRESULT WinAccessibility::GetPropertyValue(PROPERTYID property, VARIANT* out) {
         out->bstrVal = value;
     } else if (property == UIA_IsControlElementPropertyId ||
                property == UIA_IsContentElementPropertyId ||
-               property == UIA_IsEnabledPropertyId) {
-        VariantBool(out, true);
-    } else if (property == UIA_IsKeyboardFocusablePropertyId) {
+               property == UIA_IsEnabledPropertyId ||
+               property == UIA_IsKeyboardFocusablePropertyId) {
         VariantBool(out, true);
     } else if (property == UIA_HasKeyboardFocusPropertyId) {
         VariantBool(out, ::GetFocus() == hwnd);

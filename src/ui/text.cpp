@@ -905,7 +905,6 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
         }
         case md::NodeKind::Definition:
             // Collected before the walk; it renders as nothing.
-            break;
         default:
             break;
     }

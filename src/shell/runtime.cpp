@@ -4854,14 +4854,16 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
                           "recursive", "fs.mkdir(path, options)",
                           &job->recursive);
     } else if (operation == shell::FsOperation::Write) {
-        if (argc < 2) {
+        if (argc < 2 ||
+            (!JS_IsString(argv[1]) &&
+             JS_GetTypedArrayType(argv[1]) != JS_TYPED_ARRAY_UINT8)) {
             JS_ThrowTypeError(ctx, "fs.writeFile(path, contents) expects a string or Uint8Array");
             ok = false;
         } else if (JS_IsString(argv[1])) {
             Str input;
             ok = JsString(ctx, argv[1], arena, &input);
             if (ok) job->input = StrDup(input);
-        } else if (JS_GetTypedArrayType(argv[1]) == JS_TYPED_ARRAY_UINT8) {
+        } else {
             size_t count = 0;
             uint8_t* bytes = JS_GetUint8Array(ctx, &count, argv[1]);
             ok = bytes != nullptr || count == 0;
@@ -4871,9 +4873,6 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
                 JS_ThrowRangeError(ctx, "fs.writeFile contents are too large");
                 ok = false;
             }
-        } else {
-            JS_ThrowTypeError(ctx, "fs.writeFile(path, contents) expects a string or Uint8Array");
-            ok = false;
         }
         if (ok && job->input.len > shell::kFsMaxWriteBytes) {
             JS_ThrowRangeError(ctx, "fs.writeFile contents exceed the 8388608-byte write limit");

@@ -1693,9 +1693,8 @@ void InputScrollToCaret(InputState* s, float caretX, float caretY,
             s->scrollY = caretY + lineH + lineH - s->viewH;
         }
         // A move that went up is never answered by scrolling down.
-        if (dir == InputMoveDir::Up && s->scrollY > wasY) {
-            s->scrollY = wasY;
-        } else if (dir == InputMoveDir::Down && s->scrollY < wasY) {
+        if ((dir == InputMoveDir::Up && s->scrollY > wasY) ||
+            (dir == InputMoveDir::Down && s->scrollY < wasY)) {
             s->scrollY = wasY;
         }
         float mostY = s->contentH - s->viewH;

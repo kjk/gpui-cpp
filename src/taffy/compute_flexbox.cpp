@@ -1709,9 +1709,7 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
             UnwrapOr(endMain, 0.0f) - MainEnd(resolvedMargin, c.dir);
         float offsetMain;
         if (IsSome(startMain) || IsSome(endMain)) {
-            if (mainIsRtl && IsSome(endMain)) {
-                offsetMain = alignedToMainEnd;
-            } else if (IsSome(startMain)) {
+            if (IsSome(startMain) && !(mainIsRtl && IsSome(endMain))) {
                 offsetMain = startMain + MainStart(c.border, c.dir) +
                              mainStartScrollbarOffset +
                              MainStart(resolvedMargin, c.dir);
@@ -1743,8 +1741,6 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                                                  : true;
             switch (jc) {
                 case AlignContentKeyword::SpaceBetween:
-                    offsetMain = rev ? endPos : startPos;
-                    break;
                 case AlignContentKeyword::Stretch:
                 case AlignContentKeyword::FlexStart:
                     offsetMain = rev ? endPos : startPos;
@@ -1774,9 +1770,7 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
             UnwrapOr(endCross, 0.0f) - CrossEnd(resolvedMargin, c.dir);
         float offsetCross;
         if (IsSome(startCross) || IsSome(endCross)) {
-            if (crossIsRtl && IsSome(endCross)) {
-                offsetCross = alignedToCrossEnd;
-            } else if (IsSome(startCross)) {
+            if (IsSome(startCross) && !(crossIsRtl && IsSome(endCross))) {
                 offsetCross = startCross + CrossStart(c.border, c.dir) +
                               crossStartScrollbarOffset +
                               CrossStart(resolvedMargin, c.dir);

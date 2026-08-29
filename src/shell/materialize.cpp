@@ -854,17 +854,13 @@ static bool MotionTarget(const shell::SpecNode* node, const char* property,
                          const Style& style, float* target) {
     bool declared = false;
     for (const shell::SpecOp& op : node->ops) {
-        if (strcmp(property, "opacity") == 0 && StrEq(op.name, "opacity"))
-            declared = true;
-        else if (strcmp(property, "width") == 0 &&
-                 (StrEq(op.name, "w") || StrEq(op.name, "size")))
-            declared = true;
-        else if (strcmp(property, "height") == 0 &&
-                 (StrEq(op.name, "h") || StrEq(op.name, "size")))
-            declared = true;
-        else if (strcmp(property, "left") == 0 && StrEq(op.name, "left"))
-            declared = true;
-        else if (strcmp(property, "top") == 0 && StrEq(op.name, "top"))
+        if ((strcmp(property, "opacity") == 0 && StrEq(op.name, "opacity")) ||
+            (strcmp(property, "width") == 0 &&
+             (StrEq(op.name, "w") || StrEq(op.name, "size"))) ||
+            (strcmp(property, "height") == 0 &&
+             (StrEq(op.name, "h") || StrEq(op.name, "size"))) ||
+            (strcmp(property, "left") == 0 && StrEq(op.name, "left")) ||
+            (strcmp(property, "top") == 0 && StrEq(op.name, "top")))
             declared = true;
     }
     if (!declared) return false;

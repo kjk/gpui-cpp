@@ -1014,9 +1014,8 @@ static int32_t PeekBytesEmailDomain(Str bytes, int32_t start, bool xmpp) {
     bool dot = false;
     while (index < bytes.len) {
         uint8_t byte = (uint8_t)bytes.s[index];
-        if (byte == '-' || byte == '_' || IsAsciiAlphanumeric(byte)) {
-            // Fine.
-        } else if (byte == '/' && xmpp) {
+        if (byte == '-' || byte == '_' || IsAsciiAlphanumeric(byte) ||
+            (byte == '/' && xmpp)) {
             // Fine.
         } else if (byte == '.' && index + 1 < bytes.len &&
                    IsAsciiAlphanumeric((uint8_t)bytes.s[index + 1])) {
