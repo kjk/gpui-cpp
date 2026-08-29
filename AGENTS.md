@@ -30,6 +30,8 @@ bun cmd/build.ts -dbg -all
 bun cmd/build.ts -rel -asan system_monitor
 bun cmd/build.ts -wasm system_monitor
 bun cmd/build.ts -clang -rel showcase   # Windows: clang-cl, not cl.exe
+bun cmd/build-no-amalgam.ts -rel         # one object per source, header build check
+bun cmd/build-no-amalgam.ts -clang -rel  # same check through clang-cl on Windows
 bun cmd/run.ts -wasm showcase
 
 bun cmd/build.ts -rel --win-backend=d3d11 story    # fixed custom D3D11 build

@@ -12,10 +12,6 @@
 
 namespace base {
 
-template <typename T, size_t N>
-char (&DimofSizeHelper(T (&array)[N]))[N];
-#define dimof(array) (sizeof(DimofSizeHelper(array)))
-
 static int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
 
 void* AllocZero(int count, int size) {

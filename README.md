@@ -42,6 +42,9 @@ machine they run on, so the same commands work on all three platforms:
 ```
 bun cmd/build.ts -rel story
 bun cmd/run.ts -rel -compare story
+# compile every source file as a separate object and link a header-only example
+bun cmd/build-no-amalgam.ts -rel
+bun cmd/build-no-amalgam.ts -clang -rel   # Windows: clang-cl
 ```
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).

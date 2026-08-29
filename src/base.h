@@ -83,6 +83,14 @@
 // always has, and `gpui::Str` still names this type for a caller outside.
 namespace base {
 
+// Array count for source files compiled independently. The declaration is
+// enough: sizeof only needs the returned reference's bound and never calls it.
+template <typename T, size_t N>
+char (&DimofSizeHelper(T (&array)[N]))[N];
+#ifndef dimof
+#define dimof(array) (sizeof(base::DimofSizeHelper(array)))
+#endif
+
 // The longest path we put on the stack. Windows spells it MAX_PATH; Linux
 // PATH_MAX, which is 4096 and too big for the fixed arrays here.
 enum {

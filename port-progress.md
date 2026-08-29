@@ -10113,3 +10113,13 @@ the 21,510-check release suite in an all-backend build. Fixed D3D11 and fixed
 D3D12 `hello_world` builds both complete the 30-frame warmup plus one measured
 frame and exit 0. clang-cl `/W4 /WX` builds the all-backend executable and the
 same smoke exits 0 under both runtime backend choices.
+
+## Standalone translation-unit build
+
+2026-08-29: `bun cmd/build-no-amalgam.ts` now compiles every platform-appropriate
+`.cpp` (and QuickJS's C source) into separate objects, then links
+`examples/hello_world_no_amalgam.cpp`, which includes the public non-amalgam
+headers directly. The first independent compile exposed `dimof` and shell
+executor declarations that amalgamation had been providing accidentally; those
+are now declared in `base.h` and force-included through the normal public build
+headers. MSVC and clang-cl release all-backend builds both link successfully.
