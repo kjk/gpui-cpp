@@ -3949,6 +3949,7 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
     }
     gLayoutFixed.len = 0;
     lc->stats = LayoutCacheStats{};
+    lc->tree.allocs = 0;
 
     PrepareEl(ctx, e, inheritFont, inheritFg);
 
@@ -4044,6 +4045,7 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
     }
     PlaceAnchored(e, ctx ? ctx->viewW : 0.f, ctx ? ctx->viewH : 0.f,
                   ctx ? ctx->clientInset : 0.f);
+    lc->stats.allocs = lc->tree.allocs;
 }
 
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
@@ -5620,7 +5622,16 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             e->input->inputBounds = e->Bounds();
             // The box the field scrolls inside, less what it pads by.
             e->input->viewW = e->w - e->style.pad.HorizontalAxisSum();
-            e->input->viewH = e->h - e->style.pad.VerticalAxisSum();
+            // The viewport is the clipping/scrolling box. An inner content
+            // column laid out to the document height must not replace it —
+            // that made the next frame treat every line as visible.
+            if (e->style.overflowY == Overflow::Scroll ||
+                e->style.overflowY == Overflow::Hidden) {
+                float vh = e->h - e->style.pad.VerticalAxisSum();
+                if (vh > 0) {
+                    e->input->viewH = vh;
+                }
+            }
             // scroll_size.width: how wide the longest row came out, which is
             // what a sideways scroll clamps against. Only a box that scrolls
             // that way reports it — a field that clips instead never moves

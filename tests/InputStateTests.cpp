@@ -2562,6 +2562,56 @@ static void SoftWrapBoundariesKeepTheVisualRowAffinity() {
     PaintAppFree(paint);
 }
 
+static int CountElTree(El* e) {
+    int n = 0;
+    for (; e; e = e->next) {
+        n++;
+        n += CountElTree(e->first);
+    }
+    return n;
+}
+
+// A long document with no viewport yet, or with viewH set to the content
+// column's height, must not build every line. That was the editor's one-frame
+// spike to thousands of taffy nodes on file open.
+static void ALongDocumentBuildsOnlyTheVisibleBand() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    win->paint.viewH = 756;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+
+    const int kLines = 2000;
+    char* buf = (char*)Alloc(nullptr, kLines * 2);
+    utassert(buf);
+    for (int i = 0; i < kLines; i++) {
+        buf[i * 2] = 'x';
+        buf[i * 2 + 1] = '\n';
+    }
+    InputState state;
+    state.kind = InputKind::Editor;
+    InputSetValue(&state, Str(buf, kLines * 2));
+    Free(nullptr, buf);
+
+    state.viewH = 0;
+    El* none = gpui::Editor::New(&cx, &state);
+    utassert(none);
+    int nNone = CountElTree(none);
+    utassert(nNone > 0 && nNone < 800);
+
+    a->Reset();
+    state.viewH = (float)kLines * 20.f;
+    El* full = gpui::Editor::New(&cx, &state);
+    utassert(full);
+    int nFull = CountElTree(full);
+    utassert(nFull > 0 && nFull < 800);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2646,4 +2696,5 @@ void TestInputState() {
     HighlighterContractsAreDependencyFreeAndFunctional();
     LspFacadesInstallCapabilitiesAndExposeOverlayState();
     SoftWrapBoundariesKeepTheVisualRowAffinity();
+    ALongDocumentBuildsOnlyTheVisibleBand();
 }

@@ -158,10 +158,11 @@ static void FrameBenchTick(Window* win, float secs) {
     // of boxes whose style is a function of something that moved.
     LayoutCacheStats ls = LayoutCacheLastStats(win->layout);
     logf(
-        "frame-bench layout nodes=%d live=%d made=%d dropped=%d restyled=%d "
-        "remeasured=%d",
-        ls.nodes, LayoutCacheNodeCount(win->layout), ls.made, ls.dropped,
-        ls.restyled, ls.remeasured);
+        "frame-bench layout nodes=%d live=%d slots=%d made=%d dropped=%d "
+        "restyled=%d remeasured=%d allocs=%d",
+        ls.nodes, LayoutCacheNodeCount(win->layout),
+        LayoutCacheSlotCount(win->layout), ls.made, ls.dropped, ls.restyled,
+        ls.remeasured, ls.allocs);
 #if GPUI_OS_WINDOWS
     if (PaintGpuOn()) {
         const gpuw::FrameStats& st = gpuw::LastFrameStats();
@@ -254,11 +255,13 @@ static void LayoutDumpFrame(Window* win, El* root) {
     LayoutCacheStats ls = LayoutCacheLastStats(win->layout);
     fprintf(f,
             "--- frame %llu t=%.3f view=%.0fx%.0f prims=%d presented=%d "
-            "nodes=%d made=%d dropped=%d restyled=%d remeasured=%d\n",
+            "nodes=%d slots=%d made=%d dropped=%d restyled=%d remeasured=%d "
+            "allocs=%d\n",
             (unsigned long long)win->frameSeq, TimeNow(), win->paint.viewW,
             win->paint.viewH, SceneOn() ? scene::Stats().prims : -1,
-            (SceneOn() && scene::SkipPresent()) ? 0 : 1, ls.nodes, ls.made,
-            ls.dropped, ls.restyled, ls.remeasured);
+            (SceneOn() && scene::SkipPresent()) ? 0 : 1, ls.nodes,
+            LayoutCacheSlotCount(win->layout), ls.made, ls.dropped, ls.restyled,
+            ls.remeasured, ls.allocs);
     LayoutDumpEl(f, root, 0);
     fflush(f);
 }

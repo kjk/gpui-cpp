@@ -4592,6 +4592,10 @@ struct LayoutCacheStats {
     // ancestors with it.
     int restyled = 0;
     int remeasured = 0;
+    // Times InsertNode actually `new`'d a NodeData this pass. Recycled
+    // slots do not count. `__layout_reuse=off` still rebuilds, but this
+    // stays 0 after the tree has reached its peak size.
+    int allocs = 0;
 };
 
 LayoutCacheStats LayoutCacheLastStats(const LayoutCache* lc);

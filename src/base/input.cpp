@@ -533,16 +533,29 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
     // comes off last frame's boxes — one frame stale, which is what the fold
     // gutter's hitbox already is — and a row with no box yet is estimated at
     // one line, which the next frame corrects.
+    //
+    // viewH is the clip box, not the content column. BindInput can record
+    // the inner column's laid-out height (the whole document) or nothing
+    // yet on the first frame of a file; either would build every line.
+    // Cap at the window so a mistaken content height still virtualizes.
+    float vh = state->viewH;
+    float vhCap = 600.f;
+    if (cx->win && cx->win->paint.viewH > 0) {
+        vhCap = cx->win->paint.viewH;
+    }
+    if (vh <= 0 || vh > vhCap) {
+        vh = vhCap;
+    }
     int firstRow = 0;
     int endRow = rows;
     float padTop = 0;
     float padBottom = 0;
-    if (state->viewH > 0 && rows > 1) {
+    if (rows > 1) {
         // Two rows of slack at each end, so a scroll of a few pixels does not
         // uncover an empty band before the next frame fills it.
         const int kSlack = 2;
         float top = state->scrollY;
-        float bottom = top + state->viewH;
+        float bottom = top + vh;
         if (!wrap || state->rowBoxes.len != rows) {
             int first = (int)(top / lineH) - kSlack;
             int end = (int)(bottom / lineH) + 1 + kSlack;
@@ -590,6 +603,19 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
                 float h = state->rowBoxes[i].h;
                 padBottom += h > 0 ? h : lineH;
             }
+        }
+        // A wrap walk over empty boxes, or a viewH that is still the full
+        // document, can ask for every row. Cap at a viewport band.
+        int maxRows = (int)(vh / lineH) + 1 + 2 * kSlack;
+        if (maxRows < 8) {
+            maxRows = 8;
+        }
+        if (endRow - firstRow > maxRows) {
+            endRow = firstRow + maxRows;
+            if (endRow > rows) {
+                endRow = rows;
+            }
+            padBottom = (float)(rows - endRow) * lineH;
         }
     }
     if (padTop > 0) {

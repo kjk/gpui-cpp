@@ -42,6 +42,7 @@ void TaffyTree::Init(int capacity) {
     VecReset(slots);
     VecReset(freeSlots);
     liveCount = 0;
+    allocs = 0;
     useRounding = true;
     if (capacity > 0) {
         base::VecReserve(slots, capacity);
@@ -82,6 +83,7 @@ static NodeId InsertNode(TaffyTree* tree, const Style& style) {
     } else {
         d = new NodeData();
         tree->slots[idx] = d;
+        tree->allocs++;
     }
 
     // Reset field by field rather than assigning a fresh NodeData: the
@@ -140,14 +142,19 @@ NodeId TaffyTree::NewWithChildren(const Style& style, const NodeId* children,
 }
 
 void TaffyTree::Clear() {
+    // Rebuild the free list from every allocated slot, alive or not. Appending
+    // only the live ones left dead slots stranded when freeSlots had been
+    // emptied, so the next InsertNode appended a fresh slot and `new`'d.
+    VecReset(freeSlots);
     for (int i = 0; i < slots.len; i++) {
         NodeData* d = slots[i];
-        if (!d || !d->alive) {
+        if (!d) {
             continue;
         }
         d->alive = false;
         d->children.len = 0;
         d->hasParent = false;
+        d->parent = NodeId{};
         VecAppend(freeSlots, (int32_t)i);
     }
     liveCount = 0;

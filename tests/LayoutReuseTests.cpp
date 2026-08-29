@@ -300,12 +300,16 @@ static void ReuseOffRebuildsEveryFrame() {
     first->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("a"))));
     LayoutEl(nullptr, first, 0, 0, 400, 300, 14, Rgba{}, lc);
     utassert(LayoutCacheLastStats(lc).made > 0);
+    utassert(LayoutCacheLastStats(lc).allocs > 0);
+    int slots = LayoutCacheSlotCount(lc);
 
     a->Reset();
     El* second = Div(a)->FlexCol()->W(kFill)->H(kFill);
     second->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("a"))));
     LayoutEl(nullptr, second, 0, 0, 400, 300, 14, Rgba{}, lc);
     utassert(LayoutCacheLastStats(lc).made > 0);
+    utassert(LayoutCacheLastStats(lc).allocs == 0);
+    utassert(LayoutCacheSlotCount(lc) == slots);
 
     ArenaDelete(a);
     LayoutCacheFree(lc);

@@ -69,6 +69,9 @@ struct TaffyTree {
     Vec<NodeData*> slots;
     Vec<int32_t> freeSlots;
     int32_t liveCount = 0;
+    // Times InsertNode had to `new NodeData` since the caller last zeroed
+    // this. Recycled slots do not increment it.
+    int32_t allocs = 0;
 
     // Whether to round layout values. On by default, as in Rust.
     bool useRounding = true;
