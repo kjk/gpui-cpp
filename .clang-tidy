@@ -1,4 +1,4 @@
-Checks: '-*,bugprone-*,performance-*,-bugprone-easily-swappable-parameters,-performance-no-int-to-ptr'
+Checks: '-*,bugprone-*,performance-*,-bugprone-easily-swappable-parameters,-performance-no-int-to-ptr,-bugprone-inc-dec-in-conditions'
 WarningsAsErrors: ''
 HeaderFilterRegex: '(^|/)src/'
 FormatStyle: file
