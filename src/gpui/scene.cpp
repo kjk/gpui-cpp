@@ -760,6 +760,8 @@ static Path* BuildPath(PaintCtx* ctx, const PathRec& pr) {
             case kVClose:
                 PathClose(p);
                 break;
+            default:
+                break;
         }
     }
     return p;
@@ -1088,6 +1090,8 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
                 }
                 break;
             }
+            default:
+                break;
         }
     }
     if (pushed) {

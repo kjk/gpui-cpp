@@ -21,6 +21,8 @@ SliderState* HslaSliders::At(int index) {
             return &lightness;
         case 3:
             return &alpha;
+        default:
+            break;
     }
     return nullptr;
 }

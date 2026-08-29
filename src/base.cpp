@@ -1602,6 +1602,8 @@ static FmtArg::Kind typeFromConv(char c) {
             return FmtArg::Kind::Str;
         case 'v':
             return FmtArg::Kind::Any;
+        default:
+            break;
     }
     return FmtArg::Kind::None;
 }

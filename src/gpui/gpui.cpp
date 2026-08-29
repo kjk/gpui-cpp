@@ -2085,6 +2085,9 @@ static uint32_t MurmurHash2(const void* key, int n) {
         case 1:
             h ^= data[0];
             h *= m;
+            break;
+        default:
+            break;
     }
     h ^= h >> 13;
     h *= m;
