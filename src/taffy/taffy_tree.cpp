@@ -2,6 +2,8 @@
 
 #include "taffy/compute.h"
 
+#include <cstring>
+
 namespace taffy {
 
 using base::Str;
@@ -156,12 +158,6 @@ void TaffyTree::Remove(NodeId node) {
     if (!d) {
         return;
     }
-    // Descendants first. Leaving them alive with no parent would occupy a
-    // slot forever, so the next InsertNode would `new NodeData` instead of
-    // recycling — which is what scrolling a virtualized list was doing.
-    for (int i = d->children.len - 1; i >= 0; i--) {
-        Remove(d->children[i]);
-    }
     if (d->hasParent) {
         NodeData* p = Get(d->parent);
         if (p) {
@@ -174,11 +170,64 @@ void TaffyTree::Remove(NodeId node) {
             p->children.len = w;
         }
     }
+    // Drop the "parent" back-reference from every child. Descendants stay
+    // alive: the layout cache walks them with LayoutDropSubtree and gives
+    // their records back. Killing them here put the same slot on freeSlots
+    // twice (once from the walk, once from this recurse), and the second
+    // InsertNode reused a still-parented node, leaving a stale id in the
+    // tree and a fresh NodeData on every rebuild.
+    for (int i = 0; i < d->children.len; i++) {
+        NodeData* c = Get(d->children[i]);
+        if (c) {
+            c->hasParent = false;
+        }
+    }
     d->alive = false;
     d->children.len = 0;
     d->hasParent = false;
     liveCount--;
     VecAppend(freeSlots, IdIndex(node));
+}
+
+static void MarkReachable(const TaffyTree* tree, NodeId id, uint8_t* seen,
+                          int nSlots) {
+    NodeData* d = tree->Get(id);
+    if (!d) {
+        return;
+    }
+    int32_t idx = IdIndex(id);
+    if (idx < 0 || idx >= nSlots || seen[idx]) {
+        return;
+    }
+    seen[idx] = 1;
+    for (int i = 0; i < d->children.len; i++) {
+        MarkReachable(tree, d->children[i], seen, nSlots);
+    }
+}
+
+void TaffyTree::EachUnreachable(NodeId root, void (*fn)(NodeId, void*),
+                                void* user) {
+    if (!fn || slots.len <= 0) {
+        return;
+    }
+    uint8_t* seen = (uint8_t*)base::Alloc(nullptr, slots.len);
+    if (!seen) {
+        return;
+    }
+    memset(seen, 0, (size_t)slots.len);
+    MarkReachable(this, root, seen, slots.len);
+    Vec<NodeId> ids;
+    for (int i = 0; i < slots.len; i++) {
+        NodeData* d = slots[i];
+        if (d && d->alive && !seen[i]) {
+            VecAppend(ids, MakeId((int32_t)i, d->generation));
+        }
+    }
+    base::Free(nullptr, seen);
+    for (int i = 0; i < ids.len; i++) {
+        fn(ids[i], user);
+    }
+    VecReset(ids);
 }
 
 void TaffyTree::SetNodeContext(NodeId node, void* context, bool hasContext) {

@@ -101,10 +101,15 @@ struct TaffyTree {
 
     // Drops every node in the tree.
     void Clear();
-    // Drops `node` and every descendant, and detaches it from its parent.
-    // Recursing is what lets a slot go back on the free list; leaving a
-    // child alive with no parent would occupy the slot forever.
+    // Detaches `node` from its parent and children and drops it. Descendants
+    // stay alive so a caller that walks them (the layout cache) can give
+    // their context back before removing each one.
     void Remove(NodeId node);
+
+    // Live nodes that cannot be reached from `root`. `fn` is called with each
+    // such id, parents before descendants are not guaranteed; the id is still
+    // alive when `fn` runs.
+    void EachUnreachable(NodeId root, void (*fn)(NodeId, void*), void* user);
 
     void SetNodeContext(NodeId node, void* context, bool hasContext);
     void* GetNodeContext(NodeId node) const;

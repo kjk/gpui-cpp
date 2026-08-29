@@ -10231,7 +10231,15 @@ and if the count never shrank the extra slots stayed live. Scrolling was
 one new node (plus its descendants) per newly visible row, forever.
 
 `LayoutSync` now drops extra children first so the free list is populated
-before anything is made. `TaffyTree::Remove` also drops descendants, so a
-parent taken off the tree cannot leave live children occupying slots. A
-sliding 10-row window over 80 items keeps a constant live count; an
-identical second frame makes no nodes.
+before anything is made. A sliding 10-row window over 80 items keeps a
+constant live count; an identical second frame makes no nodes.
+
+That drop-first was wrong on the **root**. The root's taffy children include
+last frame's `fixed` overlays (completion, diagnostic popover). Counting
+only in-flow El children treated those as extras, dropped them, then the
+fixed pass `LayoutBuild`'d them again — `InsertNode` on every frame, which
+is the stack scrolling still showed. Root skips drop-first; the fixed pass
+reuses. Kind mismatch detaches and drops the old subtree *before* building.
+`TaffyTree::Remove` does not kill descendants (the cache walks those for
+GiveBack); a sweep at the end of the pass drops anything not reachable
+from the root. A fixed overlay over 12 identical frames makes no nodes.

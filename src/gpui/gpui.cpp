@@ -3374,6 +3374,10 @@ static void LayoutDropSubtree(LayoutCache* lc, taffy::NodeId id) {
     lc->stats.dropped++;
 }
 
+static void LayoutDropUnreachable(taffy::NodeId id, void* user) {
+    LayoutDropSubtree((LayoutCache*)user, id);
+}
+
 // The root's own style is stretched to fill the space it was given — Rust's
 // `stretch_auto_size_to_fill` — and that has to happen before the comparison
 // below, or the root would differ from itself every frame.
@@ -3470,10 +3474,9 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
     // only counts the ones that stay.
     //
     // Drop whatever this node has past the new child count *before* making
-    // anything. A virtualized list that grew or swapped a spacer for a row
-    // used to AddChild first, and InsertNode saw an empty free list and
-    // allocated a fresh NodeData; the drop that followed recycled too late
-    // for this frame, and if the count never shrank the extra slots stayed.
+    // anything, so InsertNode recycles. Skip that on the root: its taffy
+    // children include last frame's `fixed` overlays, which the pass below
+    // reuses; treating them as extras rebuilt every popover on every frame.
     int want = 0;
     for (El* c = e->first; c; c = c->next) {
         if (!c->style.fixed) {
@@ -3481,9 +3484,11 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
         }
     }
     bool dropped = false;
-    for (int j = lc->tree.ChildCount(prev) - 1; j >= want; j--) {
-        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
-        dropped = true;
+    if (!isRoot) {
+        for (int j = lc->tree.ChildCount(prev) - 1; j >= want; j--) {
+            LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
+            dropped = true;
+        }
     }
     int i = 0;
     for (El* c = e->first; c; c = c->next) {
@@ -3494,12 +3499,22 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
         int had = lc->tree.ChildCount(prev);
         if (i < had) {
             taffy::NodeId old = lc->tree.ChildAtIndex(prev, i);
-            taffy::NodeId now = LayoutSync(sc, c, old, true, false);
-            if (now != old) {
-                lc->tree.ReplaceChildAtIndex(prev, i, now);
-                // The swap has taken `old` out of the list, so dropping it
-                // now leaves the list — and every index into it — alone.
+            LayoutNode* oldRec =
+                (LayoutNode*)lc->tree.GetNodeContext(old);
+            if (oldRec && oldRec->kind == (uint8_t)c->kind) {
+                taffy::NodeId now = LayoutSync(sc, c, old, true, false);
+                if (now != old) {
+                    lc->tree.ReplaceChildAtIndex(prev, i, now);
+                    LayoutDropSubtree(lc, old);
+                }
+            } else {
+                // Kind mismatch: recycle the old subtree before building
+                // so InsertNode does not `new NodeData` while the old
+                // slots are still live.
+                lc->tree.RemoveChildAtIndex(prev, i);
                 LayoutDropSubtree(lc, old);
+                taffy::NodeId now = LayoutBuild(sc, c, false);
+                lc->tree.InsertChildAtIndex(prev, i, now);
             }
         } else {
             lc->tree.AddChild(prev, LayoutBuild(sc, c, false));
@@ -3875,6 +3890,18 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
     PrepareEl(ctx, e, inheritFont, inheritFg);
 
     LayoutSyncCtx sc = {lc, ctx, availW, availH};
+    // Recycle a root of a different kind before building, so InsertNode
+    // reuses its slots. A child in a list cannot be dropped first — that
+    // shifts the indices the caller is walking.
+    if (lc->hasRoot) {
+        LayoutNode* rec =
+            (LayoutNode*)lc->tree.GetNodeContext(lc->root);
+        if (!rec || rec->kind != (uint8_t)e->kind) {
+            LayoutDropSubtree(lc, lc->root);
+            lc->hasRoot = false;
+            lc->root = taffy::NodeId{};
+        }
+    }
     // Rust's `stretch_auto_size_to_fill` is applied to the root's style
     // inside the sync, so that the style the node carries is the one the
     // next frame compares against.
@@ -3905,19 +3932,29 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
         El* f = gLayoutFixed[i];
         int at = own + i;
         bool had = at < lc->tree.ChildCount(root);
-        taffy::NodeId old =
-            had ? lc->tree.ChildAtIndex(root, at) : taffy::NodeId{};
-        taffy::NodeId now = LayoutSync(&sc, f, old, had, false);
         if (!had) {
-            lc->tree.AddChild(root, now);
-        } else if (now != old) {
-            lc->tree.ReplaceChildAtIndex(root, at, now);
+            lc->tree.AddChild(root, LayoutBuild(&sc, f, false));
+            continue;
+        }
+        taffy::NodeId old = lc->tree.ChildAtIndex(root, at);
+        LayoutNode* oldRec = (LayoutNode*)lc->tree.GetNodeContext(old);
+        if (oldRec && oldRec->kind == (uint8_t)f->kind) {
+            taffy::NodeId now = LayoutSync(&sc, f, old, true, false);
+            if (now != old) {
+                lc->tree.ReplaceChildAtIndex(root, at, now);
+                LayoutDropSubtree(lc, old);
+            }
+        } else {
+            lc->tree.RemoveChildAtIndex(root, at);
             LayoutDropSubtree(lc, old);
+            lc->tree.InsertChildAtIndex(root, at, LayoutBuild(&sc, f, false));
         }
     }
     if (droppedFixed) {
         lc->tree.MarkDirty(root);
     }
+
+    lc->tree.EachUnreachable(root, LayoutDropUnreachable, lc);
 
     taffy::SizeAvail space;
     if (minContent) {

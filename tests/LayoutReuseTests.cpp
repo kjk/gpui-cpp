@@ -187,10 +187,70 @@ static void ASecondIdenticalFrameMakesNoNodes() {
     LayoutCacheFree(lc);
 }
 
+static void AFixedOverlayIsReusedNotRebuilt() {
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+    int live = 0;
+    for (int f = 0; f < 12; f++) {
+        a->Reset();
+        El* root = Div(a)->FlexCol()->W(kFill)->H(kFill);
+        root->Child(Div(a)->W(kFill)->H(20)->Child(TextEl(a, StrL("row"))));
+        root->Child(Div(a)->Fixed()->Left(0)->Top(0)->W(40)->H(20)->Child(
+            TextEl(a, StrL("tip"))));
+        LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
+        if (f == 1) {
+            live = LayoutCacheNodeCount(lc);
+        }
+        if (f > 1) {
+            utassert(LayoutCacheLastStats(lc).made == 0);
+            utassert(LayoutCacheNodeCount(lc) == live);
+        }
+    }
+    utassert(live > 0);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
+static void AKindChangeRecyclesBeforeBuilding() {
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+    int peak = 0;
+    for (int f = 0; f < 24; f++) {
+        a->Reset();
+        El* root = Div(a)->FlexCol()->W(kFill)->H(kFill);
+        El* col = Div(a)->FlexCol()->W(kFill);
+        for (int i = 0; i < 8; i++) {
+            if ((f + i) % 2 == 0) {
+                col->Child(TextEl(a, StrL("x")));
+            } else {
+                col->Child(Div(a)
+                               ->W(kFill)
+                               ->H(16)
+                               ->Child(TextEl(a, StrL("a")))
+                               ->Child(TextEl(a, StrL("b"))));
+            }
+        }
+        root->Child(col);
+        LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
+        int n = LayoutCacheNodeCount(lc);
+        if (n > peak) {
+            peak = n;
+        }
+    }
+    // 8 nested rows (3 nodes each) plus wrappers, not 8 × 24 frames.
+    utassert(peak < 50);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
 void TestLayoutReuse() {
     AChildOfAnotherKindIsStillLaidOut();
     APageSwitchLaysOutEveryBox();
     AParentThatLostAChildShrinks();
     ASlidingWindowDoesNotGrowTheTaffyTree();
     ASecondIdenticalFrameMakesNoNodes();
+    AFixedOverlayIsReusedNotRebuilt();
+    AKindChangeRecyclesBeforeBuilding();
 }
