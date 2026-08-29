@@ -1,9 +1,9 @@
 #ifndef GPUI_GPUI_PAINTGPU_H_
 #define GPUI_GPUI_PAINTGPU_H_
-/* A second Windows backend for Paint.h, which draws the way GPUI's own
-   renderer does. It is off by default and exists to be measured against the
-   Direct2D one; see the note at the end for what it is worth and what it is
-   still short of.
+/* The two custom Windows backends for Paint.h, which draw the way GPUI's own
+   renderer does. They are off by default and exist to be measured against
+   the Direct2D one; see the note at the end for what they are worth and what
+   they are still short of.
 
    The default Windows backend is already on the GPU: Direct2D on a D3D11
    device, presenting through a DXGI flip-model swap chain. What it is not is
@@ -14,20 +14,25 @@
    border and the content mask evaluated analytically in the pixel shader.
    This is that, far enough along to draw the story gallery and the showcase
    and be timed against the D2D path on the same machine in the same process.
+   One CPU front end builds the batches, path fans, glyph atlas and image
+   uploads. Native D3D11 and D3D12 submission halves consume the same data;
+   D3D12 does not pass through D3D11On12.
 
-   `GPUI_PAINT=gpu` in the environment picks it, read once at startup, so the
-   D2D backend stays the default and nothing about a normal build changes.
+   `GPUI_PAINT=d3d11|d3d12` in the environment picks its native submission
+   API (`gpu` remains an alias for d3d11), read once at startup, so the D2D
+   backend stays the default and nothing about a normal build changes.
    `GPUI_PAINT_MSAA=1|2|4|8` sets the sample count (default 4): quads and
    glyphs carry their own analytic coverage, but tessellated paths and
    expanded strokes get their antialiasing from the sample count, and its
    cost is worth being able to see.
 
    What lives where: everything device-independent is shared with
-   paint_win.cpp rather than written twice — the DirectWrite factory and its
-   text formats, an IDWriteTextLayout (which is what a `TextLayout*` is on
-   Windows, so shaping, measurement, hit-testing and range rects are the same
-   code on both paths), the WIC image decode, and the D3D11 device itself.
-   Only the target and the drawing differ. */
+   paint_win.cpp rather than written three times — the DirectWrite factory
+   and its text formats, an IDWriteTextLayout (which is what a `TextLayout*`
+   is on Windows, so shaping, measurement, hit-testing and range rects are the same
+   code on all paths), and WIC image decode. D3D11 additionally borrows the
+   default backend's device; D3D12 owns its device, queue, triple-buffered
+   command allocators and upload heaps. Only targets and submission differ. */
 
 #include "gpui/paint.h"
 
@@ -38,6 +43,8 @@ namespace gpui {
 // Read once, from GPUI_PAINT. The backend cannot change while a target is
 // alive, and nothing here re-reads it.
 bool PaintGpuOn();
+// Which native submission half the shared GPU renderer uses.
+bool PaintD3d12On();
 // The sample count the GPU backend renders at; 1 is no multisampling.
 int PaintGpuSamples();
 
@@ -124,19 +131,22 @@ const FrameStats& LastFrameStats();
 //
 // Measured with GPUI_FRAME_BENCH (see window_common.cpp), which times the
 // three phases of Window::draw apart. Only the paint phase is below; the
-// other two are the same code on both backends. Mean of 800 frames, release,
-// one machine — so the ratios are the answer, not the absolute numbers.
+// other two are the same code on all backends. Median paint-phase mean from
+// three release runs of 600 frames, scene disabled, one machine — so the
+// ratios are the answer, not the absolute numbers.
 //
-//     scene             D2D        this
-//     showcase          0.21 ms    0.09 ms    2.3x
-//     system_monitor    0.46 ms    0.16 ms    2.9x
-//     story             1.86 ms    0.99 ms    1.9x
+//     scene             Direct2D   D3D11      D3D12
+//     showcase          0.200 ms   0.170 ms   0.159 ms
+//     system_monitor    0.448 ms   0.203 ms   0.256 ms
+//     story             1.625 ms   0.582 ms   0.744 ms
 //
 // The charts are where it wins biggest, because D2D re-tessellates path
 // geometry on the CPU every frame and stencil-and-cover does not. Read the
-// whole-frame number before getting excited: `story` spends 5.8 ms in layout,
-// so halving the paint is 11% of the frame. Multisampling is close to free on
-// the two heavier scenes and costs about 0.05 ms on the light one.
+// whole-frame number before getting excited. D3D12 is slightly ahead on the
+// light scene, but its explicit state and command recording cost more over the
+// story's many alternating quad/stencil passes; D3D11 remains the faster
+// custom submission half there. Multisampling is close to free on the two
+// heavier scenes and costs about 0.05 ms on the light one.
 //
 // Two things that came out of measuring it, in case either is ever true
 // again: the showcase was *slower* than D2D until the per-frame stencil clear
@@ -147,7 +157,8 @@ const FrameStats& LastFrameStats();
 // Against the D2D path, pixel for pixel: 2.7% of the story's pixels differ
 // and 1.2% of the chart page's, all of it text — DirectWrite draws ClearType
 // and the atlas is grayscale — plus the third-of-a-pixel positioning this
-// does not do. No geometry moves.
+// does not do. No geometry moves. D3D11 and D3D12 consume the same atlas and
+// shader inputs; their story captures are byte-identical.
 
 } // namespace gpui
 

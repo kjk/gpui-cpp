@@ -45,27 +45,48 @@
 #if GPUI_OS_WINDOWS
 
 #include <d3d11.h>
+#include <d3d12.h>
 #include <d3dcompiler.h>
 #include <dwrite.h>
 #include <dxgi1_2.h>
+#include <dxgi1_4.h>
 #include <math.h>
 
 namespace gpui {
 
-// GPUI_PAINT=gpu, read once. Anything else — unset, "d2d", nonsense — leaves
-// the Direct2D backend in place.
-bool PaintGpuOn() {
-    static int on = -1;
-    if (on < 0) {
+enum GpuApi : int {
+    kGpuUnknown = -1,
+    kGpuOff = 0,
+    kGpuD3d11 = 11,
+    kGpuD3d12 = 12,
+};
+
+// Read once. `gpu` was the original spelling and remains the D3D11 alias.
+// Anything else — unset, "d2d", nonsense — leaves Direct2D in place.
+static int PaintGpuApi() {
+    static int api = kGpuUnknown;
+    if (api == kGpuUnknown) {
         char buf[16] = {};
         DWORD n = GetEnvironmentVariableA("GPUI_PAINT", buf, sizeof(buf));
-        on = (n > 0 && n < sizeof(buf) && base::StrEqI(Str(buf), "gpu")) ? 1
-                                                                         : 0;
-        if (on) {
-            logf("paint: GPU backend (GPUI_PAINT=gpu)");
+        Str value = n > 0 && n < sizeof(buf) ? Str(buf) : Str{};
+        api = base::StrEqI(value, "gpu") || base::StrEqI(value, "d3d11")
+                  ? kGpuD3d11
+              : base::StrEqI(value, "d3d12") ? kGpuD3d12
+                                               : kGpuOff;
+        if (api != kGpuOff) {
+            logf("paint: GPU backend (D3D%d, GPUI_PAINT=%s)", api,
+                 value);
         }
     }
-    return on == 1;
+    return api;
+}
+
+bool PaintGpuOn() {
+    return PaintGpuApi() != kGpuOff;
+}
+
+bool PaintD3d12On() {
+    return PaintGpuApi() == kGpuD3d12;
 }
 
 int PaintGpuSamples() {
@@ -393,6 +414,83 @@ struct Gpu {
 
 static Gpu gGpu;
 
+constexpr int kD12FrameCount = 3;
+constexpr int kD12ImageSlots = 128;
+constexpr UINT64 kD12UploadBytes = 16ull * 1024 * 1024;
+
+struct D12Frame {
+    ID3D12CommandAllocator* allocator = nullptr;
+    ID3D12Resource* upload = nullptr;
+    uint8_t* mapped = nullptr;
+    UINT64 uploadAt = 0;
+    UINT64 fenceValue = 0;
+    // Dedicated uploads for an image larger than the per-frame stream. They
+    // stay alive until this frame's fence completes, then are released.
+    Vec<ID3D12Resource*> textureUploads;
+};
+
+struct D12Pipelines {
+    int samples = 0;
+    ID3D12PipelineState* quad = nullptr;
+    ID3D12PipelineState* cover = nullptr;
+    ID3D12PipelineState* tri = nullptr;
+    ID3D12PipelineState* evenOdd = nullptr;
+    ID3D12PipelineState* nonZero = nullptr;
+};
+
+struct D12ImageSlot {
+    const Image* img = nullptr;
+    ID3D12Resource* tex = nullptr;
+    int descriptor = -1;
+};
+
+struct D12Gpu {
+    ID3D12Device* dev = nullptr;
+    ID3D12CommandQueue* queue = nullptr;
+    IDXGIFactory4* factory = nullptr;
+    ID3D12GraphicsCommandList* list = nullptr;
+    ID3D12RootSignature* root = nullptr;
+    ID3DBlob* vsQuad = nullptr;
+    ID3DBlob* psQuad = nullptr;
+    ID3DBlob* vsTri = nullptr;
+    ID3DBlob* psTri = nullptr;
+    ID3D12DescriptorHeap* srvHeap = nullptr;
+    UINT srvStep = 0;
+    ID3D12Fence* fence = nullptr;
+    HANDLE fenceEvent = nullptr;
+    UINT64 nextFence = 1;
+    ID3D12Resource* atlas = nullptr;
+    D3D12_RESOURCE_STATES atlasState = D3D12_RESOURCE_STATE_COPY_DEST;
+    D12Pipelines pipes[4] = {};
+    D12ImageSlot images[kD12ImageSlots] = {};
+    int imageCount = 0;
+    IDWriteFactory* dwrite = nullptr;
+    bool ready = false;
+};
+
+struct D12Target {
+    HWND hwnd = nullptr;
+    IDXGISwapChain3* swap = nullptr;
+    ID3D12DescriptorHeap* rtvHeap = nullptr;
+    ID3D12DescriptorHeap* dsvHeap = nullptr;
+    ID3D12Resource* back[kD12FrameCount] = {};
+    ID3D12Resource* msaa = nullptr;
+    ID3D12Resource* depth = nullptr;
+    ID3D12Resource* offTex = nullptr;
+    ID3D12Resource* readback = nullptr;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT readbackLayout = {};
+    UINT64 readbackBytes = 0;
+    D12Frame frames[kD12FrameCount];
+    int frameIx = 0;
+    bool offscreen = false;
+    bool clearStencil = true;
+    int pxW = 0;
+    int pxH = 0;
+    int samples = 1;
+};
+
+static D12Gpu gD12;
+
 // What is being accumulated right now. Painter order is preserved by
 // flushing whenever the pipeline or a bound texture has to change, so the
 // batch is only ever the run of primitives that can go out together.
@@ -400,7 +498,11 @@ struct Batch {
     Vec<Inst> insts;
     Vec<TriVert> tris;
     ID3D11ShaderResourceView* image = nullptr;
-    GpuTarget* target = nullptr;
+    int image12 = -1;
+    void* target = nullptr;
+    int pxW = 0;
+    int pxH = 0;
+    bool offscreen = false;
     // The content mask, as a stack. GPUI carries one per primitive rather
     // than setting a scissor, which is what lets a clip change cost nothing.
     Vec<float> clipStack; // x0, y0, x1, y1 per entry
@@ -438,6 +540,374 @@ static bool CompileShader(const char* entry, const char* target,
     if (err) {
         err->Release();
     }
+    return true;
+}
+
+static D3D12_HEAP_PROPERTIES D12Heap(D3D12_HEAP_TYPE type) {
+    D3D12_HEAP_PROPERTIES h = {};
+    h.Type = type;
+    h.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    h.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    h.CreationNodeMask = 1;
+    h.VisibleNodeMask = 1;
+    return h;
+}
+
+static D3D12_RESOURCE_DESC D12Buffer(UINT64 bytes) {
+    D3D12_RESOURCE_DESC d = {};
+    d.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    d.Width = bytes;
+    d.Height = 1;
+    d.DepthOrArraySize = 1;
+    d.MipLevels = 1;
+    d.Format = DXGI_FORMAT_UNKNOWN;
+    d.SampleDesc.Count = 1;
+    d.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    return d;
+}
+
+static D3D12_RESOURCE_DESC D12Texture(int w, int h, DXGI_FORMAT format,
+                                     int samples,
+                                     D3D12_RESOURCE_FLAGS flags) {
+    D3D12_RESOURCE_DESC d = {};
+    d.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    d.Width = (UINT64)w;
+    d.Height = (UINT)h;
+    d.DepthOrArraySize = 1;
+    d.MipLevels = 1;
+    d.Format = format;
+    d.SampleDesc.Count = (UINT)samples;
+    d.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    d.Flags = flags;
+    return d;
+}
+
+static void D12Barrier(ID3D12GraphicsCommandList* list, ID3D12Resource* r,
+                       D3D12_RESOURCE_STATES before,
+                       D3D12_RESOURCE_STATES after) {
+    if (!list || !r || before == after) {
+        return;
+    }
+    D3D12_RESOURCE_BARRIER b = {};
+    b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    b.Transition.pResource = r;
+    b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    b.Transition.StateBefore = before;
+    b.Transition.StateAfter = after;
+    list->ResourceBarrier(1, &b);
+}
+
+static D3D12_CPU_DESCRIPTOR_HANDLE D12SrvCpu(int ix) {
+    D3D12_CPU_DESCRIPTOR_HANDLE h = gD12.srvHeap->GetCPUDescriptorHandleForHeapStart();
+    h.ptr += (SIZE_T)ix * gD12.srvStep;
+    return h;
+}
+
+static D3D12_GPU_DESCRIPTOR_HANDLE D12SrvGpu(int ix) {
+    D3D12_GPU_DESCRIPTOR_HANDLE h = gD12.srvHeap->GetGPUDescriptorHandleForHeapStart();
+    h.ptr += (UINT64)ix * gD12.srvStep;
+    return h;
+}
+
+static int D12PipeIx(int samples) {
+    return samples == 2 ? 1 : samples == 4 ? 2 : samples == 8 ? 3 : 0;
+}
+
+static D3D12_BLEND_DESC D12Blend() {
+    D3D12_BLEND_DESC b = {};
+    b.RenderTarget[0].BlendEnable = TRUE;
+    b.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+    b.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+    b.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+    b.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+    b.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+    b.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+    b.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    return b;
+}
+
+static D3D12_RASTERIZER_DESC D12Raster(int samples) {
+    D3D12_RASTERIZER_DESC r = {};
+    r.FillMode = D3D12_FILL_MODE_SOLID;
+    r.CullMode = D3D12_CULL_MODE_NONE;
+    r.DepthClipEnable = TRUE;
+    r.MultisampleEnable = samples > 1;
+    return r;
+}
+
+static D3D12_DEPTH_STENCIL_DESC D12DepthOff() {
+    D3D12_DEPTH_STENCIL_DESC d = {};
+    d.DepthEnable = FALSE;
+    d.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    d.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    d.StencilEnable = FALSE;
+    d.StencilReadMask = 0xff;
+    d.StencilWriteMask = 0xff;
+    return d;
+}
+
+static D3D12_DEPTH_STENCILOP_DESC D12StencilOp(D3D12_STENCIL_OP pass,
+                                               D3D12_COMPARISON_FUNC func) {
+    D3D12_DEPTH_STENCILOP_DESC o = {};
+    o.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+    o.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+    o.StencilPassOp = pass;
+    o.StencilFunc = func;
+    return o;
+}
+
+static bool D12MakePipelines(int samples) {
+    D12Gpu* g = &gD12;
+    D12Pipelines* p = &g->pipes[D12PipeIx(samples)];
+    if (p->quad) {
+        return true;
+    }
+    p->samples = samples;
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC d = {};
+    d.pRootSignature = g->root;
+    d.VS = {g->vsQuad->GetBufferPointer(), g->vsQuad->GetBufferSize()};
+    d.PS = {g->psQuad->GetBufferPointer(), g->psQuad->GetBufferSize()};
+    d.BlendState = D12Blend();
+    d.SampleMask = UINT_MAX;
+    d.RasterizerState = D12Raster(samples);
+    d.DepthStencilState = D12DepthOff();
+    d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    d.NumRenderTargets = 1;
+    d.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
+    d.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    d.SampleDesc.Count = (UINT)samples;
+    if (FAILED(g->dev->CreateGraphicsPipelineState(&d, __uuidof(ID3D12PipelineState),
+                                                    (void**)&p->quad))) {
+        return false;
+    }
+
+    D3D12_DEPTH_STENCIL_DESC cover = D12DepthOff();
+    cover.StencilEnable = TRUE;
+    cover.FrontFace = D12StencilOp(D3D12_STENCIL_OP_ZERO,
+                                   D3D12_COMPARISON_FUNC_NOT_EQUAL);
+    cover.BackFace = cover.FrontFace;
+    d.DepthStencilState = cover;
+    if (FAILED(g->dev->CreateGraphicsPipelineState(&d, __uuidof(ID3D12PipelineState),
+                                                    (void**)&p->cover))) {
+        return false;
+    }
+
+    D3D12_INPUT_ELEMENT_DESC input[] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0,
+         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 8,
+         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24,
+         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    };
+    d.InputLayout = {input, 3};
+    d.VS = {g->vsTri->GetBufferPointer(), g->vsTri->GetBufferSize()};
+    d.PS = {g->psTri->GetBufferPointer(), g->psTri->GetBufferSize()};
+    d.DepthStencilState = D12DepthOff();
+    if (FAILED(g->dev->CreateGraphicsPipelineState(&d, __uuidof(ID3D12PipelineState),
+                                                    (void**)&p->tri))) {
+        return false;
+    }
+
+    d.PS = {};
+    d.BlendState.RenderTarget[0].RenderTargetWriteMask = 0;
+    D3D12_DEPTH_STENCIL_DESC stencil = D12DepthOff();
+    stencil.StencilEnable = TRUE;
+    stencil.FrontFace = D12StencilOp(D3D12_STENCIL_OP_INVERT,
+                                     D3D12_COMPARISON_FUNC_ALWAYS);
+    stencil.BackFace = stencil.FrontFace;
+    d.DepthStencilState = stencil;
+    if (FAILED(g->dev->CreateGraphicsPipelineState(&d, __uuidof(ID3D12PipelineState),
+                                                    (void**)&p->evenOdd))) {
+        return false;
+    }
+    stencil.FrontFace = D12StencilOp(D3D12_STENCIL_OP_INCR,
+                                     D3D12_COMPARISON_FUNC_ALWAYS);
+    stencil.BackFace = D12StencilOp(D3D12_STENCIL_OP_DECR,
+                                    D3D12_COMPARISON_FUNC_ALWAYS);
+    d.DepthStencilState = stencil;
+    if (FAILED(g->dev->CreateGraphicsPipelineState(&d, __uuidof(ID3D12PipelineState),
+                                                    (void**)&p->nonZero))) {
+        return false;
+    }
+    return true;
+}
+
+static bool D12EnsureGpu(PaintApp* pa) {
+    D12Gpu* g = &gD12;
+    if (g->ready) {
+        return true;
+    }
+    if (!pa) {
+        return false;
+    }
+    IDXGIFactory4* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory4), (void**)&factory))) {
+        return false;
+    }
+    IDXGIAdapter1* chosen = nullptr;
+    for (UINT i = 0;; i++) {
+        IDXGIAdapter1* adapter = nullptr;
+        if (factory->EnumAdapters1(i, &adapter) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+        DXGI_ADAPTER_DESC1 desc = {};
+        adapter->GetDesc1(&desc);
+        if (!(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+            SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0,
+                                        __uuidof(ID3D12Device), nullptr))) {
+            chosen = adapter;
+            break;
+        }
+        adapter->Release();
+    }
+    HRESULT hr = chosen
+                     ? D3D12CreateDevice(chosen, D3D_FEATURE_LEVEL_11_0,
+                                         __uuidof(ID3D12Device),
+                                         (void**)&g->dev)
+                     : E_FAIL;
+    if (chosen) {
+        chosen->Release();
+    }
+    if (FAILED(hr)) {
+        IDXGIAdapter* warp = nullptr;
+        if (SUCCEEDED(factory->EnumWarpAdapter(__uuidof(IDXGIAdapter),
+                                               (void**)&warp))) {
+            hr = D3D12CreateDevice(warp, D3D_FEATURE_LEVEL_11_0,
+                                   __uuidof(ID3D12Device), (void**)&g->dev);
+            warp->Release();
+        }
+    }
+    if (FAILED(hr) || !g->dev) {
+        factory->Release();
+        logf("paint/d3d12: D3D12CreateDevice failed %08x", (unsigned)hr);
+        return false;
+    }
+    g->factory = factory;
+    D3D12_COMMAND_QUEUE_DESC qd = {};
+    qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    if (FAILED(g->dev->CreateCommandQueue(&qd, __uuidof(ID3D12CommandQueue),
+                                           (void**)&g->queue))) {
+        return false;
+    }
+    ID3D12CommandAllocator* bootstrap = nullptr;
+    if (FAILED(g->dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                               __uuidof(ID3D12CommandAllocator),
+                                               (void**)&bootstrap)) ||
+        FAILED(g->dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                         bootstrap, nullptr,
+                                         __uuidof(ID3D12GraphicsCommandList),
+                                         (void**)&g->list))) {
+        Rel(&bootstrap);
+        return false;
+    }
+    g->list->Close();
+    bootstrap->Release();
+
+    D3D12_DESCRIPTOR_HEAP_DESC hd = {};
+    hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    hd.NumDescriptors = 1 + kD12ImageSlots;
+    hd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    if (FAILED(g->dev->CreateDescriptorHeap(&hd, __uuidof(ID3D12DescriptorHeap),
+                                             (void**)&g->srvHeap))) {
+        return false;
+    }
+    g->srvStep = g->dev->GetDescriptorHandleIncrementSize(
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    D3D12_DESCRIPTOR_RANGE ranges[2] = {};
+    for (int i = 0; i < 2; i++) {
+        ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        ranges[i].NumDescriptors = 1;
+        ranges[i].BaseShaderRegister = (UINT)(i + 1);
+        ranges[i].OffsetInDescriptorsFromTableStart = 0;
+    }
+    D3D12_ROOT_PARAMETER rp[4] = {};
+    rp[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rp[0].Constants.ShaderRegister = 0;
+    rp[0].Constants.Num32BitValues = 4;
+    rp[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    rp[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    rp[1].Descriptor.ShaderRegister = 0;
+    rp[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    for (int i = 0; i < 2; i++) {
+        rp[i + 2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        rp[i + 2].DescriptorTable.NumDescriptorRanges = 1;
+        rp[i + 2].DescriptorTable.pDescriptorRanges = &ranges[i];
+        rp[i + 2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    }
+    D3D12_STATIC_SAMPLER_DESC samp = {};
+    samp.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    samp.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samp.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samp.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samp.MaxLOD = D3D12_FLOAT32_MAX;
+    samp.ShaderRegister = 0;
+    samp.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    D3D12_ROOT_SIGNATURE_DESC rsd = {};
+    rsd.NumParameters = 4;
+    rsd.pParameters = rp;
+    rsd.NumStaticSamplers = 1;
+    rsd.pStaticSamplers = &samp;
+    rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    ID3DBlob* sig = nullptr;
+    ID3DBlob* err = nullptr;
+    hr = D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig,
+                                     &err);
+    if (FAILED(hr)) {
+        if (err) {
+            logf("paint/d3d12: root signature failed: %s",
+                 Str((const char*)err->GetBufferPointer()));
+            err->Release();
+        }
+        return false;
+    }
+    hr = g->dev->CreateRootSignature(0, sig->GetBufferPointer(),
+                                     sig->GetBufferSize(),
+                                     __uuidof(ID3D12RootSignature),
+                                     (void**)&g->root);
+    sig->Release();
+    if (err) {
+        err->Release();
+    }
+    if (FAILED(hr)) {
+        return false;
+    }
+    if (!CompileShader("VSQuad", "vs_5_0", &g->vsQuad) ||
+        !CompileShader("PSQuad", "ps_5_0", &g->psQuad) ||
+        !CompileShader("VSTri", "vs_5_0", &g->vsTri) ||
+        !CompileShader("PSTri", "ps_5_0", &g->psTri)) {
+        return false;
+    }
+
+    D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
+    D3D12_RESOURCE_DESC atlas = D12Texture(
+        kAtlasDim, kAtlasDim, DXGI_FORMAT_R8_UNORM, 1,
+        D3D12_RESOURCE_FLAG_NONE);
+    if (FAILED(g->dev->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &atlas,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, __uuidof(ID3D12Resource),
+            (void**)&g->atlas))) {
+        return false;
+    }
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
+    sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    sv.Format = DXGI_FORMAT_R8_UNORM;
+    sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    sv.Texture2D.MipLevels = 1;
+    g->dev->CreateShaderResourceView(g->atlas, &sv, D12SrvCpu(0));
+    if (FAILED(g->dev->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                                    __uuidof(ID3D12Fence),
+                                    (void**)&g->fence))) {
+        return false;
+    }
+    g->fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g->fenceEvent) {
+        return false;
+    }
+    g->dwrite = (IDWriteFactory*)PaintSharedDwrite(pa);
+    gGpu.dwrite = g->dwrite;
+    g->ready = true;
     return true;
 }
 
@@ -527,6 +997,9 @@ static bool MakeStencilStates(Gpu* g) {
 }
 
 static bool EnsureGpu(PaintApp* pa) {
+    if (PaintD3d12On()) {
+        return D12EnsureGpu(pa);
+    }
     Gpu* g = &gGpu;
     if (g->ready) {
         return true;
@@ -704,9 +1177,458 @@ static bool EnsureTriBuf(Gpu* g, int n) {
     return true;
 }
 
+static void D12Wait(UINT64 value) {
+    if (!value || gD12.fence->GetCompletedValue() >= value) {
+        return;
+    }
+    if (SUCCEEDED(gD12.fence->SetEventOnCompletion(value, gD12.fenceEvent))) {
+        WaitForSingleObject(gD12.fenceEvent, INFINITE);
+    }
+}
+
+static void D12WaitTarget(D12Target* t) {
+    if (!t) {
+        return;
+    }
+    for (int i = 0; i < kD12FrameCount; i++) {
+        D12Wait(t->frames[i].fenceValue);
+        t->frames[i].fenceValue = 0;
+    }
+}
+
+static bool D12MakeFrames(D12Target* t) {
+    D3D12_HEAP_PROPERTIES uploadHeap = D12Heap(D3D12_HEAP_TYPE_UPLOAD);
+    D3D12_RESOURCE_DESC upload = D12Buffer(kD12UploadBytes);
+    for (int i = 0; i < kD12FrameCount; i++) {
+        D12Frame* f = &t->frames[i];
+        if (FAILED(gD12.dev->CreateCommandAllocator(
+                D3D12_COMMAND_LIST_TYPE_DIRECT,
+                __uuidof(ID3D12CommandAllocator), (void**)&f->allocator)) ||
+            FAILED(gD12.dev->CreateCommittedResource(
+                &uploadHeap, D3D12_HEAP_FLAG_NONE, &upload,
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                __uuidof(ID3D12Resource), (void**)&f->upload)) ||
+            FAILED(f->upload->Map(0, nullptr, (void**)&f->mapped))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void D12FreeSurfaces(D12Target* t) {
+    if (!t) {
+        return;
+    }
+    D12WaitTarget(t);
+    for (int i = 0; i < kD12FrameCount; i++) {
+        Rel(&t->back[i]);
+    }
+    Rel(&t->msaa);
+    Rel(&t->depth);
+    Rel(&t->offTex);
+    Rel(&t->readback);
+    Rel(&t->rtvHeap);
+    Rel(&t->dsvHeap);
+}
+
+static void D12FreeTarget(D12Target* t) {
+    if (!t) {
+        return;
+    }
+    D12FreeSurfaces(t);
+    for (int i = 0; i < kD12FrameCount; i++) {
+        if (t->frames[i].upload && t->frames[i].mapped) {
+            t->frames[i].upload->Unmap(0, nullptr);
+        }
+        for (ID3D12Resource* upload : t->frames[i].textureUploads) {
+            Rel(&upload);
+        }
+        Rel(&t->frames[i].upload);
+        Rel(&t->frames[i].allocator);
+    }
+    Rel(&t->swap);
+    delete t;
+}
+
+static D3D12_CPU_DESCRIPTOR_HANDLE D12Rtv(D12Target* t, int ix) {
+    D3D12_CPU_DESCRIPTOR_HANDLE h =
+        t->rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    h.ptr += (SIZE_T)ix * gD12.dev->GetDescriptorHandleIncrementSize(
+                              D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    return h;
+}
+
+static D3D12_CPU_DESCRIPTOR_HANDLE D12Dsv(D12Target* t) {
+    return t->dsvHeap->GetCPUDescriptorHandleForHeapStart();
+}
+
+static bool D12MakeSurfaceHeaps(D12Target* t) {
+    D3D12_DESCRIPTOR_HEAP_DESC hd = {};
+    hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+    hd.NumDescriptors = 4;
+    if (FAILED(gD12.dev->CreateDescriptorHeap(
+            &hd, __uuidof(ID3D12DescriptorHeap), (void**)&t->rtvHeap))) {
+        return false;
+    }
+    hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    hd.NumDescriptors = 1;
+    return SUCCEEDED(gD12.dev->CreateDescriptorHeap(
+        &hd, __uuidof(ID3D12DescriptorHeap), (void**)&t->dsvHeap));
+}
+
+static int D12SupportedSamples(int wanted) {
+    int n = wanted;
+    while (n > 1) {
+        D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS q = {};
+        q.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        q.SampleCount = (UINT)n;
+        if (SUCCEEDED(gD12.dev->CheckFeatureSupport(
+                D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &q, sizeof(q))) &&
+            q.NumQualityLevels > 0) {
+            return n;
+        }
+        n /= 2;
+    }
+    return 1;
+}
+
+static bool D12MakeWindowSurfaces(D12Target* t) {
+    if (!D12MakeSurfaceHeaps(t)) {
+        return false;
+    }
+    for (int i = 0; i < kD12FrameCount; i++) {
+        if (FAILED(t->swap->GetBuffer((UINT)i, __uuidof(ID3D12Resource),
+                                      (void**)&t->back[i]))) {
+            return false;
+        }
+        gD12.dev->CreateRenderTargetView(t->back[i], nullptr, D12Rtv(t, i));
+    }
+    t->samples = D12SupportedSamples(t->samples);
+    D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
+    if (t->samples > 1) {
+        D3D12_RESOURCE_DESC color = D12Texture(
+            t->pxW, t->pxH, DXGI_FORMAT_B8G8R8A8_UNORM, t->samples,
+            D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+        D3D12_CLEAR_VALUE cv = {};
+        cv.Format = color.Format;
+        if (FAILED(gD12.dev->CreateCommittedResource(
+                &heap, D3D12_HEAP_FLAG_NONE, &color,
+                D3D12_RESOURCE_STATE_RENDER_TARGET, &cv,
+                __uuidof(ID3D12Resource), (void**)&t->msaa))) {
+            return false;
+        }
+        D3D12_RENDER_TARGET_VIEW_DESC rv = {};
+        rv.Format = color.Format;
+        rv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+        gD12.dev->CreateRenderTargetView(t->msaa, &rv, D12Rtv(t, 3));
+    }
+    D3D12_RESOURCE_DESC depth = D12Texture(
+        t->pxW, t->pxH, DXGI_FORMAT_D24_UNORM_S8_UINT, t->samples,
+        D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+    D3D12_CLEAR_VALUE dv = {};
+    dv.Format = depth.Format;
+    dv.DepthStencil.Depth = 1.f;
+    if (FAILED(gD12.dev->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &depth,
+            D3D12_RESOURCE_STATE_DEPTH_WRITE, &dv,
+            __uuidof(ID3D12Resource), (void**)&t->depth))) {
+        return false;
+    }
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
+    dsv.Format = depth.Format;
+    dsv.ViewDimension = t->samples > 1 ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+                                       : D3D12_DSV_DIMENSION_TEXTURE2D;
+    gD12.dev->CreateDepthStencilView(t->depth, &dsv, D12Dsv(t));
+    t->clearStencil = true;
+    return D12MakePipelines(t->samples);
+}
+
+static bool D12MakeOffscreenSurfaces(D12Target* t) {
+    if (!D12MakeSurfaceHeaps(t)) {
+        return false;
+    }
+    D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
+    D3D12_RESOURCE_DESC color = D12Texture(
+        t->pxW, t->pxH, DXGI_FORMAT_B8G8R8A8_UNORM, 1,
+        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+    D3D12_CLEAR_VALUE cv = {};
+    cv.Format = color.Format;
+    if (FAILED(gD12.dev->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &color,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, &cv,
+            __uuidof(ID3D12Resource), (void**)&t->offTex))) {
+        return false;
+    }
+    gD12.dev->CreateRenderTargetView(t->offTex, nullptr, D12Rtv(t, 3));
+    UINT rows = 0;
+    UINT64 rowBytes = 0;
+    gD12.dev->GetCopyableFootprints(&color, 0, 1, 0, &t->readbackLayout,
+                                    &rows, &rowBytes, &t->readbackBytes);
+    D3D12_HEAP_PROPERTIES readHeap = D12Heap(D3D12_HEAP_TYPE_READBACK);
+    D3D12_RESOURCE_DESC read = D12Buffer(t->readbackBytes);
+    if (FAILED(gD12.dev->CreateCommittedResource(
+            &readHeap, D3D12_HEAP_FLAG_NONE, &read,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+            __uuidof(ID3D12Resource), (void**)&t->readback))) {
+        return false;
+    }
+    t->samples = 1;
+    D3D12_RESOURCE_DESC depth = D12Texture(
+        t->pxW, t->pxH, DXGI_FORMAT_D24_UNORM_S8_UINT, 1,
+        D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+    D3D12_CLEAR_VALUE dv = {};
+    dv.Format = depth.Format;
+    dv.DepthStencil.Depth = 1.f;
+    if (FAILED(gD12.dev->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &depth,
+            D3D12_RESOURCE_STATE_DEPTH_WRITE, &dv,
+            __uuidof(ID3D12Resource), (void**)&t->depth))) {
+        return false;
+    }
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
+    dsv.Format = depth.Format;
+    dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    gD12.dev->CreateDepthStencilView(t->depth, &dsv, D12Dsv(t));
+    t->clearStencil = true;
+    return D12MakePipelines(1);
+}
+
+static bool D12BeginCommands(D12Target* t) {
+    t->frameIx = t->offscreen ? 0 : (int)t->swap->GetCurrentBackBufferIndex();
+    D12Frame* f = &t->frames[t->frameIx];
+    D12Wait(f->fenceValue);
+    f->fenceValue = 0;
+    for (ID3D12Resource* upload : f->textureUploads) {
+        Rel(&upload);
+    }
+    f->textureUploads.len = 0;
+    f->uploadAt = 0;
+    if (FAILED(f->allocator->Reset()) ||
+        FAILED(gD12.list->Reset(f->allocator, nullptr))) {
+        return false;
+    }
+    ID3D12DescriptorHeap* heaps[] = {gD12.srvHeap};
+    gD12.list->SetDescriptorHeaps(1, heaps);
+    gD12.list->SetGraphicsRootSignature(gD12.root);
+    float viewport[4] = {(float)t->pxW, (float)t->pxH, 0, 0};
+    gD12.list->SetGraphicsRoot32BitConstants(0, 4, viewport, 0);
+    gD12.list->SetGraphicsRootDescriptorTable(2, D12SrvGpu(0));
+    gD12.list->SetGraphicsRootDescriptorTable(3, D12SrvGpu(0));
+    D3D12_VIEWPORT vp = {};
+    vp.Width = (float)t->pxW;
+    vp.Height = (float)t->pxH;
+    vp.MaxDepth = 1.f;
+    gD12.list->RSSetViewports(1, &vp);
+    D3D12_RECT scissor = {0, 0, t->pxW, t->pxH};
+    gD12.list->RSSetScissorRects(1, &scissor);
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv =
+        t->offscreen ? D12Rtv(t, 3)
+                     : (t->msaa ? D12Rtv(t, 3) : D12Rtv(t, t->frameIx));
+    if (!t->offscreen && !t->msaa) {
+        D12Barrier(gD12.list, t->back[t->frameIx],
+                   D3D12_RESOURCE_STATE_PRESENT,
+                   D3D12_RESOURCE_STATE_RENDER_TARGET);
+    }
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv = D12Dsv(t);
+    gD12.list->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+    if (t->clearStencil) {
+        gD12.list->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_STENCIL, 1.f, 0,
+                                         0, nullptr);
+        t->clearStencil = false;
+    }
+    if (gD12.atlasState == D3D12_RESOURCE_STATE_COPY_DEST) {
+        D12Barrier(gD12.list, gD12.atlas, gD12.atlasState,
+                   D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        gD12.atlasState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    }
+    gB.target = t;
+    gB.image = nullptr;
+    gB.image12 = -1;
+    gB.pxW = t->pxW;
+    gB.pxH = t->pxH;
+    gB.offscreen = t->offscreen;
+    gB.insts.len = 0;
+    gB.tris.len = 0;
+    gB.clipStack.len = 0;
+    gB.clip[0] = 0;
+    gB.clip[1] = 0;
+    gB.clip[2] = (float)t->pxW;
+    gB.clip[3] = (float)t->pxH;
+    gB.stats = FrameStats{};
+    return true;
+}
+
+static bool D12FinishCommands(D12Target* t, bool wait) {
+    D12Frame* f = &t->frames[t->frameIx];
+    if (FAILED(gD12.list->Close())) {
+        return false;
+    }
+    ID3D12CommandList* lists[] = {gD12.list};
+    gD12.queue->ExecuteCommandLists(1, lists);
+    UINT64 value = gD12.nextFence++;
+    if (FAILED(gD12.queue->Signal(gD12.fence, value))) {
+        return false;
+    }
+    f->fenceValue = value;
+    if (wait) {
+        D12Wait(value);
+        f->fenceValue = 0;
+    }
+    return true;
+}
+
+static void* D12Upload(UINT64 bytes, UINT64 align,
+                       D3D12_GPU_VIRTUAL_ADDRESS* gpu) {
+    D12Target* t = (D12Target*)gB.target;
+    if (!t || !bytes) {
+        return nullptr;
+    }
+    D12Frame* f = &t->frames[t->frameIx];
+    UINT64 at = (f->uploadAt + align - 1) & ~(align - 1);
+    if (at + bytes > kD12UploadBytes) {
+        logf("paint/d3d12: frame upload exhausted (%llu bytes)",
+             (unsigned long long)(at + bytes));
+        return nullptr;
+    }
+    f->uploadAt = at + bytes;
+    if (gpu) {
+        *gpu = f->upload->GetGPUVirtualAddress() + at;
+    }
+    return f->mapped + at;
+}
+
+static bool D12UploadTexture(ID3D12Resource* texture,
+                             D3D12_RESOURCE_STATES* state,
+                             DXGI_FORMAT format, int x, int y, int w, int h,
+                             int bytesPerPixel, const uint8_t* pixels,
+                             int srcPitch) {
+    D12Target* t = (D12Target*)gB.target;
+    if (!t || !texture || !state || !pixels || w <= 0 || h <= 0) {
+        return false;
+    }
+    UINT rowPitch = (UINT)((w * bytesPerPixel + 255) & ~255);
+    UINT64 bytes = (UINT64)rowPitch * (UINT64)h;
+    D12Frame* f = &t->frames[t->frameIx];
+    UINT64 at = (f->uploadAt + 511) & ~511ull;
+    ID3D12Resource* source = f->upload;
+    UINT64 offset = at;
+    uint8_t* dst = nullptr;
+    if (at + bytes <= kD12UploadBytes) {
+        f->uploadAt = at + bytes;
+        dst = f->mapped + at;
+    } else {
+        D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_UPLOAD);
+        D3D12_RESOURCE_DESC desc = D12Buffer(bytes);
+        if (FAILED(gD12.dev->CreateCommittedResource(
+                &heap, D3D12_HEAP_FLAG_NONE, &desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                __uuidof(ID3D12Resource), (void**)&source)) ||
+            FAILED(source->Map(0, nullptr, (void**)&dst))) {
+            Rel(&source);
+            return false;
+        }
+        offset = 0;
+        if (!VecAppend(f->textureUploads, source)) {
+            source->Unmap(0, nullptr);
+            Rel(&source);
+            return false;
+        }
+    }
+    for (int row = 0; row < h; row++) {
+        memcpy(dst + (size_t)row * rowPitch,
+               pixels + (size_t)row * (size_t)srcPitch,
+               (size_t)w * (size_t)bytesPerPixel);
+    }
+    if (source != f->upload) {
+        source->Unmap(0, nullptr);
+    }
+    D12Barrier(gD12.list, texture, *state, D3D12_RESOURCE_STATE_COPY_DEST);
+    D3D12_TEXTURE_COPY_LOCATION src = {};
+    src.pResource = source;
+    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src.PlacedFootprint.Offset = offset;
+    src.PlacedFootprint.Footprint.Format = format;
+    src.PlacedFootprint.Footprint.Width = (UINT)w;
+    src.PlacedFootprint.Footprint.Height = (UINT)h;
+    src.PlacedFootprint.Footprint.Depth = 1;
+    src.PlacedFootprint.Footprint.RowPitch = rowPitch;
+    D3D12_TEXTURE_COPY_LOCATION dest = {};
+    dest.pResource = texture;
+    dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    gD12.list->CopyTextureRegion(&dest, (UINT)x, (UINT)y, 0, &src, nullptr);
+    D12Barrier(gD12.list, texture, D3D12_RESOURCE_STATE_COPY_DEST,
+               D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    *state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    return true;
+}
+
+enum TriMode : int {
+    kTriColor,
+    kTriEvenOdd,
+    kTriNonZero,
+};
+
+static void D12SubmitQuads(bool cover) {
+    if (gB.insts.len == 0 || !gB.target) {
+        return;
+    }
+    D12Target* t = (D12Target*)gB.target;
+    UINT64 bytes = (UINT64)gB.insts.len * sizeof(Inst);
+    D3D12_GPU_VIRTUAL_ADDRESS gpu = 0;
+    void* dst = D12Upload(bytes, 16, &gpu);
+    if (!dst) {
+        gB.insts.len = 0;
+        return;
+    }
+    memcpy(dst, gB.insts.els, (size_t)bytes);
+    D12Pipelines* p = &gD12.pipes[D12PipeIx(t->samples)];
+    gD12.list->SetPipelineState(cover ? p->cover : p->quad);
+    gD12.list->SetGraphicsRootShaderResourceView(1, gpu);
+    gD12.list->SetGraphicsRootDescriptorTable(2, D12SrvGpu(0));
+    gD12.list->SetGraphicsRootDescriptorTable(
+        3, D12SrvGpu(gB.image12 >= 0 ? gB.image12 : 0));
+    gD12.list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    gD12.list->OMSetStencilRef(0);
+    gD12.list->DrawInstanced(4, (UINT)gB.insts.len, 0, 0);
+    gB.stats.instances += gB.insts.len;
+    gB.stats.draws++;
+    gB.insts.len = 0;
+}
+
+static void D12SubmitTris(D3D12_PRIMITIVE_TOPOLOGY topology, TriMode mode) {
+    if (gB.tris.len == 0 || !gB.target) {
+        return;
+    }
+    D12Target* t = (D12Target*)gB.target;
+    UINT64 bytes = (UINT64)gB.tris.len * sizeof(TriVert);
+    D3D12_GPU_VIRTUAL_ADDRESS gpu = 0;
+    void* dst = D12Upload(bytes, 16, &gpu);
+    if (!dst) {
+        gB.tris.len = 0;
+        return;
+    }
+    memcpy(dst, gB.tris.els, (size_t)bytes);
+    D12Pipelines* p = &gD12.pipes[D12PipeIx(t->samples)];
+    ID3D12PipelineState* state =
+        mode == kTriEvenOdd ? p->evenOdd
+                            : mode == kTriNonZero ? p->nonZero : p->tri;
+    gD12.list->SetPipelineState(state);
+    D3D12_VERTEX_BUFFER_VIEW vb = {};
+    vb.BufferLocation = gpu;
+    vb.SizeInBytes = (UINT)bytes;
+    vb.StrideInBytes = sizeof(TriVert);
+    gD12.list->IASetVertexBuffers(0, 1, &vb);
+    gD12.list->IASetPrimitiveTopology(topology);
+    gD12.list->OMSetStencilRef(0);
+    gD12.list->DrawInstanced((UINT)gB.tris.len, 1, 0, 0);
+    gB.stats.pathTriangles += gB.tris.len / 3;
+    gB.stats.draws++;
+    gB.tris.len = 0;
+}
+
 // ─── drawing ─────────────────────────────────────────────────────────────
 
-static GpuTarget* T(PaintCtx* ctx) {
+static GpuTarget* T11(PaintCtx* ctx) {
     return ctx ? (GpuTarget*)ctx->rt : nullptr;
 }
 
@@ -720,19 +1642,22 @@ static void SetViewportCb(Gpu* g, float w, float h) {
 }
 
 static void FlushQuads();
-static void FlushTris(D3D11_PRIMITIVE_TOPOLOGY topo, bool colorWrite,
-                      ID3D11DepthStencilState* ds);
+static void FlushTris(D3D_PRIMITIVE_TOPOLOGY topo, TriMode mode);
 
 // Everything queued, in order. Called before anything that would change what
 // a draw would do, and at the end of the frame.
 static void Flush() {
     FlushQuads();
-    FlushTris(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true, gGpu.dsOff);
+    FlushTris(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, kTriColor);
 }
 
 static void FlushQuads() {
     Gpu* g = &gGpu;
     if (gB.insts.len == 0 || !gB.target) {
+        return;
+    }
+    if (PaintD3d12On()) {
+        D12SubmitQuads(false);
         return;
     }
     if (!EnsureInstBuf(g, gB.insts.len)) {
@@ -763,10 +1688,13 @@ static void FlushQuads() {
     gB.insts.len = 0;
 }
 
-static void FlushTris(D3D11_PRIMITIVE_TOPOLOGY topo, bool colorWrite,
-                      ID3D11DepthStencilState* ds) {
+static void FlushTris(D3D_PRIMITIVE_TOPOLOGY topo, TriMode mode) {
     Gpu* g = &gGpu;
     if (gB.tris.len == 0 || !gB.target) {
+        return;
+    }
+    if (PaintD3d12On()) {
+        D12SubmitTris(topo, mode);
         return;
     }
     if (!EnsureTriBuf(g, gB.tris.len)) {
@@ -784,6 +1712,10 @@ static void FlushTris(D3D11_PRIMITIVE_TOPOLOGY topo, bool colorWrite,
     UINT stride = sizeof(TriVert);
     UINT off = 0;
     g->ctx->VSSetShader(g->vsTri, nullptr, 0);
+    bool colorWrite = mode == kTriColor;
+    ID3D11DepthStencilState* ds =
+        mode == kTriEvenOdd ? g->dsEvenOdd
+                            : mode == kTriNonZero ? g->dsNonZero : g->dsOff;
     g->ctx->PSSetShader(colorWrite ? g->psTri : nullptr, nullptr, 0);
     g->ctx->IASetInputLayout(g->triLayout);
     g->ctx->IASetVertexBuffers(0, 1, &g->triBuf, &stride, &off);
@@ -806,7 +1738,7 @@ static void FlushTris(D3D11_PRIMITIVE_TOPOLOGY topo, bool colorWrite,
 // about to use.
 static void EnsureQuadPhase() {
     if (gB.tris.len > 0) {
-        FlushTris(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, true, gGpu.dsOff);
+        FlushTris(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, kTriColor);
     }
 }
 
@@ -826,7 +1758,7 @@ static void Push(const Inst& i) {
 // primitive is handed to the backend.
 static void Quad(PaintCtx* ctx, int kind, float x, float y, float w, float h,
                  Rgba c, float radius = 0, float border = 0) {
-    if (!T(ctx) || w <= 0 || h <= 0) {
+    if (!gB.target || w <= 0 || h <= 0) {
         return;
     }
     c = PaintFade(ctx, c);
@@ -868,7 +1800,18 @@ static void FreeSurfaces(GpuTarget* t) {
 }
 
 void PaintTargetFree(PaintCtx* ctx) {
-    GpuTarget* t = T(ctx);
+    if (PaintD3d12On()) {
+        D12Target* t = ctx ? (D12Target*)ctx->rt : nullptr;
+        D12FreeTarget(t);
+        if (ctx) {
+            ctx->rt = nullptr;
+        }
+        if (gB.target == t) {
+            gB.target = nullptr;
+        }
+        return;
+    }
+    GpuTarget* t = T11(ctx);
     if (!t) {
         return;
     }
@@ -980,6 +1923,10 @@ static void BeginFrameState(Gpu* g, GpuTarget* t) {
     // most of what the frame cost.
     gB.target = t;
     gB.image = nullptr;
+    gB.image12 = -1;
+    gB.pxW = t->pxW;
+    gB.pxH = t->pxH;
+    gB.offscreen = t->offscreen;
     gB.insts.len = 0;
     gB.tris.len = 0;
     gB.clipStack.len = 0;
@@ -990,7 +1937,183 @@ static void BeginFrameState(Gpu* g, GpuTarget* t) {
     gB.stats = FrameStats{};
 }
 
+static bool D12PaintTargetBegin(PaintCtx* ctx, void* native, int pxW,
+                                int pxH) {
+    if (!ctx || !ctx->pa || !D12EnsureGpu(ctx->pa)) {
+        return false;
+    }
+    HWND hwnd = (HWND)native;
+    if (!hwnd || pxW <= 0 || pxH <= 0) {
+        return false;
+    }
+    D12Target* t = (D12Target*)ctx->rt;
+    if (t && (t->hwnd != hwnd || t->offscreen)) {
+        D12FreeTarget(t);
+        ctx->rt = nullptr;
+        t = nullptr;
+    }
+    if (!t) {
+        t = new D12Target();
+        t->hwnd = hwnd;
+        t->pxW = pxW;
+        t->pxH = pxH;
+        t->samples = PaintGpuSamples();
+        DXGI_SWAP_CHAIN_DESC1 desc = {};
+        desc.Width = (UINT)pxW;
+        desc.Height = (UINT)pxH;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        desc.BufferCount = kD12FrameCount;
+        desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        IDXGISwapChain1* swap1 = nullptr;
+        HRESULT hr = gD12.factory->CreateSwapChainForHwnd(
+            gD12.queue, hwnd, &desc, nullptr, nullptr, &swap1);
+        if (SUCCEEDED(hr)) {
+            hr = swap1->QueryInterface(__uuidof(IDXGISwapChain3),
+                                       (void**)&t->swap);
+            swap1->Release();
+        }
+        if (FAILED(hr) || !t->swap || !D12MakeFrames(t) ||
+            !D12MakeWindowSurfaces(t)) {
+            D12FreeTarget(t);
+            return false;
+        }
+        gD12.factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+        ctx->rt = (PaintTarget*)t;
+    } else if (t->pxW != pxW || t->pxH != pxH) {
+        D12FreeSurfaces(t);
+        t->pxW = pxW;
+        t->pxH = pxH;
+        scene::Invalidate();
+        if (FAILED(t->swap->ResizeBuffers(kD12FrameCount, (UINT)pxW,
+                                          (UINT)pxH,
+                                          DXGI_FORMAT_B8G8R8A8_UNORM, 0)) ||
+            !D12MakeWindowSurfaces(t)) {
+            D12FreeTarget(t);
+            ctx->rt = nullptr;
+            return false;
+        }
+    }
+    return D12BeginCommands(t);
+}
+
+static bool D12PaintTargetEnd(PaintCtx* ctx) {
+    D12Target* t = ctx ? (D12Target*)ctx->rt : nullptr;
+    if (!t || t->offscreen) {
+        return false;
+    }
+    Flush();
+    bool skip = scene::SkipPresent();
+    ID3D12Resource* back = t->back[t->frameIx];
+    if (t->msaa) {
+        if (!skip) {
+            D12Barrier(gD12.list, t->msaa,
+                       D3D12_RESOURCE_STATE_RENDER_TARGET,
+                       D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+            D12Barrier(gD12.list, back, D3D12_RESOURCE_STATE_PRESENT,
+                       D3D12_RESOURCE_STATE_RESOLVE_DEST);
+            gD12.list->ResolveSubresource(back, 0, t->msaa, 0,
+                                          DXGI_FORMAT_B8G8R8A8_UNORM);
+            D12Barrier(gD12.list, back, D3D12_RESOURCE_STATE_RESOLVE_DEST,
+                       D3D12_RESOURCE_STATE_PRESENT);
+            D12Barrier(gD12.list, t->msaa,
+                       D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
+                       D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
+    } else {
+        D12Barrier(gD12.list, back, D3D12_RESOURCE_STATE_RENDER_TARGET,
+                   D3D12_RESOURCE_STATE_PRESENT);
+    }
+    gLastStats = gB.stats;
+    gB.target = nullptr;
+    if (!D12FinishCommands(t, false)) {
+        return false;
+    }
+    if (skip) {
+        return true;
+    }
+    HRESULT hr = t->swap->Present(0, 0);
+    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+        D12FreeTarget(t);
+        ctx->rt = nullptr;
+        return false;
+    }
+    return SUCCEEDED(hr);
+}
+
+static bool D12PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    if (!ctx || !ctx->pa || !D12EnsureGpu(ctx->pa) || pxW <= 0 || pxH <= 0) {
+        return false;
+    }
+    if (ctx->rt) {
+        D12FreeTarget((D12Target*)ctx->rt);
+        ctx->rt = nullptr;
+    }
+    D12Target* t = new D12Target();
+    t->offscreen = true;
+    t->pxW = pxW;
+    t->pxH = pxH;
+    if (!D12MakeFrames(t) || !D12MakeOffscreenSurfaces(t)) {
+        D12FreeTarget(t);
+        return false;
+    }
+    ctx->rt = (PaintTarget*)t;
+    if (!D12BeginCommands(t)) {
+        D12FreeTarget(t);
+        ctx->rt = nullptr;
+        return false;
+    }
+    float clear[4] = {0, 0, 0, 0};
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = D12Rtv(t, 3);
+    gD12.list->ClearRenderTargetView(rtv, clear, 0, nullptr);
+    return true;
+}
+
+static bool D12PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
+    D12Target* t = ctx ? (D12Target*)ctx->rt : nullptr;
+    if (!t || !t->offscreen) {
+        return false;
+    }
+    Flush();
+    D12Barrier(gD12.list, t->offTex, D3D12_RESOURCE_STATE_RENDER_TARGET,
+               D3D12_RESOURCE_STATE_COPY_SOURCE);
+    D3D12_TEXTURE_COPY_LOCATION src = {};
+    src.pResource = t->offTex;
+    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    D3D12_TEXTURE_COPY_LOCATION dst = {};
+    dst.pResource = t->readback;
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst.PlacedFootprint = t->readbackLayout;
+    gD12.list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    gB.target = nullptr;
+    bool ok = D12FinishCommands(t, true);
+    if (ok && outBgra) {
+        uint8_t* mapped = nullptr;
+        D3D12_RANGE read = {0, (SIZE_T)t->readbackBytes};
+        if (SUCCEEDED(t->readback->Map(0, &read, (void**)&mapped))) {
+            for (int y = 0; y < t->pxH; y++) {
+                memcpy(outBgra + (size_t)y * (size_t)t->pxW * 4,
+                       mapped + (size_t)y *
+                                    t->readbackLayout.Footprint.RowPitch,
+                       (size_t)t->pxW * 4);
+            }
+            D3D12_RANGE wrote = {0, 0};
+            t->readback->Unmap(0, &wrote);
+        } else {
+            ok = false;
+        }
+    }
+    D12FreeTarget(t);
+    ctx->rt = nullptr;
+    return ok;
+}
+
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
+    if (PaintD3d12On()) {
+        return D12PaintTargetBegin(ctx, native, pxW, pxH);
+    }
     if (!ctx || !ctx->pa || !EnsureGpu(ctx->pa)) {
         return false;
     }
@@ -999,7 +2122,7 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         return false;
     }
     Gpu* g = &gGpu;
-    GpuTarget* t = T(ctx);
+    GpuTarget* t = T11(ctx);
     if (t && (t->hwnd != hwnd || t->offscreen)) {
         gpuw::PaintTargetFree(ctx);
         t = nullptr;
@@ -1049,12 +2172,15 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
             return false;
         }
     }
-    BeginFrameState(g, T(ctx));
+    BeginFrameState(g, T11(ctx));
     return true;
 }
 
 bool PaintTargetEnd(PaintCtx* ctx) {
-    GpuTarget* t = T(ctx);
+    if (PaintD3d12On()) {
+        return D12PaintTargetEnd(ctx);
+    }
+    GpuTarget* t = T11(ctx);
     if (!t) {
         return false;
     }
@@ -1083,6 +2209,9 @@ bool PaintTargetEnd(PaintCtx* ctx) {
 }
 
 bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    if (PaintD3d12On()) {
+        return D12PaintTargetBeginOffscreen(ctx, pxW, pxH);
+    }
     if (!ctx || !ctx->pa || !EnsureGpu(ctx->pa) || pxW <= 0 || pxH <= 0) {
         return false;
     }
@@ -1136,7 +2265,10 @@ bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
 }
 
 bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
-    GpuTarget* t = T(ctx);
+    if (PaintD3d12On()) {
+        return D12PaintTargetEndOffscreen(ctx, outBgra);
+    }
+    GpuTarget* t = T11(ctx);
     if (!t || !t->offscreen) {
         return false;
     }
@@ -1162,8 +2294,7 @@ bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
 // ─── canvas ──────────────────────────────────────────────────────────────
 
 void CanvasClear(PaintCtx* ctx, Rgba c) {
-    GpuTarget* t = T(ctx);
-    if (!t) {
+    if (!gB.target) {
         return;
     }
     // A clear only reaches the whole surface when nothing is clipping it; a
@@ -1174,12 +2305,22 @@ void CanvasClear(PaintCtx* ctx, Rgba c) {
         Flush();
         Rgba f = PaintFade(ctx, c);
         float col[4] = {f.r / 255.f, f.g / 255.f, f.b / 255.f, f.a / 255.f};
+        if (PaintD3d12On()) {
+            D12Target* t = (D12Target*)gB.target;
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv =
+                t->offscreen
+                    ? D12Rtv(t, 3)
+                    : (t->msaa ? D12Rtv(t, 3) : D12Rtv(t, t->frameIx));
+            gD12.list->ClearRenderTargetView(rtv, col, 0, nullptr);
+            return;
+        }
+        GpuTarget* t = (GpuTarget*)gB.target;
         ID3D11RenderTargetView* rtv =
             t->offscreen ? t->offRtv : (t->msaaRtv ? t->msaaRtv : t->backRtv);
         gGpu.ctx->ClearRenderTargetView(rtv, col);
         return;
     }
-    Quad(ctx, kQuadRect, 0, 0, (float)t->pxW, (float)t->pxH, c);
+    Quad(ctx, kQuadRect, 0, 0, (float)gB.pxW, (float)gB.pxH, c);
 }
 
 void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
@@ -1239,7 +2380,7 @@ static void StrokeDisc(float cx, float cy, float r, Rgba c) {
 
 void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
                 float stroke, Rgba c, const float* dash) {
-    if (!T(ctx) || stroke <= 0) {
+    if (!gB.target || stroke <= 0) {
         return;
     }
     c = PaintFade(ctx, c);
@@ -1291,7 +2432,8 @@ void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
 }
 
 void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
-    if (!T(ctx)) {
+    (void)ctx;
+    if (!gB.target) {
         return;
     }
     // Nothing is flushed: the mask rides on the instance, so a clip change
@@ -1491,6 +2633,11 @@ static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto) {
     VecAppend(gB.insts, i);
     (void)ctx;
 
+    if (PaintD3d12On()) {
+        D12SubmitQuads(true);
+        return;
+    }
+
     // Straight out rather than through FlushQuads: this one draw needs the
     // stencil test, and the state goes back afterwards.
     if (!EnsureInstBuf(g, gB.insts.len)) {
@@ -1521,13 +2668,13 @@ static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto) {
 
 static void PathFillWith(PaintCtx* ctx, Path* path, const Inst& proto) {
     GpuPath* p = P(path);
-    if (!T(ctx) || !p || p->pts.len < 6) {
+    if (!gB.target || !p || p->pts.len < 6) {
         return;
     }
     Flush();
     PathStencil(ctx, p);
-    FlushTris(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false,
-              p->winding ? gGpu.dsNonZero : gGpu.dsEvenOdd);
+    FlushTris(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+              p->winding ? kTriNonZero : kTriEvenOdd);
     PathCover(ctx, p, proto);
 }
 
@@ -1568,7 +2715,7 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
 void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c,
                 bool roundCaps) {
     GpuPath* p = P(path);
-    if (!T(ctx) || !p || stroke <= 0) {
+    if (!gB.target || !p || stroke <= 0) {
         return;
     }
     c = PaintFade(ctx, c);
@@ -1612,6 +2759,49 @@ struct ImageSlot {
 static ImageSlot gImages[kImageSlots];
 static int gImageNext = 0;
 
+static int D12ImageDescriptor(const Image* img) {
+    for (int i = 0; i < gD12.imageCount; i++) {
+        if (gD12.images[i].img == img) {
+            return gD12.images[i].descriptor;
+        }
+    }
+    if (gD12.imageCount >= kD12ImageSlots) {
+        return -1;
+    }
+    const uint8_t* bgra = nullptr;
+    int w = 0, h = 0;
+    if (!PaintImagePixels(img, &bgra, &w, &h) || !bgra || w <= 0 || h <= 0) {
+        return -1;
+    }
+    D12ImageSlot* slot = &gD12.images[gD12.imageCount];
+    D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
+    D3D12_RESOURCE_DESC td = D12Texture(
+        w, h, DXGI_FORMAT_B8G8R8A8_UNORM, 1, D3D12_RESOURCE_FLAG_NONE);
+    if (FAILED(gD12.dev->CreateCommittedResource(
+            &heap, D3D12_HEAP_FLAG_NONE, &td,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, __uuidof(ID3D12Resource),
+            (void**)&slot->tex))) {
+        return -1;
+    }
+    D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST;
+    if (!D12UploadTexture(slot->tex, &state, DXGI_FORMAT_B8G8R8A8_UNORM, 0,
+                          0, w, h, 4, bgra, w * 4)) {
+        Rel(&slot->tex);
+        return -1;
+    }
+    slot->img = img;
+    slot->descriptor = 1 + gD12.imageCount;
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
+    sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    sv.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    sv.Texture2D.MipLevels = 1;
+    gD12.dev->CreateShaderResourceView(slot->tex, &sv,
+                                       D12SrvCpu(slot->descriptor));
+    gD12.imageCount++;
+    return slot->descriptor;
+}
+
 static ID3D11ShaderResourceView* ImageSrv(const Image* img) {
     for (int i = 0; i < kImageSlots; i++) {
         if (gImages[i].img == img) {
@@ -1654,18 +2844,29 @@ static ID3D11ShaderResourceView* ImageSrv(const Image* img) {
 }
 
 void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
-    if (!T(ctx) || !img || b.w <= 0 || b.h <= 0) {
-        return;
-    }
-    ID3D11ShaderResourceView* srv = ImageSrv(img);
-    if (!srv) {
+    if (!gB.target || !img || b.w <= 0 || b.h <= 0) {
         return;
     }
     EnsureQuadPhase();
-    // A different texture is the one thing that has to break the batch.
-    if (gB.image != srv) {
-        FlushQuads();
-        gB.image = srv;
+    if (PaintD3d12On()) {
+        int descriptor = D12ImageDescriptor(img);
+        if (descriptor < 0) {
+            return;
+        }
+        if (gB.image12 != descriptor) {
+            FlushQuads();
+            gB.image12 = descriptor;
+        }
+    } else {
+        ID3D11ShaderResourceView* srv = ImageSrv(img);
+        if (!srv) {
+            return;
+        }
+        // A different texture is the one thing that has to break the batch.
+        if (gB.image != srv) {
+            FlushQuads();
+            gB.image = srv;
+        }
     }
     Inst i = {};
     i.rect[0] = b.x;
@@ -1685,6 +2886,7 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     Push(i);
     FlushQuads();
     gB.image = nullptr;
+    gB.image12 = -1;
 }
 
 // ─── text ────────────────────────────────────────────────────────────────
@@ -1790,13 +2992,21 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
             return false;
         }
     }
-    D3D11_BOX box = {};
-    box.left = (UINT)a->penX;
-    box.top = (UINT)a->penY;
-    box.right = (UINT)(a->penX + w);
-    box.bottom = (UINT)(a->penY + h);
-    box.back = 1;
-    g->ctx->UpdateSubresource(a->tex, 0, &box, gray.els, (UINT)w, 0);
+    if (PaintD3d12On()) {
+        if (!D12UploadTexture(gD12.atlas, &gD12.atlasState,
+                              DXGI_FORMAT_R8_UNORM, a->penX, a->penY, w, h, 1,
+                              gray.els, w)) {
+            return false;
+        }
+    } else {
+        D3D11_BOX box = {};
+        box.left = (UINT)a->penX;
+        box.top = (UINT)a->penY;
+        box.right = (UINT)(a->penX + w);
+        box.bottom = (UINT)(a->penY + h);
+        box.back = 1;
+        g->ctx->UpdateSubresource(a->tex, 0, &box, gray.els, (UINT)w, 0);
+    }
 
     e->used = true;
     e->key.face = face;
@@ -1952,7 +3162,7 @@ struct GlyphSink : public IDWriteTextRenderer {
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip, float clipW) {
     (void)clipW;
-    if (!T(ctx) || !tl) {
+    if (!gB.target || !tl) {
         return;
     }
     auto* layout = (IDWriteTextLayout*)tl;

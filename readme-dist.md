@@ -40,6 +40,10 @@ bun run.ts gpui_shell -- examples/js_todolist --dev
 loads and renders once without opening a window, and `types <directory>` writes
 the matching `gpui.d.ts` declarations.
 
+Windows uses Direct2D by default. Set `GPUI_PAINT=d3d11` (`gpu` is an alias) or
+`GPUI_PAINT=d3d12` before launching an example to select the native custom GPU
+renderer; `GPUI_PAINT_MSAA=1|2|4|8` controls its sample count.
+
 ## What is here
 
 ```
@@ -62,7 +66,8 @@ C11. The platform halves are already inside `gpui.cpp` behind `GPUI_OS_*`
 guards, so the same source set builds on all four:
 
 - **Windows** — `cl /std:c++20 /EHsc /utf-8 /DUNICODE /D_UNICODE`, static CRT;
-  links against the Win32, Direct2D and DirectWrite import libraries.
+  links against the Win32, Direct2D, DirectWrite, D3D11, D3D12 and DXGI import
+  libraries.
 - **Linux** — `g++ -std=c++20` with `pkg-config --cflags --libs x11 cairo pangocairo`.
 - **macOS** — `clang++ -std=c++20 -x objective-c++` with the Cocoa, CoreText and
   IOKit frameworks. The file is Objective-C++ because the mac half is.

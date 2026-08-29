@@ -9928,3 +9928,45 @@ through rather than storing it in the builder. New string tests cover borrowed
 buffer growth, arena growth and destruction, ownership transfer, removal and
 NUL termination. MSVC release and debug and clang-cl release each pass 21,490
 checks; wasm passes 20,709.
+
+## The GPUI-shaped renderer has a native D3D12 submission half
+
+2026-08-29: `GPUI_PAINT=d3d12` now selects a native D3D12 backend on Windows.
+It shares the existing custom renderer's CPU front end, HLSL, instance format,
+path flattening and stencil-and-cover algorithm, glyph atlas and WIC-decoded
+pixels with `GPUI_PAINT=d3d11`; this is not D3D11On12. The D3D12 half owns its
+device and queue, a flip-model triple buffer, command allocator and persistently
+mapped 16 MB upload stream per back buffer, fence-delayed upload lifetimes,
+shader-visible SRV descriptors, native image and atlas textures, D24S8 stencil
+surface, per-MSAA-count pipeline objects, and offscreen render/readback targets.
+Large images use dedicated upload resources when they do not fit in the frame
+stream. Hardware device creation falls back to WARP the same way the D3D11
+renderer does.
+
+The process-start selector is now explicit: unset or `GPUI_PAINT=d2d` keeps the
+default Direct2D backend, `d3d11` selects the original custom submission half,
+and `d3d12` selects the new one; `gpu` remains an alias for `d3d11` so existing
+invocations do not change. `GPUI_PAINT_MSAA=1|2|4|8` applies to both custom
+halves. `d3d12.lib` joins the Windows import libraries, and the source and
+published-readme documentation record the choices.
+
+Fresh release measurements used `GPUI_SCENE=off`, 600 back-to-back frames and
+three runs per cell. These are the medians of the three paint-phase means on
+the same machine; disabling the scene measures the renderer instead of the
+default scene's unchanged-frame skip:
+
+```
+scene             Direct2D   D3D11      D3D12
+showcase          0.200 ms   0.170 ms   0.159 ms
+system_monitor    0.448 ms   0.203 ms   0.256 ms
+story             1.625 ms   0.582 ms   0.744 ms
+```
+
+D3D12 is slightly ahead on the light showcase, while D3D11 remains faster on
+the path-heavy monitor and on story: explicit D3D12 state and command recording
+cost more across their many alternating quad, stencil and cover passes. Both
+custom APIs execute the same renderer rather than two approximate versions:
+fresh `GPUI_SCENE=off` D3D11 and D3D12 story captures are byte-identical.
+MSVC release passes 21,490 checks under each of Direct2D, D3D11 and D3D12;
+MSVC release builds of story, showcase and system_monitor pass, and clang-cl
+release builds story with `/W4 /WX`.

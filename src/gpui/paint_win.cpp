@@ -1,8 +1,9 @@
 /* Direct2D + DirectWrite backend for Paint.h. */
 
 #include "gpui/paint.h"
-// The GPU backend beside this one. PaintGpuOn() is false unless
-// GPUI_PAINT=gpu, and then every entry point below hands straight over to it.
+// The custom GPU renderer beside this one. PaintGpuOn() is false unless
+// GPUI_PAINT=d3d11|d3d12 (gpu aliases d3d11), and then every entry point below
+// hands straight over to its selected native submission half.
 #include "gpui/paintgpu.h"
 #include "gpui/scene.h"
 

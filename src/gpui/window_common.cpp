@@ -165,9 +165,10 @@ static void FrameBenchTick(Window* win, float secs) {
     if (PaintGpuOn()) {
         const gpuw::FrameStats& st = gpuw::LastFrameStats();
         logf(
-            "frame-bench gpu instances=%d draws=%d pathTris=%d "
+            "frame-bench %s instances=%d draws=%d pathTris=%d "
             "glyphsRasterized=%d",
-            st.instances, st.draws, st.pathTriangles, st.glyphsRasterized);
+            PaintD3d12On() ? StrL("d3d12") : StrL("d3d11"), st.instances,
+            st.draws, st.pathTriangles, st.glyphsRasterized);
     }
 #endif
     if (SceneOn()) {

@@ -881,6 +881,7 @@ export function findToolchain(plat: Platform, f: BuildFlags, fail: (msg: string)
 const winLibs = [
   "d2d1.lib",
   "d3d11.lib",
+  "d3d12.lib",
   "dxgi.lib",
   // src/gpui/paintgpu_win.cpp compiles its HLSL at startup with D3DCompile.
   "d3dcompiler.lib",

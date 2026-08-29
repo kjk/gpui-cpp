@@ -32,7 +32,8 @@ bun cmd/build.ts -wasm system_monitor
 bun cmd/build.ts -clang -rel showcase   # Windows: clang-cl, not cl.exe
 bun cmd/run.ts -wasm showcase
 
-GPUI_PAINT=gpu out/rel/story.exe            # the second Windows backend
+GPUI_PAINT=d3d11 out/rel/story.exe          # custom renderer on D3D11 (`gpu` alias)
+GPUI_PAINT=d3d12 out/rel/story.exe          # custom renderer on native D3D12
 GPUI_SCENE=off out/rel/story.exe            # draw straight, without the scene
 GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
 GPUI_LAYOUT_DUMP=lay.txt out/rel/story.exe  # every frame's laid-out tree
@@ -82,7 +83,8 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   here and neither is the whole. `src/gpui/paintgpu.h` is the renderer half —
   one instance buffer a frame, SDF rounded rects and borders, a glyph atlas,
   stencil-and-cover paths, which is what Blade and `directx_renderer.rs` do —
-  and it is off unless `GPUI_PAINT=gpu`. `src/gpui/scene.h` is the collection
+  and it is off unless `GPUI_PAINT=d3d11|d3d12` (`gpu` aliases `d3d11`).
+  `src/gpui/scene.h` is the collection
   half, and it *is* on: a frame's drawing gathered as a flat array of
   primitives, each carrying its own content mask and its layer, hashed against
   the last frame's. What that bought was not batching, which the GPU backend
@@ -225,22 +227,28 @@ it — `src/base_wasm.cpp` writes its own against a linear heap that grows.
 window — frame drawing, input dispatch, the app lifecycle — and all platform
 files call into it.
 
-### Two Windows backends
+### Three Windows backends
 
-`paint.h` has two implementations on Windows. `paint_win.cpp` is the default
+`paint.h` has three implementations on Windows. `paint_win.cpp` is the default
 and is Direct2D on a D3D11 device over a flip-model swap chain — already on
 the GPU, and what every build and every screenshot uses.
 `paintgpu_win.cpp` is GPUI's own shape of renderer, reached with
-`GPUI_PAINT=gpu` in the environment: a frame is one instance buffer of rounded
+`GPUI_PAINT=d3d11` or `GPUI_PAINT=d3d12` in the environment (`gpu` remains a
+compatibility alias for `d3d11`): a frame is one instance buffer of rounded
 rects, borders, glyphs, images and gradients, the shape and the content mask
 are evaluated in the pixel shader, and path fills go through stencil-and-cover
-rather than a tessellator. `GPUI_PAINT_MSAA` sets its sample count.
+rather than a tessellator. The CPU batching, shaders, atlas and path machinery
+are shared; only native resource and command submission differ. The D3D12 half
+owns a command queue, triple-buffered allocators, persistent upload heaps and
+descriptor tables; it does not use D3D11On12. `GPUI_PAINT_MSAA` sets the
+custom renderers' sample count.
 
-The two share everything device-independent rather than writing it twice: the
-DirectWrite factory and its formats, the `IDWriteTextLayout` a `TextLayout*`
-is on Windows — so shaping, measurement, hit-testing and range rects are the
-same code on both — the WIC decode, and the D3D11 device. Only the target and
-the drawing differ, and `paint_win.cpp` hands over in one line per entry
+All three share everything device-independent rather than writing it three
+times: the DirectWrite factory and its formats, the `IDWriteTextLayout` a
+`TextLayout*` is on Windows — so shaping, measurement, hit-testing and range rects are the
+same code on all three — and WIC decode. Direct2D and the D3D11 custom half
+also share the D3D11 device. Only the target and drawing differ, and
+`paint_win.cpp` hands over in one line per entry
 point. Read `src/gpui/paintgpu.h` before touching either: it has the measured
 numbers, the reason it is not the default, and the two gaps that would have to
 close first (subpixel glyph positioning, dashes on a rounded rect).
@@ -250,7 +258,7 @@ close first (subpixel glyph positioning, dashes on a rounded rect).
 `src/gpui/scene.h` sits between the element tree and `paint.h` on Windows: the
 tree's drawing is collected as a flat array of primitives rather than issued to
 a backend as it walks, and the array is then replayed through the same
-`paint.h` entry points — so both Windows backends draw it and neither can tell.
+`paint.h` entry points — so all three Windows backends draw it and none can tell.
 It is on at the `skip` level; `GPUI_SCENE=off|replay|cache|skip|damage` turns it
 down, and `off` is the first thing to try if a frame ever comes out stale, since
 this is the only thing in the tree that can decide not to draw. On the story

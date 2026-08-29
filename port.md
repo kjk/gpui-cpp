@@ -127,7 +127,10 @@ word for — `fixed` against the window, an overlay anchored under its trigger, 
 
 ### 4.4 Paint
 
-Direct2D + DirectWrite (GPU, no extra deps):
+Direct2D + DirectWrite is the default Windows backend. The custom GPUI-shaped
+renderer shares its CPU batches and shaders across native D3D11 and D3D12
+submission paths, selected with `GPUI_PAINT=d3d11|d3d12` (`gpu` aliases
+`d3d11`). All three provide:
 
 - filled / stroked rounded rects
 - clip
