@@ -4565,9 +4565,16 @@ void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
 // per-node caches are. It is reconciled against the element tree rather than
 // rebuilt: an element whose style and content are the ones its node already
 // has is not laid out again, and a subtree of them is not walked at all.
-// See the block above `LayoutNode` in gpui.cpp, and GPUI_LAYOUT_REUSE=off to
-// take it back out.
+// See the block above `LayoutNode` in gpui.cpp, and `__layout_reuse=off`
+// to take it back out. `GPUI_LAYOUT_REUSE=off` is the same switch if argv
+// did not set it.
 struct LayoutCache;
+
+// Consumed by GpuiTakeRuntimeArgs: `__layout_reuse=off|on` (also 0|1).
+// Invalid values are still consumed and leave the current/default choice.
+bool LayoutReuseTakeArg(Str arg);
+// Whether the taffy tree is kept between frames. Default on.
+bool LayoutReuseOn();
 
 LayoutCache* LayoutCacheNew();
 void LayoutCacheFree(LayoutCache* lc);

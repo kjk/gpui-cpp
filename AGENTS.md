@@ -39,9 +39,9 @@ bun cmd/build.ts -rel --win-backend=d3d11 story    # fixed custom D3D11 build
 bun cmd/build.ts -rel --win-backend=d3d12 story    # fixed native D3D12 build
 bun cmd/run.ts -rel --win-backend=all story -- __paint=d3d12 __msaa=4 __scene=damage
 out/rel/story.exe __scene=off               # draw straight, without the scene
+out/rel/editor.exe __layout_reuse=off       # rebuild the taffy tree each frame
 GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
 GPUI_LAYOUT_DUMP=lay.txt out/rel/story.exe  # every frame's laid-out tree
-GPUI_LAYOUT_REUSE=off out/rel/story.exe     # rebuild the taffy tree each frame
 ```
 
 Rust references (in `.work/gpui-component`):
@@ -539,8 +539,9 @@ style taffy knows about nor a measurement, so it costs no layout.
 
 That is what took a story frame's layout from 1.85 ms to 0.24 — the frame
 from 2.34 to 0.69 — and what is left of the 0.24 is this tree's own walk, not
-taffy's. `GPUI_LAYOUT_REUSE=off` rebuilds every frame the way it used to, and
-is the first thing to try if a frame ever comes out laid out stale;
+taffy's. `__layout_reuse=off` rebuilds every frame the way it used to, and
+is the first thing to try if a frame ever comes out laid out stale
+(`GPUI_LAYOUT_REUSE=off` is the same switch if argv did not set it);
 `GPUI_FRAME_BENCH` prints what each frame had to tell taffy about
 (`nodes=1466 made=0 dropped=0 restyled=0 remeasured=0` is a page that did not
 change).
@@ -781,8 +782,9 @@ cmd/imgdiff.ts         compare two shots, or two directories of them, and exit 1
                        It passes -gpui-window=X,Y,W,H, a runtime flag every example
                        understands: the window opens at that outer rect instead of
                        being moved into it, so the tree is laid out once. The runtime
-                       takes its runtime flags, including Windows' __paint,
-                       __msaa and __scene, out of argv before the example parses it.
+                       takes its runtime flags, including __layout_reuse and
+                       Windows' __paint, __msaa and __scene, out of argv
+                       before the example parses it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/update-dist.ts     amalgamate src/** into gpui.h + gpui.cpp (`.work/` for

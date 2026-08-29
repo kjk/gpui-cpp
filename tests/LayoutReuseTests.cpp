@@ -288,6 +288,31 @@ static void AKindChangeRecyclesBeforeBuilding() {
     LayoutCacheFree(lc);
 }
 
+// __layout_reuse=off is the rust-shaped path: rebuild the taffy tree every
+// frame. An identical second tree then still makes nodes.
+static void ReuseOffRebuildsEveryFrame() {
+    LayoutReuseTakeArg(StrL("__layout_reuse=off"));
+    utassert(!LayoutReuseOn());
+
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+    El* first = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    first->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("a"))));
+    LayoutEl(nullptr, first, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(LayoutCacheLastStats(lc).made > 0);
+
+    a->Reset();
+    El* second = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    second->Child(Div(a)->W(100)->H(20)->Child(TextEl(a, StrL("a"))));
+    LayoutEl(nullptr, second, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(LayoutCacheLastStats(lc).made > 0);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+    LayoutReuseTakeArg(StrL("__layout_reuse=on"));
+    utassert(LayoutReuseOn());
+}
+
 void TestLayoutReuse() {
     AChildOfAnotherKindIsStillLaidOut();
     APageSwitchLaysOutEveryBox();
@@ -296,4 +321,5 @@ void TestLayoutReuse() {
     ASecondIdenticalFrameMakesNoNodes();
     AFixedOverlayIsReusedNotRebuilt();
     AKindChangeRecyclesBeforeBuilding();
+    ReuseOffRebuildsEveryFrame();
 }

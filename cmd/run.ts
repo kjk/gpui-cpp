@@ -93,9 +93,9 @@ const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
   -no-open    -wasm: do not launch a browser
   -port N     -wasm: listen on N (default 8000; the next free port if taken)
   --          pass every remaining argument unchanged to the selected binary;
-              Windows consumes __paint=d2d|d3d11|d3d12 and __msaa=1|2|4|8
-              plus __scene=off|replay|cache|skip|damage before the
-              application's GpuiMain sees argv
+              the runtime consumes __layout_reuse=off|on before GpuiMain;
+              Windows also consumes __paint=d2d|d3d11|d3d12, __msaa=1|2|4|8
+              and __scene=off|replay|cache|skip|damage
 
 The target name is the last argument before --. -all is not accepted — pick one binary.`;
 

@@ -2731,9 +2731,9 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 //     A hover that only recolours a box changes neither, so a hovered row
 //     costs no layout at all.
 //
-// `GPUI_LAYOUT_REUSE=off` turns it back into the old behaviour by resetting
-// the cache every frame, which is the first thing to try if a frame ever
-// comes out laid out stale.
+// `__layout_reuse=off` (or `GPUI_LAYOUT_REUSE=off`) turns it back into the
+// old behaviour by resetting the cache every frame, which is the first
+// thing to try if a frame ever comes out laid out stale.
 
 // What a node needs to know about its element, kept beside taffy rather than
 // in it: `SetNodeContext` marks a node dirty, so handing taffy this frame's
@@ -3285,26 +3285,39 @@ static uint64_t FnvMix(uint64_t h, const void* p, size_t n) {
     return h;
 }
 
-// GPUI_LAYOUT_REUSE=off rebuilds the tree every frame, which is what layout
+// __layout_reuse=off rebuilds the tree every frame, which is what layout
 // did before the cache. It is the first thing to try if a frame ever comes
-// out laid out stale, and what the two are measured against.
-static bool LayoutReuseOn() {
-    static int on = -1;
-    if (on >= 0) {
-        return on != 0;
+// out laid out stale, and what the two are measured against. Argv wins;
+// GPUI_LAYOUT_REUSE is the same switch if nothing on the command line set it.
+static int gLayoutReuse = -1;
+
+bool LayoutReuseTakeArg(Str arg) {
+    const Str k = StrL("__layout_reuse=");
+    if (!base::StrStartsWith(arg, k)) {
+        return false;
     }
-    char buf[16] = {};
+    Str value(arg.s + k.len, arg.len - k.len);
+    if (base::StrEqI(value, "off") || base::StrEq(value, "0")) {
+        gLayoutReuse = 0;
+        logf("layout: reuse off (__layout_reuse=off), rebuilding every frame");
+    } else if (base::StrEqI(value, "on") || base::StrEq(value, "1")) {
+        gLayoutReuse = 1;
+    }
+    return true;
+}
+
+bool LayoutReuseOn() {
+    if (gLayoutReuse >= 0) {
+        return gLayoutReuse != 0;
+    }
+    gLayoutReuse = 1;
     const char* env = getenv("GPUI_LAYOUT_REUSE");
-    if (env) {
-        StrCopyZ(buf, (int)sizeof(buf), env);
-    }
-    on = 1;
-    if (buf[0] &&
-        (base::StrEqI(Str(buf), "0") || base::StrEqI(Str(buf), "off"))) {
-        on = 0;
+    if (env && env[0] &&
+        (base::StrEqI(Str(env), "0") || base::StrEqI(Str(env), "off"))) {
+        gLayoutReuse = 0;
         logf("layout: reuse off (GPUI_LAYOUT_REUSE), rebuilding every frame");
     }
-    return on != 0;
+    return gLayoutReuse != 0;
 }
 
 static LayoutNode* LayoutNodeTake(LayoutCache* lc, El* e) {

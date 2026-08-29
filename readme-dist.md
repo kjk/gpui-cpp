@@ -45,8 +45,9 @@ Windows builds Direct2D by default. Pass
 the executable contains. An `all` build retains the process-start
 `__paint=d2d|d3d11|d3d12` selector; `__msaa=1|2|4|8` controls the custom
 renderers' sample count, and `__scene=off|replay|cache|skip|damage` selects the
-scene optimization level (`skip` by default). Pass those after `run.ts`'s
-`--`; Windows removes them from `argv` before calling `GpuiMain`.
+scene optimization level (`skip` by default). `__layout_reuse=off|on` rebuilds
+the taffy tree every frame when off. Pass those after `run.ts`'s `--`; the
+runtime removes them from `argv` before calling `GpuiMain`.
 
 ## What is here
 

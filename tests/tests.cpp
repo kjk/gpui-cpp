@@ -34,7 +34,8 @@ int GpuiMain(int argc, char** argv) {
         Str arg(argv[i]);
         utassert(!base::StrStartsWith(arg, "__paint=") &&
                  !base::StrStartsWith(arg, "__msaa=") &&
-                 !base::StrStartsWith(arg, "__scene="));
+                 !base::StrStartsWith(arg, "__scene=") &&
+                 !base::StrStartsWith(arg, "__layout_reuse="));
     }
 
     // No test reaches the network. A suite that did would fail on a machine

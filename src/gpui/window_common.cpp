@@ -2744,6 +2744,9 @@ int GpuiTakeRuntimeArgs(int argc, char** argv) {
             continue;
         }
 #endif
+        if (i > 0 && a && LayoutReuseTakeArg(Str(a))) {
+            continue;
+        }
         if (i > 0 && a && strcmp(a, "-gpui-inspector") == 0) {
             gInspectorAsked = true;
             continue;

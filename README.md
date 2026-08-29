@@ -74,9 +74,11 @@ compiles all three and retains the process-start
 `__paint=d2d|d3d11|d3d12` selector. A fixed build ignores unavailable backend
 choices. `__msaa=1|2|4|8` controls the custom renderers' sample count (4 by
 default). `__scene=off|replay|cache|skip|damage` selects how much scene work is
-enabled, with `skip` as the default. Windows consumes all three reserved
-arguments before calling `GpuiMain`, so application argument parsing never
-sees them. See `src/gpui/paint.h` for the quality, cost and caching tradeoffs.
+enabled, with `skip` as the default. `__layout_reuse=off|on` rebuilds the
+taffy tree every frame when off (default on); `GPUI_LAYOUT_REUSE` is the same
+switch if argv did not set it. The runtime consumes those reserved arguments
+before calling `GpuiMain`, so application argument parsing never sees them.
+See `src/gpui/paint.h` for the quality, cost and caching tradeoffs.
 
 The custom renderers use checked-in FXC bytecode rather than compiling HLSL at
 application startup. After editing `src/gpui/paintgpu_win.hlsl`, regenerate it
