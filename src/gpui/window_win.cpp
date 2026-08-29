@@ -63,7 +63,7 @@ static int ImeStringUtf8(HIMC imc, DWORD which, char* out, int cap) {
         wlen = (int)(sizeof(wbuf) / sizeof(wbuf[0]));
     }
     ImmGetCompositionStringW(imc, which, wbuf,
-                              (DWORD)wlen * (DWORD)sizeof(wchar_t));
+                             (DWORD)wlen * (DWORD)sizeof(wchar_t));
     int n =
         WideCharToMultiByte(CP_UTF8, 0, wbuf, wlen, out, cap, nullptr, nullptr);
     return n;
@@ -1295,9 +1295,16 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     // same ones MoveWindow and GetWindowRect use.
     WindowGeomRequested(&x, &y, &pxW, &pxH);
 
-    HWND hwnd =
-        CreateWindowExW(0, kWndClass, ToCWstrTemp(title), style, x, y, pxW, pxH,
-                        nullptr, nullptr, GetModuleHandleW(nullptr), win);
+    // WS_EX_NOREDIRECTIONBITMAP, the way GPUI's window.rs creates its windows:
+    // without it the window keeps a GDI redirection surface the system fills
+    // white, and DWM composites that surface — not the flip chain — whenever
+    // the two part company for a moment, which is the white flash a scroll or
+    // a click could show, and reliably did over RDP. Every frame here goes
+    // through the flip-model swap chain, so nothing ever draws on the surface
+    // this drops.
+    HWND hwnd = CreateWindowExW(
+        WS_EX_NOREDIRECTIONBITMAP, kWndClass, ToCWstrTemp(title), style, x, y,
+        pxW, pxH, nullptr, nullptr, GetModuleHandleW(nullptr), win);
     if (!hwnd) {
         delete win->plat;
         win->plat = nullptr;

@@ -10123,3 +10123,21 @@ headers directly. The first independent compile exposed `dimof` and shell
 executor declarations that amalgamation had been providing accidentally; those
 are now declared in `base.h` and force-included through the normal public build
 headers. MSVC and clang-cl release all-backend builds both link successfully.
+
+## White flashes on scroll/click in the editor sample
+
+2026-08-29: The editor sample flashed white on scroll and click where the Rust
+twin did not, and visibly so over RDP. It was not a rendering or a frame-time
+bug: PrintWindow captured every presented frame with its content intact, and a
+30-notch wheel burst drained in ~1 ms. The difference was one window-creation
+flag. GPUI's `window.rs` creates every non-dialog window with
+`WS_EX_NOREDIRECTIONBITMAP` (its content goes through a DirectComposition
+swap chain), so no GDI redirection surface exists. Ours passed exStyle 0, so
+the window kept a redirection surface the system initializes to white, and
+whenever DWM composited that surface instead of the flip chain — activation
+churn, RDP's composition path — the window flashed white. `WindowOpen` in
+`src/gpui/window_win.cpp` now passes `WS_EX_NOREDIRECTIONBITMAP`. Nothing here
+draws through GDI, so the surface it drops was write-only white; screenshots
+still work because `PrintWindow(PW_RENDERFULLCONTENT)` reads the composed flip
+content, which is also how `cmd/compare-story.ts` was already capturing the
+Rust app.
