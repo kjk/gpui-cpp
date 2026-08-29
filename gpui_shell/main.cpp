@@ -39,7 +39,8 @@ static void PrintHelp() {
         "Arguments:\n"
         "  <directory>  The application root, or the main.js inside it.\n\n"
         "Commands:\n"
-        "  types        Write gpui.d.ts beside scripts that import Shell modules.\n"
+        "  types        Write gpui.d.ts beside scripts that import Shell "
+        "modules.\n"
         "  check        Load and render once without opening a window.\n\n"
         "Options:\n"
         "  --watch      Reload when application sources change.\n"
@@ -86,8 +87,10 @@ static bool Parse(int argc, char** argv, Invocation* out, Str* error) {
         } else if (!out->directory) {
             out->directory = Str(argument);
         } else {
-            *error = StrDup(fmt("unexpected argument `%s`; gpui-shell runs one application directory",
-                                Str(argument)));
+            *error =
+                StrDup(fmt("unexpected argument `%s`; gpui-shell runs one "
+                           "application directory",
+                           Str(argument)));
             return false;
         }
     }
@@ -99,8 +102,8 @@ static bool Parse(int argc, char** argv, Invocation* out, Str* error) {
 }
 
 static bool JoinPath(char* out, int cap, Str left, Str right) {
-    bool separator = left && left.s[left.len - 1] != '/' &&
-                     left.s[left.len - 1] != '\\';
+    bool separator =
+        left && left.s[left.len - 1] != '/' && left.s[left.len - 1] != '\\';
     int len = left.len + (separator ? 1 : 0) + right.len;
     if (!left || !right || len >= cap) return false;
     memcpy(out, left.s, (size_t)left.len);
@@ -124,11 +127,15 @@ static bool ResolveRoot(Str input, bool requireEntry, Str* root, Str* entry,
     candidate[input.len] = 0;
     if (PlatFileExists(candidate)) {
         int slash = input.len - 1;
-        while (slash >= 0 && candidate[slash] != '/' && candidate[slash] != '\\')
+        while (slash >= 0 && candidate[slash] != '/' &&
+               candidate[slash] != '\\')
             slash--;
-        if (slash < 0) strcpy(candidate, ".");
-        else if (slash == 0) candidate[1] = 0;
-        else candidate[slash] = 0;
+        if (slash < 0)
+            strcpy(candidate, ".");
+        else if (slash == 0)
+            candidate[1] = 0;
+        else
+            candidate[slash] = 0;
     }
     if (!PlatDirExists(candidate)) {
         ShellErrorSet(error, fmt("`%s` does not exist", input));
@@ -142,34 +149,33 @@ static bool ResolveRoot(Str input, bool requireEntry, Str* root, Str* entry,
     Str resolved(canonical);
     PluginManifest manifest;
     char manifestPath[kMaxPath];
-    bool hasManifest = JoinPath(manifestPath, kMaxPath, resolved,
-                                Str(kShellManifestFile)) &&
-                       PlatFileExists(manifestPath);
+    bool hasManifest =
+        JoinPath(manifestPath, kMaxPath, resolved, Str(kShellManifestFile)) &&
+        PlatFileExists(manifestPath);
     Str selected = StrL("main.js");
     if (hasManifest && requireEntry) {
         if (!PluginManifestRead(resolved, &manifest, error)) return false;
         selected = manifest.entry;
     }
     char entryPath[kMaxPath];
-    if (requireEntry &&
-        (!JoinPath(entryPath, kMaxPath, resolved, selected) ||
-         !PlatFileExists(entryPath))) {
+    if (requireEntry && (!JoinPath(entryPath, kMaxPath, resolved, selected) ||
+                         !PlatFileExists(entryPath))) {
         ShellErrorSet(error,
-                      fmt("no `%s` in %s\n\nAn application directory must contain %s, which default-exports a view class.",
+                      fmt("no `%s` in %s\n\nAn application directory must "
+                          "contain %s, which default-exports a view class.",
                           selected, resolved, selected));
         return false;
     }
-    *root = StrDup(resolved);
-    *entry = StrDup(selected);
+    StrDup2(resolved, selected, *root, *entry);
     return root->s && entry->s;
 }
 
 static Policy* LocalPolicy(Str root, ShellError* error) {
     PluginManifest manifest;
     char manifestPath[kMaxPath];
-    bool hasManifest = JoinPath(manifestPath, kMaxPath, root,
-                                Str(kShellManifestFile)) &&
-                       PlatFileExists(manifestPath);
+    bool hasManifest =
+        JoinPath(manifestPath, kMaxPath, root, Str(kShellManifestFile)) &&
+        PlatFileExists(manifestPath);
     if (hasManifest && !PluginManifestRead(root, &manifest, error))
         return nullptr;
 
@@ -200,10 +206,8 @@ static Policy* LocalPolicy(Str root, ShellError* error) {
     Capabilities capabilities =
         hasManifest ? manifest.Grant(root, data) : Capabilities();
     if (!hasManifest) capabilities.Storage(true);
-    capabilities.AddReadRoot(root)
-        .AddReadRoot(data)
-        .AddWriteRoot(data)
-        .Exit(true);
+    capabilities.AddReadRoot(root).AddReadRoot(data).AddWriteRoot(data).Exit(
+        true);
     Policy* policy = PolicyNew(capabilities);
     if (capabilities.HasStorage()) {
         char store[kMaxPath];
@@ -249,7 +253,7 @@ static int Check(Str root, Str entry, bool printSpec, Policy* policy) {
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
     Arena* arena = ArenaNew();
     Str spec = runtime ? ShellCheckApplication(arena, runtime, root, &window,
-                                                &app, policy, &error)
+                                               &app, policy, &error)
                        : Str{};
     int status = error.IsSet() ? 1 : 0;
     if (status) {
@@ -304,8 +308,8 @@ static int Run(Str root, Str entry, const Invocation& invocation,
     component::Init(app);
     ShellError error = {};
     ShellRuntime* runtime = ShellRuntime::New(app, &error);
-    ViewType* type = runtime ? runtime->LoadApp(root, entry, policy, &error)
-                             : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadApp(root, entry, policy, &error) : nullptr;
     if (!type) {
         fprintf(stderr, "gpui-shell: ");
         Print(error.message, stderr);
@@ -358,7 +362,8 @@ int GpuiMain(int argc, char** argv) {
     if (!Parse(argc, argv, &invocation, &parseError)) {
         fprintf(stderr, "gpui-shell: ");
         Print(parseError, stderr);
-        fprintf(stderr, "\nTry `gpui-shell --help` for the accepted arguments.\n");
+        fprintf(stderr,
+                "\nTry `gpui-shell --help` for the accepted arguments.\n");
         StrFree(parseError);
         return 2;
     }
@@ -387,8 +392,7 @@ int GpuiMain(int argc, char** argv) {
         Policy* policy = PolicyDefault();
         int status = RefreshTypes(root, policy, true) ? 0 : 1;
         PolicyRelease(policy);
-        StrFree(root);
-        StrFree(entry);
+        StrFree2(root);
         ShellErrorClear(&error);
         return status;
     }
@@ -398,8 +402,7 @@ int GpuiMain(int argc, char** argv) {
         fprintf(stderr, "gpui-shell: ");
         Print(error.message, stderr);
         fputc('\n', stderr);
-        StrFree(root);
-        StrFree(entry);
+        StrFree2(root);
         ShellErrorClear(&error);
         return 1;
     }
@@ -412,8 +415,7 @@ int GpuiMain(int argc, char** argv) {
         status = Run(root, entry, invocation, policy);
     }
     PolicyRelease(policy);
-    StrFree(root);
-    StrFree(entry);
+    StrFree2(root);
     ShellErrorClear(&error);
     return status;
 }

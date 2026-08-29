@@ -112,7 +112,8 @@ struct Str {
     explicit Str(const char* s_) : s((char*)s_), len(0) {
         len = s_ ? (int)strlen(s_) : 0;
     }
-    constexpr explicit Str(const char* s_, int len_) noexcept : s((char*)s_), len(len_) {}
+    constexpr explicit Str(const char* s_, int len_) noexcept
+        : s((char*)s_), len(len_) {}
     explicit Str(char* s_) : s(s_), len(0) { len = s ? (int)strlen(s) : 0; }
     constexpr explicit Str(char* s_, int len_) noexcept : s(s_), len(len_) {}
 
@@ -1659,6 +1660,11 @@ void StrFree(const char*) = delete;
 
 Str StrDup(Arena*, Str str);
 Str StrDup(Str s);
+// Two strings in one heap block. `s1Out.s` is the allocation; `s2Out.s` is
+// interior. Free with StrFree2(s1Out) only — StrFree2 is StrFree by another
+// name, so calling it on `s2Out` would free an interior pointer.
+void StrDup2(Str s1, Str s2, Str& s1Out, Str& s2Out);
+void StrFree2(Str s);
 
 GPUI_NOINLINE bool StrEqRest(Str s1, Str s2);
 inline bool StrEq(Str s1, Str s2) {

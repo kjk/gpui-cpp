@@ -48,6 +48,8 @@ bool TreeExpands(bool isFolder, bool isExpanded);
 // Rc; the items here live in one array on the state and name their parent,
 // which is the same tree without the reference counting.
 struct TreeItem {
+    // One StrDup2 block: id.s is the allocation, label.s is interior.
+    // StrFree2(id) frees both; do not StrFree(label).
     Str id = {};
     Str label = {};
     int parent = -1;
@@ -131,10 +133,8 @@ struct TreeState {
     static void OnScroll(TreeState* self, Ctx* cx, const ScrollEvent* ev);
 
     ~TreeState() {
-        // TreeAddItem duplicated every id and label into the state.
         for (int i = 0; i < items.len; i++) {
-            StrFree(items[i].id);
-            StrFree(items[i].label);
+            StrFree2(items[i].id);
         }
         VecReset(items);
         VecReset(entries);

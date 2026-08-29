@@ -137,6 +137,7 @@ bool ImageSrcIsLocal(Str src) {
 // that is the common answer for a remote URL nothing shipped, and it is the
 // one that costs the most to reach.
 struct AssetResolveSlot {
+    // One StrDup2 block: src.s is the allocation, asset.s is interior.
     Str src = {};
     Str asset = {};
 };
@@ -146,12 +147,7 @@ static int gAssetResolveN = 0;
 
 static void AssetResolveClear() {
     for (int i = 0; i < gAssetResolveN; i++) {
-        if (gAssetResolve[i].src.s) {
-            StrFree(gAssetResolve[i].src);
-        }
-        if (gAssetResolve[i].asset.s) {
-            StrFree(gAssetResolve[i].asset);
-        }
+        StrFree2(gAssetResolve[i].src);
         gAssetResolve[i] = {};
     }
     gAssetResolveN = 0;
@@ -174,8 +170,7 @@ Str ImageAssetFor(Arena* a, Str src) {
     // sixty-four distinct pictures is not what this is sized for.
     if (gAssetResolveN < kAssetResolveSlots) {
         AssetResolveSlot* sl = &gAssetResolve[gAssetResolveN++];
-        sl->src = StrDup(src);
-        sl->asset = got.s ? StrDup(got) : Str{};
+        StrDup2(src, got, sl->src, sl->asset);
     }
     return got;
 }

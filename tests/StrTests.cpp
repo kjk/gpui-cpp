@@ -32,12 +32,11 @@ static void CaseInsensitivePrefixUsesBothOverloads() {
 }
 
 static void ReplaceAllReplacesNonOverlappingMatches() {
-    utassert(base::StrEq(base::StrReplaceAll(StrL("aaaa"), StrL("aa"),
-                                             StrL("b")),
-                         "bb"));
-    utassert(base::StrEq(base::StrReplaceAll(StrL("one two one"),
-                                             StrL("one"), StrL("three")),
-                         "three two three"));
+    utassert(base::StrEq(
+        base::StrReplaceAll(StrL("aaaa"), StrL("aa"), StrL("b")), "bb"));
+    utassert(base::StrEq(
+        base::StrReplaceAll(StrL("one two one"), StrL("one"), StrL("three")),
+        "three two three"));
 }
 
 static void ReplaceAllHandlesEmptyAndMissingMatches() {
@@ -46,8 +45,8 @@ static void ReplaceAllHandlesEmptyAndMissingMatches() {
     utassert(unchanged.s == value.s && unchanged.len == value.len);
     unchanged = base::StrReplaceAll(value, StrL("z"), StrL("x"));
     utassert(unchanged.s == value.s && unchanged.len == value.len);
-    utassert(base::StrEq(base::StrReplaceAll(value, StrL("l"), StrL("")),
-                         "heo"));
+    utassert(
+        base::StrEq(base::StrReplaceAll(value, StrL("l"), StrL("")), "heo"));
 }
 
 static void PrefixSuffixAndFindHelpersHandleBoundaries() {
@@ -132,6 +131,30 @@ static void BuilderRemovalKeepsTheTerminator() {
     utassert(b.RemoveLast() == 0 && b.LastChar() == 0);
 }
 
+static void Dup2PutsBothStringsInOneBlock() {
+    Str a, b;
+    StrDup2(StrL("id"), StrL("label"), a, b);
+    utassert(base::StrEq(a, "id"));
+    utassert(base::StrEq(b, "label"));
+    utassert(a.s && b.s == a.s + a.len + 1);
+    utassert(a.s[a.len] == 0 && b.s[b.len] == 0);
+    StrFree2(a);
+}
+
+static void Dup2TreatsNullAsEmptyInsideTheSameBlock() {
+    Str a, b;
+    StrDup2(Str{}, StrL("x"), a, b);
+    utassert(a.len == 0 && a.s);
+    utassert(base::StrEq(b, "x"));
+    utassert(b.s == a.s + 1);
+    StrFree2(a);
+
+    StrDup2(StrL("y"), Str{}, a, b);
+    utassert(base::StrEq(a, "y"));
+    utassert(b.len == 0 && b.s == a.s + a.len + 1);
+    StrFree2(a);
+}
+
 void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
@@ -144,4 +167,6 @@ void TestStr() {
     BuilderBorrowsThenGrowsLikeAVec();
     BuilderArenaStorageStaysWithTheArena();
     BuilderRemovalKeepsTheTerminator();
+    Dup2PutsBothStringsInOneBlock();
+    Dup2TreatsNullAsEmptyInsideTheSameBlock();
 }

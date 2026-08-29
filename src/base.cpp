@@ -970,8 +970,37 @@ Str StrDup(Str s) {
     return StrDup(nullptr, s);
 }
 
+void StrDup2(Str s1, Str s2, Str& s1Out, Str& s2Out) {
+    s1Out = {};
+    s2Out = {};
+    int n1 = (!s1.s || s1.len < 0) ? 0 : s1.len;
+    int n2 = (!s2.s || s2.len < 0) ? 0 : s2.len;
+    if (n2 > INT_MAX - 2 - n1) {
+        return;
+    }
+    int n = n1 + n2 + 2;
+    char* p = (char*)Alloc(nullptr, n);
+    if (!p) {
+        return;
+    }
+    if (n1 > 0) {
+        memcpy(p, s1.s, (size_t)n1);
+    }
+    p[n1] = 0;
+    if (n2 > 0) {
+        memcpy(p + n1 + 1, s2.s, (size_t)n2);
+    }
+    p[n1 + 1 + n2] = 0;
+    s1Out = Str(p, n1);
+    s2Out = Str(p + n1 + 1, n2);
+}
+
 void StrFree(Str s) {
     free(s.s);
+}
+
+void StrFree2(Str s) {
+    StrFree(s);
 }
 
 // A page that draws "today" cannot be screenshot twice: the picture changes at
@@ -1841,8 +1870,7 @@ static void evalDefault(Fmt& fmt, const FmtArg& arg) {
             break;
         case FmtArg::Kind::Float:
             // Note: %G, unlike %f, avoids trailing '0'
-            StrBuilderAppend(fmt.a, fmt.res,
-                             bufFmt(buf, "%G", (double)arg.f));
+            StrBuilderAppend(fmt.a, fmt.res, bufFmt(buf, "%G", (double)arg.f));
             break;
         case FmtArg::Kind::Double:
             StrBuilderAppend(fmt.a, fmt.res, bufFmt(buf, "%G", arg.d));
@@ -1984,8 +2012,7 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
         auto& inst = instructions[n];
 
         if (inst.t == FmtArg::Kind::RawStr) {
-            StrBuilderAppend(a, res,
-                             Str(format.s + inst.rawOff, inst.sLen));
+            StrBuilderAppend(a, res, Str(format.s + inst.rawOff, inst.sLen));
             continue;
         }
 

@@ -77,9 +77,9 @@ int TreeAddItem(TreeState* s, Str id, Str label, int parent) {
     // Copies, owned by the state and freed with it — the convention
     // InputSetPlaceholder set. The strings used to be stored as handed in,
     // which left the caller's heap copies to leak: nothing freed them, and
-    // nothing could have without also freeing a caller's literal.
-    it.id = StrDup(id);
-    it.label = StrDup(label);
+    // nothing could have without also freeing a caller's literal. One
+    // allocation: id and label are always a pair.
+    StrDup2(id, label, it.id, it.label);
     it.parent = parent;
     int ix = s->items.len;
     if (parent >= 0 && parent < ix) {
@@ -144,15 +144,13 @@ void TreeSetItems(TreeState* s, Ctx* cx, const TreeItem* items, int count) {
     // The state owns every item's strings (see TreeAddItem): the old ones go
     // with the old items, and the new ones come in as copies.
     for (int i = 0; i < s->items.len; i++) {
-        StrFree(s->items[i].id);
-        StrFree(s->items[i].label);
+        StrFree2(s->items[i].id);
     }
     s->items.len = 0;
     if (items && count > 0) {
         for (int i = 0; i < count; i++) {
             TreeItem it = items[i];
-            it.id = StrDup(it.id);
-            it.label = StrDup(it.label);
+            StrDup2(items[i].id, items[i].label, it.id, it.label);
             VecAppend(s->items, it);
         }
     }

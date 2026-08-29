@@ -5443,6 +5443,8 @@ static const int kMaxUndoTransactions = 1000;
 static const int kMaxChangesPerTransaction = 1000;
 
 static void ChangeFree(Change* c) {
+    // Not a StrDup2 pair: UndoRecordTransaction can replace newText while
+    // keeping oldText, so the two allocations have to be independent.
     StrFree(c->oldText);
     StrFree(c->newText);
     c->oldText = {};
