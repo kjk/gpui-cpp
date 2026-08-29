@@ -437,14 +437,17 @@ function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[]
   if (nonAmalgam) {
     if (name !== "hello_world" && name !== "hello_world_no_amalgam") return null;
     const markdown = process.env.GPUI_MARKDOWN ?? "full";
-    const example = name === "hello_world_no_amalgam"
-      ? "examples/hello_world_no_amalgam.cpp"
-      : "examples/hello_world.cpp";
-    return [example, ...allCppDir("src").filter((f) => {
-      if (!sourcePlatform(f, plat)) return false;
-      if (markdown === "full") return !f.startsWith("src/markdown-mini/");
-      return !f.startsWith("src/markdown/") || f === "src/markdown/mdast.cpp";
-    }), "src/quickjs/quickjs.c"];
+    const example =
+      name === "hello_world_no_amalgam" ? "examples/hello_world_no_amalgam.cpp" : "examples/hello_world.cpp";
+    return [
+      example,
+      ...allCppDir("src").filter((f) => {
+        if (!sourcePlatform(f, plat)) return false;
+        if (markdown === "full") return !f.startsWith("src/markdown-mini/");
+        return !f.startsWith("src/markdown/") || f === "src/markdown/mdast.cpp";
+      }),
+      "src/quickjs/quickjs.c",
+    ];
   }
   if (dirExamples.includes(name)) {
     return [...amalgamSrc(), ...cppDir(`examples/${name}`)];
@@ -1034,7 +1037,28 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
       "/D_HAS_EXCEPTIONS=0",
       "/utf-8",
       ...(f.nonAmalgam
-        ? ["/I", "src", "/I", "src/gpui", "/FI", "markdown/markdown.h", "/FI", "base/lib.h", "/FI", "ui/lib.h", "/FI", "gpui/paint.h", "/FI", "gpui/assets.h", "/FI", "gpui/svg.h", "/FI", "gpui/accessibility_win.h", "/FI", "sys/executor.h"]
+        ? [
+            "/I",
+            "src",
+            "/I",
+            "src/gpui",
+            "/FI",
+            "markdown/markdown.h",
+            "/FI",
+            "base/lib.h",
+            "/FI",
+            "ui/lib.h",
+            "/FI",
+            "gpui/paint.h",
+            "/FI",
+            "gpui/assets.h",
+            "/FI",
+            "gpui/svg.h",
+            "/FI",
+            "gpui/accessibility_win.h",
+            "/FI",
+            "sys/executor.h",
+          ]
         : ["/I", amalgamDir()]),
       backendDefine,
       "/DUNICODE",
@@ -1085,16 +1109,39 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
   const flags = [
     "-std=c++20",
     ...(f.nonAmalgam
-      ? ["-I", "src", "-I", "src/gpui", "-include", "markdown/markdown.h", "-include", "base/lib.h", "-include", "ui/lib.h", "-include", "gpui/paint.h", "-include", "gpui/assets.h", "-include", "gpui/svg.h", "-include", "gpui/accessibility_win.h", "-include", "sys/executor.h"]
+      ? [
+          "-I",
+          "src",
+          "-I",
+          "src/gpui",
+          "-include",
+          "markdown/markdown.h",
+          "-include",
+          "base/lib.h",
+          "-include",
+          "ui/lib.h",
+          "-include",
+          "gpui/paint.h",
+          "-include",
+          "gpui/assets.h",
+          "-include",
+          "gpui/svg.h",
+          "-include",
+          "gpui/accessibility_win.h",
+          "-include",
+          "sys/executor.h",
+        ]
       : ["-I", amalgamDir()]),
     "-Wall",
     "-Wextra",
     "-Werror",
     "-fno-exceptions",
     "-fno-rtti",
-    // Clang/GCC's feature macro is absent with -fno-exceptions; define it
-    // explicitly as zero so portable code can test it with #if.
-    "-D__EXCEPTIONS=0",
+    // Do not define __EXCEPTIONS here: it is the compiler's own predefined
+    // macro, not a knob. With -fno-exceptions C++ leaves it undefined, but
+    // Objective-C++ on macOS predefines it to 1 regardless (ObjC exceptions
+    // are on by default), so -D__EXCEPTIONS=0 is a -Wmacro-redefined error
+    // there. Code that cares tests it with #ifdef, which needs no help.
     ...(f.debug ? ["-O0", "-DDEBUG"] : ["-O2", "-DNDEBUG"]),
   ];
   if (tc.plat === "mac") {
@@ -1167,7 +1214,8 @@ function quickjsCflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => n
     return flags;
   }
   const flags = [
-    "-x", "c",
+    "-x",
+    "c",
     "-std=gnu11",
     "-D_GNU_SOURCE",
     "-Wall",
@@ -1278,10 +1326,7 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
         `(${a.headerCount} headers, ${a.sourceCount} + ${a.platformSourceCount} sources, markdown ${a.markdown}, ` +
         `${amalgamSize(a.headerBytes + a.sourceBytes, a.headerLines + a.sourceLines)}); ` +
         `${a.quickjsHeaderPath} + ${a.quickjsSourcePath} ` +
-        `(${amalgamSize(
-          a.quickjsHeaderBytes + a.quickjsSourceBytes,
-          a.quickjsHeaderLines + a.quickjsSourceLines,
-        )})`,
+        `(${amalgamSize(a.quickjsHeaderBytes + a.quickjsSourceBytes, a.quickjsHeaderLines + a.quickjsSourceLines)})`,
     );
     return;
   }
