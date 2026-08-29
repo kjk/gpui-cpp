@@ -6280,8 +6280,8 @@ ShellRuntime* ShellRuntime::New(App*, ShellError* error) {
         runtime->Release();
         return nullptr;
     }
-    JS_SetMemoryLimit(runtime->impl->jsRuntime, 256u * 1024u * 1024u);
-    JS_SetMaxStackSize(runtime->impl->jsRuntime, 1024u * 1024u);
+    JS_SetMemoryLimit(runtime->impl->jsRuntime, (size_t)256 * 1024 * 1024);
+    JS_SetMaxStackSize(runtime->impl->jsRuntime, (size_t)1024 * 1024);
     JS_SetInterruptHandler(runtime->impl->jsRuntime, Interrupt, runtime->impl);
     JS_SetModuleLoaderFunc(runtime->impl->jsRuntime, ModuleNormalize, ModuleLoad,
                            runtime->impl);

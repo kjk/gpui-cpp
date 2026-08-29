@@ -40,7 +40,7 @@ static void Sha256Block(uint32_t state[8], const uint8_t block[64]) {
         0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
     };
     uint32_t words[64];
-    for (int i = 0; i < 16; i++) words[i] = ReadBig32(block + i * 4);
+    for (int i = 0; i < 16; i++) words[i] = ReadBig32(block + (size_t)i * 4);
     for (int i = 16; i < 64; i++) {
         uint32_t a = words[i - 15];
         uint32_t b = words[i - 2];
@@ -96,7 +96,7 @@ void Sha256(Str data, uint8_t digest[32]) {
     }
     Sha256Block(state, tail);
     if (blocks == 2) Sha256Block(state, tail + 64);
-    for (int i = 0; i < 8; i++) WriteBig32(digest + i * 4, state[i]);
+    for (int i = 0; i < 8; i++) WriteBig32(digest + (size_t)i * 4, state[i]);
 }
 
 static void StandardError(Str* error, Str message) {

@@ -963,7 +963,7 @@ static bool ParseHex(Str s, Rgba* out) {
         }
     } else {
         for (int i = 0; i < n / 2; i++) {
-            v[i] = d[i * 2] * 16 + d[i * 2 + 1];
+            v[i] = d[(size_t)i * 2] * 16 + d[(size_t)i * 2 + 1];
         }
     }
     *out = Rgba8((uint8_t)v[0], (uint8_t)v[1], (uint8_t)v[2], (uint8_t)v[3]);

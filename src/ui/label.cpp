@@ -247,7 +247,7 @@ static Str LabelMasked(Arena* a, Str text) {
     static const char bullet[] = "\xe2\x80\xa2";
     for (int i = 0; i < chars; i++) {
         // U+2022 BULLET, the pinned MASKED string.
-        memcpy(out + i * 3, bullet, 3);
+        memcpy(out + (size_t)i * 3, bullet, 3);
     }
     return Str(out, chars * 3);
 }
