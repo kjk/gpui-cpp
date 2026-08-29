@@ -49,6 +49,14 @@ bun cmd/build-no-amalgam.ts -clang -rel   # Windows: clang-cl
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
 
+To lint every native source translation unit with LLVM's clang-tidy (using the
+same platform filtering and public include paths as the standalone build):
+
+```
+bun cmd/clang-tidy.ts
+bun cmd/clang-tidy.ts -checks=bugprone-*,performance-*
+```
+
 On Windows, the renderer is selected at compile time. With no definition the
 build contains only Direct2D, the compatibility default. The repository build
 script accepts the same choice through `--win-backend`:

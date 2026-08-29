@@ -723,20 +723,6 @@ void Invalidate() {
 }
 
 void Reset() {
-    // The run's summary, on the way out. GPUI_FRAME_BENCH prints the same
-    // counters for a benchmark, but a benchmark draws one frame over and
-    // over: the partial-redraw numbers only mean anything when something on
-    // screen actually moved, which is an interactive run.
-    if (gStats.frames > 0) {
-        logf(
-            "scene: frames=%d unchanged=%d partial=%d meanDamage=%.1f%% "
-            "cacheLive=%d",
-            gStats.frames, gStats.framesUnchanged, gStats.framesPartial,
-            gStats.framesPartial
-                ? 100.0 * gStats.damageFracSum / gStats.framesPartial
-                : 0.0,
-            gCacheLive);
-    }
     CacheClear();
     Invalidate();
 }
@@ -959,19 +945,6 @@ bool FrameEnd(PaintCtx* ctx, Bounds* damage) {
         gDamageRing[gDamageRingAt] = dmg;
         gDamageRingAt = (gDamageRingAt + 1) % kBufferDepth;
         dmg = Intersect(acc, whole);
-    }
-
-    // The first few frames that differed, spelled out: a partial redraw is
-    // the one thing a benchmark of one repeated frame cannot show, so an
-    // interactive run has to be able to say that it happened and how big it
-    // was.
-    static int logged = 0;
-    if (!identical && gHavePrev && logged < 8) {
-        logged++;
-        logf(
-            "scene: changed %d of %d prims, damage %.0fx%.0f at %.0f,%.0f "
-            "(view %.0fx%.0f)",
-            changed, gCur.len, dmg.w, dmg.h, dmg.x, dmg.y, whole.w, whole.h);
     }
 
     bool skip = identical && SceneLevelOn() >= kSceneSkip;
