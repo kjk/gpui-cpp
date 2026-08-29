@@ -128,6 +128,16 @@ struct PaintApp {
     IDWriteTextFormat* font20 = nullptr;
     IDWriteTextFormat* font24 = nullptr;
     IDWriteTextFormat* fontMono = nullptr;
+    // One ellipsis sign per format. CreateEllipsisTrimmingSign against a
+    // text *layout* lays that whole run out again, so doing it per draw
+    // leaked DWrite internals on every truncated paint (tree labels,
+    // status chips) while scrolling.
+    IDWriteInlineObject* ellipsis12 = nullptr;
+    IDWriteInlineObject* ellipsis14 = nullptr;
+    IDWriteInlineObject* ellipsis16 = nullptr;
+    IDWriteInlineObject* ellipsis20 = nullptr;
+    IDWriteInlineObject* ellipsis24 = nullptr;
+    IDWriteInlineObject* ellipsisMono = nullptr;
 };
 
 // The window target is a DXGI flip-model swap chain with a D2D device context
@@ -203,6 +213,12 @@ void PaintAppFree(PaintApp* pa) {
     if (!pa) {
         return;
     }
+    Rel(&pa->ellipsis12);
+    Rel(&pa->ellipsis14);
+    Rel(&pa->ellipsis16);
+    Rel(&pa->ellipsis20);
+    Rel(&pa->ellipsis24);
+    Rel(&pa->ellipsisMono);
     Rel(&pa->font12);
     Rel(&pa->font14);
     Rel(&pa->font16);
@@ -1168,6 +1184,30 @@ static IDWriteTextFormat* FontFor(PaintApp* pa, float fontSize,
     return pa->font16;
 }
 
+static IDWriteInlineObject* EllipsisSign(PaintApp* pa, IDWriteTextFormat* fmt) {
+    if (!pa || !fmt || !pa->dwrite) {
+        return nullptr;
+    }
+    IDWriteInlineObject** slot = &pa->ellipsis16;
+    if (fmt == pa->font12) {
+        slot = &pa->ellipsis12;
+    } else if (fmt == pa->font14) {
+        slot = &pa->ellipsis14;
+    } else if (fmt == pa->font16) {
+        slot = &pa->ellipsis16;
+    } else if (fmt == pa->font20) {
+        slot = &pa->ellipsis20;
+    } else if (fmt == pa->font24) {
+        slot = &pa->ellipsis24;
+    } else if (fmt == pa->fontMono) {
+        slot = &pa->ellipsisMono;
+    }
+    if (!*slot) {
+        pa->dwrite->CreateEllipsisTrimmingSign(fmt, slot);
+    }
+    return *slot;
+}
+
 static DWRITE_FONT_WEIGHT DwriteWeight(uint8_t weight) {
     switch (weight & kFontWeightMask) {
         case kFontWeightThin:
@@ -1536,12 +1576,10 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     if (clip && clipW > 0) {
         Dw(tl)->SetMaxWidth(clipW);
         DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
-        IDWriteInlineObject* sign = nullptr;
-        if (SUCCEEDED(ctx->pa->dwrite
-                          ->CreateEllipsisTrimmingSign(Dw(tl), &sign)) &&
-            sign) {
+        IDWriteInlineObject* sign =
+            EllipsisSign(ctx->pa, FontFor(ctx->pa, Dw(tl)->GetFontSize(), 0));
+        if (sign) {
             Dw(tl)->SetTrimming(&trim, sign);
-            sign->Release();
         }
     }
     D2D1_DRAW_TEXT_OPTIONS opt =

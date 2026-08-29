@@ -692,6 +692,40 @@ seam to reach the logic — `FrameSamplerIngest` is the drain half of
 `FrameSamplerTick`, split out so the rolling window can be driven without a
 window — add the seam rather than the harness.
 
+## Memory leaks (Deleaker, Windows)
+
+CRT / COM growth that Task Manager shows while a window is open is often
+freed on `AppFree`, so `--export-xml-report-on-exit` is not the test for
+"grows while scrolling". Periodic snapshots are.
+
+DeleakerConsole is `C:\Program Files (x86)\Deleaker\DeleakerConsole.exe` (a
+32-bit host; it injects the 64-bit loader). **`--run` must be last** —
+everything after it is the launched process, including our `__paint` /
+`__layout_reuse` flags.
+
+```
+"C:\Program Files (x86)\Deleaker\DeleakerConsole.exe" ^
+  --export-xml-report-on-exit out/deleaker/exit.xml ^
+  --snapshot-database out/deleaker/run.dsnapshot ^
+  --save-snapshot-period 2 ^
+  --save-snapshot-on-exit --snapshot-name exit ^
+  --process-working-directory . ^
+  --run out\rel\editor.exe
+```
+
+`bun cmd/deleaker-scroll.ts` does that for the editor and wheels the document
+down, up, and down again (`-dbg` uses `out/dbg/editor.exe`; extra args after
+`--` go to the app). Need a binary with PDBs; `bun cmd/build.ts -rel editor`
+is enough.
+
+The `.dsnapshot` is SQLite (`Snapshot`, `AllocationGroup`, `StackTrace`,
+`StackEntry`). Compare two *live* snapshots, not the exit one — AppFree drops
+the window, and XML-on-exit leftovers are typically process-lifetime
+(`wWinMain` argv, an accessibility node from a click). Groups whose hit count
+rises between those live snapshots, with a stack in `src/`, are the leak.
+The first snapshot of a process is slow (Microsoft symbol download); later
+ones in the same run are seconds.
+
 ## Benchmarks
 
 ```
@@ -806,6 +840,9 @@ cmd/vec-log.ts         run a target with the debug Vec/ArenaVec instrument on
                        The instrument is in src/base.h behind #if DEBUG and
                        writes nothing unless this sets GPUI_VEC_LOG. Answer a
                        "should this capacity be bigger?" question with it
+cmd/deleaker-scroll.ts DeleakerConsole against editor.exe: periodic snapshots
+                       while scrolling, XML on exit. Windows only. See
+                       "Memory leaks (Deleaker, Windows)"
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 cmd/svg-to-bytecode.ts convert assets/icons into src/gpui/asset_icons.cpp
 src/taffy/             the taffy layout crate, ported (see its readme.md)
