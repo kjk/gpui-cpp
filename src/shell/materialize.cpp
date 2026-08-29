@@ -357,6 +357,12 @@ static float PresetNumber(Str name, Str prefix, bool* found) {
     return value;
 }
 
+static bool PresetNumberIs(Str name, Str prefix, float* value) {
+    bool found = false;
+    *value = PresetNumber(name, prefix, &found);
+    return found;
+}
+
 static bool ApplyNullary(El* element, Str name) {
     if (StrEq(name, "flex")) element->Flex();
     else if (StrEq(name, "flex_row")) element->FlexRow();
@@ -419,24 +425,24 @@ static bool ApplyNullary(El* element, Str name) {
         bool found = false;
         float n = PresetNumber(name, StrL("gap_"), &found);
         if (found) element->Gap(n * 4);
-        else if ((n = PresetNumber(name, StrL("gap_x_"), &found)), found) element->GapX(n * 4);
-        else if ((n = PresetNumber(name, StrL("gap_y_"), &found)), found) element->GapY(n * 4);
-        else if ((n = PresetNumber(name, StrL("p_"), &found)), found) element->Pad(n * 4);
-        else if ((n = PresetNumber(name, StrL("px_"), &found)), found) element->PadX(n * 4);
-        else if ((n = PresetNumber(name, StrL("py_"), &found)), found) element->PadY(n * 4);
-        else if ((n = PresetNumber(name, StrL("pt_"), &found)), found) element->PadT(n * 4);
-        else if ((n = PresetNumber(name, StrL("pb_"), &found)), found) element->PadB(n * 4);
-        else if ((n = PresetNumber(name, StrL("pl_"), &found)), found) element->PadL(n * 4);
-        else if ((n = PresetNumber(name, StrL("pr_"), &found)), found) element->PadR(n * 4);
-        else if ((n = PresetNumber(name, StrL("m_"), &found)), found) element->Margin(n * 4);
-        else if ((n = PresetNumber(name, StrL("mx_"), &found)), found) element->MarginX(n * 4);
-        else if ((n = PresetNumber(name, StrL("my_"), &found)), found) element->MarginY(n * 4);
-        else if ((n = PresetNumber(name, StrL("mt_"), &found)), found) element->MarginT(n * 4);
-        else if ((n = PresetNumber(name, StrL("mb_"), &found)), found) element->MarginB(n * 4);
-        else if ((n = PresetNumber(name, StrL("ml_"), &found)), found) element->MarginL(n * 4);
-        else if ((n = PresetNumber(name, StrL("mr_"), &found)), found) element->MarginR(n * 4);
-        else if ((n = PresetNumber(name, StrL("rounded_"), &found)), found) element->Radius(n * 4);
-        else if ((n = PresetNumber(name, StrL("border_"), &found)), found) element->style.border = n;
+        else if (PresetNumberIs(name, StrL("gap_x_"), &n)) element->GapX(n * 4);
+        else if (PresetNumberIs(name, StrL("gap_y_"), &n)) element->GapY(n * 4);
+        else if (PresetNumberIs(name, StrL("p_"), &n)) element->Pad(n * 4);
+        else if (PresetNumberIs(name, StrL("px_"), &n)) element->PadX(n * 4);
+        else if (PresetNumberIs(name, StrL("py_"), &n)) element->PadY(n * 4);
+        else if (PresetNumberIs(name, StrL("pt_"), &n)) element->PadT(n * 4);
+        else if (PresetNumberIs(name, StrL("pb_"), &n)) element->PadB(n * 4);
+        else if (PresetNumberIs(name, StrL("pl_"), &n)) element->PadL(n * 4);
+        else if (PresetNumberIs(name, StrL("pr_"), &n)) element->PadR(n * 4);
+        else if (PresetNumberIs(name, StrL("m_"), &n)) element->Margin(n * 4);
+        else if (PresetNumberIs(name, StrL("mx_"), &n)) element->MarginX(n * 4);
+        else if (PresetNumberIs(name, StrL("my_"), &n)) element->MarginY(n * 4);
+        else if (PresetNumberIs(name, StrL("mt_"), &n)) element->MarginT(n * 4);
+        else if (PresetNumberIs(name, StrL("mb_"), &n)) element->MarginB(n * 4);
+        else if (PresetNumberIs(name, StrL("ml_"), &n)) element->MarginL(n * 4);
+        else if (PresetNumberIs(name, StrL("mr_"), &n)) element->MarginR(n * 4);
+        else if (PresetNumberIs(name, StrL("rounded_"), &n)) element->Radius(n * 4);
+        else if (PresetNumberIs(name, StrL("border_"), &n)) element->style.border = n;
         else return false;
     }
     return true;
