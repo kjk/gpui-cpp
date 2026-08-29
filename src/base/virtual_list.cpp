@@ -266,7 +266,8 @@ El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
     if (o.range && visibleCount > 0) {
         rangeRows = (El**)Alloc(a, (int)(sizeof(El*) * (size_t)visibleCount));
         if (rangeRows) {
-            memset(rangeRows, 0, sizeof(El*) * (size_t)visibleCount);
+            memset(static_cast<void*>(rangeRows), 0,
+                   sizeof(El*) * (size_t)visibleCount);
             o.range(o.user, cx, frame.visible.first, frame.visible.end,
                     rangeRows);
         }

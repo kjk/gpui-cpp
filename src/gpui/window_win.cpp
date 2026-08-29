@@ -1362,7 +1362,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, buf, n, nullptr, nullptr);
         argv[i] = buf;
     }
-    LocalFree(wargv);
+    LocalFree(static_cast<void*>(wargv));
     argc = gpui::GpuiTakeRuntimeArgs(argc, argv);
     return GpuiMain(argc, argv);
 }
