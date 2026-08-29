@@ -201,7 +201,10 @@ static bool ReadFileAll(const char* path, Vec<uint8_t>* out) {
         fclose(f);
         return false;
     }
-    rewind(f);
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
     VecReset(*out);
     int n = (int)size;
     if (n == 0) {
