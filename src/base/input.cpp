@@ -404,7 +404,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
         return col->Child(ph);
     }
 
-    int rows = RopeLinesLen(text);
+    int rows = InputLinesLen(state);
     // The scrolled height, which is what scroll_to clamps against. A wrapping
     // editor takes it off the box the rows were laid out in last frame, since
     // nothing here can tell how many times a line will break; until there is
@@ -460,12 +460,12 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
     // vanishing with the text it is in.
     int caretRow = -1;
     if (style.activeLine.a != 0 || folding) {
-        caretRow = RopeOffsetToPoint(text, cursor).row;
+        caretRow = InputOffsetToPoint(state, cursor).row;
         caretRow = FoldMapNearestVisibleLine(&state->folds, caretRow);
     }
     bool caretFolded =
         folding && caret &&
-        FoldMapLineHidden(&state->folds, RopeOffsetToPoint(text, cursor).row);
+        FoldMapLineHidden(&state->folds, InputOffsetToPoint(state, cursor).row);
     // A monospace column, for the indent guides. The glyphs are all one width
     // in the family the editor asks for, so one measurement does.
     float colW = 0;
@@ -647,19 +647,15 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
     // beside them.
     int spanAt = 0;
     int matchAt = 0;
-    // One scan finds where the first visible row starts; after it each row
-    // begins where the previous one's newline ended, so the loop reads the
-    // visible band once instead of scanning the document from the top for
-    // every row — RopeSliceLine alone was 13% of a scroll frame in the
-    // editor example.
-    int rowStart = RopeLineStartOffset(text, firstRow);
+    // Each row's start and end are lookups in the line index rather than
+    // scans of the document — RopeSliceLine, three scans per row, was 13% of
+    // a scroll frame in the editor example.
+    const Vec<int>& lineStarts = InputLineStarts(state);
     for (int row = firstRow; row < endRow; row++) {
-        int start = rowStart;
-        const char* nl = (const char*)memchr(text.s + start, '\n',
-                                             (size_t)(text.len - start));
-        Str line = nl ? Str(text.s + start, (int)(nl - text.s) - start)
-                      : Str(text.s + start, text.len - start);
-        rowStart = start + line.len + 1;
+        int start = lineStarts[row];
+        int lineEnd =
+            row + 1 < lineStarts.len ? lineStarts[row + 1] - 1 : text.len;
+        Str line = Str(text.s + start, lineEnd - start);
         // A line inside a closed fold is not built at all, which is what
         // makes the rows below it move up. Its box is zeroed rather than left
         // at last frame's, so the hit test and the vertical walk read it as
@@ -1047,6 +1043,85 @@ Str InputValue(const InputState* s) {
 
 const char* InputCStr(const InputState* s) {
     return s && s->text.els ? s->text.els : "";
+}
+
+// ─── the line index ───────────────────────────────────────────────────────
+//
+// ropey keeps a tree and answers line_to_byte_idx / byte_to_line_idx in
+// O(log n); the flat buffer's equivalent is one Vec of line-start offsets,
+// rebuilt in a single memchr pass when the document moved. Filling a lazy
+// cache is a read as far as every caller is concerned, which is what the
+// const_cast below says.
+
+static void LineStartsEnsure(InputState* s) {
+    if (s->lineStartsValid && s->lineStartsVersion == s->docVersion) {
+        return;
+    }
+    VecClear(s->lineStarts);
+    VecAppend(s->lineStarts, 0);
+    Str t = InputValue(s);
+    int at = 0;
+    while (at < t.len) {
+        const char* nl =
+            (const char*)memchr(t.s + at, '\n', (size_t)(t.len - at));
+        if (!nl) {
+            break;
+        }
+        at = (int)(nl - t.s) + 1;
+        VecAppend(s->lineStarts, at);
+    }
+    s->lineStartsValid = true;
+    s->lineStartsVersion = s->docVersion;
+}
+
+const Vec<int>& InputLineStarts(const InputState* s) {
+    LineStartsEnsure(const_cast<InputState*>(s));
+    return s->lineStarts;
+}
+
+int InputLinesLen(const InputState* s) {
+    return InputLineStarts(s).len;
+}
+
+int InputLineStartOffset(const InputState* s, int row) {
+    const Vec<int>& starts = InputLineStarts(s);
+    if (row <= 0) {
+        return 0;
+    }
+    if (row >= starts.len) {
+        return s->text.len;
+    }
+    return starts[row];
+}
+
+Str InputSliceLine(const InputState* s, int row) {
+    const Vec<int>& starts = InputLineStarts(s);
+    if (row < 0 || row >= starts.len) {
+        return {};
+    }
+    int a = starts[row];
+    int b = row + 1 < starts.len ? starts[row + 1] - 1 : s->text.len;
+    return Str(s->text.els + a, b - a);
+}
+
+RopePoint InputOffsetToPoint(const InputState* s, int offset) {
+    const Vec<int>& starts = InputLineStarts(s);
+    offset = RopeClipOffset(InputValue(s), offset, Bias::Left);
+    // The last line whose start is at or before the offset.
+    int lo = 0;
+    int hi = starts.len - 1;
+    while (lo < hi) {
+        int mid = lo + (hi - lo + 1) / 2;
+        if (starts[mid] <= offset) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    RopePoint p = {};
+    p.row = lo;
+    p.column = offset - starts[lo];
+    return p;
 }
 
 InputState::~InputState() {
@@ -1440,7 +1515,7 @@ int InputCursor(const InputState* s) {
 }
 
 RopePoint InputCursorPosition(const InputState* s) {
-    return RopeOffsetToPoint(InputValue(s), InputCursor(s));
+    return InputOffsetToPoint(s, InputCursor(s));
 }
 
 Str InputSelectedValue(const InputState* s) {
@@ -4399,7 +4474,7 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
         return TextIndexAt(ctx, t, font, 0, false, x - b.x, 0, s->lastMono);
     }
     float lineH = s->lastLineH > 0 ? s->lastLineH : b.h;
-    int rows = RopeLinesLen(t);
+    int rows = InputLinesLen(s);
     int row = 0;
     // How far down its own row the press landed, which is which of a wrapped
     // line's visual rows it wanted.
@@ -4435,8 +4510,8 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
         }
         row = FoldMapNearestVisibleLine(&s->folds, row);
     }
-    Str line = RopeSliceLine(t, row);
-    int start = RopeLineStartOffset(t, row);
+    Str line = InputSliceLine(s, row);
+    int start = InputLineStartOffset(s, row);
     // A wrapped line still needs shaping at its left edge: the same x starts
     // every visual row, and relY is what distinguishes those offsets.  The
     // logical-line shortcut is valid only when the line does not wrap.

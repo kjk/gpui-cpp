@@ -3675,6 +3675,14 @@ struct InputState {
     // document — the syntax cache below — can tell an unchanged document from
     // a changed one without comparing it.
     uint64_t docVersion = 0;
+    // ropey's line index, flat: the byte offset each line starts at, one
+    // entry per line, lineStarts[0] = 0. Rust's Rope answers line_to_byte_idx
+    // and byte_to_line_idx in O(log n) from its tree; this is the same answer
+    // as a lookup, rebuilt lazily when docVersion moves. Read it through
+    // InputLineStarts, never directly.
+    Vec<int> lineStarts;
+    uint64_t lineStartsVersion = 0;
+    bool lineStartsValid = false;
     // The whole-document lex, cached across frames. Re-lexing an unchanged
     // document on every frame was ~30% of a scroll frame in the editor
     // example (winperf, wheel + click drive), and both halves are functions
@@ -3940,6 +3948,16 @@ void InputScrollToCursor(InputState* s, InputMoveDir dir);
 
 // value() / the NUL-terminated view of it. Neither allocates.
 Str InputValue(const InputState* s);
+// The line index over the document — InputState::lineStarts, rebuilt here
+// when docVersion moved. Every answer the flat Rope* helpers scan the
+// document for is a lookup against it; use these wherever an InputState is
+// in hand and the Rope* spelling only where there is none. The pointer they
+// take is const because reading a lazily filled cache is a read.
+const Vec<int>& InputLineStarts(const InputState* s);
+int InputLinesLen(const InputState* s);
+int InputLineStartOffset(const InputState* s, int row);
+Str InputSliceLine(const InputState* s, int row);
+RopePoint InputOffsetToPoint(const InputState* s, int offset);
 const char* InputCStr(const InputState* s);
 // unmask_value(): the text with the mask's separators taken back out.
 Str InputUnmaskValue(Arena* a, const InputState* s);
