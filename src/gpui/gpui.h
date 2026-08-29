@@ -1237,8 +1237,8 @@ struct AnchoredPosition {
 };
 
 AnchoredPosition AnchoredSideResolve(Bounds trigger, Size popup, Size view,
-                                     float margin, int preferred,
-                                     int align, float offset);
+                                     float margin, int preferred, int align,
+                                     float offset);
 AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
                                        Size view, float margin);
 
@@ -1324,8 +1324,8 @@ struct Style {
     bool fontSemibold = false;
     bool fontMedium = false; // font_medium(): DWrite weight 500
     uint16_t fontWeight = 0;
-    bool fontMono = false;   // font_family("Consolas")
-    bool underline = false;  // text_decoration_1()
+    bool fontMono = false;  // font_family("Consolas")
+    bool underline = false; // text_decoration_1()
     // text_decoration_line_through(): a ~~del~~ run, an HTML <s> or <del>.
     bool strike = false;
     bool italic = false; // *emphasis*
@@ -3671,6 +3671,28 @@ struct InputState {
     // Rust's `Rope`. NUL-terminated past `len` so a `const char*` reader still
     // works; the terminator is not counted.
     Vec<char> text;
+    // Bumped by every splice of `text`, so whatever is derived from the whole
+    // document — the syntax cache below — can tell an unchanged document from
+    // a changed one without comparing it.
+    uint64_t docVersion = 0;
+    // The whole-document lex, cached across frames. Re-lexing an unchanged
+    // document on every frame was ~30% of a scroll frame in the editor
+    // example (winperf, wheel + click drive), and both halves are functions
+    // of (document, language, theme) alone, so they are keyed on exactly
+    // that. `synThemeKey` folds in the theme mode and the foreground the
+    // spans were coloured with; the fold candidates never look at colours,
+    // so their key is just the document and the language.
+    // The lang fields are SyntaxLang (an int8_t this header cannot name);
+    // -2 is "never lexed", one below SyntaxLangNone.
+    Vec<TextSpan> synSpans;
+    uint64_t synSpansVersion = 0;
+    int8_t synSpansLang = -2;
+    uint64_t synThemeKey = 0;
+    bool synSpansValid = false;
+    Vec<FoldRange> synFolds;
+    uint64_t synFoldsVersion = 0;
+    int8_t synFoldsLang = -2;
+    bool synFoldsValid = false;
     Selection selectedRange = {};
     bool selectionReversed = false;
     // selected_word_range: what a double click took, kept so dragging out of
@@ -3968,8 +3990,8 @@ void InputMoveToWithAffinity(InputState* s, App* app, Window* win, int offset,
                              bool lineEndAffinity);
 // select_to(): drags the live end of the selection to `offset`.
 void InputSelectTo(InputState* s, App* app, Window* win, int offset);
-void InputSelectToWithAffinity(InputState* s, App* app, Window* win,
-                               int offset, bool lineEndAffinity);
+void InputSelectToWithAffinity(InputState* s, App* app, Window* win, int offset,
+                               bool lineEndAffinity);
 void InputSelectAll(InputState* s, App* app, Window* win);
 void InputUnselect(InputState* s, App* app, Window* win);
 void InputSetSelectedRange(InputState* s, App* app, Window* win, int a, int b);

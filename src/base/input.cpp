@@ -12,8 +12,8 @@
 
 namespace gpui {
 
-InputEditorStyle InputEditorStyleResolve(
-    const InputEditorStyle& projected, const SemanticThemeTokens& tokens) {
+InputEditorStyle InputEditorStyleResolve(const InputEditorStyle& projected,
+                                         const SemanticThemeTokens& tokens) {
     InputEditorStyle out = projected;
     const ColorTokens& colors = tokens.colors;
     if (out.foreground.a == 0) out.foreground = colors.foreground;
@@ -29,16 +29,14 @@ InputEditorStyle InputEditorStyleResolve(
     return out;
 }
 
-El* InputBase::New(Ctx* cx, Str id, bool interactive,
-                   AccessibilityRole role) {
+El* InputBase::New(Ctx* cx, Str id, bool interactive, AccessibilityRole role) {
     Arena* a = cx->a;
     return (interactive ? Div(a)->PathId(id) : Div(a)->Id(id))
         ->Role(role)
         ->AriaDisabled(!interactive);
 }
 
-El* InputBase::New(Ctx* cx, Str id,
-                   const InputPresentation& presentation,
+El* InputBase::New(Ctx* cx, Str id, const InputPresentation& presentation,
                    const InputStyles& styles) {
     El* element = New(cx, id, presentation.IsEditable());
     element->TrackFocus(presentation.focus);
@@ -184,14 +182,14 @@ El* Input::New(Ctx* cx, InputState* state) {
     return New(cx, state, InputEditorStyle{});
 }
 
-El* Input::New(Ctx* cx, InputState* state,
-               const InputEditorStyle& projected) {
+El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& projected) {
     Arena* a = cx->a;
     if (!state) {
         return TextEl(a, Str{});
     }
     BaseTheme theme = base_theme::Theme::Global(cx->app);
-    InputEditorStyle resolved = InputEditorStyleResolve(projected, theme.tokens);
+    InputEditorStyle resolved =
+        InputEditorStyleResolve(projected, theme.tokens);
     const InputEditorStyle& style = resolved;
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
     float lineMult = kInputLineH / font;
@@ -357,14 +355,15 @@ El* Textarea::New(Ctx* cx, InputState* state) {
 // The multi-line editor. Rust lays every visible row out through the display
 // map; without one, each logical line is its own run and the selection is
 // clipped to it — which is the same picture as long as nothing soft-wraps.
-El* Textarea::New(Ctx* cx, InputState* state,
-                  const InputEditorStyle& projected, bool lineNumbers) {
+El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
+                  bool lineNumbers) {
     Arena* a = cx->a;
     if (!state) {
         return TextEl(a, Str{});
     }
     BaseTheme theme = base_theme::Theme::Global(cx->app);
-    InputEditorStyle resolved = InputEditorStyleResolve(projected, theme.tokens);
+    InputEditorStyle resolved =
+        InputEditorStyleResolve(projected, theme.tokens);
     const InputEditorStyle& style = resolved;
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
     // EDITOR_LINE_HEIGHT: a code editor takes its rows from its own font, so
@@ -602,7 +601,7 @@ El* Textarea::New(Ctx* cx, InputState* state,
             // The source keeps the union of trigger and popover live. The
             // popover's own outside listener clears it on a press elsewhere.
         } else if (!state->hoverProvider || !inside || state->selecting ||
-            state->hoverDiagnostic >= 0 || secondary) {
+                   state->hoverDiagnostic >= 0 || secondary) {
             state->hoverText = Str{};
             state->hoverRange = Selection{};
             state->hoverAsked = true;
@@ -648,7 +647,19 @@ El* Textarea::New(Ctx* cx, InputState* state,
     // beside them.
     int spanAt = 0;
     int matchAt = 0;
+    // One scan finds where the first visible row starts; after it each row
+    // begins where the previous one's newline ended, so the loop reads the
+    // visible band once instead of scanning the document from the top for
+    // every row — RopeSliceLine alone was 13% of a scroll frame in the
+    // editor example.
+    int rowStart = RopeLineStartOffset(text, firstRow);
     for (int row = firstRow; row < endRow; row++) {
+        int start = rowStart;
+        const char* nl = (const char*)memchr(text.s + start, '\n',
+                                             (size_t)(text.len - start));
+        Str line = nl ? Str(text.s + start, (int)(nl - text.s) - start)
+                      : Str(text.s + start, text.len - start);
+        rowStart = start + line.len + 1;
         // A line inside a closed fold is not built at all, which is what
         // makes the rows below it move up. Its box is zeroed rather than left
         // at last frame's, so the hit test and the vertical walk read it as
@@ -659,8 +670,6 @@ El* Textarea::New(Ctx* cx, InputState* state,
             }
             continue;
         }
-        int start = RopeLineStartOffset(text, row);
-        Str line = RopeSliceLine(text, row);
         // The spans and matches are in document order and the walk carries on
         // where the last row left off, so a range that does not start at the
         // top has to skip what came before it.
@@ -1085,6 +1094,7 @@ static void TextSplice(InputState* s, int a, int b, Str ins) {
     }
     s->text.len = out;
     s->text.els[out] = 0;
+    s->docVersion++;
 }
 
 static void TextSet(InputState* s, Str v) {
@@ -1098,6 +1108,7 @@ static void TextSet(InputState* s, Str v) {
     }
     s->text.len = n;
     s->text.els[n] = 0;
+    s->docVersion++;
 }
 
 // ─── mode ─────────────────────────────────────────────────────────────────
@@ -1766,8 +1777,8 @@ void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
     InputMoveToWithAffinity(s, app, win, offset, false);
 }
 
-void InputSelectToWithAffinity(InputState* s, App* app, Window* win,
-                               int offset, bool lineEndAffinity) {
+void InputSelectToWithAffinity(InputState* s, App* app, Window* win, int offset,
+                               bool lineEndAffinity) {
     Str t = InputValue(s);
     if (offset < 0) {
         offset = 0;
@@ -2455,8 +2466,7 @@ void InputAcceptCompletion(InputState* s, App* app, Window* win) {
     InputDismissCompletion(s);
     s->silentReplace = true;
     if (edits.len == 1) {
-        InputReplaceTextInRange(s, app, win, &edits[0].range,
-                                edits[0].newText);
+        InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
     } else {
         InputApplyEdits(s, app, win, edits.els, edits.len);
     }
@@ -2589,8 +2599,7 @@ void InputInsertCompletion(InputState* s, App* app, Window* win,
     // asks for no suggestion.
     s->silentReplace = true;
     if (edits.len == 1) {
-        InputReplaceTextInRange(s, app, win, &edits[0].range,
-                                edits[0].newText);
+        InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
     } else {
         InputApplyEdits(s, app, win, edits.els, edits.len);
     }
@@ -2736,9 +2745,9 @@ void InputScheduleInlineCompletion(InputState* s) {
     if (!s->inlineCompletionProvider) {
         return;
     }
-    s->inlineCompletion.dueAt =
-        TimeNow() + (double)std::max(0.f, s->inlineCompletionDebounceMs) /
-                        1000.0;
+    s->inlineCompletion
+        .dueAt = TimeNow() +
+                 (double)std::max(0.f, s->inlineCompletionDebounceMs) / 1000.0;
     s->inlineCompletion.asked = false;
     s->inlineCompletion.at = InputCursor(s);
 }
@@ -3185,8 +3194,8 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
         }
         int n = 0;
         for (;;) {
-            n = fn(data, s->codeActions.arena, InputValue(s),
-                   s->selectedRange, buf.els, cap);
+            n = fn(data, s->codeActions.arena, InputValue(s), s->selectedRange,
+                   buf.els, cap);
             if (n < 0) {
                 n = 0;
             }
@@ -3420,8 +3429,8 @@ static bool InputLineEndAffinityAt(PaintCtx* ctx, Str line, float font,
     }
     float endX = 0, endY = 0, endH = 0;
     float startX = 0, startY = 0, startH = 0;
-    if (!TextPointAt(ctx, line, font, maxW, true, offset, &endX, &endY,
-                     &endH, mono, lineMult, true) ||
+    if (!TextPointAt(ctx, line, font, maxW, true, offset, &endX, &endY, &endH,
+                     mono, lineMult, true) ||
         !TextPointAt(ctx, line, font, maxW, true, offset, &startX, &startY,
                      &startH, mono, lineMult, false)) {
         return false;
@@ -3558,8 +3567,7 @@ static void SelectVertical(InputState* s, App* app, Window* win, int lines) {
     Str t = InputValue(s);
     VerticalTarget to = VerticalTargetFor(s, win, lines, t, InputCursor(s));
     PauseBlink(s, app, win);
-    InputSelectToWithAffinity(s, app, win, to.offset,
-                              to.lineEndAffinity);
+    InputSelectToWithAffinity(s, app, win, to.offset, to.lineEndAffinity);
     s->preferredX = to.preferredX;
     s->preferredColumn = to.preferredColumn;
     // scroll_to: the moving end of the selection takes the view with it, the
@@ -3779,8 +3787,7 @@ static bool DoOutdent(InputState* s, App* app, Window* win) {
     for (;;) {
         int lineLen = LineLenAt(src, i);
         int skip = 0;
-        if (lineLen >= tab.len &&
-            StrEq(Str(src.s + i, tab.len), tab)) {
+        if (lineLen >= tab.len && StrEq(Str(src.s + i, tab.len), tab)) {
             skip = tab.len;
             removed += tab.len;
         }
@@ -3868,8 +3875,7 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return true;
         case InputAction::MoveEnd:
             PauseBlink(s, app, win);
-            InputMoveToWithAffinity(s, app, win, InputEndOfLine(s, win),
-                                    true);
+            InputMoveToWithAffinity(s, app, win, InputEndOfLine(s, win), true);
             return true;
         case InputAction::MoveToStart:
             InputMoveTo(s, app, win, 0);
@@ -4372,8 +4378,8 @@ void InputBlur(InputState* s, App* app, Window* win) {
 // asks the display map which visible row the y landed on and then the shaped
 // line for the x; the rows here are the logical lines, evenly spaced from the
 // first one, so the row is arithmetic and only the x needs shaping.
-int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
-                          float y, bool* lineEndAffinity) {
+int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
+                          bool* lineEndAffinity) {
     if (lineEndAffinity) {
         *lineEndAffinity = false;
     }
@@ -4439,11 +4445,11 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
     }
     float maxW = s->softWrap ? b.w : 0;
     float lineMult = s->lastLineH > 0 ? s->lastLineH / font : 0;
-    int local = TextIndexAt(ctx, line, font, maxW, s->softWrap, x - b.x,
-                            relY, s->lastMono, lineMult);
+    int local = TextIndexAt(ctx, line, font, maxW, s->softWrap, x - b.x, relY,
+                            s->lastMono, lineMult);
     if (lineEndAffinity && s->softWrap) {
-        *lineEndAffinity = InputLineEndAffinityAt(
-            ctx, line, font, maxW, local, relY, s->lastMono, lineMult);
+        *lineEndAffinity = InputLineEndAffinityAt(ctx, line, font, maxW, local,
+                                                  relY, s->lastMono, lineMult);
     }
     return start + local;
 }
@@ -5415,7 +5421,8 @@ void UndoCommitTransaction(UndoManager* m) {
     Change c = m->pending;
     m->hasPending = false;
     m->pending = {};
-    if (!RangeSame(c.oldRange, c.newRange) || !base::StrEq(c.oldText, c.newText)) {
+    if (!RangeSame(c.oldRange, c.newRange) ||
+        !base::StrEq(c.oldText, c.newText)) {
         PushTransaction(m, c, EditIntent::Atomic);
     } else {
         ChangeFree(&c);

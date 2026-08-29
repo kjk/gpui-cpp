@@ -10141,3 +10141,33 @@ draws through GDI, so the surface it drops was write-only white; screenshots
 still work because `PrintWindow(PW_RENDERFULLCONTENT)` reads the composed flip
 content, which is also how `cmd/compare-story.ts` was already capturing the
 Rust app.
+
+## Slow editor repaint: the whole-document work a scroll frame was doing
+
+2026-08-29: The editor sample's repaint was visibly slow, clicks after a
+scroll landed on the wrong text, and the window could flash white — the
+DWM "unresponsive" frosting a long frame earns, and a click resolved
+against the previous frame's row boxes. `winperf record` over a wheel +
+click drive put the blame in two places, both O(document) work repeated
+every frame on a document that had not changed:
+
+- `Highlighter::IntoEl` re-lexed the whole document twice per frame —
+  `HighlightSpans` for the colours and `FoldCandidates` for the fold
+  ranges — which was ~30% of a scroll frame (`SyntaxLexNext` inclusive).
+  Both are functions of (document, language, theme) alone, so they are
+  now cached on `InputState`, keyed on a `docVersion` counter bumped by
+  `TextSplice`/`TextSet` (the two funnels every edit goes through), the
+  language, and the theme mode + foreground the spans were coloured with.
+  The frame still copies the cached spans into its arena before
+  `MergeDecorations`, which edits runs in place.
+- `Textarea::New` called `RopeLineStartOffset` + `RopeSliceLine` per
+  visible row, and `RopeSliceLine` starts with a `RopeLinesLen` — three
+  full-document scans per row, 13% of the frame on line 663 alone. The
+  row loop now finds the first visible row once and steps to each next
+  line with `memchr`, so the visible band is read once.
+
+Re-profiled with the same drive: editor.exe fell from 5345 to 2999
+samples over the same 18 s, `Textarea::New` from 762 self samples to 14,
+and the lexer off the profile entirely; what is left is element build,
+taffy and Direct2D, which is the shape a frame should have. The
+21510-check suite passes and the editor screenshot is pixel-identical.
