@@ -425,7 +425,8 @@ const FrameStats& LastFrameStats() {
 // ─── device setup ────────────────────────────────────────────────────────
 
 static D3D12_HEAP_PROPERTIES D12Heap(D3D12_HEAP_TYPE type) {
-    D3D12_HEAP_PROPERTIES h = {};
+    D3D12_HEAP_PROPERTIES h;
+    memset(&h, 0, sizeof(h));
     h.Type = type;
     h.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
     h.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
@@ -495,7 +496,8 @@ static int D12PipeIx(int samples) {
 }
 
 static D3D12_BLEND_DESC D12Blend() {
-    D3D12_BLEND_DESC b = {};
+    D3D12_BLEND_DESC b;
+    memset(&b, 0, sizeof(b));
     b.RenderTarget[0].BlendEnable = TRUE;
     b.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
     b.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
@@ -508,7 +510,8 @@ static D3D12_BLEND_DESC D12Blend() {
 }
 
 static D3D12_RASTERIZER_DESC D12Raster(int samples) {
-    D3D12_RASTERIZER_DESC r = {};
+    D3D12_RASTERIZER_DESC r;
+    memset(&r, 0, sizeof(r));
     r.FillMode = D3D12_FILL_MODE_SOLID;
     r.CullMode = D3D12_CULL_MODE_NONE;
     r.DepthClipEnable = TRUE;
@@ -517,7 +520,8 @@ static D3D12_RASTERIZER_DESC D12Raster(int samples) {
 }
 
 static D3D12_DEPTH_STENCIL_DESC D12DepthOff() {
-    D3D12_DEPTH_STENCIL_DESC d = {};
+    D3D12_DEPTH_STENCIL_DESC d;
+    memset(&d, 0, sizeof(d));
     d.DepthEnable = FALSE;
     d.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
     d.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
@@ -529,7 +533,8 @@ static D3D12_DEPTH_STENCIL_DESC D12DepthOff() {
 
 static D3D12_DEPTH_STENCILOP_DESC D12StencilOp(D3D12_STENCIL_OP pass,
                                                D3D12_COMPARISON_FUNC func) {
-    D3D12_DEPTH_STENCILOP_DESC o = {};
+    D3D12_DEPTH_STENCILOP_DESC o;
+    memset(&o, 0, sizeof(o));
     o.StencilFailOp = D3D12_STENCIL_OP_KEEP;
     o.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
     o.StencilPassOp = pass;
@@ -544,7 +549,8 @@ static bool D12MakePipelines(int samples) {
         return true;
     }
     p->samples = samples;
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC d = {};
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC d;
+    memset(&d, 0, sizeof(d));
     d.pRootSignature = g->root;
     d.VS = {kShaderVSQuadBytes, (SIZE_T)kShaderVSQuadSize};
     d.PS = {kShaderPSQuadBytes, (SIZE_T)kShaderPSQuadSize};
@@ -718,7 +724,8 @@ static bool D12EnsureGpu(PaintApp* pa) {
         rp[i + 2].DescriptorTable.pDescriptorRanges = &ranges[i];
         rp[i + 2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     }
-    D3D12_STATIC_SAMPLER_DESC samp = {};
+    D3D12_STATIC_SAMPLER_DESC samp;
+    memset(&samp, 0, sizeof(samp));
     samp.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
     samp.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     samp.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -834,7 +841,8 @@ static bool MakeWhite(Gpu* g) {
 // wrote and zeroes it on the way past, so the buffer is clean for the next
 // path without a clear.
 static bool MakeStencilStates(Gpu* g) {
-    D3D11_DEPTH_STENCIL_DESC d = {};
+    D3D11_DEPTH_STENCIL_DESC d;
+    memset(&d, 0, sizeof(d));
     d.DepthEnable = FALSE;
     d.StencilEnable = FALSE;
     if (FAILED(g->dev->CreateDepthStencilState(&d, &g->dsOff))) {
@@ -844,7 +852,8 @@ static bool MakeStencilStates(Gpu* g) {
     d.StencilEnable = TRUE;
     d.StencilReadMask = 0xff;
     d.StencilWriteMask = 0xff;
-    D3D11_DEPTH_STENCILOP_DESC inv = {};
+    D3D11_DEPTH_STENCILOP_DESC inv;
+    memset(&inv, 0, sizeof(inv));
     inv.StencilFailOp = D3D11_STENCIL_OP_KEEP;
     inv.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
     inv.StencilPassOp = D3D11_STENCIL_OP_INVERT;
@@ -864,7 +873,8 @@ static bool MakeStencilStates(Gpu* g) {
         return false;
     }
 
-    D3D11_DEPTH_STENCILOP_DESC cover = {};
+    D3D11_DEPTH_STENCILOP_DESC cover;
+    memset(&cover, 0, sizeof(cover));
     cover.StencilFailOp = D3D11_STENCIL_OP_ZERO;
     cover.StencilDepthFailOp = D3D11_STENCIL_OP_ZERO;
     cover.StencilPassOp = D3D11_STENCIL_OP_ZERO;
@@ -933,7 +943,8 @@ static bool EnsureGpu(PaintApp* pa) {
     }
 
     // Premultiplied source, which is what both pixel shaders emit.
-    D3D11_BLEND_DESC bd = {};
+    D3D11_BLEND_DESC bd;
+    memset(&bd, 0, sizeof(bd));
     bd.RenderTarget[0].BlendEnable = TRUE;
     bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
     bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -946,7 +957,8 @@ static bool EnsureGpu(PaintApp* pa) {
         return false;
     }
 
-    D3D11_RASTERIZER_DESC rd = {};
+    D3D11_RASTERIZER_DESC rd;
+    memset(&rd, 0, sizeof(rd));
     rd.FillMode = D3D11_FILL_SOLID;
     // No culling: a path's stencil fan is deliberately wound both ways, and
     // the nonzero rule reads the winding out of the front/back stencil ops
@@ -961,7 +973,8 @@ static bool EnsureGpu(PaintApp* pa) {
         return false;
     }
 
-    D3D11_SAMPLER_DESC sd = {};
+    D3D11_SAMPLER_DESC sd;
+    memset(&sd, 0, sizeof(sd));
     sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
     sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
