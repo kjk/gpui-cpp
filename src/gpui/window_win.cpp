@@ -13,6 +13,7 @@
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <uiautomation.h>
+#include <math.h>
 
 namespace gpui {
 
@@ -990,7 +991,7 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     float scale = win->paint.dpi / 96.f;
     // The menu draws an item's bitmap at its own pixel size, so it is
     // rasterized at the device size to stay sharp on a high-DPI display.
-    int iconPx = (int)((float)kMenuImageSize * scale + 0.5f);
+    int iconPx = (int)lroundf((float)kMenuImageSize * scale);
     if (iconPx < 1) {
         iconPx = 1;
     }
@@ -1001,7 +1002,7 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     if (!menu) {
         return 0;
     }
-    POINT pt = {(LONG)(x * scale + 0.5f), (LONG)(y * scale + 0.5f)};
+    POINT pt = {(LONG)lroundf(x * scale), (LONG)lroundf(y * scale)};
     ClientToScreen(hwnd, &pt);
     // Without this the menu does not dismiss when the click lands elsewhere.
     SetForegroundWindow(hwnd);

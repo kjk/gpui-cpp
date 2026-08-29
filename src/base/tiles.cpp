@@ -1,5 +1,7 @@
 #include "base/tiles.h"
 
+#include <math.h>
+
 namespace gpui {
 
 const Str kTileMoveDrag = StrL("tile-move");
@@ -100,7 +102,7 @@ float TileRoundToGrid(float v, float grid) {
     }
     float t = v / grid;
     // Rust's f32::round is half away from zero.
-    float r = t >= 0 ? (float)(int)(t + 0.5f) : -(float)(int)(-t + 0.5f);
+    float r = (float)lroundf(t);
     return r * grid;
 }
 

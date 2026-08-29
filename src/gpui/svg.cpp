@@ -921,7 +921,7 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
         if (o > 1) {
             o = 1;
         }
-        cur.fill.a = (uint8_t)(o * 255.f + 0.5f);
+        cur.fill.a = (uint8_t)lroundf(o * 255.f);
         cur.hasFill = cur.hasFill || o < 1.f;
     }
     if (GetAttrStr(tag, "filter", &tr)) {
@@ -1113,7 +1113,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
                         if (o > 1) {
                             o = 1;
                         }
-                        c.a = (uint8_t)(o * 255.f + 0.5f);
+                        c.a = (uint8_t)lroundf(o * 255.f);
                     }
                     ic->gradients[gradIx].color = c;
                     ic->gradients[gradIx].hasColor = true;

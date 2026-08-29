@@ -4,6 +4,8 @@
 #include "sys/executor.h"
 #include "sys/gpu.h"
 
+#include <math.h>
+
 namespace gpui {
 
 // ─── style (crates/fps/src/style.rs) ──────────────────────────────────────
@@ -350,7 +352,7 @@ static void StartResourceSampling(FpsMonitor* self, Ctx* cx) {
     if (!self->showResources || self->resourceTimer || !cx->win) {
         return;
     }
-    int ms = (int)(self->resourceInterval * 1000.f + 0.5f);
+    int ms = (int)lroundf(self->resourceInterval * 1000.f);
     // sysinfo refuses a faster refresh too; even the native one-process
     // counters become noise below this point.
     if (ms < 200) {

@@ -47,10 +47,10 @@ Rgba RgbaMix(Rgba a, Rgba b, float t) {
         t = 1;
     }
     Rgba o;
-    o.r = (uint8_t)(a.r * t + b.r * (1 - t) + 0.5f);
-    o.g = (uint8_t)(a.g * t + b.g * (1 - t) + 0.5f);
-    o.b = (uint8_t)(a.b * t + b.b * (1 - t) + 0.5f);
-    o.a = (uint8_t)(a.a * t + b.a * (1 - t) + 0.5f);
+    o.r = (uint8_t)lroundf(a.r * t + b.r * (1 - t));
+    o.g = (uint8_t)lroundf(a.g * t + b.g * (1 - t));
+    o.b = (uint8_t)lroundf(a.b * t + b.b * (1 - t));
+    o.a = (uint8_t)lroundf(a.a * t + b.a * (1 - t));
     return o;
 }
 
@@ -2037,7 +2037,7 @@ float PxToDip(PaintCtx* ctx, int px) {
     return px * 96.f / (ctx->dpi > 0 ? ctx->dpi : 96.f);
 }
 int DipToPx(PaintCtx* ctx, float dip) {
-    return (int)(dip * (ctx->dpi > 0 ? ctx->dpi : 96.f) / 96.f + 0.5f);
+    return (int)lroundf(dip * (ctx->dpi > 0 ? ctx->dpi : 96.f) / 96.f);
 }
 
 // Key wrap width: 0 = unconstrained. Round to 1 DIP so tiny parent-size
@@ -4264,7 +4264,7 @@ static void ChartDomain(const ChartSeries& c, float* outMin, float* outMax) {
 // A value-axis tick label: whole numbers plain, anything else to one place,
 // which is what a chart's own labels do upstream.
 static Str ChartValueLabel(float v) {
-    float rounded = v < 0 ? -(float)(int)(-v + 0.5f) : (float)(int)(v + 0.5f);
+    float rounded = (float)lroundf(v);
     float d = v - rounded;
     if ((d < 0 ? -d : d) < 0.05f) {
         return fmt("%d", (int)rounded);
@@ -4853,7 +4853,7 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             }
         } else {
             float t = n > 1 ? (ctx->mouseX - x) / (w / (float)(n - 1)) : 0.f;
-            index = (int)(t + 0.5f);
+            index = (int)lroundf(t);
             if (index < 0) {
                 index = 0;
             }

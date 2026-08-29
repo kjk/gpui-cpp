@@ -2844,7 +2844,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
         a->penX = 0;
         a->penY = 0;
         a->rowH = 0;
-        e = AtlasFind({face, glyph, (uint32_t)(em * 4.f + 0.5f)});
+        e = AtlasFind({face, glyph, (uint32_t)lroundf(em * 4.f)});
         if (!e) {
             return false;
         }
@@ -2868,7 +2868,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
     e->used = true;
     e->key.face = face;
     e->key.glyph = glyph;
-    e->key.size4 = (uint32_t)(em * 4.f + 0.5f);
+    e->key.size4 = (uint32_t)lroundf(em * 4.f);
     e->x = a->penX;
     e->y = a->penY;
     e->w = w;
@@ -2885,7 +2885,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
 
 static void DrawGlyph(IDWriteFontFace* face, float em, uint16_t glyph, float x,
                       float y, Rgba c) {
-    GlyphKey k = {face, glyph, (uint32_t)(em * 4.f + 0.5f)};
+    GlyphKey k = {face, glyph, (uint32_t)lroundf(em * 4.f)};
     GlyphEntry* e = AtlasFind(k);
     if (!e) {
         return;

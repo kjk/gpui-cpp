@@ -2457,7 +2457,7 @@ int WindowTimerMs(Window* win) {
     if (soonest < 0) {
         return 0;
     }
-    int ms = (int)((soonest - now) * 1000.0 + 0.5);
+    int ms = (int)lround((soonest - now) * 1000.0);
     return ms > 0 ? ms : 1;
 }
 

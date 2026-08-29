@@ -225,7 +225,7 @@ int ScaleBand::LeastIndex(float tick) const {
     if (step == 0) {
         return 0;
     }
-    int index = (int)((tick - outer) / step + 0.5f);
+    int index = (int)lroundf((tick - outer) / step);
     if (index < 0) {
         index = 0;
     }
