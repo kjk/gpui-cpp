@@ -38,6 +38,11 @@ enum class SyntaxTok : uint8_t {
     Comment,
     Tag,
     Attribute,
+    // Markdown: `@title` on a heading, `@text.literal` on a fenced block
+    // and `@text.code.span` on an inline span. The scanner has no parse, so
+    // the heading is the whole ATX line and a fence's body is one run.
+    Title,
+    Literal,
 };
 
 // An index into the language table, or SyntaxLangNone.

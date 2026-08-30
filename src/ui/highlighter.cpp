@@ -451,15 +451,27 @@ static bool HighlightNameColor(Str name, ThemeMode mode, Rgba fallback,
         const char* name;
         SyntaxTok tok;
     } kMap[] = {
-        {"keyword", SyntaxTok::Keyword},   {"type", SyntaxTok::Type},
-        {"class", SyntaxTok::Type},        {"struct", SyntaxTok::Type},
-        {"enum", SyntaxTok::Type},         {"interface", SyntaxTok::Type},
-        {"function", SyntaxTok::Function}, {"method", SyntaxTok::Function},
-        {"macro", SyntaxTok::Function},    {"property", SyntaxTok::Property},
-        {"variable", SyntaxTok::Property}, {"parameter", SyntaxTok::Property},
-        {"string", SyntaxTok::String},     {"number", SyntaxTok::Number},
-        {"boolean", SyntaxTok::Boolean},   {"comment", SyntaxTok::Comment},
-        {"tag", SyntaxTok::Tag},           {"attribute", SyntaxTok::Attribute},
+        {"keyword", SyntaxTok::Keyword},
+        {"type", SyntaxTok::Type},
+        {"class", SyntaxTok::Type},
+        {"struct", SyntaxTok::Type},
+        {"enum", SyntaxTok::Type},
+        {"interface", SyntaxTok::Type},
+        {"function", SyntaxTok::Function},
+        {"method", SyntaxTok::Function},
+        {"macro", SyntaxTok::Function},
+        {"property", SyntaxTok::Property},
+        {"variable", SyntaxTok::Property},
+        {"parameter", SyntaxTok::Property},
+        {"string", SyntaxTok::String},
+        {"number", SyntaxTok::Number},
+        {"boolean", SyntaxTok::Boolean},
+        {"comment", SyntaxTok::Comment},
+        {"tag", SyntaxTok::Tag},
+        {"attribute", SyntaxTok::Attribute},
+        {"title", SyntaxTok::Title},
+        {"text.literal", SyntaxTok::Literal},
+        {"text.code.span", SyntaxTok::Literal},
     };
     Str head = name;
     for (int pass = 0; pass < 2; pass++) {
@@ -715,6 +727,10 @@ static Str SynHlTokName(SyntaxTok tok) {
             return StrL("tag");
         case SyntaxTok::Attribute:
             return StrL("attribute");
+        case SyntaxTok::Title:
+            return StrL("title");
+        case SyntaxTok::Literal:
+            return StrL("text.literal");
         default:
             return Str{};
     }

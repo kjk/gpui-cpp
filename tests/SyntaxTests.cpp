@@ -203,12 +203,12 @@ static void TestSyntaxMarkdown() {
         "\n"
         "After the fence.\n";
 
-    utassert(TokAt(md, src, "# Heading") == SyntaxTok::Keyword);
+    utassert(TokAt(md, src, "# Heading") == SyntaxTok::Title);
     // The emphasis inside a heading is the heading's own colour: the whole
     // line is one token.
-    utassert(TokAt(md, src, "**one**") == SyntaxTok::Keyword);
+    utassert(TokAt(md, src, "**one**") == SyntaxTok::Title);
     utassert(TokAt(md, src, "Prose with") == SyntaxTok::Text);
-    utassert(TokAt(md, src, "`a span`") == SyntaxTok::String);
+    utassert(TokAt(md, src, "`a span`") == SyntaxTok::Literal);
     utassert(TokAt(md, src, "[a link]") == SyntaxTok::Function);
     utassert(TokAt(md, src, "(https://example.com/x)") == SyntaxTok::Comment);
     utassert(TokAt(md, src, "in it.") == SyntaxTok::Text);
@@ -218,9 +218,10 @@ static void TestSyntaxMarkdown() {
     utassert(TokAt(md, src, "> a quote") == SyntaxTok::Comment);
     utassert(TokAt(md, src, "<img src=") == SyntaxTok::Tag);
     utassert(TokAt(md, src, "tag.") == SyntaxTok::Text);
-    // The fence lines are marks; what they hold is verbatim, `[1]` included.
-    utassert(TokAt(md, src, "```rust") == SyntaxTok::Keyword);
-    utassert(TokAt(md, src, "let x = [1];") == SyntaxTok::Text);
+    // The fence is `@text.literal` on the block, including the delimiters
+    // and the verbatim body — `[1]` included, not scanned as rust.
+    utassert(TokAt(md, src, "```rust") == SyntaxTok::Literal);
+    utassert(TokAt(md, src, "let x = [1];") == SyntaxTok::Literal);
     utassert(TokAt(md, src, "After the fence.") == SyntaxTok::Text);
     utassert(Partitions(md, src));
 

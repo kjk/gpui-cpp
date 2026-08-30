@@ -284,8 +284,7 @@ static int SyntaxSkipSpace(const SyntaxLexer* lx, int at) {
 
 static bool SyntaxAt(const SyntaxLexer* lx, int at, const char* s) {
     int n = (int)strlen(s);
-    return at + n <= lx->src.len &&
-           StrEq(Str(lx->src.s + at, n), Str(s, n));
+    return at + n <= lx->src.len && StrEq(Str(lx->src.s + at, n), Str(s, n));
 }
 
 // A quoted run, to its closing quote. `escapes` is whether a backslash
@@ -398,10 +397,8 @@ static bool SyntaxNextMarkdown(SyntaxLexer* lx) {
         lx->at = end;
         if (MdIsFenceLine(line)) {
             lx->inFence = false;
-            SyntaxEmit(lx, start, SyntaxTok::Keyword);
-        } else {
-            SyntaxEmit(lx, start, SyntaxTok::Text);
         }
+        SyntaxEmit(lx, start, SyntaxTok::Literal);
         return true;
     }
     // A destination reads as one only where a link's text just ended.
@@ -430,13 +427,13 @@ static bool SyntaxNextMarkdown(SyntaxLexer* lx) {
         if (MdIsFenceLine(line)) {
             lx->inFence = true;
             lx->at = end;
-            SyntaxEmit(lx, start, SyntaxTok::Keyword);
+            SyntaxEmit(lx, start, SyntaxTok::Literal);
             return true;
         }
         if (c == '#') {
-            // An ATX heading is the whole line, hashes and all.
+            // An ATX heading is the whole line, hashes and all — `@title`.
             lx->at = end;
-            SyntaxEmit(lx, start, SyntaxTok::Keyword);
+            SyntaxEmit(lx, start, SyntaxTok::Title);
             return true;
         }
         if (c == '>') {
@@ -473,7 +470,7 @@ static bool SyntaxNextMarkdown(SyntaxLexer* lx) {
                 break;
             }
         }
-        SyntaxEmit(lx, start, SyntaxTok::String);
+        SyntaxEmit(lx, start, SyntaxTok::Literal);
         return true;
     }
     bool image = c == '!' && lx->at + 1 < s.len && s.s[lx->at + 1] == '[';
@@ -747,6 +744,9 @@ static const SyntaxColorRow kColors[] = {
     {SyntaxTok::Comment, {0x00, 0x7f, 0xff, 0xff}, {0x9e, 0x9e, 0x9e, 0xff}},
     {SyntaxTok::Tag, {0x04, 0x33, 0xff, 0xff}, {0xb5, 0xaf, 0x9a, 0xff}},
     {SyntaxTok::Attribute, {0x95, 0x79, 0x31, 0xff}, {0xe7, 0xcb, 0x8f, 0xff}},
+    // default-theme.json `title` / `text.literal` (and `text.code.span`).
+    {SyntaxTok::Title, {0x04, 0x33, 0xff, 0xff}, {0xcc, 0x9e, 0x00, 0xff}},
+    {SyntaxTok::Literal, {0x6f, 0x42, 0xc1, 0xff}, {0xa3, 0xe0, 0x9f, 0xff}},
 };
 
 Rgba SyntaxTokColor(SyntaxTok tok, ThemeMode mode, Rgba fallback) {
