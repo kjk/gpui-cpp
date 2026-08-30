@@ -10256,3 +10256,18 @@ that scrolled off is already on the free list when the one that scrolled
 on is made. The sliding-window test now uses editor-like nested rows,
 scrolls back to the top, and checks the slot count (not just the live
 count) does not grow.
+
+## Stack overflow releasing DirectWrite layouts (ellipsis nesting)
+
+2026-08-30: ASan (and then a normal stack) blew up in
+`IDWriteTextLayout::Release`, walking a chain of
+`MutableTextLayout::~` → `InlineLayout::Release` → `MutableTextLayout::~`
+thousands deep. `TextLayoutDraw` on the Direct2D path was calling
+`CreateEllipsisTrimmingSign` with the layout itself. That API takes an
+`IDWriteTextFormat`; a layout is one, and DWrite copies the format's current
+trimming into the new sign's inner layout. Truncated draws of a cached run
+therefore nested another `InlineLayout` every frame. Cache eviction was the
+Release that overflowed. The sign is now created from a factory format (no
+trimming) and both the sign and the max-width mutation are cleared after the
+draw, the way the Pango path already restored ellipsize. The GPU path never
+set trimming (its `DrawInlineObject` is `E_NOTIMPL`), so it did not hit this.

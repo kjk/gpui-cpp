@@ -191,8 +191,7 @@ PaintApp* PaintAppNew() {
     }
 #endif
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                             __uuidof(IDWriteFactory),
-                             (IUnknown**)&pa->dwrite);
+                             __uuidof(IDWriteFactory), (IUnknown**)&pa->dwrite);
     if (FAILED(hr)) {
         Rel(&pa->d2d);
         delete pa;
@@ -1570,21 +1569,36 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     // fit ends in one rather than being cut through a glyph. DirectWrite draws
     // it from a trimming sign against the layout's own max width — and a
     // non-wrapping run was shaped unconstrained, so both are set here, on the
-    // way in. The layout is drawn once per call and the width is set every
-    // time, so a run shared between a truncating cell and an untruncated one
-    // is right in both.
+    // way in, and cleared on the way out: the same cached run can be drawn
+    // truncated in one cell and whole in another.
+    //
+    // CreateEllipsisTrimmingSign takes IDWriteTextFormat. The layout is one,
+    // but feeding it back copies its current trimming sign into the new sign's
+    // inner layout. Each truncated draw then nests another InlineLayout, and
+    // Release of a cached run recurses until the stack overflows. A factory
+    // format has no trimming.
+    IDWriteTextLayout* layout = Dw(tl);
+    FLOAT savedW = 0;
+    bool ellipsized = false;
     if (clip && clipW > 0) {
-        Dw(tl)->SetMaxWidth(clipW);
+        savedW = layout->GetMaxWidth();
+        layout->SetMaxWidth(clipW);
         DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
         IDWriteInlineObject* sign =
-            EllipsisSign(ctx->pa, FontFor(ctx->pa, Dw(tl)->GetFontSize(), 0));
+            EllipsisSign(ctx->pa, FontFor(ctx->pa, layout->GetFontSize(), 0));
         if (sign) {
-            Dw(tl)->SetTrimming(&trim, sign);
+            layout->SetTrimming(&trim, sign);
         }
+        ellipsized = true;
     }
     D2D1_DRAW_TEXT_OPTIONS opt =
         clip ? D2D1_DRAW_TEXT_OPTIONS_CLIP : D2D1_DRAW_TEXT_OPTIONS_NONE;
-    ctx->rt->rt->DrawTextLayout(D2D1::Point2F(x, y), Dw(tl), b, opt);
+    ctx->rt->rt->DrawTextLayout(D2D1::Point2F(x, y), layout, b, opt);
+    if (ellipsized) {
+        DWRITE_TRIMMING none = {DWRITE_TRIMMING_GRANULARITY_NONE, 0, 0};
+        layout->SetTrimming(&none, nullptr);
+        layout->SetMaxWidth(savedW);
+    }
 }
 
 int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
