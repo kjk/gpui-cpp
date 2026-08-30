@@ -90,7 +90,10 @@ struct EditorApp {
 
     // The file the editor holds, and what the tree said last.
     char openPath[1024] = {};
-    Str language = {};
+    // The extension `LanguageFor` copied out of the path. Must be owned: a
+    // `Str` into the stack buffer `OpenFile` is given is gone next frame,
+    // and `Highlighter::Language` then sees garbage instead of "md".
+    char language[32] = {};
 
     // The lint's own diagnostics, rebuilt when the document changes.
     Diagnostic* diagnostics = nullptr;
@@ -161,7 +164,15 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
 }
 
 // The language a file's extension names, which is what the editor scans it as.
-static Str LanguageFor(const char* path) {
+// Writes the last extension (after `/` or `\`) into `out`.
+static void LanguageFor(const char* path, char* out, int cap) {
+    if (!out || cap <= 0) {
+        return;
+    }
+    out[0] = 0;
+    if (!path) {
+        return;
+    }
     const char* dot = nullptr;
     for (const char* p = path; *p; p++) {
         if (*p == '.') {
@@ -170,7 +181,9 @@ static Str LanguageFor(const char* path) {
             dot = nullptr;
         }
     }
-    return dot ? Str(dot) : Str{};
+    if (dot) {
+        StrCopyZ(out, cap, dot);
+    }
 }
 
 // ─── the lint that stands in for autocorrect ──────────────────────────────
@@ -269,7 +282,7 @@ static void OpenFile(EditorApp* self, const char* path) {
     InputSetValue(&self->editor, Str(buf, (int)got));
     Free(nullptr, buf);
     StrCopyZ(self->openPath, (int)sizeof(self->openPath), path);
-    self->language = LanguageFor(path);
+    LanguageFor(path, self->language, (int)sizeof(self->language));
     Lint(self);
 }
 
@@ -1551,8 +1564,8 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     component::Highlighter* ed =
         component::Highlighter::New(cx, StrL("editor"), &self->editor);
     ed->H(bodyH)->ActiveLine();
-    if (self->language.len > 0) {
-        ed->Language(self->language);
+    if (self->language[0]) {
+        ed->Language(Str(self->language));
     }
     if (self->indentGuides) {
         ed->IndentGuides();
@@ -1711,7 +1724,7 @@ int GpuiMain(int argc, char** argv) {
     if (fixture.len > 0) {
         InputSetValue(&self->editor, Str(fixture.s, fixture.len));
     }
-    self->language = StrL("rs");
+    StrCopyZ(self->language, (int)sizeof(self->language), "rs");
     Lint(self);
     self->editor.focused = true;
     // TitleBar::window_options(): the example owns its title bar, so the
