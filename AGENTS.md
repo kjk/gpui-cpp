@@ -4,7 +4,7 @@ This repository is a C++ port of [longbridge/gpui-component](https://github.com/
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
-**Upstream pins** — source of truth: the pin block at the top of [`cmd/run.ts`](cmd/run.ts) (`gpuiComponent`, `zedGpui`, and the three crates we port: `taffy`, `markdown` and `wry`); `bun cmd/run.ts -versions` prints them. How to ingest a later checkin: `port-upstream.md`.
+**Upstream pins** — source of truth: the pin block at the top of [`cmd/run.ts`](cmd/run.ts) (`gpuiComponent`, `zedGpui`, and the four crates we port: `taffy`, `markdown`, `wry` and `autocorrect`); `bun cmd/run.ts -versions` prints them. How to ingest a later checkin: `port-upstream.md`.
 
 ## Goal
 
@@ -62,11 +62,13 @@ Matching means:
 
 It does **not** mean a line-for-line clone of Zed's GPUI renderer or Blade.
 Those are the layer *under* gpui-component, and we reimplement a subset of them
-rather than port them. **Three crates are the exception**, and each is a full
+rather than port them. **Four crates are the exception**, and each is a full
 C++ port at the version gpui-component pins: `src/taffy/` lays out every box in
-this tree, `src/markdown/` parses every `TextView`, and `src/wry/` is the
-webview `crates/webview` puts in a window. See `src/taffy/readme.md`,
-`src/markdown/readme.md` and `src/wry/readme.md`.
+this tree, `src/markdown/` parses every `TextView`, `src/wry/` is the
+webview `crates/webview` puts in a window, and `src/autocorrect/` is the CJK
+copywriting linter the editor example lints and walks its file tree with. See
+`src/taffy/readme.md`, `src/markdown/readme.md`, `src/wry/readme.md` and
+`src/autocorrect/readme.md`.
 
 `crates/shell` is in scope too. Its JavaScript engine is the explicit vendoring
 exception: the exact QuickJS-NG revision recorded in `cmd/run.ts` is checked out
@@ -139,7 +141,7 @@ rediscover it.
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout, and it is `namespace base`. Everything else in `src/` lives in `namespace gpui` (themed widgets in `gpui::component`), which takes the base in with a using-directive, so gpui code writes `Str` unqualified and `gpui::Str` still names it from outside. Examples `#include "gpui.h"` and `using namespace gpui;`.
 
-   The two ported crates are the reason for the split. `src/taffy` and `src/markdown` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/update-dist.ts` fails the build if that stops being true. Keep it that way when adding to either — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
+   The ported crates are the reason for the split. `src/taffy`, `src/markdown`, `src/wry` and `src/autocorrect` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/update-dist.ts` fails the build if that stops being true. Keep it that way when adding to any of them — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
 3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs — plus WinHTTP for `src/sys/http_win.cpp`. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`, and libcurl the same way when it is installed (the one soft dependency: without it the tree still builds and only loses remote images). macOS: clang++ with Cocoa, Core Graphics, Core Text, IOKit and Foundation's NSURLSession from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). QuickJS-NG is the sole vendored-source exception, pinned and reduced by `cmd/update-quickjs.ts` to `src/quickjs/quickjs.h` plus `quickjs.c`; it is compiled directly as C11 and brings no build system or transitive library.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
@@ -346,14 +348,18 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 `Key*` constants in `Gpui.h` (the Win32 `VK_*` values, which the X11 window
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
-`cmd/update-dist.ts` amalgamates `src/` into `gpui.h` and `gpui.cpp`, then copies
-the separately compiled `quickjs/quickjs.h` and `quickjs/quickjs.c`. All four
+`cmd/update-dist.ts` amalgamates `src/` into `gpui.h` and `gpui.cpp`, copies
+the separately compiled `quickjs/quickjs.h` and `quickjs/quickjs.c`, and
+amalgamates `src/autocorrect/` into its own
+`autocorrect/autocorrect.h` + `autocorrect/autocorrect.cpp` pair — the linter
+is not part of GPUI, so `cmd/build.ts` compiles and links that pair only into
+the targets that use it (the editor example and the tests). All six files
 are the same on every platform. `.work/` is gitignored and is what
 every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
 it. The published copy is a repo of its own,
 [gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to
 `.work/gpui-cpp-dist` and refreshed only by running `bun cmd/update-dist.ts` by
-hand: that syncs the clone, writes the GPUI and QuickJS pairs into it, builds every example
+hand: that syncs the clone, writes the GPUI, QuickJS and autocorrect pairs into it, builds every example
 against it (`GPUI_AMALGAM_DIR` points the platform build at that copy, and its
 objects go to their own `out/*_dist` tree), rewrites its readme with the
 gpui-cpp commit it came from and a compare link showing what it is behind by,
@@ -364,7 +370,7 @@ on `main` is removed and cloned again rather than repaired: the script writes
 the whole of it and commits whatever `git status` reports, so a stray file
 would be published.
 
-The snapshot is a checkout, not four source files. Beside both pairs go every
+The snapshot is a checkout, not six source files. Beside the pairs go every
 example, `gpui_shell/`, `assets/`, `web/shell.html`, `build.ts` and `run.ts` at
 the top level, and
 `winapi.ts` + `mac-window-place.m` because `run.ts -compare` reaches for them
@@ -794,8 +800,9 @@ cmd/run.ts             build then run; build.ts's flags plus -debugger /
                        -windbg / -cdb / -gdb / -lldb, -compare, -no-build, and
                        -wasm (serve the page and open a tab). Also holds the
                        upstream pins — the exact gpui-component and zed gpui
-                       SHAs and the taffy / markdown / wry crate versions we
-                       are porting — which -versions prints and syncs
+                       SHAs and the taffy / markdown / wry / autocorrect
+                       crate versions we are porting — which -versions
+                       prints and syncs
 cmd/wsl-run.ts         run cmd/run.ts inside WSL from a Windows checkout
 cmd/ubuntu-install-deps.sh  non-interactive apt + bun + rustup setup for Linux
 cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords).
@@ -850,6 +857,9 @@ src/markdown/          the markdown crate, ported (see its readme.md)
 src/wry/               the wry webview crate, ported (see its readme.md);
                        WebView2 on Windows, WKWebView on macOS, a stub on
                        Linux and wasm
+src/autocorrect/       the autocorrect CJK linter crate, ported (see its
+                       readme.md); examples/editor.cpp lints and walks its
+                       file tree through it
 src/webview/           crates/webview (gpui-wry): the view that gives a
                        wry webview a box in the element tree
 src/base.h/.cpp        vendored SumatraPDF subset

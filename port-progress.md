@@ -10271,3 +10271,45 @@ Release that overflowed. The sign is now created from a factory format (no
 trimming) and both the sign and the max-width mutation are cleared after the
 draw, the way the Pango path already restored ellipsize. The GPU path never
 set trimming (its `DrawInlineObject` is `E_NOTIMPL`), so it did not hit this.
+
+## The autocorrect crate, ported; the editor lints and walks through it
+
+2026-08-30: `src/autocorrect/` is the fourth isolated crate port —
+[autocorrect](https://github.com/huacnlee/autocorrect) 2.14.2, the CJK
+copywriting linter the Rust editor example lints every document with. The
+homemade `Lint()` in `examples/editor.cpp` (TODO markers, trailing
+whitespace, the 100-column rule that put a wavy underline under most of
+`port-upstream.md`) is gone; the editor now calls `autocorrect::LintFor`
+with the highlighter's canonical language name, maps severities exactly as
+Rust does (Error→Warning, Warning→Hint, Pass→Info), and publishes a
+`Change to '…'` quickfix per finding as a second code action provider
+beside TextConvertor. `kSkipDirs` is gone too: the file tree walks through
+`autocorrect::Ignorer` (.gitignore + .autocorrectignore + the `.git` name
+check), so `.cache` stays visible and `.work`/`out` disappear because the
+ignore file names them.
+
+The crate's regex rules are hand-written scanners (word/fullwidth/halfwidth
+strategeries with replace_all's resume semantics, quirks preserved — the
+ungrouped `\p{CJK}` alternation, the literal `|` its class expansion leaks),
+and the pest grammars are scanners too: markdown is a small recursive-descent
+PEG building a pair tree, html/rust/js/c/python/ruby/go/sql/css/conf/json/
+yaml and nine more are flat scans in `source.cpp`. Not ported, recorded in
+`src/autocorrect/readme.md`: spellcheck (off in the crate's default config),
+`.autocorrectrc` loading, six grammars (latex, asciidoc, gettext, strings,
+xml, jupyter — empty results until a file of that type matters), the CLI and
+serializers. `tests/AutocorrectTests.cpp` ports the crate's format/
+fullwidth/halfwidth/toggle/types/code/ignorer tests;
+`tests/AutocorrectMarkdownFormatTests.cpp` carries the crate's
+whole-document markdown fixture extracted verbatim, formatted and then
+linted clean. Lint cost, measured: ~30 ms per MB of markdown, ~16 ms per MB
+of C, so the editor lints synchronously under its 4 MB open cap.
+
+Follow-up, same day: the port is **not in the gpui amalgam**. Only the
+editor example and the tests use it, so `cmd/update-dist.ts` now amalgamates
+`src/autocorrect/` into its own `autocorrect/autocorrect.h` +
+`autocorrect.cpp` pair beside `quickjs/` (the pair header pulls in `gpui.h`
+for the base types and carries `internal.h` for the tests), and
+`cmd/build.ts` compiles and links that pair only into `autocorrectTargets`
+(editor, tests). Every other binary shrank back by the linter's ~150 kB of
+source; `gpui.h`/`gpui.cpp` carry no `autocorrect` symbol. Consumers write
+`#include "autocorrect/autocorrect.h"` after `gpui.h`.

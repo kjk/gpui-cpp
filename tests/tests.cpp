@@ -108,6 +108,7 @@ int GpuiMain(int argc, char** argv) {
     TestThemeColor();
     TestColor();
     TestWryUri();
+    TestAutocorrect();
     TestObservers();
     TestStyleEq();
     TestScrollbarMotion();

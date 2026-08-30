@@ -1,8 +1,11 @@
 # gpui-cpp-dist
 
 The amalgamated build of [gpui-cpp](https://github.com/kjk/gpui-cpp): GPUI is
-`gpui.h` and `gpui.cpp`, and its QuickJS-NG engine is the separate generated
-`quickjs/quickjs.h` and `quickjs/quickjs.c`. Everything beside those four files
+`gpui.h` and `gpui.cpp`, its QuickJS-NG engine is the separate generated
+`quickjs/quickjs.h` and `quickjs/quickjs.c`, and the `autocorrect` CJK linter
+the editor example uses is the separate generated
+`autocorrect/autocorrect.h` and `autocorrect/autocorrect.cpp` (optional: only
+that example needs it). Everything beside those generated files
 is here so you can run them before you commit to them — every example, the
 assets they load, and the build and run scripts used by the source repo.
 
@@ -54,6 +57,9 @@ runtime removes them from `argv` before calling `GpuiMain`.
 ```
 gpui.h, gpui.cpp     the C++20 library amalgam
 quickjs/             pinned QuickJS-NG as one C11 header and one C source
+autocorrect/         the autocorrect CJK linter port as its own C++ pair;
+                     compiled and linked only into the editor example and
+                     the tests
 gpui_shell/           command-line JavaScript application host
 examples/            every example, including story/ and showcase/
 assets/              icons, images and documents the examples load at runtime
@@ -67,7 +73,10 @@ build.ts, run.ts     the source repo's own build and run scripts
 
 Drop the GPUI pair and `quickjs/` into your tree, `#include "gpui.h"` where you
 need the API, compile `gpui.cpp` as C++20, and compile `quickjs/quickjs.c` as
-C11. The platform halves are already inside `gpui.cpp` behind `GPUI_OS_*`
+C11. `autocorrect/` is optional: take its pair too only if you want the CJK
+copywriting linter (`#include "autocorrect/autocorrect.h"`, compile
+`autocorrect/autocorrect.cpp` as C++20). The platform halves are already
+inside `gpui.cpp` behind `GPUI_OS_*`
 guards, so the same source set builds on all four:
 
 - **Windows** — `cl /std:c++20 /EHsc /utf-8 /DUNICODE /D_UNICODE`, static CRT;

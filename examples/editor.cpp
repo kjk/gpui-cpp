@@ -2,9 +2,10 @@
    the editor's own switches under it.
 
    The tree walks the working directory and opens a file into the editor,
-   which scans it as whatever its extension names. Rust filters the walk
-   through the `autocorrect` ignorer, which reads .gitignore; `kSkipDirs`
-   below is the short list that stands in for it.
+   which scans it as whatever its extension names. The walk is filtered
+   through `autocorrect::Ignorer` (src/autocorrect/), which reads .gitignore
+   and .autocorrectignore the way Rust's walk does, plus the same standalone
+   `.git` name check.
 
    Over it is the bar `crates/story/src/title_bar.rs` draws: Rust's editor
    window is a StoryRoot, whose AppTitleBar carries the app menu bar on the
@@ -17,12 +18,12 @@
    line numbers, soft wrap, show whitespaces, indent guides, folding, read
    only, scroll beyond last line, and cursor surrounding lines.
 
-   The diagnostics are the part that differs and says so. Upstream lints the
-   open document with the `autocorrect` crate and publishes what it finds
-   through an LSP-style store; there is no such crate here, so the same seam
-   is fed by a small linter of this example's own — a marker comment, a line
-   past a hundred columns, trailing whitespace — one severity each, drawn as
-   the wavy underline `element.rs` draws a diagnostic with.
+   The diagnostics are the crate's: the open document is linted with the
+   ported `autocorrect` crate (src/autocorrect/), exactly as upstream lints
+   it, and every finding is published twice the way Rust's ExampleLspStore
+   publishes it — as a diagnostic drawn with the wavy underline `element.rs`
+   draws, and as a quickfix code action ("Change to '…'") beside
+   TextConvertor's rewrites.
 
    The completion menu is the store's other half that is here: the items are
    upstream's own `fixtures/completion_items.json`, filtered by the word being
@@ -36,32 +37,38 @@
 
 #include "gpui.h"
 
+// The autocorrect port is not part of the gpui amalgam: it is this example's
+// linter, so it comes as its own pair and cmd/build.ts compiles and links it
+// only here (and into the tests).
+#include "autocorrect/autocorrect.h"
+
 using namespace gpui;
 
-// The directories a walk does not go into. Rust asks the `autocorrect`
-// ignorer, which reads .gitignore, and skips `.git` on top of it; this is the
-// short list that stands in for the ignorer -- the entries this repo's own
-// .gitignore names, plus the ones a sibling checkout tends to leave about.
-//
-// A leading dot is not itself a reason to skip: `.github`, `.gitignore`,
-// `.clang-format` and `.cache` are in the tree the ignorer keeps (`.cache`
-// is not in this repo's .gitignore), so they are in this one.
-static const char* const kSkipDirs[] = {
-    ".git", ".work", "out", "target", ".emsdk", "build", "node_modules", ".vs"};
-
-static bool SkipEntry(const char* name) {
+// The walk asks the `autocorrect` ignorer, which reads .gitignore and
+// .autocorrectignore from the working directory, and skips `.git` by name on
+// top of it — build_file_items in the Rust example. A leading dot is not
+// itself a reason to skip: `.github` and `.cache` stay unless an ignore file
+// names them.
+static bool SkipEntry(const autocorrect::Ignorer* ig, const char* relPath,
+                      const char* name) {
     if (!name[0]) {
         return true;
     }
-    for (const char* d : kSkipDirs) {
-        if (strcmp(name, d) == 0) {
-            return true;
-        }
+    if (strcmp(name, ".git") == 0) {
+        return true;
     }
-    return false;
+    return autocorrect::IgnorerIsIgnored(ig, Str(relPath));
 }
 
 static const int kMaxDiagnostics = 512;
+
+// One lint finding's quickfix: replace `range` with `newText`. The title the
+// menu shows is derived from it — `Change to '…'`, the way Rust builds the
+// CodeAction beside each diagnostic.
+struct LintFix {
+    Selection range = {};
+    Str newText = {};
+};
 
 struct EditorApp {
     Entity<TreeState> tree = {};
@@ -95,16 +102,21 @@ struct EditorApp {
     // and `Highlighter::Language` then sees garbage instead of "md".
     char language[32] = {};
 
-    // The lint's own diagnostics, rebuilt when the document changes.
+    // The autocorrect lint's diagnostics, rebuilt when the document
+    // changes, and the quickfix each carries — Rust keeps the same pair in
+    // ExampleLspStore as `diagnostics` and `code_actions`.
     Diagnostic* diagnostics = nullptr;
+    LintFix* fixes = nullptr;
     int nDiagnostics = 0;
     int lintedLen = -1;
 
     ~EditorApp() {
         for (int i = 0; i < nDiagnostics; i++) {
             StrFree(diagnostics[i].message);
+            StrFree(fixes[i].newText);
         }
         Free(nullptr, diagnostics);
+        Free(nullptr, fixes);
     }
     static El* Render(EditorApp* self, Ctx* cx);
 };
@@ -130,7 +142,8 @@ static void SortDir(DirEntry* e, int n) {
     }
 }
 
-static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
+static void LoadDir(TreeState* s, const autocorrect::Ignorer* ig,
+                    const char* path, int parent, int depth) {
     // One listing per level, on the heap: a static array here would be the
     // same array the level above is still walking.
     const int kMaxEntries = 512;
@@ -141,13 +154,15 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
     int got = PlatListDir(path, found, kMaxEntries);
     SortDir(found, got);
     for (int i = 0; i < got; i++) {
-        if (SkipEntry(found[i].name)) {
-            continue;
-        }
         char child[1024];
         int wrote = snprintf(child, sizeof(child), "%.*s/%.*s", 500, path,
                              (int)sizeof(found[i].name), found[i].name);
         if (wrote <= 0) {
+            continue;
+        }
+        // The ignorer is asked with the path relative to the walked root,
+        // which is what `child` is: the walk starts at ".".
+        if (SkipEntry(ig, child, found[i].name)) {
             continue;
         }
         // TreeAddItem copies both strings; the state owns and frees them.
@@ -157,7 +172,7 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
         }
         s->items[ix].folder = found[i].isDir;
         if (found[i].isDir && depth > 0) {
-            LoadDir(s, child, ix, depth - 1);
+            LoadDir(s, ig, child, ix, depth - 1);
         }
     }
     Free(nullptr, found);
@@ -186,74 +201,122 @@ static void LanguageFor(const char* path, char* out, int cap) {
     }
 }
 
-// ─── the lint that stands in for autocorrect ──────────────────────────────
+// ─── the autocorrect lint ─────────────────────────────────────────────────
+//
+// lint_document in the Rust example: the document goes through
+// autocorrect::lint_for as the language the highlighter names, and each
+// LineResult becomes a diagnostic plus a quickfix. The severity mapping is
+// Rust's, copied exactly: Error → Warning, Warning → Hint, Pass → Info.
+//
+// Rust background_spawns the lint; this runs it on the UI thread, measured
+// first: ~30 ms per MB of markdown and ~16 ms per MB of C, so the 4 MB
+// OpenFile cap keeps the worst case around a tenth of a second and a
+// typical document under a millisecond. If a document ever wants more, the
+// ExecSpawn + WindowPost pair is the seam to move it to.
 
-static const char* const kMarkers[] = {"TODO", "FIXME", "XXX", "HACK"};
+// The canonical language name lint_for dispatches on — Rust passes
+// `self.language.name()` ("rust", "markdown"), never the extension, and an
+// extension the highlighter does not know becomes Plain, whose name is
+// "text" (linted as markdown). SyntaxLangFor is that same table here.
+static Str LintLanguageName(const char* ext) {
+    Str name = component::SyntaxLangName(component::SyntaxLangFor(Str(ext)));
+    return name.len > 0 ? name : StrL("text");
+}
 
-static void AddDiagnostic(EditorApp* self, int lo, int hi,
-                          DiagnosticSeverity severity, Str message) {
-    if (self->nDiagnostics >= kMaxDiagnostics) {
-        return;
+// `n` chars forward from byte `at`, staying inside the text — the crate
+// counts columns and lengths in chars, the document is bytes.
+static int AdvanceChars(Str text, int at, int n) {
+    uint32_t cp = 0;
+    while (n > 0 && at < text.len) {
+        at += Utf8At(text, at, &cp);
+        n--;
     }
-    if (!self->diagnostics) {
-        self->diagnostics = AllocArray<Diagnostic>(kMaxDiagnostics);
-        if (!self->diagnostics) {
-            return;
-        }
-    }
-    Diagnostic& d = self->diagnostics[self->nDiagnostics++];
-    d.range.start = lo;
-    d.range.end = hi;
-    d.severity = severity;
-    d.message = StrDup(message);
-    d.source = StrL("lint");
+    return at;
 }
 
 static void Lint(EditorApp* self) {
     for (int i = 0; i < self->nDiagnostics; i++) {
         StrFree(self->diagnostics[i].message);
+        StrFree(self->fixes[i].newText);
     }
     self->nDiagnostics = 0;
     Str text = InputValue(&self->editor);
     self->lintedLen = text.len;
 
-    int lineStart = 0;
-    for (int at = 0; at <= text.len; at++) {
-        bool eol = at == text.len || text.s[at] == '\n';
-        if (!eol) {
-            continue;
-        }
-        int lineEnd = at;
-        // A marker comment: a warning where it stands.
-        for (int i = lineStart; i < lineEnd; i++) {
-            for (const char* m : kMarkers) {
-                int len = (int)strlen(m);
-                if (i + len <= lineEnd &&
-                    StrEq(Str(text.s + i, len), Str(m, len))) {
-                    AddDiagnostic(self, i, i + len, DiagnosticSeverity::Warning,
-                                  StrL("marker left in the source"));
-                    i += len - 1;
-                    break;
-                }
+    Arena* a = ArenaNew();
+    autocorrect::LintResult result =
+        autocorrect::LintFor(a, text, LintLanguageName(self->language));
+    for (int i = 0; i < result.nLines && self->nDiagnostics < kMaxDiagnostics;
+         i++) {
+        const autocorrect::LineResult& item = result.lines[i];
+        if (!self->diagnostics) {
+            self->diagnostics = AllocArray<Diagnostic>(kMaxDiagnostics);
+            self->fixes = AllocArray<LintFix>(kMaxDiagnostics);
+            if (!self->diagnostics || !self->fixes) {
+                break;
             }
         }
-        // Trailing whitespace, and a line past a hundred columns.
-        int end = lineEnd;
-        while (end > lineStart &&
-               (text.s[end - 1] == ' ' || text.s[end - 1] == '\t')) {
-            end--;
+        // 1-based (line, col) to byte offsets; the end is the start plus
+        // item.old counted in chars, which is Rust's
+        // `col + item.old.chars().count()`.
+        int row = item.line - 1;
+        int lineStart = RopeLineStartOffset(text, row);
+        int lineEnd = RopeLineEndOffset(text, row);
+        int start = AdvanceChars(Str(text.s + lineStart, lineEnd - lineStart),
+                                 0, item.col - 1) +
+                    lineStart;
+        int oldChars = 0;
+        for (int at = 0; at < item.old.len;) {
+            uint32_t cp = 0;
+            at += Utf8At(item.old, at, &cp);
+            oldChars++;
         }
-        if (end < lineEnd) {
-            AddDiagnostic(self, end, lineEnd, DiagnosticSeverity::Hint,
-                          StrL("trailing whitespace"));
+        int end = AdvanceChars(text, start, oldChars);
+        int ix = self->nDiagnostics++;
+        Diagnostic& d = self->diagnostics[ix];
+        d = Diagnostic{};
+        d.range.start = start;
+        d.range.end = end;
+        switch (item.severity) {
+            case autocorrect::Severity::Error:
+                d.severity = DiagnosticSeverity::Warning;
+                break;
+            case autocorrect::Severity::Warning:
+                d.severity = DiagnosticSeverity::Hint;
+                break;
+            case autocorrect::Severity::Pass:
+            default:
+                d.severity = DiagnosticSeverity::Info;
+                break;
         }
-        if (lineEnd - lineStart > 100) {
-            AddDiagnostic(self, lineStart + 100, lineEnd,
-                          DiagnosticSeverity::Info,
-                          StrL("line is longer than 100 columns"));
-        }
-        lineStart = at + 1;
+        d.message = StrDup(fmt("AutoCorrect: %s", item.neu));
+        self->fixes[ix].range = d.range;
+        self->fixes[ix].newText = StrDup(item.neu);
     }
+    ArenaDelete(a);
+}
+
+// The second code action provider — Rust registers the LspStore beside
+// TextConvertor. A request whose range sits inside a lint finding gets that
+// finding's one edit.
+static int AutocorrectQuickfixes(void* data, Arena* a, Str, Selection sel,
+                                 CodeActionItem* out, int cap) {
+    EditorApp* self = (EditorApp*)data;
+    int n = 0;
+    for (int i = 0; i < self->nDiagnostics; i++) {
+        Selection range = self->fixes[i].range;
+        if (sel.start < range.start || sel.end > range.end) {
+            continue;
+        }
+        if (n < cap && out) {
+            out[n].title =
+                StrDup(a, fmt("Change to '%s'", self->fixes[i].newText));
+            out[n].range = range;
+            out[n].newText = StrDup(a, self->fixes[i].newText);
+        }
+        n++;
+    }
+    return n;
 }
 
 static void OpenFile(EditorApp* self, const char* path) {
@@ -1496,7 +1559,12 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
         self->tree = EntityNewState<TreeState>(cx->app);
         if (TreeState* s = self->tree.Get(cx)) {
             s->rowH = kFileTreeRowH;
-            LoadDir(s, ".", -1, 2);
+            // Ignorer::new("./"), for the duration of the walk — it loads
+            // .gitignore and .autocorrectignore from the working directory.
+            autocorrect::Ignorer ig;
+            autocorrect::IgnorerInit(&ig, StrL("."));
+            LoadDir(s, &ig, ".", -1, 2);
+            autocorrect::IgnorerFree(&ig);
             TreeRebuild(s);
             self->treeSub = Subscribe(cx, self->tree, &OnTreeEvent);
         }
@@ -1699,8 +1767,12 @@ int GpuiMain(int argc, char** argv) {
     // And the hover provider, which answers about the word the pointer rests
     // on out of the same items.
     self->editor.hoverProvider = &HoverAt;
-    // And the code actions, which ctrl-. offers over a selection.
+    // And the code actions, which ctrl-. offers over a selection. The lint's
+    // quickfixes register as a second provider, the way Rust's
+    // code_action_providers holds the LspStore beside TextConvertor.
     self->editor.codeActionProvider = &CodeActionsFor;
+    InputAddCodeActionProvider(&self->editor, &AutocorrectQuickfixes, self,
+                               nullptr);
     // And the colours the document names, painted where they are named.
     self->editor.documentColorProvider = &DocumentColorsIn;
     // And where a symbol is defined: ctrl-hover underlines one it can reach,

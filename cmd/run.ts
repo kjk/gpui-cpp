@@ -605,6 +605,20 @@ export const wry = {
   dir: "src/wry",
 } as const;
 
+/**
+ * The CJK copywriting linter/formatter `crates/story`'s editor example lints
+ * every open document with (`autocorrect = "2.14.2"` in
+ * `crates/story/Cargo.toml`). We port it: `src/autocorrect/` is a C++ port of
+ * exactly this version, and `examples/editor.cpp` lints and walks its file
+ * tree through it. See `src/autocorrect/readme.md`.
+ */
+export const autocorrect = {
+  repo: "https://github.com/huacnlee/autocorrect",
+  version: "2.14.2",
+  crateSha256: "3199cc73b9b6af61f5034dcdb28c21e6050ffdc1229a20abfc71c244083ab9dc",
+  dir: "src/autocorrect",
+} as const;
+
 /** JavaScript engine used by the C++ port of crates/shell. */
 export const quickjsNg = {
   repo: "https://github.com/quickjs-ng/quickjs",
@@ -711,6 +725,7 @@ function printVersions(): never {
   console.log("crates ported", `taffy ${taffy.version} -> ${taffy.dir}`);
   console.log("             ", `markdown ${markdown.version} -> ${markdown.dir}`);
   console.log("             ", `${wry.crate} ${wry.version} -> ${wry.dir}`);
+  console.log("             ", `autocorrect ${autocorrect.version} -> ${autocorrect.dir}`);
   console.log("engine       ", `quickjs-ng ${quickjsNg.version} ${quickjsNg.sha} -> ${quickjsNg.dir}`);
   try {
     const dir = ensureRustTree(root);
@@ -917,7 +932,12 @@ async function runNative(a: RunArgs): Promise<never> {
   // programs and not their working directories.
   const cwd = root;
 
-  if (a.plat === "linux" && !consoleTargets.has(a.target) && !process.env["DISPLAY"] && !process.env["WAYLAND_DISPLAY"]) {
+  if (
+    a.plat === "linux" &&
+    !consoleTargets.has(a.target) &&
+    !process.env["DISPLAY"] &&
+    !process.env["WAYLAND_DISPLAY"]
+  ) {
     console.error("DISPLAY is not set: there is no X server to open a window on.");
     console.error("Under WSL, make sure WSLg is available (wsl --update).");
     process.exit(1);

@@ -98,6 +98,7 @@ void TestInspector();
 void TestThemeColor();
 void TestColor();
 void TestWryUri();
+void TestAutocorrect();
 void TestObservers();
 void TestStyleEq();
 void TestScrollbarMotion();

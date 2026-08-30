@@ -1,7 +1,10 @@
-// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h and gpui.cpp. QuickJS is
-// the one source that stays separate: its generated C11 amalgam and public
-// header are copied as quickjs/quickjs.c + quickjs.h. All four are the same on
-// every platform.
+// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h and gpui.cpp. Two source
+// sets stay separate: QuickJS, whose generated C11 amalgam and public header
+// are copied as quickjs/quickjs.c + quickjs.h, and the autocorrect port,
+// amalgamated into its own autocorrect/autocorrect.h + autocorrect.cpp pair —
+// only the editor example and the tests use it, so it is compiled and linked
+// only into those targets rather than into every binary. All six files are
+// the same on every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
 // _mac.cpp, _wasm.cpp, _mem_posix.cpp for the Linux and macOS halves both,
@@ -71,6 +74,10 @@ export type BuildDistResult = {
   quickjsSourceBytes: number;
   quickjsHeaderLines: number;
   quickjsSourceLines: number;
+  autocorrectHeaderPath: string;
+  autocorrectSourcePath: string;
+  autocorrectBytes: number;
+  autocorrectLines: number;
   headerBytes: number;
   sourceBytes: number;
   headerLines: number;
@@ -538,14 +545,15 @@ function collapseBlankRuns(text: string): string {
   return out;
 }
 
-// src/taffy, src/markdown and src/wry are ports of crates that have never
-// heard of gpui, and they are kept that way on purpose: each is written against
+// src/taffy, src/markdown, src/wry and src/autocorrect are ports of crates
+// that have never heard of gpui, and they are kept that way on purpose: each
+// is written against
 // base.h and its own headers, so it can be read against the Rust without
 // this tree's vocabulary in the way, and lifted out of it without untangling
 // anything. The amalgam compiles the whole of src/ as one translation unit,
 // so nothing else would notice the day one of them reached for a gpui type.
 // This does.
-const isolatedDirs = ["src/taffy/", "src/markdown/", "src/markdown-mini/", "src/wry/"];
+const isolatedDirs = ["src/taffy/", "src/markdown/", "src/markdown-mini/", "src/wry/", "src/autocorrect/"];
 
 function checkIsolation(files: string[]): void {
   const bad: string[] = [];
@@ -584,10 +592,17 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const markdown = markdownVariant();
   // QuickJS is already its own upstream-generated amalgam, compiled as C11.
   // Folding it into gpui.h/gpui.cpp would both expose its API as GPUI's and
-  // ask a C++ compiler to parse C source.
-  const headers = listSrc(".h").filter((rel) => !rel.startsWith("src/quickjs/"));
-  const foundCpps = preferredCppOrder(listSrc(".cpp"));
-  checkIsolation([...headers, ...foundCpps]);
+  // ask a C++ compiler to parse C source. The autocorrect port also stays
+  // out of the GPUI pair: only the editor example (and the tests) lint
+  // through it, so it becomes its own pair beside quickjs/ and is compiled
+  // and linked only into the targets that ask for it.
+  const allHeaders = listSrc(".h").filter((rel) => !rel.startsWith("src/quickjs/"));
+  const allFoundCpps = preferredCppOrder(listSrc(".cpp"));
+  checkIsolation([...allHeaders, ...allFoundCpps]);
+  const acHeaders = allHeaders.filter((rel) => rel.startsWith("src/autocorrect/"));
+  const acCpps = allFoundCpps.filter((rel) => rel.startsWith("src/autocorrect/"));
+  const headers = allHeaders.filter((rel) => !rel.startsWith("src/autocorrect/"));
+  const foundCpps = allFoundCpps.filter((rel) => !rel.startsWith("src/autocorrect/"));
   const allCpps = foundCpps.filter((rel) => {
     if (markdown === "full") {
       return !rel.startsWith("src/markdown-mini/");
@@ -764,6 +779,56 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   writeIfChanged(quickjsHeaderPath, quickjsHeaderText);
   writeIfChanged(quickjsSourcePath, quickjsSourceText);
 
+  // The autocorrect pair. The header carries the public API *and* the
+  // port's internal.h — the tests exercise the toggle internals — and pulls
+  // in gpui.h for the base types the sources see through base.h. The source
+  // is the port's files concatenated, one translation unit of its own.
+  if (acHeaders.length === 0 || acCpps.length === 0) {
+    throw new Error("no src/autocorrect/ sources to amalgamate");
+  }
+  const acHeaderChunks: string[] = [
+    "#ifndef AUTOCORRECT_AMALGAM_H_",
+    "#define AUTOCORRECT_AMALGAM_H_",
+    '#include "gpui.h"',
+    "",
+  ];
+  // topoHeaders orders by dependency and pulls base.h into the walk; only
+  // the port's own headers belong in the pair — gpui.h above carries base.
+  for (const rel of topoHeaders(acHeaders).filter((h) => acHeaders.includes(h))) {
+    acHeaderChunks.push(`#line 1 "${rel}"`, stripInternalIncludes(rel, readLf(rel)), "");
+  }
+  acHeaderChunks.push("#endif");
+  const acIncludes = new Set<string>();
+  const acBodyChunks: string[] = [];
+  for (const rel of acCpps) {
+    let body = stripInternalIncludes(rel, readLf(rel));
+    if (tidy) {
+      const lifted = liftIncludes(body);
+      body = lifted.body;
+      for (const l of lifted.includes) {
+        acIncludes.add(l);
+      }
+    }
+    acBodyChunks.push(`#line 1 "${rel}"`, body, "");
+  }
+  const acSourceChunks: string[] = ['#include "autocorrect/autocorrect.h"'];
+  if (acIncludes.size > 0) {
+    acSourceChunks.push("", ...sortedIncludes(acIncludes));
+  }
+  acSourceChunks.push("", ...acBodyChunks);
+  const acHeaderText = tidy
+    ? collapseBlankRuns(finish(acHeaderChunks.join("\n"), true))
+    : finish(acHeaderChunks.join("\n"), false);
+  const acSourceText = tidy
+    ? collapseBlankRuns(finish(acSourceChunks.join("\n"), true))
+    : finish(acSourceChunks.join("\n"), false);
+  const autocorrectDir = join(absOut, "autocorrect");
+  mkdirSync(autocorrectDir, { recursive: true });
+  const autocorrectHeaderPath = join(autocorrectDir, "autocorrect.h");
+  const autocorrectSourcePath = join(autocorrectDir, "autocorrect.cpp");
+  writeIfChanged(autocorrectHeaderPath, acHeaderText);
+  writeIfChanged(autocorrectSourcePath, acSourceText);
+
   return {
     outDir,
     headerPath: srcRel(headerPath),
@@ -774,6 +839,10 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     quickjsSourceBytes: Buffer.byteLength(quickjsSourceText, "utf8"),
     quickjsHeaderLines: countLines(quickjsHeaderText),
     quickjsSourceLines: countLines(quickjsSourceText),
+    autocorrectHeaderPath: srcRel(autocorrectHeaderPath),
+    autocorrectSourcePath: srcRel(autocorrectSourcePath),
+    autocorrectBytes: Buffer.byteLength(acHeaderText, "utf8") + Buffer.byteLength(acSourceText, "utf8"),
+    autocorrectLines: countLines(acHeaderText) + countLines(acSourceText),
     headerBytes: Buffer.byteLength(headerText, "utf8"),
     sourceBytes: Buffer.byteLength(sourceText, "utf8"),
     headerLines: countLines(headerText),

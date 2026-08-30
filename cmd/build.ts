@@ -400,6 +400,17 @@ function amalgamSrc(): string[] {
   return [amalgamPath("gpui.cpp"), amalgamPath("quickjs/quickjs.c")];
 }
 
+/**
+ * The autocorrect port is not part of gpui.cpp: only the editor example
+ * lints through it (and the tests exercise it), so its own amalgamated pair
+ * is compiled and linked into exactly those targets.
+ */
+const autocorrectTargets = new Set(["editor", "tests"]);
+
+function extraSrcFor(name: string): string[] {
+  return autocorrectTargets.has(name) ? [amalgamPath("autocorrect/autocorrect.cpp")] : [];
+}
+
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
   if (!existsSync(dir)) {
@@ -453,10 +464,10 @@ function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[]
     return [...amalgamSrc(), ...cppDir(`examples/${name}`)];
   }
   if (consoleTargets.has(name)) {
-    return [...amalgamSrc(), ...cppDir(name)];
+    return [...amalgamSrc(), ...extraSrcFor(name), ...cppDir(name)];
   }
   if (name === "system_monitor" || name === "app_assets" || simpleExamples.includes(name)) {
-    return [...amalgamSrc(), `examples/${name}.cpp`];
+    return [...amalgamSrc(), ...extraSrcFor(name), `examples/${name}.cpp`];
   }
   return null;
 }
@@ -466,6 +477,9 @@ function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[]
 function objGroup(f: string): string {
   if (/quickjs[\\/]quickjs\.c$/.test(f)) {
     return "quickjs";
+  }
+  if (/autocorrect[\\/]autocorrect\.cpp$/.test(f)) {
+    return "autocorrect";
   }
   if (f.startsWith("ext/")) {
     return "ext";
@@ -1326,7 +1340,9 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
         `(${a.headerCount} headers, ${a.sourceCount} + ${a.platformSourceCount} sources, markdown ${a.markdown}, ` +
         `${amalgamSize(a.headerBytes + a.sourceBytes, a.headerLines + a.sourceLines)}); ` +
         `${a.quickjsHeaderPath} + ${a.quickjsSourcePath} ` +
-        `(${amalgamSize(a.quickjsHeaderBytes + a.quickjsSourceBytes, a.quickjsHeaderLines + a.quickjsSourceLines)})`,
+        `(${amalgamSize(a.quickjsHeaderBytes + a.quickjsSourceBytes, a.quickjsHeaderLines + a.quickjsSourceLines)}); ` +
+        `${a.autocorrectHeaderPath} + ${a.autocorrectSourcePath} ` +
+        `(${amalgamSize(a.autocorrectBytes, a.autocorrectLines)})`,
     );
     return;
   }
@@ -1336,7 +1352,17 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
   let lines = 0;
   let quickjsBytes = 0;
   let quickjsLines = 0;
-  for (const f of ["gpui.h", "gpui.cpp", "quickjs/quickjs.h", "quickjs/quickjs.c"]) {
+  let autocorrectBytes = 0;
+  let autocorrectLines = 0;
+  const published = [
+    "gpui.h",
+    "gpui.cpp",
+    "quickjs/quickjs.h",
+    "quickjs/quickjs.c",
+    "autocorrect/autocorrect.h",
+    "autocorrect/autocorrect.cpp",
+  ];
+  for (const f of published) {
     const abs = join(root, amalgamDir(), f);
     if (!existsSync(abs)) {
       fail(`missing ${amalgamPath(f)}`);
@@ -1347,6 +1373,9 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
     if (f.startsWith("quickjs/")) {
       quickjsBytes += fileBytes;
       quickjsLines += fileLines;
+    } else if (f.startsWith("autocorrect/")) {
+      autocorrectBytes += fileBytes;
+      autocorrectLines += fileLines;
     } else {
       bytes += fileBytes;
       lines += fileLines;
@@ -1355,7 +1384,9 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
   console.log(
     `amalgam ${amalgamPath("gpui.h")} + ${amalgamPath("gpui.cpp")} ` +
       `(as published, ${amalgamSize(bytes, lines)}); ${amalgamPath("quickjs/quickjs.h")} + ` +
-      `${amalgamPath("quickjs/quickjs.c")} (${amalgamSize(quickjsBytes, quickjsLines)})`,
+      `${amalgamPath("quickjs/quickjs.c")} (${amalgamSize(quickjsBytes, quickjsLines)}); ` +
+      `${amalgamPath("autocorrect/autocorrect.h")} + ${amalgamPath("autocorrect/autocorrect.cpp")} ` +
+      `(${amalgamSize(autocorrectBytes, autocorrectLines)})`,
   );
 }
 

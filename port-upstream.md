@@ -1,6 +1,6 @@
 # Upstream pins
 
-**Source of truth for which checkin we are porting: the pin block at the top of [`cmd/run.ts`](cmd/run.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`, `wry.version`). `bun cmd/build.ts` and `bun cmd/run.ts -versions` clone or reset `.work/gpui-component` to that SHA.
+**Source of truth for which checkin we are porting: the pin block at the top of [`cmd/run.ts`](cmd/run.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`, `wry.version`, `autocorrect.version`). `bun cmd/build.ts` and `bun cmd/run.ts -versions` clone or reset `.work/gpui-component` to that SHA.
 
 This file is the ingest playbook. Diff Rust from the pinned SHA, not `HEAD`.
 
@@ -178,6 +178,48 @@ says what a real one would take. A wry release that only touches
 The WebView2 declaration block in `wry_win.cpp` is transcribed from the SDK
 header and is the one thing a wry bump never touches — it moves when the
 *SDK* does, and only to reach an interface we do not already declare.
+
+## autocorrect (a crate we port)
+
+`src/autocorrect/` is a C++ port of
+[autocorrect](https://github.com/huacnlee/autocorrect) at the version
+`crates/story/Cargo.toml` asks for — currently `autocorrect = "2.14.2"`. It
+is the editor example's linter, not a reference: `examples/editor.cpp` lints
+every open document through it and walks its file tree with its `Ignorer`.
+
+**It moves when the gpui-component pin moves.** After bumping
+`gpuiComponent.sha`, check whether the resolved `autocorrect` changed:
+
+```
+grep -A3 'name = "autocorrect"' .work/gpui-component/Cargo.lock
+```
+
+If it did, set `autocorrect.version` in `cmd/run.ts` to the new one and diff
+the crate between the two versions. The crate tarball is the thing to
+compare (its git tags carry the whole workspace):
+
+```
+curl -sL -o .work/autocorrect.crate https://static.crates.io/crates/autocorrect/autocorrect-NEW.crate
+tar xzf .work/autocorrect.crate -C .work      # unpacks autocorrect-NEW/
+diff -ru .work/autocorrect-2.14.2/src .work/autocorrect-NEW/src
+diff -ru .work/autocorrect-2.14.2/grammar .work/autocorrect-NEW/grammar
+```
+
+`src/autocorrect/readme.md` has the file-for-file map, and — more to the
+point when reading a diff — the list of what is deliberately not ported
+(spellcheck, `.autocorrectrc` loading, six grammars, the CLI and its
+serializers) so a change to one of those needs no work here. A grammar diff
+lands in the matching scanner (`markdown.cpp`, `html.cpp`, `source.cpp`); a
+`rule/` diff lands in the matching rule file. The crate's own tests are
+ported in `tests/AutocorrectTests.cpp`, and the whole-document Markdown
+fixture in `tests/AutocorrectMarkdownFormatTests.cpp` is extracted verbatim
+from the crate — re-extract it when the fixture changes.
+
+`autocorrect-derive` is not ported: the two functions its macro generates
+per language are written out in `code.cpp`'s dispatch table. Neither are the
+crate's dependencies — pest (the grammars are hand-written scanners), regex
+(the rules are scanners too), `ignore` (the gitignore half is written out in
+`ignorer.cpp`), serde, lazy_static, owo-colors.
 
 ## Not ported (do not pin / do not chase)
 
