@@ -21,7 +21,7 @@ struct Tooltip {
     static El* New(Ctx* cx, Str id);
 };
 
-using TooltipBuilder = El* (*)(Ctx* cx, void* data);
+using TooltipBuilder = El* (*)(Ctx * cx, void* data);
 
 enum class TooltipTransitionKind : uint8_t {
     Enter,
@@ -40,7 +40,7 @@ struct TooltipTransition {
                                     Bounds current);
 };
 
-using TooltipRenderer = El* (*)(Ctx* cx, El* view,
+using TooltipRenderer = El* (*)(Ctx * cx, El* view,
                                 const TooltipTransition& transition,
                                 void* data);
 
@@ -80,8 +80,7 @@ struct TooltipOverlay {
 
     ~TooltipOverlay();
 
-    TooltipOverlay* RenderWith(TooltipRenderer renderer,
-                               void* data = nullptr);
+    TooltipOverlay* RenderWith(TooltipRenderer renderer, void* data = nullptr);
     uint64_t NextEpoch();
     void RequestShow(const TooltipRequest& request, Window* window, Ctx* cx);
     void RequestHide(Window* window, Ctx* cx);

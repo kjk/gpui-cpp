@@ -12,9 +12,8 @@ ToggleStyles& ToggleStyles::Disabled(const StateStyle& style) {
     return *this;
 }
 
-El* Toggle::New(Ctx* cx, Str id, bool pressed, bool disabled,
-                Listener onChange, const ToggleStyles* styles,
-                const StateStyle* instance) {
+El* Toggle::New(Ctx* cx, Str id, bool pressed, bool disabled, Listener onChange,
+                const ToggleStyles* styles, const StateStyle* instance) {
     Arena* a = cx->a;
     El* e = Div(a)
                 // Match Button's neutral control geometry: a fixed-size
@@ -26,7 +25,7 @@ El* Toggle::New(Ctx* cx, Str id, bool pressed, bool disabled,
                 ->PathClick(id)
                 ->Role(AccessibilityRole::Button)
                 ->AriaToggled(pressed ? AccessibilityToggled::True
-                                     : AccessibilityToggled::False)
+                                      : AccessibilityToggled::False)
                 ->AriaDisabled(disabled);
     if (styles || instance) {
         StateStyle base = instance ? *instance : StateStyle{};

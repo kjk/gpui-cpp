@@ -194,8 +194,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         if (t) {
             // The picker opens on the theme that is showing, which is the
             // one the registry has installed for the mode in force.
-            Str active =
-                ThemeRegistryActive(cx->app, ThemeGet(cx->app));
+            Str active = ThemeRegistryActive(cx->app, ThemeGet(cx->app));
             int at = 0;
             for (int i = 0; i < self->themeItems.len; i++) {
                 if (base::StrEq(self->themeItems[i].title, active)) {
@@ -386,9 +385,8 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     // or the start of the hex. What is left is a list of pointers, since a
     // group is a run of rows with the same category and a filter can empty
     // one out.
-    const ThemeConfig* active =
-        ThemeRegistryFind(
-            cx->app, ThemeRegistryActive(cx->app, ThemeGet(cx->app)));
+    const ThemeConfig* active = ThemeRegistryFind(
+        cx->app, ThemeRegistryActive(cx->app, ThemeGet(cx->app)));
     Str query = InputValue(&self->filter);
     while (query.len > 0 && query.s[0] == '#') {
         query = Str(query.s + 1, query.len - 1);

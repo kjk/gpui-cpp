@@ -72,8 +72,8 @@ struct ColorPickerState {
     // Handlers the themed picker binds to. They are here because the state is
     // the entity — a widget rebuilt every frame has nothing to bind to.
     static void OnToggleOpen(ColorPickerState* s, Ctx* cx, const ClickEvent*);
-    static void OnOpenChange(ColorPickerState* s, Ctx* cx,
-                             const ClickEvent*, intptr_t open);
+    static void OnOpenChange(ColorPickerState* s, Ctx* cx, const ClickEvent*,
+                             intptr_t open);
     static void OnTab(ColorPickerState* s, Ctx* cx, const ClickEvent*,
                       intptr_t ix);
     static void OnSwatchClick(ColorPickerState* s, Ctx* cx, const ClickEvent*,
@@ -127,8 +127,8 @@ bool ColorPickerParseHex(Str text, uint32_t* out);
 Str ColorPickerHexString(Arena* a, uint32_t color);
 
 struct ColorPicker {
-    static El* New(Ctx* cx, Str id, bool open = false,
-                   bool disabled = false, Str accessibilityLabel = {},
+    static El* New(Ctx* cx, Str id, bool open = false, bool disabled = false,
+                   Str accessibilityLabel = {},
                    AccessibilityRole role = AccessibilityRole::Button,
                    Listener onOpenChange = {}, FocusHandle focus = {},
                    int tabIndex = 0, bool tabStop = true,

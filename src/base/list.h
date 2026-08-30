@@ -235,8 +235,7 @@ bool ListShouldLoadMore(const ListState* s, int lastVisibleRow);
 // The state-facing methods whose Rust counterparts live on ListState<D>.
 // Selection setters synchronize the delegate but do not emit ListEvent;
 // movement/click helpers below emit at the same points as upstream.
-void ListSetSelectedIndex(ListState* s, Ctx* cx, int entry,
-                          bool scroll = false,
+void ListSetSelectedIndex(ListState* s, Ctx* cx, int entry, bool scroll = false,
                           ScrollStrategy strategy = ScrollStrategy::Top);
 void ListSetRightClickedIndex(ListState* s, Ctx* cx, int entry);
 bool ListSelectedIndex(const ListState* s, IndexPath* out);

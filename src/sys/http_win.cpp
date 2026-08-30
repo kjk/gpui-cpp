@@ -88,16 +88,16 @@ static void ReadRedirect(HINTERNET req, const wchar_t* base, HttpRsp* out) {
     }
     DWORD combinedLen = 32768;
     wchar_t* combined = AllocArray<wchar_t>((int)combinedLen);
-    if (combined && SUCCEEDED(UrlCombineW(base, location, combined,
-                                           &combinedLen, 0))) {
+    if (combined &&
+        SUCCEEDED(UrlCombineW(base, location, combined, &combinedLen, 0))) {
         out->redirectUrl = FromWide(combined);
     }
     Free(nullptr, combined);
     Free(nullptr, location);
 }
 
-static bool ReadResponse(HINTERNET req, const wchar_t* base,
-                         bool noRedirect, HttpRsp* out) {
+static bool ReadResponse(HINTERNET req, const wchar_t* base, bool noRedirect,
+                         HttpRsp* out) {
     DWORD status = 0;
     DWORD size = sizeof(status);
     if (!WinHttpQueryHeaders(
@@ -203,11 +203,11 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
                     conn.h, L"GET", pathLen > 0 ? path : L"/", nullptr,
                     WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
                 DWORD redirectPolicy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
-                bool redirectReady = !noRedirect ||
-                    (req.h && WinHttpSetOption(req.h,
-                                               WINHTTP_OPTION_REDIRECT_POLICY,
-                                               &redirectPolicy,
-                                               sizeof(redirectPolicy)));
+                bool redirectReady =
+                    !noRedirect ||
+                    (req.h &&
+                     WinHttpSetOption(req.h, WINHTTP_OPTION_REDIRECT_POLICY,
+                                      &redirectPolicy, sizeof(redirectPolicy)));
                 if (req.h && redirectReady &&
                     WinHttpSendRequest(req.h, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                        WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&

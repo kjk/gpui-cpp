@@ -127,12 +127,12 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                        ->Child(Input::New(cx, &app->hexIn)));
     }
-    El* root = ColorPicker::New(cx, StrL("example-color-picker"),
-                                app->colorOpen, false, StrL("Color"),
-                                AccessibilityRole::Button,
-                                Listen(cx, &ToggleColor))
-                   ->W(220)
-                   ->Child(trigger);
+    El* root =
+        ColorPicker::New(cx, StrL("example-color-picker"), app->colorOpen,
+                         false, StrL("Color"), AccessibilityRole::Button,
+                         Listen(cx, &ToggleColor))
+            ->W(220)
+            ->Child(trigger);
     return Popup::New(cx, StrL("example-color-picker-popup"), root)
         ->Content(pop)
         ->IntoEl();

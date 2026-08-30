@@ -43,7 +43,10 @@ struct PositionerState {};
 // then the complete group is moved in window coordinates during the shared
 // post-layout anchored pass.
 struct Positioner {
-    enum class Strategy : uint8_t { Side, Corner };
+    enum class Strategy : uint8_t {
+        Side,
+        Corner
+    };
 
     Arena* a = nullptr;
     Strategy strategy = Strategy::Side;
@@ -80,8 +83,8 @@ ResolvedPosition PositionSide(Bounds trigger, Size popup, Size view,
 
 // Puts `anchor`'s corner of the popup at `at`, then clamps into the
 // viewport. Never flips, and never reports a side.
-ResolvedPosition PositionCorner(Anchor anchor, Point at, Size popup,
-                                Size view, float margin);
+ResolvedPosition PositionCorner(Anchor anchor, Point at, Size popup, Size view,
+                                float margin);
 
 } // namespace gpui
 #endif // GPUI_BASE_POSITIONER_H_

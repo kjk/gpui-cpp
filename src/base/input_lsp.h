@@ -27,8 +27,7 @@ struct CompletionProvider {
     float inlineCompletionDebounceMs = kInlineCompletionDebounceMs;
 
     bool IsValid() const { return completions != nullptr; }
-    void Install(InputState* state,
-                 CompletionMenuOptions options = {}) const;
+    void Install(InputState* state, CompletionMenuOptions options = {}) const;
 };
 
 struct CodeActionProvider {
@@ -145,8 +144,7 @@ struct Lsp {
     Lsp& Hover(const HoverProvider& provider);
     Lsp& Definition(const DefinitionProvider& provider);
     Lsp& DocumentColors(const DocumentColorProvider& provider);
-    Lsp& SemanticTokens(
-        const DocumentRangeSemanticTokensProvider& provider);
+    Lsp& SemanticTokens(const DocumentRangeSemanticTokensProvider& provider);
     Lsp& ShowDocuments(const ShowDocumentHandler& handler);
     Lsp& CompletionMenu(const CompletionMenuOptions& options);
     void Install(InputState* input);

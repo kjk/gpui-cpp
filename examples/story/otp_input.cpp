@@ -18,8 +18,7 @@ struct OtpInputStory {
     static void OnOtp(OtpInputStory* self, Ctx* cx, const OtpEvent* ev);
 };
 
-void OtpInputStory::OnOtp(OtpInputStory* self, Ctx* cx,
-                          const OtpEvent* ev) {
+void OtpInputStory::OnOtp(OtpInputStory* self, Ctx* cx, const OtpEvent* ev) {
     if (!self || ev->kind != OtpEventKind::Complete) {
         return;
     }

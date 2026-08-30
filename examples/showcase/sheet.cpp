@@ -80,13 +80,8 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                                 ->Font(12)
                                 ->Fg(Rgb(0xff, 0xff, 0xff)))));
 
-    El* overlay = Div(a)
-                      ->Absolute()
-                      ->Top(0)
-                      ->Left(0)
-                      ->W(kFill)
-                      ->H(kFill)
-                      ->Bg(Rgba8(0, 0, 0, 38));
+    El* overlay = Div(a)->Absolute()->Top(0)->Left(0)->W(kFill)->H(kFill)->Bg(
+        Rgba8(0, 0, 0, 38));
     root->Child(Sheet::New(cx)
                     ->Overlay(overlay)
                     ->Surface(surface)

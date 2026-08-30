@@ -56,13 +56,21 @@ constexpr bool operator==(UiSize a, UiSize b) {
     return a.kind == b.kind &&
            (a.kind != UiSize::Kind::Size || a.pixels == b.pixels);
 }
-constexpr bool operator!=(UiSize a, UiSize b) { return !(a == b); }
+constexpr bool operator!=(UiSize a, UiSize b) {
+    return !(a == b);
+}
 constexpr bool operator==(UiSize a, UiSize::Constant b) {
     return a.kind == b.kind;
 }
-constexpr bool operator==(UiSize::Constant a, UiSize b) { return b == a; }
-constexpr bool operator!=(UiSize a, UiSize::Constant b) { return !(a == b); }
-constexpr bool operator!=(UiSize::Constant a, UiSize b) { return !(a == b); }
+constexpr bool operator==(UiSize::Constant a, UiSize b) {
+    return b == a;
+}
+constexpr bool operator!=(UiSize a, UiSize::Constant b) {
+    return !(a == b);
+}
+constexpr bool operator!=(UiSize::Constant a, UiSize b) {
+    return !(a == b);
+}
 constexpr bool operator<(UiSize a, UiSize::Constant b) {
     return (uint8_t)a.kind < (uint8_t)b.kind;
 }
@@ -353,16 +361,30 @@ inline float UiSizeWithPx(UiSize s) {
 inline El* UiInputTextSize(El* e, UiSize s) {
     return e->Font(UiInputFontPx(s));
 }
-inline El* UiInputPadL(El* e, UiSize s) { return e->PadL(UiInputPadX(s)); }
-inline El* UiInputPadR(El* e, UiSize s) { return e->PadR(UiInputPadX(s)); }
-inline El* UiInputPadX(El* e, UiSize s) { return e->PadX(UiInputPadX(s)); }
-inline El* UiInputPadY(El* e, UiSize s) { return e->PadY(UiInputPadY(s)); }
-inline El* UiInputH(El* e, UiSize s) { return e->H(UiInputHeight(s)); }
+inline El* UiInputPadL(El* e, UiSize s) {
+    return e->PadL(UiInputPadX(s));
+}
+inline El* UiInputPadR(El* e, UiSize s) {
+    return e->PadR(UiInputPadX(s));
+}
+inline El* UiInputPadX(El* e, UiSize s) {
+    return e->PadX(UiInputPadX(s));
+}
+inline El* UiInputPadY(El* e, UiSize s) {
+    return e->PadY(UiInputPadY(s));
+}
+inline El* UiInputH(El* e, UiSize s) {
+    return e->H(UiInputHeight(s));
+}
 inline El* UiInputSize(El* e, UiSize s) {
     return UiInputH(UiInputPadY(UiInputPadX(e, s), s), s);
 }
-inline El* UiListPadX(El* e, UiSize s) { return e->PadX(UiListPadX(s)); }
-inline El* UiListPadY(El* e, UiSize s) { return e->PadY(UiListPadY(s)); }
+inline El* UiListPadX(El* e, UiSize s) {
+    return e->PadX(UiListPadX(s));
+}
+inline El* UiListPadY(El* e, UiSize s) {
+    return e->PadY(UiListPadY(s));
+}
 inline El* UiListSize(El* e, UiSize s) {
     return UiInputTextSize(UiListPadY(UiListPadX(e, s), s), s);
 }
@@ -375,14 +397,11 @@ inline El* UiTableCellSize(El* e, UiSize s) {
     if (s == UiSize::XSmall || s == UiSize::Small) {
         e->Font(14);
     }
-    return e->PadL(pad.left)
-        ->PadR(pad.right)
-        ->PadT(pad.top)
-        ->PadB(pad.bottom);
+    return e->PadL(pad.left)->PadR(pad.right)->PadT(pad.top)->PadB(pad.bottom);
 }
 inline El* UiButtonTextSize(El* e, UiSize s) {
-    float font = s == UiSize::XSmall ? 12.f :
-                 (s == UiSize::Small ? 14.f : 16.f);
+    float font =
+        s == UiSize::XSmall ? 12.f : (s == UiSize::Small ? 14.f : 16.f);
     return e->Font(font);
 }
 

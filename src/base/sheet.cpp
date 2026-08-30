@@ -62,8 +62,7 @@ void SheetState::OnOverlay(SheetState* self, Ctx* cx,
     }
 }
 
-void SheetState::OnAction(SheetState* self, Ctx* cx,
-                          const ActionEvent* ev) {
+void SheetState::OnAction(SheetState* self, Ctx* cx, const ActionEvent* ev) {
     if (!ev) {
         return;
     }
@@ -164,14 +163,14 @@ El* Sheet::IntoEl() {
             // at the cutoff lets the C++ hit-chain reach a title bar behind
             // the sheet above that line, which is the observable purpose of
             // dismiss_before_y.
-            El* capture = Div(cx->a)
-                              ->Absolute()
-                              ->Top(hasDismissBefore ? dismissBeforeY : 0)
-                              ->Left(0)
-                              ->Right(0)
-                              ->Bottom(0)
-                              ->OnMouseDown(
-                                  ListenTo(state, &SheetState::OnOverlay));
+            El* capture =
+                Div(cx->a)
+                    ->Absolute()
+                    ->Top(hasDismissBefore ? dismissBeforeY : 0)
+                    ->Left(0)
+                    ->Right(0)
+                    ->Bottom(0)
+                    ->OnMouseDown(ListenTo(state, &SheetState::OnOverlay));
             root->Child(capture);
         }
     }

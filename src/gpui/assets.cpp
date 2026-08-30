@@ -68,8 +68,7 @@ int AssetsAddSource(void* user, AssetLoadFn load, AssetExistsFn exists) {
 void AssetsRemoveSource(int id) {
     for (int i = 0; i < gSourceN; i++) {
         if (gSources[i].id != id) continue;
-        for (int j = i + 1; j < gSourceN; j++)
-            gSources[j - 1] = gSources[j];
+        for (int j = i + 1; j < gSourceN; j++) gSources[j - 1] = gSources[j];
         gSourceN--;
         return;
     }
@@ -292,8 +291,7 @@ bool AssetsExists(Str relPath) {
         return false;
     }
     for (int i = gSourceN - 1; i >= 0; i--)
-        if (gSources[i].exists &&
-            gSources[i].exists(gSources[i].user, relPath))
+        if (gSources[i].exists && gSources[i].exists(gSources[i].user, relPath))
             return true;
 
     char rel[kMaxPath];

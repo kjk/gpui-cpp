@@ -216,7 +216,10 @@ struct CandlestickChart {
 // This is RadarLabel in radar_chart.rs, represented as a POD tag because a
 // frame element cannot be retained behind a variant or trait object here.
 struct RadarLabel {
-    enum class Kind : uint8_t { Text, Element };
+    enum class Kind : uint8_t {
+        Text,
+        Element
+    };
 
     Kind kind = Kind::Text;
     Str text = {};

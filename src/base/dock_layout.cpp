@@ -160,8 +160,7 @@ const PaneNode* PaneTree::FindNode(NodeId id) const {
     return FindNodeRec(root, id);
 }
 
-static bool FindPanelNodeRec(const PaneNode* node, PanelId panel,
-                             NodeId* out) {
+static bool FindPanelNodeRec(const PaneNode* node, PanelId panel, NodeId* out) {
     if (!node) {
         return false;
     }
@@ -263,8 +262,7 @@ NodeId PaneTree::SetRootTiles(const TilePanel* values, int count) {
     return node->nodeId;
 }
 
-static bool AppendChild(PaneNode* parent, PaneNode* child,
-                        const float* size) {
+static bool AppendChild(PaneNode* parent, PaneNode* child, const float* size) {
     if (!parent || parent->paneKind != PaneKind::Split || !child) {
         return false;
     }
@@ -424,8 +422,7 @@ bool PaneTree::InsertBeside(NodeId at, PanelId panel, Placement placement,
     }
     PaneNode* group = PaneNode::Tabs(AllocateNodeId());
     VecAppend(group->panels, panel);
-    bool before = placement == Placement::Left ||
-                  placement == Placement::Top;
+    bool before = placement == Placement::Left || placement == Placement::Top;
     Axis axis = PlacementAxis(placement);
     PaneNode* parent = nullptr;
     int ix = -1;
@@ -464,10 +461,10 @@ bool PaneTree::InsertBeside(NodeId at, PanelId panel, Placement placement,
 static bool NormalizeNode(PaneNode* node) {
     bool changed = false;
     if (node->paneKind == PaneKind::Tabs) {
-        int clamped = node->panels.len > 0
-                          ? std::max(0, std::min(node->activeIx,
-                                               node->panels.len - 1))
-                          : 0;
+        int clamped =
+            node->panels.len > 0
+                ? std::max(0, std::min(node->activeIx, node->panels.len - 1))
+                : 0;
         if (node->activeIx != clamped) {
             node->activeIx = clamped;
             changed = true;
@@ -519,8 +516,8 @@ static bool NormalizeNode(PaneNode* node) {
     bool hasSameAxis = false;
     for (int i = 0; i < node->children.len; i++) {
         PaneNode* child = node->children[i];
-        hasSameAxis |= child->paneKind == PaneKind::Split &&
-                       child->axis == node->axis;
+        hasSameAxis |=
+            child->paneKind == PaneKind::Split && child->axis == node->axis;
     }
     if (hasSameAxis) {
         Vec<PaneNode*> children;
@@ -669,8 +666,7 @@ EditResult PaneTree::SetSizes(NodeId id, const float* values,
     bool changed = false;
     for (int i = 0; i < count; i++) {
         uint8_t isKnown = known ? known[i] : 1;
-        changed |= node->sizes[i] != values[i] ||
-                   node->sizeKnown[i] != isKnown;
+        changed |= node->sizes[i] != values[i] || node->sizeKnown[i] != isKnown;
         node->sizes[i] = values[i];
         node->sizeKnown[i] = isKnown;
     }
@@ -794,10 +790,10 @@ static PaneNode* BuildLayoutNode(PaneTree* tree, const DockLayout* layout,
     if (layout->kind == PaneKind::Split) {
         PaneNode* node = PaneNode::Split(id, layout->axis);
         for (int i = 0; i < layout->children.len; i++) {
-            PaneNode* child = BuildLayoutNode(tree, layout->children[i],
-                                              collected);
-            const float* size = layout->sizeKnown[i] ? &layout->sizes[i]
-                                                     : nullptr;
+            PaneNode* child =
+                BuildLayoutNode(tree, layout->children[i], collected);
+            const float* size =
+                layout->sizeKnown[i] ? &layout->sizes[i] : nullptr;
             AppendChild(node, child, size);
         }
         return node;
@@ -815,8 +811,8 @@ static PaneNode* BuildLayoutNode(PaneTree* tree, const DockLayout* layout,
     }
     PaneNode* node = PaneNode::Tiles(id);
     for (int i = 0; i < layout->panelIds.len; i++) {
-        Bounds bounds = i < layout->tileBounds.len ? layout->tileBounds[i]
-                                                   : Bounds{};
+        Bounds bounds =
+            i < layout->tileBounds.len ? layout->tileBounds[i] : Bounds{};
         VecAppend(node->tiles, TilePanel::New(layout->panelIds[i], bounds)
                                    .WithZIndex(i));
         if (collected && i < layout->panelViews.len) {
@@ -834,8 +830,8 @@ PaneTree* PaneTree::FromLayout(DockLayout* layout, RootKind kind,
     PaneTree* tree = new PaneTree(kind);
     PaneNode* built = BuildLayoutNode(tree, layout, panels);
     if (kind == RootKind::Split && built->paneKind != PaneKind::Split) {
-        PaneNode* wrapper = PaneNode::Split(tree->AllocateNodeId(),
-                                            Axis::Horizontal);
+        PaneNode* wrapper =
+            PaneNode::Split(tree->AllocateNodeId(), Axis::Horizontal);
         AppendChild(wrapper, built, nullptr);
         built = wrapper;
     }

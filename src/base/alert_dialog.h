@@ -37,8 +37,7 @@ struct AlertDialogAction {
     static El* New(Ctx* cx);
 };
 struct AlertDialogTrigger {
-    static El* New(Ctx* cx, Listener onOpen = {},
-                   DialogHandle handle = {});
+    static El* New(Ctx* cx, Listener onOpen = {}, DialogHandle handle = {});
 };
 
 struct AlertDialog {

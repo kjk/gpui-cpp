@@ -367,8 +367,7 @@ static void PaintRadarLabels(PaintCtx* ctx, El* e, void* user) {
     float labelRadius = radius + c->labelGap;
     float centerX = e->x + e->w * 0.5f;
     float centerY = e->y + e->h * 0.5f;
-    Rgba color = c->hasLabelColor ? c->labelColor
-                                  : ThemeNow(ctx->app).mutedFg;
+    Rgba color = c->hasLabelColor ? c->labelColor : ThemeNow(ctx->app).mutedFg;
     for (int i = 0; i < c->n; i++) {
         float angle = -1.5707963f + 6.2831853f * (float)i / (float)c->n;
         float dx = cosf(angle);
@@ -379,8 +378,7 @@ static void PaintRadarLabels(PaintCtx* ctx, El* e, void* user) {
         if (label.kind == RadarLabel::Kind::Element) {
             El* child = label.element;
             if (child) {
-                MoveRadarLabel(child,
-                               anchorX + (dx - 1.f) * child->w * 0.5f,
+                MoveRadarLabel(child, anchorX + (dx - 1.f) * child->w * 0.5f,
                                anchorY + (dy - 1.f) * child->h * 0.5f);
             }
             continue;
@@ -425,8 +423,7 @@ RadarChart* RadarChart::Labels(const char* const* l) {
         labels = nullptr;
         return this;
     }
-    RadarLabel* converted =
-        (RadarLabel*)Alloc(a, (int)sizeof(RadarLabel) * n);
+    RadarLabel* converted = (RadarLabel*)Alloc(a, (int)sizeof(RadarLabel) * n);
     for (int i = 0; i < n; i++) {
         converted[i] = RadarLabel::Text(Str(l[i]));
     }
@@ -481,8 +478,8 @@ El* RadarChart::IntoEl() {
         e->customPaint = PaintRadarLabels;
         e->customUser = this;
         for (int i = 0; i < n; i++) {
-            if (labels[i].kind == RadarLabel::Kind::Element &&
-                labels[i].element) {
+            if (labels[i].kind == RadarLabel::Kind::Element && labels[i]
+                                                                   .element) {
                 e->Child(labels[i].element->Absolute());
             }
         }
@@ -592,8 +589,8 @@ static void PaintPieLabels(PaintCtx* ctx, PieChart* p, float cx, float cy,
     const Theme& th = ThemeNow(ctx->app);
     Rgba color = p->hasLabelColor ? p->labelColor : th.foreground;
     float labelR = p->outerRadius + p->labelGap;
-    ArenaVec<PieLabelLayout> right {};
-    ArenaVec<PieLabelLayout> left {};
+    ArenaVec<PieLabelLayout> right{};
+    ArenaVec<PieLabelLayout> left{};
     float angle = -kPi * 0.5f;
     for (int i = 0; i < p->slices.len; i++) {
         const PieSlice& s = p->slices[i];
@@ -726,8 +723,7 @@ static int SankeyNodeLineCount(const SankeyChartNode& node, Str value) {
     if (node.hasCustomLabels) {
         return node.labels.len;
     }
-    return (value.s ? 1 : 0) + (node.note.s ? 1 : 0) +
-           (node.label.s ? 1 : 0);
+    return (value.s ? 1 : 0) + (node.note.s ? 1 : 0) + (node.label.s ? 1 : 0);
 }
 
 static SankeyLabel SankeyNodeLine(const SankeyChartNode& node, Str value,
@@ -869,8 +865,8 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
             int lineCount = SankeyNodeLineCount(node, values[i]);
             for (int k = 0; k < lineCount; k++) {
                 SankeyLabel line = SankeyNodeLine(node, values[i], k, th);
-                float fontSize = line.fontSize > 0 ? line.fontSize
-                                                   : kPlotTextSize;
+                float fontSize =
+                    line.fontSize > 0 ? line.fontSize : kPlotTextSize;
                 Size sz = MeasureText(ctx, line.text, fontSize, 0);
                 if (sz.w > labelW) {
                     labelW = sz.w;
@@ -1028,8 +1024,8 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
             SankeyLabel line = SankeyNodeLine(chartNode, value, k, th);
             float fontSize = line.fontSize > 0 ? line.fontSize : kPlotTextSize;
             Rgba lineColor = line.hasColor ? line.color : th.foreground;
-            SankeyLabelLine(ctx, line.text, e->x + x, e->y + y, maxW,
-                            fontSize, lineColor, align);
+            SankeyLabelLine(ctx, line.text, e->x + x, e->y + y, maxW, fontSize,
+                            lineColor, align);
             y += line.LineHeight();
         }
     }

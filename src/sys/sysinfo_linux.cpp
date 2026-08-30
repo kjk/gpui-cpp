@@ -176,8 +176,7 @@ static void RefreshBattery(SysState* s) {
         snprintf(path, sizeof(path), "/sys/class/power_supply/%s/status",
                  ent->d_name);
         if (ReadSmallFile(path, buf, (int)sizeof(buf)) > 0) {
-            s->battery.charging =
-                base::StrStartsWithI(Str(buf), "Charging");
+            s->battery.charging = base::StrStartsWithI(Str(buf), "Charging");
         }
         break;
     }

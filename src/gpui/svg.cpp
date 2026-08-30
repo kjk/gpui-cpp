@@ -898,13 +898,14 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
         }
     }
     if (GetAttr(tag, "font-weight", buf, 64)) {
-        cur.bold = StrEqI(Str(buf), "bold") || StrToIntUnchecked(Str(buf)) >= 600;
+        cur.bold =
+            StrEqI(Str(buf), "bold") || StrToIntUnchecked(Str(buf)) >= 600;
     }
     if (GetAttr(tag, "text-anchor", buf, 64)) {
         Str v(buf);
         cur.anchor = StrEqI(v, "middle") ? kTextAnchorMiddle
                      : StrEqI(v, "end")  ? kTextAnchorEnd
-                                               : kTextAnchorStart;
+                                         : kTextAnchorStart;
     }
     if (GetAttr(tag, "fill", buf, 64)) {
         Rgba c;

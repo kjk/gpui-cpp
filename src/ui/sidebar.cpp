@@ -324,8 +324,8 @@ El* SidebarGroup::IntoEl(Str id) {
     }
     El* inner = Div(a)->FlexCol()->W(kFill)->Gap(8);
     for (int i = 0; i < children.len; i++) {
-        inner->Child(children[i].Render(cx, StrDup(a, fmt("%d", i)),
-                                        collapsed));
+        inner
+            ->Child(children[i].Render(cx, StrDup(a, fmt("%d", i)), collapsed));
     }
     col->Child(inner);
     return col;
@@ -386,8 +386,8 @@ SidebarHeader* SidebarHeader::Refine(const Style& v, uint32_t fields) {
     return this;
 }
 El* SidebarHeader::IntoEl() {
-    return SidebarBand(cx, children, selected, onClick,
-                       StrL("sidebar-header"), style, styleSet);
+    return SidebarBand(cx, children, selected, onClick, StrL("sidebar-header"),
+                       style, styleSet);
 }
 
 SidebarFooter* SidebarFooter::New(Ctx* cx) {
@@ -586,9 +586,9 @@ El* Sidebar::IntoEl() {
     // SidebarLayout::new says what the mode and the flag come to: the width
     // the wrapper takes, which rendering the rows use, and which end the
     // content is pinned to.
-    float expandedWidth =
-        (styleSet & StyleFieldWidth) ? (style.width > 0 ? style.width : 0.f)
-                                     : width;
+    float expandedWidth = (styleSet & StyleFieldWidth)
+                              ? (style.width > 0 ? style.width : 0.f)
+                              : width;
     SidebarLayout layout =
         SidebarLayoutFor(collapsible, collapsed, expandedWidth, side);
     bool iconCollapsed = layout.iconCollapsed;
@@ -677,13 +677,13 @@ El* Sidebar::IntoEl() {
     Entity<SidebarScrollState> scrollState = KeyedEntity<SidebarScrollState>(
         cx, KeyedName(cx, StrL("sidebar-content-scroll")));
     SidebarScrollState* scroll = scrollState.Get(cx);
-    El* viewport = gpui::Scrollbar::Vertical(
-                       cx, StrL("sidebar-content-scroll"),
-                       scroll ? scroll->y : 0,
-                       ListenTo(scrollState, &SidebarScrollState::OnScroll))
-                       ->W(kFill)
-                       ->H(kFill)
-                       ->Child(inner);
+    El* viewport =
+        gpui::Scrollbar::Vertical(
+            cx, StrL("sidebar-content-scroll"), scroll ? scroll->y : 0,
+            ListenTo(scrollState, &SidebarScrollState::OnScroll))
+            ->W(kFill)
+            ->H(kFill)
+            ->Child(inner);
     body->Child(viewport);
     root->Child(body);
     if (footer) {

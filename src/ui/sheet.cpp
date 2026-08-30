@@ -98,9 +98,8 @@ El* Sheet::IntoEl(WinSize win) {
     // against the edge and rules the footer off across the whole width.
     // theme.sheet.margin_top: a sheet that hangs from the top starts under
     // the title bar rather than over it. One rising from the bottom does not.
-    float marginTop = placement == SheetPlacement::Bottom
-                          ? 0.f
-                          : th.sheet.marginTop;
+    float marginTop =
+        placement == SheetPlacement::Bottom ? 0.f : th.sheet.marginTop;
     El* surface = Div(a)
                       ->Absolute()
                       ->FlexCol()
@@ -143,9 +142,9 @@ El* Sheet::IntoEl(WinSize win) {
                    ->PadY(8)
                    ->ItemsCenter()
                    ->JustifyBetween();
-    head->Child(titleEl ? titleEl
-                        : TextEl(a, title)->Font(16)->Semibold()->Fg(
-                              th.foreground));
+    head->Child(
+        titleEl ? titleEl
+                : TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
     head->Child(Button::New(cx, StrL("sheet-close"))
                     ->Ghost()
                     ->WithSize(UiSize::Small)
@@ -190,9 +189,8 @@ El* Sheet::IntoEl(WinSize win) {
     }
     El* backdrop = nullptr;
     if (overlay) {
-        backdrop =
-            Div(a)->Absolute()->Top(0)->Left(0)->W(viewW)->H(viewH)->Bg(
-                th.overlay);
+        backdrop = Div(a)->Absolute()->Top(0)->Left(0)->W(viewW)->H(viewH)->Bg(
+            th.overlay);
     }
     return gpui::Sheet::New(cx)
         ->Overlay(backdrop)

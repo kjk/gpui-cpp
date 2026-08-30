@@ -21,10 +21,14 @@ function die(message: string): never {
 
 function hostPlatform(): Platform {
   switch (process.platform) {
-    case "win32": return "win";
-    case "linux": return "linux";
-    case "darwin": return "mac";
-    default: die(`Unsupported platform: ${process.platform}`);
+    case "win32":
+      return "win";
+    case "linux":
+      return "linux";
+    case "darwin":
+      return "mac";
+    default:
+      die(`Unsupported platform: ${process.platform}`);
   }
 }
 
@@ -46,8 +50,7 @@ function sourceFiles(rel: string, plat: Platform | null): string[] {
     const child = `${rel}/${ent.name}`;
     if (ent.isDirectory()) {
       result.push(...sourceFiles(child, plat));
-    } else if ((ent.name.endsWith(".cpp") || ent.name.endsWith(".c")) &&
-               (!plat || sourcePlatform(child, plat))) {
+    } else if ((ent.name.endsWith(".cpp") || ent.name.endsWith(".c")) && (!plat || sourcePlatform(child, plat))) {
       result.push(child);
     }
   }
@@ -59,7 +62,12 @@ function findExecutable(name: string): string | null {
   const r = Bun.spawnSync([finder, name], { stdout: "pipe", stderr: "pipe" });
   if ((r.exitCode ?? 1) !== 0 || !r.stdout) return null;
   const text = new TextDecoder().decode(r.stdout);
-  return text.split(/\r?\n/).map((s) => s.trim()).find((s) => s.length > 0) ?? null;
+  return (
+    text
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .find((s) => s.length > 0) ?? null
+  );
 }
 
 function findClangTidy(): string {
@@ -84,12 +92,7 @@ function emscriptenInclude(): string | null {
   if (emcc) candidates.push(emcc);
   const onPath = findExecutable(process.platform === "win32" ? "em++.exe" : "em++");
   if (onPath) candidates.push(onPath);
-  const roots = [
-    process.env["EMSDK"],
-    join(root, "..", ".emsdk"),
-    join(root, "..", "emsdk"),
-    join(root, ".emsdk"),
-  ];
+  const roots = [process.env["EMSDK"], join(root, "..", ".emsdk"), join(root, "..", "emsdk"), join(root, ".emsdk")];
   for (const sdk of roots) {
     if (sdk) candidates.push(join(sdk, "upstream", "emscripten", "em++"));
   }
@@ -155,23 +158,32 @@ function main(): void {
   }
   const cxxCompileArgs = [
     "-std=c++20",
-    "-I", "src",
-    "-I", "src/gpui",
-    "-include", "markdown/markdown.h",
-    "-include", "base/lib.h",
-    "-include", "ui/lib.h",
-    "-include", "gpui/paint.h",
-    "-include", "gpui/assets.h",
-    "-include", "gpui/svg.h",
-    "-include", "gpui/accessibility_win.h",
-    "-include", "sys/executor.h",
+    "-I",
+    "src",
+    "-I",
+    "src/gpui",
+    "-include",
+    "markdown/markdown.h",
+    "-include",
+    "base/lib.h",
+    "-include",
+    "ui/lib.h",
+    "-include",
+    "gpui/paint.h",
+    "-include",
+    "gpui/assets.h",
+    "-include",
+    "gpui/svg.h",
+    "-include",
+    "gpui/accessibility_win.h",
+    "-include",
+    "sys/executor.h",
     ...(plat === "win" ? ["-DWIN_BACKEND_ALL=1", "-DUNICODE", "-D_UNICODE"] : []),
     ...extraArgs,
   ];
   const cCompileArgs = ["-std=c11", ...extraArgs];
   const wasmCompileArgs = wasmInclude
-    ? ["-std=c++20", "-I", "src", "-I", "src/gpui", "-I", wasmInclude,
-       "-U_WIN32", "-D__EMSCRIPTEN__=1", ...extraArgs]
+    ? ["-std=c++20", "-I", "src", "-I", "src/gpui", "-I", wasmInclude, "-U_WIN32", "-D__EMSCRIPTEN__=1", ...extraArgs]
     : cxxCompileArgs;
 
   console.log(`Running ${exe} on ${files.length} source files (${plat})`);

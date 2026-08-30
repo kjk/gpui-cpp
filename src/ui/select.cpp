@@ -536,8 +536,7 @@ El* Select::IntoEl() {
             SearchableList::New(cx, StrL("list"), state, query)
                 ->InSelect(true)
                 ->Items(items, nItems)
-                ->W(menuWidth > 0 ? menuWidth
-                                  : (width > 0 ? width + 2 : 242))
+                ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width + 2 : 242))
                 ->CheckIcon(checkIcon)
                 ->WithSize(size);
         if (sections) {

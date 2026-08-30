@@ -147,13 +147,11 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
         custom,
         component::GroupBox::New(cx, StrL("This is a custom style"))
             ->Outline()
-            ->Refine(rootStyle,
-                     StyleFieldBg | StyleFieldRadius | StyleFieldPad)
+            ->Refine(rootStyle, StyleFieldBg | StyleFieldRadius | StyleFieldPad)
             ->TitleSemibold()
             ->TitlePadX(12)
             ->ContentStyle(contentStyle,
-                           StyleFieldRadius | StyleFieldPad |
-                               StyleFieldBorder)
+                           StyleFieldRadius | StyleFieldPad | StyleFieldBorder)
             ->Child(component::TextView::New(
                         cx, StrL("You can use `title_style` to customize "
                                  "the style of the title. And any style in "

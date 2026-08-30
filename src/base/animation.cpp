@@ -6,7 +6,7 @@
 namespace gpui {
 uint32_t MotionName(Ctx* cx, Str name);
 float MotionAppear(Ctx* cx, uint32_t key, float durationMs, EaseFn ease);
-}
+} // namespace gpui
 
 namespace gpui {
 

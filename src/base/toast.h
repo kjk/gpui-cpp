@@ -129,9 +129,8 @@ struct ToastManager {
 
     // `hadReplaced` is Rust's Option<T> discriminator; when it is true the
     // removed value is transferred through `replaced`.
-    bool Push(const I& id, const T& value, ToastOptions options,
-              int64_t nowMs, T* replaced = nullptr,
-              bool* hadReplaced = nullptr) {
+    bool Push(const I& id, const T& value, ToastOptions options, int64_t nowMs,
+              T* replaced = nullptr, bool* hadReplaced = nullptr) {
         if (hadReplaced) {
             *hadReplaced = false;
         }
@@ -192,9 +191,9 @@ struct ToastManager {
         for (int i = 0; i < entries.len; i++) {
             ManagedToast<I, T>& entry = entries[i];
             int64_t elapsed = nowMs - entry.lastAdvanceMs;
-            int delta = elapsed > 0x7fffffffLL
-                            ? 0x7fffffff
-                            : elapsed > 0 ? (int)elapsed : 0;
+            int delta = elapsed > 0x7fffffffLL ? 0x7fffffff
+                        : elapsed > 0          ? (int)elapsed
+                                               : 0;
             entry.lastAdvanceMs = nowMs;
             switch (entry.status) {
                 case ToastTransitionStatus::Starting:
@@ -242,7 +241,7 @@ struct ToastManager {
         return out;
     }
 
-private:
+  private:
     void EraseAt(int index) {
         for (int i = index; i < entries.len - 1; i++) {
             entries[i] = entries[i + 1];
@@ -327,8 +326,7 @@ struct ToastStack {
 
 struct Toast {
     El* root = nullptr;
-    ToastTransitionStatus transitionStatus =
-        ToastTransitionStatus::Starting;
+    ToastTransitionStatus transitionStatus = ToastTransitionStatus::Starting;
 
     static Toast* New(Ctx* cx, Str id);
     Toast* TransitionStatus(ToastTransitionStatus value);

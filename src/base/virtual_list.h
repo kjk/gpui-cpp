@@ -133,8 +133,7 @@ struct ItemSizeLayout {
 
 void ItemSizeLayoutBuild(ItemSizeLayout* layout, Axis axis,
                          const float* itemSizes, int count,
-                         float uniformItemSize, float gap,
-                         float crossSize);
+                         float uniformItemSize, float gap, float crossSize);
 
 // The per-frame state the source Element passes from request_layout through
 // prepaint to paint. Elements are arena children here, so their visible range
@@ -166,7 +165,8 @@ struct VirtualListOpts {
     float rowH = 32;
     float viewH = 192;
     // The horizontal counterpart. `rowH` remains the historical name for a
-    // uniform along-axis extent, so it is a width when layoutAxis is horizontal.
+    // uniform along-axis extent, so it is a width when layoutAxis is
+    // horizontal.
     float viewW = 192;
     const float* sizes = nullptr;
     // The offsets, for a list without a handle. A list with one reads its

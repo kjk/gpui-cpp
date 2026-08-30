@@ -73,8 +73,7 @@ Rating* Rating::OnClick(Listener fn) {
 
 El* Rating::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
-    Entity<RatingState> st =
-        KeyedEntity<RatingState>(cx, KeyedName(cx, id));
+    Entity<RatingState> st = KeyedEntity<RatingState>(cx, KeyedName(cx, id));
     RatingState* s = st.Get(cx);
     int shown = value;
     if (s) {

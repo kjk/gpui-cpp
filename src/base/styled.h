@@ -43,8 +43,7 @@ struct RoleOverride {
     static RoleOverride Implicit();
     static RoleOverride Presentational();
     static RoleOverride Explicit(AccessibilityRole role);
-    bool Resolve(AccessibilityRole defaultRole,
-                 AccessibilityRole* out) const;
+    bool Resolve(AccessibilityRole defaultRole, AccessibilityRole* out) const;
 };
 
 // C++ elements already own the fluent Styled surface, so the Rust extension
@@ -138,8 +137,7 @@ inline El* StyledExt::Margins(El* element, Edges value) {
 
 inline El* StyledDebug(El* element, float h, float s, float l) {
 #if defined(DEBUG) || !defined(NDEBUG)
-    return element ? element->Border(1, HslaToRgba(HslaNew(h / 360.f,
-                                                           s / 100.f,
+    return element ? element->Border(1, HslaToRgba(HslaNew(h / 360.f, s / 100.f,
                                                            l / 100.f, 1.f)))
                    : nullptr;
 #else
@@ -214,11 +212,12 @@ inline El* StyledExt::CornerRadii(El* element, Corners radius) {
 
 inline const char* const* StyledExtReflectionMethods(int* count) {
     static const char* methods[] = {
-        "refine_style", "h_flex", "v_flex", "paddings", "margins",
-        "debug_red", "debug_blue", "debug_yellow", "debug_green",
-        "debug_pink", "debug_focused", "font_thin", "font_extralight",
-        "font_light", "font_normal", "font_medium", "font_semibold",
-        "font_bold", "font_extrabold", "font_black", "corner_radii",
+        "refine_style",    "h_flex",     "v_flex",         "paddings",
+        "margins",         "debug_red",  "debug_blue",     "debug_yellow",
+        "debug_green",     "debug_pink", "debug_focused",  "font_thin",
+        "font_extralight", "font_light", "font_normal",    "font_medium",
+        "font_semibold",   "font_bold",  "font_extrabold", "font_black",
+        "corner_radii",
     };
     if (count) {
         *count = (int)(sizeof(methods) / sizeof(methods[0]));

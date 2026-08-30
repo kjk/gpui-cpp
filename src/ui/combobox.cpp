@@ -22,9 +22,8 @@ int ComboboxTriggerContext::SelectionCount() const {
 }
 
 int ComboboxTriggerContext::SelectionIndex(int at) const {
-    return state && at >= 0 && at < state->selected.len
-               ? state->selected[at]
-               : -1;
+    return state && at >= 0 && at < state->selected.len ? state->selected[at]
+                                                        : -1;
 }
 
 const SearchableListItem* ComboboxTriggerContext::SelectionItem(int at) const {
@@ -56,8 +55,7 @@ Entity<ComboboxState> ComboboxState::New(App* app) {
 
 ComboboxState* ComboboxState::Multiple(bool value) {
     multiple = value;
-    state.mode = value ? SearchableListMode::Multi
-                       : SearchableListMode::Single;
+    state.mode = value ? SearchableListMode::Multi : SearchableListMode::Single;
     state.closeOnSelect = !value;
     return this;
 }
@@ -95,8 +93,7 @@ void ComboboxState::SyncSnapshot() {
     }
 }
 
-void ComboboxState::SetSelectedValues(const Str* values, int nValues,
-                                      Ctx* cx) {
+void ComboboxState::SetSelectedValues(const Str* values, int nValues, Ctx* cx) {
     InputSetValue(&queryInput, Str{});
     SearchableListSearch(&state, state.items, state.nItems, Str{});
     VecClear(state.selected);
@@ -228,8 +225,8 @@ void ComboboxState::OnListChange(ComboboxState* self, Ctx* cx,
     if (!self || !event || event->kind != ListEventKind::Confirm) {
         return;
     }
-    bool changed = !SameSelection(self->selectionSnapshot,
-                                  self->state.selected);
+    bool changed =
+        !SameSelection(self->selectionSnapshot, self->state.selected);
     self->SyncSnapshot();
     if (changed) {
         self->Emit(cx, ComboboxEventKind::Change);
@@ -260,8 +257,7 @@ void ComboboxState::OnListChange(ComboboxState* self, Ctx* cx,
     }
 }
 
-void ComboboxState::OnToggle(ComboboxState* self, Ctx* cx,
-                             const ClickEvent*) {
+void ComboboxState::OnToggle(ComboboxState* self, Ctx* cx, const ClickEvent*) {
     if (!self) {
         return;
     }
@@ -273,8 +269,7 @@ void ComboboxState::OnToggle(ComboboxState* self, Ctx* cx,
     }
 }
 
-void ComboboxState::OnClear(ComboboxState* self, Ctx* cx,
-                            const ClickEvent*) {
+void ComboboxState::OnClear(ComboboxState* self, Ctx* cx, const ClickEvent*) {
     if (self) {
         self->ClearSelection(cx);
     }
@@ -304,8 +299,7 @@ Combobox* Combobox::New(Ctx* cx, Str id, Entity<SearchableListState> state,
 }
 Combobox* Combobox::New(Ctx* cx, Str id, Entity<ComboboxState> state) {
     ComboboxState* owner = state.Get(cx);
-    Combobox* out =
-        Combobox::New(cx, id, ComboboxListEntity(state), nullptr);
+    Combobox* out = Combobox::New(cx, id, ComboboxListEntity(state), nullptr);
     out->comboboxState = state;
     if (owner) {
         owner->self = state.id;
@@ -406,9 +400,8 @@ Combobox* Combobox::Trigger(El* e) {
     return this;
 }
 Combobox* Combobox::RenderTrigger(
-    void* value,
-    El* (*fn)(Ctx* cx, void* data,
-              const ComboboxTriggerContext* triggerContext)) {
+    void* value, El* (*fn)(Ctx* cx, void* data,
+                           const ComboboxTriggerContext* triggerContext)) {
     triggerData = value;
     renderTrigger = fn;
     return this;
@@ -417,14 +410,12 @@ Combobox* Combobox::Footer(El* e) {
     footer = e;
     return this;
 }
-Combobox* Combobox::RenderFooter(void* value,
-                                 El* (*fn)(Ctx* cx, void* data)) {
+Combobox* Combobox::RenderFooter(void* value, El* (*fn)(Ctx* cx, void* data)) {
     footerData = value;
     renderFooter = fn;
     return this;
 }
-Combobox* Combobox::RenderEmpty(void* value,
-                                El* (*fn)(Ctx* cx, void* data)) {
+Combobox* Combobox::RenderEmpty(void* value, El* (*fn)(Ctx* cx, void* data)) {
     emptyData = value;
     renderEmpty = fn;
     return this;
@@ -473,8 +464,8 @@ El* Combobox::IntoEl() {
         }
         if (renderTrigger) {
             ComboboxTriggerContext triggerContext = {
-                &owner->state, placeholder, placeholder.s != nullptr,
-                owner->state.open, disabled, size};
+                &owner->state,     placeholder, placeholder.s != nullptr,
+                owner->state.open, disabled,    size};
             trigger = renderTrigger(cx, triggerData, &triggerContext);
         }
         if (renderFooter) {

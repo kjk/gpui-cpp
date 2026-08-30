@@ -37,10 +37,10 @@ static StateStyle ResolveSwitchStyle(bool checked, bool disabled,
     return StateStyleResolve(base, states, 2);
 }
 
-El* Switch::New(Ctx* cx, Str id, bool checked, bool disabled,
-                Listener onChange, const SwitchStyles* styles,
-                const StateStyle* instance, Str accessibilityLabel,
-                int tabIndex, bool tabStop, FocusHandle focus) {
+El* Switch::New(Ctx* cx, Str id, bool checked, bool disabled, Listener onChange,
+                const SwitchStyles* styles, const StateStyle* instance,
+                Str accessibilityLabel, int tabIndex, bool tabStop,
+                FocusHandle focus) {
     Arena* a = cx->a;
     El* e = Div(a)
                 ->PathClick(id)

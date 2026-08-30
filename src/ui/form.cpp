@@ -164,21 +164,15 @@ El* Form::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     // The gap comes from the size: eight at Large, four otherwise, and a
     // vertical field halves it between the label and the control.
-    float formGap = size == UiSize::Large
-                        ? 12.f
-                        : (size == UiSize::XSmall || size == UiSize::Small)
-                              ? 6.f
-                              : 8.f;
+    float formGap = size == UiSize::Large                               ? 12.f
+                    : (size == UiSize::XSmall || size == UiSize::Small) ? 6.f
+                                                                        : 8.f;
     float fieldGap = size == UiSize::Large ? 8.f : 4.f;
     float inner = horizontal ? fieldGap : fieldGap * 0.5f;
     float labelFont = labelTextSize > 0 ? labelTextSize : 14.f;
     float lw = labelWidth > 0 ? labelWidth : 140.f;
 
-    El* col = Div(a)
-                  ->FlexCol()
-                  ->W(kFill)
-                  ->GapX(formGap * 3.f)
-                  ->GapY(formGap);
+    El* col = Div(a)->FlexCol()->W(kFill)->GapX(formGap * 3.f)->GapY(formGap);
     El* row = nullptr; // the row being filled, when the form has columns
     int inRow = 0;
     for (int i = 0; i < fields.len; i++) {
@@ -241,10 +235,9 @@ El* Form::IntoEl() {
             if (fld.description.kind == FieldBuilderKind::Element) {
                 desc->Child(fld.description.element);
             } else {
-                desc->Child(
-                    TextEl(a, fld.description.string)
-                        ->Font(12)
-                        ->Fg(th.mutedFg));
+                desc->Child(TextEl(a, fld.description.string)
+                                ->Font(12)
+                                ->Fg(th.mutedFg));
             }
         }
         f->Child(desc);
@@ -269,11 +262,7 @@ El* Form::IntoEl() {
             inRow = 0;
         }
         if (!row) {
-            row = Div(a)
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->Gap(formGap * 3.f)
-                      ->ItemsStart();
+            row = Div(a)->FlexRow()->W(kFill)->Gap(formGap * 3.f)->ItemsStart();
             col->Child(row);
             inRow = 0;
         }

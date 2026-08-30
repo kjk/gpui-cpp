@@ -215,7 +215,7 @@ struct ResizablePanelGroup {
     ResizablePanelGroup* Size(float v);
     ResizablePanelGroup* HandleColors(Rgba rest, Rgba dragging);
     ResizablePanelGroup* WithHandleAppearance(void* user,
-                                               ResizeHandleRenderer renderer);
+                                              ResizeHandleRenderer renderer);
     ResizablePanelGroup* OnResize(Listener listener);
     // A panel of a fixed starting size, with the range a drag keeps it in.
     // `max` of 0 is Rust's `Pixels::MAX` — no ceiling.
@@ -225,8 +225,7 @@ struct ResizablePanelGroup {
     // The panel that takes what the others leave: `panel_box(..)` handed to
     // the group as a plain child, which becomes a panel with no size of its
     // own.
-    ResizablePanelGroup* Grow(El* content,
-                              float min = kResizablePanelMinSize);
+    ResizablePanelGroup* Grow(El* content, float min = kResizablePanelMinSize);
     // The panel last declared keeps its size *and* takes a share of the
     // slack — a `resizable_panel()` that never called `flex_none()`, whose
     // internal `flex_grow: 1` stands.
@@ -260,9 +259,9 @@ struct ResizablePanel {
 };
 
 ResizablePanelGroup* h_resizable(Ctx* cx, Str id,
-                                  Entity<ResizableState> state = {});
+                                 Entity<ResizableState> state = {});
 ResizablePanelGroup* v_resizable(Ctx* cx, Str id,
-                                  Entity<ResizableState> state = {});
+                                 Entity<ResizableState> state = {});
 ResizablePanel* resizable_panel(Ctx* cx);
 } // namespace gpui
 #endif // GPUI_BASE_RESIZABLE_H_

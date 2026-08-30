@@ -191,8 +191,8 @@ static Tiling ReadTiling(Window* win, bool maximized) {
         int format = 0;
         unsigned long n = 0, after = 0;
         unsigned char* data = nullptr;
-        if (XGetWindowProperty(gDpy, pw->xwin, aGtkEdgeConstraints, 0, 1,
-                               False, XA_CARDINAL, &type, &format, &n, &after,
+        if (XGetWindowProperty(gDpy, pw->xwin, aGtkEdgeConstraints, 0, 1, False,
+                               XA_CARDINAL, &type, &format, &n, &after,
                                &data) == Success) {
             if (data && type == XA_CARDINAL && format == 32 && n >= 1) {
                 unsigned long bits = ((unsigned long*)data)[0];
@@ -1443,8 +1443,7 @@ bool PlatInit(App* app) {
     aNetWmMoveResize = XInternAtom(gDpy, "_NET_WM_MOVERESIZE", False);
     aMotifWmHints = XInternAtom(gDpy, "_MOTIF_WM_HINTS", False);
     aGtkShowWindowMenu = XInternAtom(gDpy, "_GTK_SHOW_WINDOW_MENU", False);
-    aGtkEdgeConstraints =
-        XInternAtom(gDpy, "_GTK_EDGE_CONSTRAINTS", False);
+    aGtkEdgeConstraints = XInternAtom(gDpy, "_GTK_EDGE_CONSTRAINTS", False);
     aClipboard = XInternAtom(gDpy, "CLIPBOARD", False);
     aTargets = XInternAtom(gDpy, "TARGETS", False);
     aClipTarget = XInternAtom(gDpy, "GPUI_CLIPBOARD", False);

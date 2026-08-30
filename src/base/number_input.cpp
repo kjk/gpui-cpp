@@ -277,11 +277,8 @@ El* NumberInput::Compose(Ctx* cx, Str id, InputState* state, bool disabled,
         decrement->Flex1()->MinH(0);
         increment->Flex1()->MinH(0);
         root->Child(text->IntoEl())
-            ->Child(Div(a)
-                        ->FlexCol()
-                        ->H(kFill)
-                        ->Child(increment)
-                        ->Child(decrement));
+            ->Child(Div(a)->FlexCol()->H(kFill)->Child(increment)->Child(
+                decrement));
     } else {
         root->Child(decrement)->Child(text->IntoEl())->Child(increment);
     }

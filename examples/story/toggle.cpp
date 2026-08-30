@@ -24,7 +24,8 @@ static void CopyToggleGroup(ToggleStory* self, Ctx* cx,
                             const component::ToggleGroupEvent* event,
                             int first) {
     int count = std::min(event->count, 10 - first);
-    for (int i = 0; i < count; i++) self->toggles[first + i] = event->checked[i];
+    for (int i = 0; i < count; i++)
+        self->toggles[first + i] = event->checked[i];
     Notify(cx);
 }
 

@@ -238,8 +238,8 @@ void NotificationSystemInsert(const NotificationSystemEntry& e);
 // window's dismiss must not take back its notification.
 void NotificationSystemDismiss(int id, Window* win);
 void NotificationSystemDismissByType(NotificationTypeId type, Window* win);
-void NotificationSystemDismissByTypeKey(NotificationTypeId type,
-                                         uint32_t key, Window* win);
+void NotificationSystemDismissByTypeKey(NotificationTypeId type, uint32_t key,
+                                        Window* win);
 // Retract every system notification posted from `win`.
 void NotificationSystemDismissAll(Window* win);
 const NotificationSystemEntry* NotificationSystemFind(int id, Window* win);

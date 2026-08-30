@@ -27,9 +27,8 @@ ColorPicker* ColorPicker::New(Ctx* cx, Str id) {
     return c;
 }
 ColorPicker* ColorPicker::New(Ctx* cx, Entity<ColorPickerState> state) {
-    ColorPicker* c = New(
-        cx, StrDup(cx->a, fmt("color-picker-%d-%u", state.id.index,
-                             state.id.gen)));
+    ColorPicker* c = New(cx, StrDup(cx->a, fmt("color-picker-%d-%u",
+                                               state.id.index, state.id.gen)));
     c->state = state;
     return c;
 }
@@ -337,11 +336,11 @@ El* ColorPicker::IntoEl() {
     // the trigger and the panel. The port had the two the other way up, which
     // is what left the popover with nothing named above it.
     El* root = gpui::ColorPicker::New(
-                   cx, id, s->open, false, label,
-                   AccessibilityRole::Button,
+                   cx, id, s->open, false, label, AccessibilityRole::Button,
                    ListenTo(st, &ColorPickerState::OnOpenChange), s->focus)
-                   ->Child(
-        Popup::New(cx, StrL("popover"), trigger)->Content(pop)->IntoEl());
+                   ->Child(Popup::New(cx, StrL("popover"), trigger)
+                               ->Content(pop)
+                               ->IntoEl());
     return root;
 }
 

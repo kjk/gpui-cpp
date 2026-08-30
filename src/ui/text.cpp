@@ -273,8 +273,7 @@ static bool StyleFieldsEqual(const gpui::Style& a, const gpui::Style& b,
     if ((fields & StyleFieldPad) && !TextEdgesEq(a.pad, b.pad)) return false;
     if ((fields & StyleFieldMargin) && !TextEdgesEq(a.margin, b.margin))
         return false;
-    if ((fields & StyleFieldGap) &&
-        (a.gapX != b.gapX || a.gapY != b.gapY))
+    if ((fields & StyleFieldGap) && (a.gapX != b.gapX || a.gapY != b.gapY))
         return false;
     if ((fields & StyleFieldRadius) && a.radius != b.radius) return false;
     if ((fields & StyleFieldBorder) && a.border != b.border) return false;
@@ -286,8 +285,7 @@ static bool StyleFieldsEqual(const gpui::Style& a, const gpui::Style& b,
     if ((fields & StyleFieldWidth) && a.width != b.width) return false;
     if ((fields & StyleFieldHeight) && a.height != b.height) return false;
     if ((fields & StyleFieldOpacity) && a.opacity != b.opacity) return false;
-    if ((fields & StyleFieldHoverBg) &&
-        !TextBackgroundEq(a.hoverBg, b.hoverBg))
+    if ((fields & StyleFieldHoverBg) && !TextBackgroundEq(a.hoverBg, b.hoverBg))
         return false;
     if ((fields & StyleFieldHoverFg) && !TextRgbaEq(a.hoverFg, b.hoverFg))
         return false;
@@ -484,7 +482,7 @@ struct MdBuild {
     // The marks in effect, from the enclosing inline nodes.
     uint8_t marks = 0;
     Str href = {};
-    ArenaVec<MdDef> defs {};
+    ArenaVec<MdDef> defs{};
 };
 
 // A node's strings are ArenaStr — an offset into the arena the tree was
@@ -2023,8 +2021,8 @@ El* TextView::ScrollTable(MdNode* n) {
             if (paint) {
                 for (MdRun* run = c->runFirst; run; run = run->next) {
                     // Unwrapped, so what comes back is the run's own width.
-                    Size sz = MeasureText(paint, run->text, baseFont, 0, false,
-                                          0);
+                    Size sz =
+                        MeasureText(paint, run->text, baseFont, 0, false, 0);
                     w += sz.w;
                 }
             } else {
@@ -2071,8 +2069,8 @@ El* TextView::ScrollTable(MdNode* n) {
         if (r->head) {
             row->Bg(th.tokens.tableHead)->Fg(th.tableHeadFg);
             if (textViewStyle.tableHeadFields) {
-                row->Refine(textViewStyle.tableHead,
-                            textViewStyle.tableHeadFields);
+                row->Refine(textViewStyle.tableHead, textViewStyle
+                                                         .tableHeadFields);
             }
         }
         int ix = 0;
@@ -2100,8 +2098,8 @@ El* TextView::ScrollTable(MdNode* n) {
                 align = colAlign[col];
             }
             SrcCell(r, c, nCols, colAlign);
-            cell->Child(Inline(c, baseFont,
-                               r->head ? kInheritFg : BlockFg(), 0, align));
+            cell->Child(Inline(c, baseFont, r->head ? kInheritFg : BlockFg(), 0,
+                               align));
             row->Child(cell);
         }
         track->Child(row);
@@ -2208,8 +2206,8 @@ El* TextView::Table(MdNode* n) {
         if (r->head) {
             row->Bg(th.tokens.tableHead)->Fg(th.tableHeadFg);
             if (textViewStyle.tableHeadFields) {
-                row->Refine(textViewStyle.tableHead,
-                            textViewStyle.tableHeadFields);
+                row->Refine(textViewStyle.tableHead, textViewStyle
+                                                         .tableHeadFields);
             }
         }
         int ix = 0;
@@ -2228,8 +2226,8 @@ El* TextView::Table(MdNode* n) {
                 align = colAlign[ix];
             }
             SrcCell(r, c, nCols, colAlign);
-            cell->Child(Inline(c, baseFont,
-                               r->head ? kInheritFg : BlockFg(), 0, align));
+            cell->Child(Inline(c, baseFont, r->head ? kInheritFg : BlockFg(), 0,
+                               align));
             row->Child(cell);
         }
         table->Child(row);
@@ -2564,9 +2562,8 @@ El* TextView::IntoEl() {
     if (!scrollable && maxLines >= 0) {
         float cap = baseFont * kLineHeight * (float)maxLines;
         element->LineClamp(
-            cap, state.IsValid()
-                     ? ListenTo(state, &TextViewState::OnLineClamp)
-                     : Listener{});
+            cap, state.IsValid() ? ListenTo(state, &TextViewState::OnLineClamp)
+                                 : Listener{});
     }
 
     if (scrollable && cx->win && managed) {
@@ -2574,24 +2571,23 @@ El* TextView::IntoEl() {
                         (uint32_t)(state.id.gen + 1);
         uint32_t key =
             KeyedKey(name, (uint32_t)HashClickId(StrL("TextViewScrollState")));
-        element =
-            Div(a)
-                ->FlexCol()
-                ->W(kFill)
-                ->H(kFill)
-                ->ClipY()
-                ->ScrollY(managed->scrollY)
-                ->ScrollId((int)key)
-                ->OnScroll(ListenTo(state, &TextViewState::OnScroll))
-                ->Child(element);
+        element = Div(a)
+                      ->FlexCol()
+                      ->W(kFill)
+                      ->H(kFill)
+                      ->ClipY()
+                      ->ScrollY(managed->scrollY)
+                      ->ScrollId((int)key)
+                      ->OnScroll(ListenTo(state, &TextViewState::OnScroll))
+                      ->Child(element);
     }
     if (outerStyleFields) {
         element->Refine(outerStyle, outerStyleFields);
     }
     if (selectable && state.IsValid()) {
         TextViewInitKeys();
-        int focus = HashClickId(StrDup(
-            a, fmt("text-view-%d-%u", state.id.index, state.id.gen)));
+        int focus = HashClickId(
+            StrDup(a, fmt("text-view-%d-%u", state.id.index, state.id.gen)));
         Listener onAction = ListenTo(state, &TextViewState::OnAction);
         element->KeyContext(StrL("TextView"))
             ->FocusId(focus)

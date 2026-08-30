@@ -712,13 +712,12 @@ El* TabBar::IntoEl() {
             st.fg = TabSelected(variant, th).fg;
         }
         Str tabId = StrDup(a, fmt("%d", i));
-        Listener click = onChange.IsValid() ? ListenerArg(onChange, i)
-                                            : item.onClick;
-        El* tab = gpui::Tab::New(
-                      cx, tabId, item.disabled,
-                      item.disabled ? Listener{} : click,
-                      on, item.ariaLabel.s ? item.ariaLabel : item.label,
-                      i + 1, items.len)
+        Listener click =
+            onChange.IsValid() ? ListenerArg(onChange, i) : item.onClick;
+        El* tab = gpui::Tab::New(cx, tabId, item.disabled,
+                                 item.disabled ? Listener{} : click, on,
+                                 item.ariaLabel.s ? item.ariaLabel : item.label,
+                                 i + 1, items.len)
                       ->FlexRow()
                       ->ItemsCenter()
                       ->JustifyCenter()
@@ -741,8 +740,7 @@ El* TabBar::IntoEl() {
             tab->Border(st.borderT, st.borderColor);
         } else {
             if (st.borderL > 0 &&
-                !(i == 0 && variant == TabVariant::Tab &&
-                  !item.tabBarPrefix)) {
+                !(i == 0 && variant == TabVariant::Tab && !item.tabBarPrefix)) {
                 tab->BorderL(st.borderL, st.borderColor);
             }
             if (st.borderR > 0) {
@@ -792,8 +790,8 @@ El* TabBar::IntoEl() {
             if (item.label.s) {
                 El* label = TextEl(a, item.label)->Font(font)->Fg(st.fg);
                 if (maxWidth > 0) {
-                // Text takes its natural width, so capping a tab means
-                // giving the label a box it is allowed to shrink inside.
+                    // Text takes its natural width, so capping a tab means
+                    // giving the label a box it is allowed to shrink inside.
                     float labelMax = maxWidth - padX * 2;
                     label->MaxW(labelMax > 0 ? labelMax : 0)->Truncate();
                 }

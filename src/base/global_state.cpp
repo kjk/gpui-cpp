@@ -36,8 +36,7 @@ static MenuRow* CopyMenuRows(Arena* a, const MenuRow* rows, int count) {
     for (int i = 0; i < count; i++) {
         copy[i] = rows[i];
         copy[i].label = StrDup(a, rows[i].label);
-        copy[i].submenu =
-            CopyMenuRows(a, rows[i].submenu, rows[i].submenuN);
+        copy[i].submenu = CopyMenuRows(a, rows[i].submenu, rows[i].submenuN);
     }
     return copy;
 }
@@ -65,8 +64,8 @@ void BaseSetAppMenus(App* app, const MenuDef* menus, int count) {
         for (int i = 0; i < count; i++) {
             MenuDef copy = menus[i];
             copy.name = StrDup(state->appMenuArena, menus[i].name);
-            copy.items = CopyMenuRows(state->appMenuArena, menus[i].items,
-                                      menus[i].n);
+            copy.items =
+                CopyMenuRows(state->appMenuArena, menus[i].items, menus[i].n);
             VecAppend(state->appMenus, copy);
         }
     }

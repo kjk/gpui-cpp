@@ -51,8 +51,7 @@ struct SheetState {
     Listener onClose = {};
 
     void Close(Ctx* cx);
-    static void OnOverlay(SheetState* self, Ctx* cx,
-                          const MouseDownEvent* ev);
+    static void OnOverlay(SheetState* self, Ctx* cx, const MouseDownEvent* ev);
     static void OnAction(SheetState* self, Ctx* cx, const ActionEvent* ev);
 };
 

@@ -138,13 +138,12 @@ static El* PanelTitle(Ctx* cx, const PanelView* panel, Rgba fallback) {
     return TextEl(cx->a, title)->Fg(fallback);
 }
 
-static bool PanelTitleStyle(Ctx* cx, const PanelView* panel,
-                            TitleStyle* out) {
+static bool PanelTitleStyle(Ctx* cx, const PanelView* panel, TitleStyle* out) {
     if (!panel || !panel->titleStyle || !out) {
         return false;
     }
-    return panel->titleStyle(cx, panel->data, &out->background,
-                             &out->foreground);
+    return panel
+        ->titleStyle(cx, panel->data, &out->background, &out->foreground);
 }
 
 DragPanelPreview* DragPanelPreview::New(Ctx* cx, const PanelView* panel) {
@@ -331,12 +330,13 @@ static El* RenderTitleRow(const DockTabGroup* g) {
     // loses the tail of its letters wherever the wrapper clips. The row's own
     // 30px and its centring are what place the title.
     Rgba titleColor = hasTitleStyle ? titleStyle.foreground : th.foreground;
-    El* title = Div(a)
-                    ->Flex1()
-                    ->MinW(64)
-                    ->ClipX()
-                    ->Fg(titleColor)
-                    ->Child(PanelTitle(cx, def, titleColor)->Font(14)->Truncate());
+    El* title =
+        Div(a)
+            ->Flex1()
+            ->MinW(64)
+            ->ClipX()
+            ->Fg(titleColor)
+            ->Child(PanelTitle(cx, def, titleColor)->Font(14)->Truncate());
     row->Child(DockBindTitleDrag(g, activeIx, title));
     if (!g->collapsed && def->titleSuffix) {
         if (El* suffix = def->titleSuffix(cx, def->data)) {
@@ -428,8 +428,9 @@ static El* SkinTabBar(Ctx* cx, void*, const DockTabGroup* g) {
                            ->Fg(labelColor)
                            ->LineHeight(1.f));
         } else {
-            tab->Fg(labelColor)->Child(
-                PanelTitle(cx, def, labelColor)->Font(14)->LineHeight(1.f));
+            tab->Fg(labelColor)
+                ->Child(
+                    PanelTitle(cx, def, labelColor)->Font(14)->LineHeight(1.f));
         }
         if (def->closable && !DockIsLastPanel(s, g->node) &&
             !DockNodeLocked(s, g->node)) {
@@ -534,7 +535,8 @@ static El* SkinDock(Ctx* cx, void*, const DockCtx* d, El* content) {
 }
 
 static El* SkinDropIndicator(Ctx* cx, void*, Bounds) {
-    return Div(cx->a)->Bg(BackgroundOpacity(ThemeNow(cx->app).tokens.primary, 0.2f));
+    return Div(cx->a)
+        ->Bg(BackgroundOpacity(ThemeNow(cx->app).tokens.primary, 0.2f));
 }
 
 // TabPanel::render_drag_panel: w_24, py_1, px_3, a border, the active tab's
@@ -544,17 +546,10 @@ static El* SkinDragPreview(Ctx* cx, void*, const DockPanelDef* def) {
 }
 
 static const DockRenderer& ThemedRenderer() {
-    static const DockRenderer r = {nullptr,
-                                   SkinFrame,
-                                   nullptr,
-                                   nullptr,
-                                   SkinSplitHandle,
-                                   SkinDock,
-                                   nullptr,
-                                   SkinTabContent,
-                                   SkinTabBar,
-                                   SkinDropIndicator,
-                                   SkinDragPreview};
+    static const DockRenderer r = {
+        nullptr,         SkinFrame,         nullptr,        nullptr,
+        SkinSplitHandle, SkinDock,          nullptr,        SkinTabContent,
+        SkinTabBar,      SkinDropIndicator, SkinDragPreview};
     return r;
 }
 

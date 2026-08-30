@@ -12,7 +12,9 @@ namespace gpui {
 
 namespace component {
 
-RenderOptions RenderOptions::New() { return {}; }
+RenderOptions RenderOptions::New() {
+    return {};
+}
 
 RenderOptions RenderOptions::WithPageIx(int value) const {
     RenderOptions out = *this;
@@ -491,8 +493,7 @@ struct FieldEl {
 };
 
 static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
-                           bool pageResettable,
-                           const RenderOptions& options) {
+                           bool pageResettable, const RenderOptions& options) {
     FieldEl out;
     SettingsState* st = s->state.Get(cx);
     if (it.field == SettingFieldKind::Element || !st) {
@@ -539,9 +540,9 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
 
     Listener click = ListenTo(s->state, &SettingsState::OnFieldClick, ix);
     // layout(Axis): a field beside the text is w_32, one under it fills.
-    float w = it.fieldW > 0 ? it.fieldW
-                            : (options.layout == Axis::Horizontal ? 128.f
-                                                                 : kFill);
+    float w = it.fieldW > 0
+                  ? it.fieldW
+                  : (options.layout == Axis::Horizontal ? 128.f : kFill);
     switch (it.field) {
         case SettingFieldKind::Switch:
             out.el = Switch::New(cx, id)
@@ -650,8 +651,7 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
                                           : GroupBoxVariant::Normal)
             .WithLayout(it.layout)
             .WithDisabled(it.disabled);
-    FieldEl f =
-        RenderField(cx, s, it, StrL("field"), pageResettable, options);
+    FieldEl f = RenderField(cx, s, it, StrL("field"), pageResettable, options);
     if (f.dirty && f.resettable && f.onReset.IsValid()) {
         *anyDirty = true;
     }
@@ -695,8 +695,8 @@ El* Settings::IntoEl() {
     // and the states the fields keep, which is what the id stack is for.
     IdScope scope(cx, id);
     El* row = Div(a)->Id(id)->FlexRow()->W(kFill)->H(h)->ItemsStart();
-    float sideWidth = std::max(sidebarMinWidth,
-                               std::min(sidebarWidth, sidebarMaxWidth));
+    float sideWidth =
+        std::max(sidebarMinWidth, std::min(sidebarWidth, sidebarMaxWidth));
 
     // The sidebar: the search field, then a row per page, with the groups of
     // the open page under it.
@@ -743,12 +743,11 @@ El* Settings::IntoEl() {
         if (p.icon != IconName::None) {
             item->Child(IconEl(a, p.icon, 16)->Fg(th.foreground));
         }
-        item->Child(
-            Div(a)->Flex1()->ClipY()->Child(TextEl(a, p.title)
-                                                ->Font(16)
-                                                ->Fg(th.foreground)
-                                                ->MaxW(sideWidth - 80)
-                                                ->Truncate()));
+        item->Child(Div(a)->Flex1()->ClipY()->Child(TextEl(a, p.title)
+                                                        ->Font(16)
+                                                        ->Fg(th.foreground)
+                                                        ->MaxW(sideWidth - 80)
+                                                        ->Truncate()));
         if (p.groups.len > 0) {
             item->Child(
                 IconEl(a,
@@ -783,8 +782,8 @@ El* Settings::IntoEl() {
             }
             sub->Child(TextEl(a, group.title)->Font(16)->Fg(th.foreground));
             BindClick(sub, StrDup(a, fmt("group-%d-%d", i, g)),
-                       ListenTo(state, &SettingsState::OnGroupClick,
-                                (intptr_t)i * 64 + (intptr_t)g));
+                      ListenTo(state, &SettingsState::OnGroupClick,
+                               (intptr_t)i * 64 + (intptr_t)g));
             side->Child(sub);
         }
     }
@@ -821,11 +820,10 @@ El* Settings::IntoEl() {
                 if (!SettingItemMatches(&it, query)) {
                     continue;
                 }
-                card->Child(
-                    RenderItem(cx, this, it,
-                               StrDup(a, fmt("%d-%d-%d", selected, g, itemIx)),
-                               selected, g, itemIx, shown == 0, p.resettable,
-                               &anyDirty));
+                card->Child(RenderItem(
+                    cx, this, it,
+                    StrDup(a, fmt("%d-%d-%d", selected, g, itemIx)), selected,
+                    g, itemIx, shown == 0, p.resettable, &anyDirty));
                 shown++;
             }
             body->Child(card);

@@ -1,7 +1,8 @@
 /* examples/text_max_lines — TextView::max_lines over the same Markdown and
    controls as the upstream example. Dragging the slider changes the body-line
    budget; a straddling glyph line is omitted whole, while a tall image keeps
-   the part that fits. TextViewState::IsClamped decides when Show more appears. */
+   the part that fits. TextViewState::IsClamped decides when Show more appears.
+ */
 
 #include "gpui.h"
 
@@ -73,8 +74,7 @@ struct MaxLinesExample {
         Notify(cx);
     }
 
-    static void OnToggle(MaxLinesExample* self, Ctx* cx,
-                         const ClickEvent*) {
+    static void OnToggle(MaxLinesExample* self, Ctx* cx, const ClickEvent*) {
         self->expanded = !self->expanded;
         Notify(cx);
     }
@@ -102,72 +102,63 @@ struct MaxLinesExample {
         component::TextViewState* longState = self->longText.Get(cx);
         bool clamped = longState && longState->IsClamped();
 
-        El* header = Div(a)
-                         ->FlexCol()
-                         ->W(kFill)
-                         ->PadX(24)
-                         ->PadT(24)
-                         ->PadB(16)
-                         ->Gap(4)
-                         ->Child(TextEl(a, StrL("Clamped previews"))
-                                     ->Font(18)
-                                     ->Semibold())
-                         ->Child(TextEl(
-                                     a, StrL("Rendered Markdown bounded to a "
-                                             "number of whole lines. Drag the "
-                                             "slider, or resize the window to "
-                                             "reflow the text."))
-                                     ->Font(14)
-                                     ->Fg(th.mutedFg)
-                                     ->Wrap());
+        El* header =
+            Div(a)
+                ->FlexCol()
+                ->W(kFill)
+                ->PadX(24)
+                ->PadT(24)
+                ->PadB(16)
+                ->Gap(4)
+                ->Child(
+                    TextEl(a, StrL("Clamped previews"))->Font(18)->Semibold())
+                ->Child(TextEl(a, StrL("Rendered Markdown bounded to a "
+                                       "number of whole lines. Drag the "
+                                       "slider, or resize the window to "
+                                       "reflow the text."))
+                            ->Font(14)
+                            ->Fg(th.mutedFg)
+                            ->Wrap());
 
-        El* controls = Div(a)
-                           ->FlexRow()
-                           ->W(kFill)
-                           ->ItemsCenter()
-                           ->PadX(24)
-                           ->PadB(16)
-                           ->Gap(12)
-                           ->Child(TextEl(a, StrL("Lines"))
-                                       ->Font(14)
-                                       ->Fg(th.mutedFg))
-                           ->Child(Div(a)
-                                       ->Flex1()
-                                       ->MaxW(320)
-                                       ->Child(component::Slider::New(
-                                                   cx, StrL("line-budget"),
-                                                   &self->slider)
-                                                   ->OnChange(Listen(
-                                                       cx, &OnSlider))
-                                                   ->IntoEl()))
-                           ->Child(TextEl(
-                                       a, StrDup(a, fmt("%d", self->maxLines)))
-                                       ->Font(14)
-                                       ->W(24));
+        El* controls =
+            Div(a)
+                ->FlexRow()
+                ->W(kFill)
+                ->ItemsCenter()
+                ->PadX(24)
+                ->PadB(16)
+                ->Gap(12)
+                ->Child(TextEl(a, StrL("Lines"))->Font(14)->Fg(th.mutedFg))
+                ->Child(Div(a)->Flex1()->MaxW(320)->Child(
+                    component::Slider::New(cx, StrL("line-budget"),
+                                           &self->slider)
+                        ->OnChange(Listen(cx, &OnSlider))
+                        ->IntoEl()))
+                ->Child(TextEl(a, StrDup(a, fmt("%d", self->maxLines)))
+                            ->Font(14)
+                            ->W(24));
 
         component::TextView* longView =
             component::TextView::New(cx, self->longText)->Selectable();
         if (!self->expanded) longView->MaxLines(self->maxLines);
-        El* longBody = Div(a)->FlexCol()->W(kFill)->Gap(12)->Child(
-            longView->IntoEl());
+        El* longBody =
+            Div(a)->FlexCol()->W(kFill)->Gap(12)->Child(longView->IntoEl());
         if (clamped || self->expanded) {
-            longBody->Child(
-                component::Button::New(cx, StrL("toggle"))
-                    ->Ghost()
-                    ->WithSize(UiSize::Small)
-                    ->Icon(self->expanded ? IconName::ChevronUp
-                                          : IconName::ChevronDown)
-                    ->Label(self->expanded ? StrL("Show less")
-                                           : StrL("Show more"))
-                    ->OnClick(Listen(cx, &OnToggle))
-                    ->IntoEl());
+            longBody->Child(component::Button::New(cx, StrL("toggle"))
+                                ->Ghost()
+                                ->WithSize(UiSize::Small)
+                                ->Icon(self->expanded ? IconName::ChevronUp
+                                                      : IconName::ChevronDown)
+                                ->Label(self->expanded ? StrL("Show less")
+                                                       : StrL("Show more"))
+                                ->OnClick(Listen(cx, &OnToggle))
+                                ->IntoEl());
         }
 
-        El* shortBody =
-            component::TextView::New(cx, self->shortText)
-                ->Selectable()
-                ->MaxLines(self->maxLines)
-                ->IntoEl();
+        El* shortBody = component::TextView::New(cx, self->shortText)
+                            ->Selectable()
+                            ->MaxLines(self->maxLines)
+                            ->IntoEl();
         El* content =
             Div(a)
                 ->FlexCol()
@@ -180,8 +171,8 @@ struct MaxLinesExample {
                                     ? StrL("Expanded")
                                     : StrL("Clamped to the line budget"),
                                 longBody))
-                ->Child(Section(cx, StrL("Shorter than the budget"),
-                                shortBody));
+                ->Child(
+                    Section(cx, StrL("Shorter than the budget"), shortBody));
 
         return Div(a)
             ->FlexCol()
@@ -214,8 +205,8 @@ int GpuiMain(int argc, char** argv) {
         component::TextViewState::Markdown(app, Str(kLongMarkdown));
     self->shortText =
         component::TextViewState::Markdown(app, Str(kShortMarkdown));
-    Window* win = WindowOpenView(app, StrL("Text max lines"), 720, 680,
-                                 view.id, WinOpts{});
+    Window* win = WindowOpenView(app, StrL("Text max lines"), 720, 680, view.id,
+                                 WinOpts{});
     (void)win;
     int rc = AppRun(app);
     AppFree(app);

@@ -391,8 +391,8 @@ static const float kInputPadY = 8;
 static const float kInputGap = 6;
 static const float kInputTextSize = 14;
 
-static AccessibilityRole InputAccessibilityRole(
-    bool hasContentType, InputContentType contentType) {
+static AccessibilityRole InputAccessibilityRole(bool hasContentType,
+                                                InputContentType contentType) {
     if (!hasContentType) {
         return AccessibilityRole::TextInput;
     }
@@ -417,9 +417,8 @@ static AccessibilityRole InputAccessibilityRole(
 
 static bool InputContentIsSecret(bool hasContentType,
                                  InputContentType contentType) {
-    return hasContentType &&
-           (contentType == InputContentType::Password ||
-            contentType == InputContentType::NewPassword);
+    return hasContentType && (contentType == InputContentType::Password ||
+                              contentType == InputContentType::NewPassword);
 }
 
 // content_type.rs::ns_text_content_type. These are WHATWG autocomplete names,
@@ -427,55 +426,92 @@ static bool InputContentIsSecret(bool hasContentType,
 static Str InputNativeContentType(bool present, InputContentType value) {
     if (!present) return {};
     switch (value) {
-        case InputContentType::Name: return StrL("name");
-        case InputContentType::NamePrefix: return StrL("honorific-prefix");
-        case InputContentType::GivenName: return StrL("given-name");
-        case InputContentType::MiddleName: return StrL("additional-name");
-        case InputContentType::FamilyName: return StrL("family-name");
-        case InputContentType::NameSuffix: return StrL("honorific-suffix");
-        case InputContentType::Nickname: return StrL("nickname");
-        case InputContentType::JobTitle: return StrL("organization-title");
-        case InputContentType::OrganizationName: return StrL("organization");
-        case InputContentType::Location: return StrL("location");
-        case InputContentType::FullStreetAddress: return StrL("street-address");
-        case InputContentType::StreetAddressLine1: return StrL("address-line1");
-        case InputContentType::StreetAddressLine2: return StrL("address-line2");
-        case InputContentType::AddressCity: return StrL("address-level2");
-        case InputContentType::AddressState: return StrL("address-level1");
+        case InputContentType::Name:
+            return StrL("name");
+        case InputContentType::NamePrefix:
+            return StrL("honorific-prefix");
+        case InputContentType::GivenName:
+            return StrL("given-name");
+        case InputContentType::MiddleName:
+            return StrL("additional-name");
+        case InputContentType::FamilyName:
+            return StrL("family-name");
+        case InputContentType::NameSuffix:
+            return StrL("honorific-suffix");
+        case InputContentType::Nickname:
+            return StrL("nickname");
+        case InputContentType::JobTitle:
+            return StrL("organization-title");
+        case InputContentType::OrganizationName:
+            return StrL("organization");
+        case InputContentType::Location:
+            return StrL("location");
+        case InputContentType::FullStreetAddress:
+            return StrL("street-address");
+        case InputContentType::StreetAddressLine1:
+            return StrL("address-line1");
+        case InputContentType::StreetAddressLine2:
+            return StrL("address-line2");
+        case InputContentType::AddressCity:
+            return StrL("address-level2");
+        case InputContentType::AddressState:
+            return StrL("address-level1");
         case InputContentType::AddressCityAndState:
             return StrL("address-level1+2");
-        case InputContentType::Sublocality: return StrL("address-level3");
-        case InputContentType::CountryName: return StrL("country-name");
-        case InputContentType::PostalCode: return StrL("postal-code");
-        case InputContentType::TelephoneNumber: return StrL("tel");
-        case InputContentType::EmailAddress: return StrL("email");
-        case InputContentType::Url: return StrL("url");
-        case InputContentType::CreditCardNumber: return StrL("cc-number");
-        case InputContentType::CreditCardName: return StrL("cc-name");
-        case InputContentType::CreditCardGivenName: return StrL("cc-given-name");
+        case InputContentType::Sublocality:
+            return StrL("address-level3");
+        case InputContentType::CountryName:
+            return StrL("country-name");
+        case InputContentType::PostalCode:
+            return StrL("postal-code");
+        case InputContentType::TelephoneNumber:
+            return StrL("tel");
+        case InputContentType::EmailAddress:
+            return StrL("email");
+        case InputContentType::Url:
+            return StrL("url");
+        case InputContentType::CreditCardNumber:
+            return StrL("cc-number");
+        case InputContentType::CreditCardName:
+            return StrL("cc-name");
+        case InputContentType::CreditCardGivenName:
+            return StrL("cc-given-name");
         case InputContentType::CreditCardMiddleName:
             return StrL("cc-additional-name");
         case InputContentType::CreditCardFamilyName:
             return StrL("cc-family-name");
-        case InputContentType::CreditCardSecurityCode: return StrL("cc-csc");
-        case InputContentType::CreditCardExpiration: return StrL("cc-exp");
+        case InputContentType::CreditCardSecurityCode:
+            return StrL("cc-csc");
+        case InputContentType::CreditCardExpiration:
+            return StrL("cc-exp");
         case InputContentType::CreditCardExpirationMonth:
             return StrL("cc-exp-month");
         case InputContentType::CreditCardExpirationYear:
             return StrL("cc-exp-year");
-        case InputContentType::CreditCardType: return StrL("cc-type");
-        case InputContentType::Username: return StrL("username");
-        case InputContentType::Password: return StrL("password");
-        case InputContentType::NewPassword: return StrL("new-password");
-        case InputContentType::OneTimeCode: return StrL("one-time-code");
+        case InputContentType::CreditCardType:
+            return StrL("cc-type");
+        case InputContentType::Username:
+            return StrL("username");
+        case InputContentType::Password:
+            return StrL("password");
+        case InputContentType::NewPassword:
+            return StrL("new-password");
+        case InputContentType::OneTimeCode:
+            return StrL("one-time-code");
         case InputContentType::ShipmentTrackingNumber:
             return StrL("shipment-tracking-number");
-        case InputContentType::FlightNumber: return StrL("flight-number");
-        case InputContentType::DateTime: return StrL("date-time");
-        case InputContentType::Birthdate: return StrL("bday");
-        case InputContentType::BirthdateDay: return StrL("bday-day");
-        case InputContentType::BirthdateMonth: return StrL("bday-month");
-        case InputContentType::BirthdateYear: return StrL("bday-year");
+        case InputContentType::FlightNumber:
+            return StrL("flight-number");
+        case InputContentType::DateTime:
+            return StrL("date-time");
+        case InputContentType::Birthdate:
+            return StrL("bday");
+        case InputContentType::BirthdateDay:
+            return StrL("bday-day");
+        case InputContentType::BirthdateMonth:
+            return StrL("bday-month");
+        case InputContentType::BirthdateYear:
+            return StrL("bday-year");
         case InputContentType::CellularEid:
         case InputContentType::CellularImei:
             return {};
@@ -537,12 +573,11 @@ El* Input::IntoEl() {
         hasAccessibilityRole
             ? accessibilityRole
             : InputAccessibilityRole(hasContentType, contentType);
-    El* field = InputBase::New(
-                    cx, id, !disabled,
-                    password && !hasAccessibilityRole
-                        ? AccessibilityRole::PasswordInput
-                        : role)
-                     ->BindInput(disabled ? nullptr : state)
+    El* field = InputBase::New(cx, id, !disabled,
+                               password && !hasAccessibilityRole
+                                   ? AccessibilityRole::PasswordInput
+                                   : role)
+                    ->BindInput(disabled ? nullptr : state)
                     ->FlexRow()
                     ->W(col ? kFill : width)
                     ->H(h)
@@ -553,7 +588,7 @@ El* Input::IntoEl() {
                     // The editor paints its own line into the field's box;
                     // a value wider than the field scrolls under it rather
                     // than spilling out past whatever is next to it.
-                     ->ClipX();
+                    ->ClipX();
     if (state) {
         if (state->placeholder.s) {
             field->AriaPlaceholder(state->placeholder);
@@ -707,7 +742,7 @@ El* Textarea::IntoEl() {
     }
     bool interactive = state && !state->disabled;
     El* box = InputBase::New(cx, id, interactive, accessibilityRole)
-                   ->BindInput(state)
+                  ->BindInput(state)
                   ->W(kFill)
                   ->H(h)
                   ->Pad(8)
@@ -722,7 +757,7 @@ El* Textarea::IntoEl() {
                   // frame that is on screen; the box is already named, so
                   // its place in the tree is what it is found by.
                   ->ScrollFromPath()
-                   ->Child(gpui::Textarea::New(cx, state, editor));
+                  ->Child(gpui::Textarea::New(cx, state, editor));
     if (state) {
         box->AriaValue(InputValue(state));
         if (state->placeholder.s) {
@@ -856,12 +891,12 @@ El* NumberInput::IntoEl() {
     bool focused = state && state->focused && !disabled;
     Str base = id.s ? id : StrL("number");
     const NumberStep* policy = hasNumberStep ? &numberStep : nullptr;
-    Func0 decDirect = NumberInputStepCallback(
-        cx, state, StepAction::Decrement, policy, hasMin, min, hasMax, max,
-        disabled, onStep);
-    Func0 incDirect = NumberInputStepCallback(
-        cx, state, StepAction::Increment, policy, hasMin, min, hasMax, max,
-        disabled, onStep);
+    Func0 decDirect =
+        NumberInputStepCallback(cx, state, StepAction::Decrement, policy,
+                                hasMin, min, hasMax, max, disabled, onStep);
+    Func0 incDirect =
+        NumberInputStepCallback(cx, state, StepAction::Increment, policy,
+                                hasMin, min, hasMax, max, disabled, onStep);
     // The visual frame is the UI layer; BaseNumberInput below owns the
     // spinbutton semantics and fixed three-part structure.
     El* frame = Div(a)->FlexRow()->W(width)->H(h);
@@ -894,7 +929,7 @@ El* NumberInput::IntoEl() {
     // what number_input.rs pins with
     // `pressing_a_step_button_never_takes_focus_off_the_editor`.
     El* dec = gpui::Button::New(cx, StrL("decrement"), disabled, onDec, false)
-                   ->AriaLabel(Tr("Input.Decrement"))
+                  ->AriaLabel(Tr("Input.Decrement"))
                   ->W(btn)
                   ->H(kFill)
                   ->Corners(stepR, 0, 0, stepR)
@@ -902,7 +937,7 @@ El* NumberInput::IntoEl() {
                   ->JustifyCenter()
                   ->Child(IconEl(a, IconName::Minus, font)->Fg(stepFg));
     El* inc = gpui::Button::New(cx, StrL("increment"), disabled, onInc, false)
-                   ->AriaLabel(Tr("Input.Increment"))
+                  ->AriaLabel(Tr("Input.Increment"))
                   ->W(btn)
                   ->H(kFill)
                   ->Corners(0, stepR, stepR, 0)

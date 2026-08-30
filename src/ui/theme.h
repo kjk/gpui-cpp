@@ -419,7 +419,6 @@ void ThemeTokensReset(Theme* t);
 // button's surface).
 void ThemeFillDerived(Theme* t, bool dark);
 
-
 // The immutable defaults, used to resolve a theme file and by pure logic
 // tests. Active palettes are application-owned and take an App.
 const Theme& ThemeDark();
@@ -472,10 +471,7 @@ void ScrollbarModeSet(App* app, ScrollbarMode mode);
 // here because Base knows nothing about the component Theme.
 SemanticThemeTokens ThemeSemanticTokens(const Theme& theme,
                                         float fontSize = 0.f);
-void ThemeApplySemanticTokens(Theme* theme,
-                              const SemanticThemeTokens& tokens);
-
-
+void ThemeApplySemanticTokens(Theme* theme, const SemanticThemeTokens& tokens);
 
 // ─── the shadcn scales, generated into theme_data.cpp ────────────────────
 
@@ -550,7 +546,9 @@ Rgba ThemeWhite();
 
 // Rust extension traits are free color operations and an application lookup
 // in this tree. Keep their exact mapping explicit for callers and the audit.
-inline const Theme& ActiveTheme(const App* app) { return ThemeNow(app); }
+inline const Theme& ActiveTheme(const App* app) {
+    return ThemeNow(app);
+}
 
 template <typename T>
 struct ThemeConfigValue {
@@ -645,8 +643,7 @@ struct SemanticThemeConfigFile {
     SemanticThemeConfig tokens;
 };
 
-bool SemanticThemeConfigParse(const JsonValue* value,
-                              SemanticThemeConfig* out);
+bool SemanticThemeConfigParse(const JsonValue* value, SemanticThemeConfig* out);
 bool SemanticThemeConfigFileParse(const JsonValue* value,
                                   SemanticThemeConfigFile* out);
 

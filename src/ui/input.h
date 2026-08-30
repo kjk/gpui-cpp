@@ -185,7 +185,7 @@ struct SearchPanel {
 };
 
 struct NativeMenu;
-using EditorContextMenuFn = NativeMenu* (*)(Ctx* cx, NativeMenu* empty,
+using EditorContextMenuFn = NativeMenu* (*)(Ctx * cx, NativeMenu* empty,
                                             void* data);
 
 // editor.rs Editor. Highlighter remains the compatibility spelling for the
@@ -203,8 +203,7 @@ struct Editor {
     bool disabled = false;
     bool readonly = false;
     int tabIndex = 0;
-    AccessibilityRole accessibilityRole =
-        AccessibilityRole::MultilineTextInput;
+    AccessibilityRole accessibilityRole = AccessibilityRole::MultilineTextInput;
     Str ariaLabel = {};
     EditorContextMenuFn contextMenu = nullptr;
     void* contextMenuData = nullptr;
@@ -293,8 +292,8 @@ struct HoverPopover {
     Selection symbolRange = {};
     Str hover = {};
 
-    static HoverPopover* New(Ctx* cx, InputState* editor,
-                             Selection symbolRange, Str hover);
+    static HoverPopover* New(Ctx* cx, InputState* editor, Selection symbolRange,
+                             Str hover);
     El* IntoEl();
 };
 
@@ -309,8 +308,7 @@ struct Textarea {
     // The editor box height in pixels, or kFill for Rust's h(relative(1.)).
     float height = 0;
     bool softWrap = true;
-    AccessibilityRole accessibilityRole =
-        AccessibilityRole::MultilineTextInput;
+    AccessibilityRole accessibilityRole = AccessibilityRole::MultilineTextInput;
     Str ariaLabel = {};
     Listener onFocus;
 

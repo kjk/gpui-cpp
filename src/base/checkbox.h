@@ -59,8 +59,7 @@ struct Checkbox {
 };
 
 struct CheckboxIndicator {
-    static El* New(Ctx* cx,
-                   CheckboxState state = CheckboxState::Unchecked,
+    static El* New(Ctx* cx, CheckboxState state = CheckboxState::Unchecked,
                    bool disabled = false,
                    const CheckboxIndicatorStyles* styles = nullptr,
                    const StateStyle* instance = nullptr);

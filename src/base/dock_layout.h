@@ -86,8 +86,7 @@ struct InsertTarget {
     float size = 0;
     Bounds bounds = {};
 
-    static InsertTarget Tabs(NodeId node, int ix = -1,
-                             bool activate = true);
+    static InsertTarget Tabs(NodeId node, int ix = -1, bool activate = true);
     static InsertTarget Split(NodeId node, Placement placement,
                               const float* size = nullptr);
     static InsertTarget Tile(NodeId node, Bounds bounds);
@@ -135,8 +134,8 @@ struct PaneTree {
     EditResult Split(NodeId at, PanelId panel, Placement placement,
                      const float* size = nullptr);
     EditResult SetActive(NodeId node, int ix);
-    EditResult SetSizes(NodeId node, const float* sizes,
-                        const uint8_t* known, int count);
+    EditResult SetSizes(NodeId node, const float* sizes, const uint8_t* known,
+                        int count);
     EditResult SetTileBounds(PanelId panel, Bounds bounds);
     EditResult BringToFront(PanelId panel);
     void Normalize();

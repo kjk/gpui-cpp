@@ -77,10 +77,9 @@ static component::Button* Btn(Ctx* cx, ButtonStory* self, const char* id) {
 }
 
 static component::ButtonIcon* ProgressIcon(Ctx* cx, float value, Rgba color,
-                                            bool hasColor) {
-    component::ProgressCircle* p = component::ProgressCircle::New(cx)
-                                       ->Value(value)
-                                       ->Label(false);
+                                           bool hasColor) {
+    component::ProgressCircle* p =
+        component::ProgressCircle::New(cx)->Value(value)->Label(false);
     if (hasColor) {
         p->Color(color);
     }

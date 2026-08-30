@@ -178,8 +178,8 @@ El* DescriptionList::IntoEl() {
         padX = 12;
         padY = 6;
     }
-    float baseGap = size == UiSize::Large ? 8.f :
-                    (size == UiSize::Medium ? 4.f : 2.f);
+    float baseGap =
+        size == UiSize::Large ? 8.f : (size == UiSize::Medium ? 4.f : 2.f);
     float gap = bordered ? 0.f : baseGap;
     if (!bordered) {
         padX = 0;
@@ -191,8 +191,7 @@ El* DescriptionList::IntoEl() {
         root->Border(1, th.border)->Radius(th.radius);
     }
 
-    int* rowCounts =
-        (int*)Alloc(a, (int)sizeof(int) * (items.len + 1));
+    int* rowCounts = (int*)Alloc(a, (int)sizeof(int) * (items.len + 1));
     DescriptionItem* flatItems = items.Flatten(a);
     int rows = DescriptionGroupRows(flatItems, items.len, columns, rowCounts,
                                     items.len + 1);
@@ -241,12 +240,8 @@ El* DescriptionList::IntoEl() {
                     }
                 }
             }
-            El* value = Div(a)
-                            ->Flex1()
-                            ->PadX(padX)
-                            ->PadY(padY)
-                            ->ClipX()
-                            ->ClipY();
+            El* value =
+                Div(a)->Flex1()->PadX(padX)->PadY(padY)->ClipX()->ClipY();
             value->Child(it.value.IntoEl(cx));
             cell->Child(label)->Child(value);
             row->Child(cell);

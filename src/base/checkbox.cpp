@@ -22,20 +22,20 @@ CheckboxStyles& CheckboxStyles::Disabled(const StateStyle& style) {
     return *this;
 }
 
-CheckboxIndicatorStyles&
-CheckboxIndicatorStyles::Checked(const StateStyle& style) {
+CheckboxIndicatorStyles& CheckboxIndicatorStyles::Checked(
+    const StateStyle& style) {
     StateStyleRefine(&checked, style);
     return *this;
 }
 
-CheckboxIndicatorStyles&
-CheckboxIndicatorStyles::Indeterminate(const StateStyle& style) {
+CheckboxIndicatorStyles& CheckboxIndicatorStyles::Indeterminate(
+    const StateStyle& style) {
     StateStyleRefine(&indeterminate, style);
     return *this;
 }
 
-CheckboxIndicatorStyles&
-CheckboxIndicatorStyles::Disabled(const StateStyle& style) {
+CheckboxIndicatorStyles& CheckboxIndicatorStyles::Disabled(
+    const StateStyle& style) {
     StateStyleRefine(&disabled, style);
     return *this;
 }
@@ -50,10 +50,9 @@ El* Checkbox::New(Ctx* cx, Str id, CheckboxState state, bool disabled,
     // both hang off `when(!disabled)`. The id is the fold of the name down
     // from the root, so a checkbox named among its siblings is still its own.
     AccessibilityToggled toggled =
-        state == CheckboxState::Indeterminate
-            ? AccessibilityToggled::Mixed
-            : state == CheckboxState::Checked ? AccessibilityToggled::True
-                                               : AccessibilityToggled::False;
+        state == CheckboxState::Indeterminate ? AccessibilityToggled::Mixed
+        : state == CheckboxState::Checked     ? AccessibilityToggled::True
+                                              : AccessibilityToggled::False;
     El* e = Div(a)
                 ->PathClick(id)
                 ->Role(role)
@@ -66,7 +65,7 @@ El* Checkbox::New(Ctx* cx, Str id, CheckboxState state, bool disabled,
         StateStyle base = instance ? *instance : StateStyle{};
         const StateStyle* states[2] = {
             state == CheckboxState::Checked && styles ? &styles->checked
-                                                       : nullptr,
+                                                      : nullptr,
             state == CheckboxState::Indeterminate && styles
                 ? &styles->indeterminate
                 : nullptr,
@@ -102,7 +101,7 @@ El* CheckboxIndicator::New(Ctx* cx, CheckboxState state, bool disabled,
         StateStyle base = instance ? *instance : StateStyle{};
         const StateStyle* states[2] = {
             state == CheckboxState::Checked && styles ? &styles->checked
-                                                       : nullptr,
+                                                      : nullptr,
             state == CheckboxState::Indeterminate && styles
                 ? &styles->indeterminate
                 : nullptr,

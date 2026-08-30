@@ -59,8 +59,8 @@ struct ScrollableElement {
                          ScrollbarAxis axis = ScrollbarAxis::Vertical);
     static El* VerticalScrollbar(Ctx* cx, El* element, Str id, float scrollY,
                                  Listener onScroll);
-    static El* HorizontalScrollbar(Ctx* cx, El* element, Str id,
-                                   float scrollX, Listener onScroll);
+    static El* HorizontalScrollbar(Ctx* cx, El* element, Str id, float scrollX,
+                                   Listener onScroll);
     static Scrollable* OverflowScrollbar(Ctx* cx, El* element);
     static Scrollable* OverflowXScrollbar(Ctx* cx, El* element);
     static Scrollable* OverflowYScrollbar(Ctx* cx, El* element);

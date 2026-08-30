@@ -415,11 +415,8 @@ El* ColorPicker::New(Ctx* cx, Str id, bool open, bool disabled,
                      Listener onOpenChange, FocusHandle focus, int tabIndex,
                      bool tabStop, const char* keyContext) {
     Arena* a = cx->a;
-    El* e = Div(a)
-                ->Id(id)
-                ->Role(role)
-                ->AriaExpanded(open)
-                ->AriaDisabled(disabled);
+    El* e =
+        Div(a)->Id(id)->Role(role)->AriaExpanded(open)->AriaDisabled(disabled);
     if (accessibilityLabel.s) {
         e->AriaLabel(accessibilityLabel);
     }
@@ -452,16 +449,16 @@ El* ColorSwatch::New(Ctx* cx, Str id, Listener onClick, Listener onHover,
                      Str accessibilityLabel, int tabIndex, bool tabStop,
                      AccessibilityRole role) {
     Arena* a = cx->a;
-    El* e = Div(a)
-                ->PathClick(id)
-                ->Role(role)
-                ->AriaLabel(accessibilityLabel.s
-                                ? accessibilityLabel
-                                : ColorPickerHexString(a, color))
-                ->AriaToggled(selected ? AccessibilityToggled::True
-                                       : AccessibilityToggled::False)
-                ->AriaSelected(selected)
-                ->AriaDisabled(disabled);
+    El* e =
+        Div(a)
+            ->PathClick(id)
+            ->Role(role)
+            ->AriaLabel(accessibilityLabel.s ? accessibilityLabel
+                                             : ColorPickerHexString(a, color))
+            ->AriaToggled(selected ? AccessibilityToggled::True
+                                   : AccessibilityToggled::False)
+            ->AriaSelected(selected)
+            ->AriaDisabled(disabled);
     if (!disabled) {
         e->PathId(id)->TabIndex(tabIndex)->TabStop(tabStop);
     }

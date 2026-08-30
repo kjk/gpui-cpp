@@ -388,8 +388,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
         for (int i = 0; i < kNSpecs; i++) {
             self->combo[i] = component::ComboboxState::New(cx->app);
             component::ComboboxState* owner = self->combo[i].Get(cx);
-            component::SearchableListState* s =
-                owner ? owner->List() : nullptr;
+            component::SearchableListState* s = owner ? owner->List() : nullptr;
             if (!s) {
                 continue;
             }

@@ -429,8 +429,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
             InputSetPlaceholder(&self->search[i], StrL("Search..."));
         }
         for (int i = 0; i < SelCount; i++) {
-            self->sel[i] =
-                component::SelectState::New(cx->app);
+            self->sel[i] = component::SelectState::New(cx->app);
         }
         BuildCountries();
         BuildItems(SelFruit, kFruits, (int)(sizeof(kFruits) / sizeof(char*)));

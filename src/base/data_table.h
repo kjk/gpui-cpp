@@ -224,8 +224,7 @@ struct TableState {
     void* delegateData = nullptr;
     void (*delegateSort)(Ctx* cx, void* data, int col,
                          ColumnSort sort) = nullptr;
-    void (*delegateMoveColumn)(Ctx* cx, void* data, int from,
-                               int to) = nullptr;
+    void (*delegateMoveColumn)(Ctx* cx, void* data, int from, int to) = nullptr;
     void (*delegateLoadMore)(Ctx* cx, void* data) = nullptr;
 
     static void OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,

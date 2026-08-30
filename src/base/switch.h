@@ -37,8 +37,7 @@ struct SwitchThumbStyles {
 // disabled switch keeps its element id but takes neither focus nor the click.
 struct Switch {
     static El* New(Ctx* cx, Str id, bool checked = false, bool disabled = false,
-                   Listener onChange = {},
-                   const SwitchStyles* styles = nullptr,
+                   Listener onChange = {}, const SwitchStyles* styles = nullptr,
                    const StateStyle* instance = nullptr,
                    Str accessibilityLabel = {}, int tabIndex = 0,
                    bool tabStop = true, FocusHandle focus = {});
@@ -47,8 +46,7 @@ struct Switch {
 // The track carries an id of its own — Rust builds it from `(id, "track")` —
 // so it hovers as a part without shadowing the switch's own hit box.
 struct SwitchTrack {
-    static El* New(Ctx* cx, Str id, bool checked = false,
-                   bool disabled = false,
+    static El* New(Ctx* cx, Str id, bool checked = false, bool disabled = false,
                    const SwitchTrackStyles* styles = nullptr,
                    const StateStyle* instance = nullptr);
 };

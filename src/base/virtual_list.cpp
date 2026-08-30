@@ -193,8 +193,7 @@ VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
 
 void ItemSizeLayoutBuild(ItemSizeLayout* layout, Axis axis,
                          const float* itemSizes, int count,
-                         float uniformItemSize, float gap,
-                         float crossSize) {
+                         float uniformItemSize, float gap, float crossSize) {
     if (!layout) {
         return;
     }
@@ -222,15 +221,13 @@ El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
     Arena* a = cx->a;
     VirtualListFrameState frame;
     float viewport = o.layoutAxis == Axis::Horizontal ? o.viewW : o.viewH;
-    float crossSize =
-        o.layoutAxis == Axis::Horizontal ? o.viewH : o.viewW;
+    float crossSize = o.layoutAxis == Axis::Horizontal ? o.viewH : o.viewW;
     ItemSizeLayoutBuild(&frame.sizeLayout, o.layoutAxis, o.sizes, o.count,
                         o.rowH, o.gap, crossSize);
     // The layout is where the handle is answered: it learns how many items
     // there are and how much of them is showing, a pending scroll_to_item is
     // applied against that, and the offset is clamped to the list.
-    float offset =
-        o.layoutAxis == Axis::Horizontal ? o.scrollX : o.scrollY;
+    float offset = o.layoutAxis == Axis::Horizontal ? o.scrollX : o.scrollY;
     if (o.handle) {
         o.handle->axis = o.layoutAxis;
         const float* sizes =
@@ -243,8 +240,8 @@ El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
     // would scroll only as far as the last row it made.
     const float* layoutSizes =
         frame.sizeLayout.sizes.len ? frame.sizeLayout.sizes.els : nullptr;
-    frame.visible = VirtualListVisibleRange(layoutSizes, o.count, offset,
-                                            viewport);
+    frame.visible =
+        VirtualListVisibleRange(layoutSizes, o.count, offset, viewport);
     El* list = Div(a);
     if (o.layoutAxis == Axis::Horizontal) {
         list->FlexRow();
@@ -306,13 +303,9 @@ El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
     frame.scrollOffset = offset;
     El* e = New(cx, id)->ClipY()->ClipX();
     if (o.layoutAxis == Axis::Horizontal) {
-        e->W(o.viewW + o.pad * 2)
-            ->ScrollX(offset)
-            ->ScrollY(o.scrollY);
+        e->W(o.viewW + o.pad * 2)->ScrollX(offset)->ScrollY(o.scrollY);
     } else {
-        e->H(o.viewH + o.pad * 2)
-            ->ScrollY(offset)
-            ->ScrollX(o.scrollX);
+        e->H(o.viewH + o.pad * 2)->ScrollY(offset)->ScrollX(o.scrollX);
     }
     if (o.pad > 0) {
         e->Pad(o.pad);
@@ -333,8 +326,7 @@ El* VirtualList::New(Ctx* cx, Str id) {
     return Div(a)->Id(id);
 }
 
-El* virtual_list(Ctx* cx, Str id, Axis axis,
-                 const VirtualListOpts& opts) {
+El* virtual_list(Ctx* cx, Str id, Axis axis, const VirtualListOpts& opts) {
     VirtualListOpts copy = opts;
     copy.layoutAxis = axis;
     return VirtualList::New(cx, id, copy);

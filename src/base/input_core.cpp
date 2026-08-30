@@ -43,14 +43,14 @@ EditorExtras EditorExtras::Of(const InputState* state) {
 }
 
 bool EditorExtras::HasDefinition() const {
-    return state && (state->definitionProvider ||
-                     state->hoverDef.lastLocations.len > 0);
+    return state &&
+           (state->definitionProvider || state->hoverDef.lastLocations.len > 0);
 }
 
 bool EditorExtras::HasCodeActions() const {
-    return state && (state->codeActionProvider ||
-                     state->codeActionProviders.len > 0 ||
-                     state->codeActions.items.len > 0);
+    return state &&
+           (state->codeActionProvider || state->codeActionProviders.len > 0 ||
+            state->codeActions.items.len > 0);
 }
 
 InputContextMenuCapabilities InputContextMenuCapabilities::Of(
@@ -73,12 +73,12 @@ InputContextMenuCapabilities InputContextMenuCapabilities::Of(
     return value;
 }
 
-#define GPUI_CAPABILITY_BUILDER(Method, Field)                              \
-    InputContextMenuCapabilities InputContextMenuCapabilities::Method(      \
-        bool value) const {                                                  \
-        InputContextMenuCapabilities copy = *this;                           \
-        copy.Field = value;                                                  \
-        return copy;                                                         \
+#define GPUI_CAPABILITY_BUILDER(Method, Field)                         \
+    InputContextMenuCapabilities InputContextMenuCapabilities::Method( \
+        bool value) const {                                            \
+        InputContextMenuCapabilities copy = *this;                     \
+        copy.Field = value;                                            \
+        return copy;                                                   \
     }
 
 GPUI_CAPABILITY_BUILDER(Disabled, disabled)
@@ -124,8 +124,7 @@ InputStyles& InputStyles::Disabled(const Style& style, uint32_t fields) {
     return *this;
 }
 
-void InputStyles::Apply(Style* style, bool isFocused,
-                        bool isDisabled) const {
+void InputStyles::Apply(Style* style, bool isFocused, bool isDisabled) const {
     if (!style) {
         return;
     }
@@ -164,8 +163,8 @@ NativeMenu& NativeMenu::MenuWithDisabled(Str label, bool disabled,
 }
 
 NativeMenu& NativeMenu::Separator() {
-    if (items.len > 0 &&
-        items[items.len - 1].kind != NativeMenuItemKind::Separator) {
+    if (items.len > 0 && items[items.len - 1]
+                                 .kind != NativeMenuItemKind::Separator) {
         VecAppend(items, NativeMenuItem{});
     }
     return *this;
@@ -175,11 +174,9 @@ void InputDefaultNativeMenu(const InputState* state, NativeMenu* out) {
     if (!out) {
         return;
     }
-    InputContextMenuCapabilities c =
-        InputContextMenuCapabilities::Of(state);
+    InputContextMenuCapabilities c = InputContextMenuCapabilities::Of(state);
     out->MenuWithDisabled(StrL("Copy"), !c.IsCopyable(), InputAction::Copy)
-        .MenuWithDisabled(StrL("Cut"),
-                          !c.IsEditable() || !c.IsCopyable(),
+        .MenuWithDisabled(StrL("Cut"), !c.IsEditable() || !c.IsCopyable(),
                           InputAction::Cut)
         .MenuWithDisabled(StrL("Paste"), !c.IsEditable(), InputAction::Paste)
         .Separator()

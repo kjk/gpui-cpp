@@ -174,9 +174,8 @@ El* RadioGroup::IntoEl() {
         if (onClick.IsValid()) {
             r->OnClick(ListenerArg(onClick, i));
         }
-        base->Child(r->IntoEl()
-                        ->AriaPositionInSet(i + 1)
-                        ->AriaSizeOfSet(radios.len));
+        base->Child(
+            r->IntoEl()->AriaPositionInSet(i + 1)->AriaSizeOfSet(radios.len));
     }
     return group;
 }

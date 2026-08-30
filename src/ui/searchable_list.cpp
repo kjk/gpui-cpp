@@ -110,26 +110,28 @@ El* SearchableListDelegate::RenderSectionHeader(Ctx* cx, int section) const {
                                : nullptr;
 }
 
-bool SearchableListDelegate::IsItemEnabled(
-    IndexPath path, const SearchableListItem* value, const App* app) const {
+bool SearchableListDelegate::IsItemEnabled(IndexPath path,
+                                           const SearchableListItem* value,
+                                           const App* app) const {
     return isItemEnabled ? isItemEnabled(user, path, value, app)
                          : value && !value->disabled && !value->pinned;
 }
 
-bool SearchableListDelegate::IsItemChecked(
-    IndexPath path, const SearchableListItem* value,
-    const SearchableListState* state, const App* app) const {
+bool SearchableListDelegate::IsItemChecked(IndexPath path,
+                                           const SearchableListItem* value,
+                                           const SearchableListState* state,
+                                           const App* app) const {
     if (isItemChecked) {
         return isItemChecked(user, path, value, state, app);
     }
-    return value && state && SearchableListIsChecked(
-                                 state, state->items, state->nItems,
-                                 SearchableFlatIndex(state, path));
+    return value && state &&
+           SearchableListIsChecked(state, state->items, state->nItems,
+                                   SearchableFlatIndex(state, path));
 }
 
-void SearchableListDelegate::OnWillChange(
-    SearchableListState* state, const SearchableListChange* changes,
-    int n) const {
+void SearchableListDelegate::OnWillChange(SearchableListState* state,
+                                          const SearchableListChange* changes,
+                                          int n) const {
     if (onWillChange) {
         onWillChange(user, state, changes, n);
         return;
@@ -138,8 +140,7 @@ void SearchableListDelegate::OnWillChange(
 }
 
 void SearchableListDelegate::OnConfirm(const SearchableListState* state,
-                                       IndexPath path,
-                                       bool secondary) const {
+                                       IndexPath path, bool secondary) const {
     if (onConfirm) {
         onConfirm(user, state, path, secondary);
     }
@@ -176,8 +177,7 @@ bool SearchableGroup::Matches(Str query) const {
     return false;
 }
 
-SearchableVec* SearchableVec::New(const SearchableListItem* values,
-                                  int count) {
+SearchableVec* SearchableVec::New(const SearchableListItem* values, int count) {
     SearchableVec* out = new SearchableVec();
     for (int i = 0; i < count; i++) {
         VecAppend(out->items, values[i]);
@@ -225,8 +225,7 @@ bool SearchableVec::Position(Str value, IndexPath* out) const {
 
 SearchableListItemElement* SearchableListItemElement::New(Ctx* cx,
                                                           size_t index) {
-    SearchableListItemElement* out =
-        ArenaNew<SearchableListItemElement>(cx->a);
+    SearchableListItemElement* out = ArenaNew<SearchableListItemElement>(cx->a);
     out->cx = cx;
     out->index = index;
     return out;
@@ -269,8 +268,8 @@ SearchableListItemElement* SearchableListItemElement::Child(El* child) {
     return this;
 }
 
-SearchableListItemElement* SearchableListItemElement::Refine(
-    const Style& value, uint32_t fields) {
+SearchableListItemElement* SearchableListItemElement::Refine(const Style& value,
+                                                             uint32_t fields) {
     style = value;
     styleSet = fields;
     return this;
@@ -279,16 +278,17 @@ SearchableListItemElement* SearchableListItemElement::Refine(
 El* SearchableListItemElement::IntoEl() {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
-    El* row = Div(a)
-                  ->PathId(StrDup(a, fmt("searchable-list-item-%d", (int)index)))
-                  ->FlexRow()
-                  ->Gap(4)
-                  ->PadY(4)
-                  ->PadX(8)
-                  ->Radius(th.radius)
-                  ->Fg(disabled ? th.mutedFg : th.foreground)
-                  ->ItemsCenter()
-                  ->JustifyBetween();
+    El* row =
+        Div(a)
+            ->PathId(StrDup(a, fmt("searchable-list-item-%d", (int)index)))
+            ->FlexRow()
+            ->Gap(4)
+            ->PadY(4)
+            ->PadX(8)
+            ->Radius(th.radius)
+            ->Fg(disabled ? th.mutedFg : th.foreground)
+            ->ItemsCenter()
+            ->JustifyBetween();
     UiListSize(row, size);
     if (!disabled && !selected) {
         row->HoverBg(BackgroundOpacity(th.tokens.accent, 0.7f));
@@ -320,8 +320,7 @@ El* SearchableListItemElement::IntoEl() {
     return row;
 }
 
-static int SearchableFlatIndex(const SearchableListState* s,
-                               IndexPath path) {
+static int SearchableFlatIndex(const SearchableListState* s, IndexPath path) {
     if (!s || !s->items || path.section < 0 || path.row < 0) {
         return -1;
     }
@@ -456,8 +455,8 @@ bool SearchableListIsChecked(const SearchableListState* s,
         return true;
     }
     if (s->hasDelegate && s->delegate.isItemChecked) {
-        return s->delegate.IsItemChecked(SearchablePath(s, index),
-                                         &items[index], s, nullptr);
+        return s->delegate
+            .IsItemChecked(SearchablePath(s, index), &items[index], s, nullptr);
     }
     return SelectionIndexOfValue(s, items, nItems, items[index].value) >= 0;
 }
@@ -469,8 +468,8 @@ bool SearchableListIsEnabled(const SearchableListState* s,
         return false;
     }
     if (s->hasDelegate && s->delegate.isItemEnabled &&
-        !s->delegate.IsItemEnabled(SearchablePath(s, index), &items[index],
-                                   nullptr)) {
+        !s->delegate
+             .IsItemEnabled(SearchablePath(s, index), &items[index], nullptr)) {
         return false;
     }
     if (items[index].disabled || items[index].pinned) {
@@ -645,8 +644,7 @@ SearchableList* SearchableList::WithSize(UiSize value) {
     size = value;
     return this;
 }
-SearchableList* SearchableList::Delegate(
-    const SearchableListDelegate& value) {
+SearchableList* SearchableList::Delegate(const SearchableListDelegate& value) {
     delegate = value;
     hasDelegate = true;
     return this;
@@ -674,10 +672,10 @@ El* SearchableList::IntoEl() {
         for (int section = 0; section < sectionCount; section++) {
             total += delegate.ItemsCount(section);
         }
-        SearchableListItem* flat = total > 0
-                                       ? (SearchableListItem*)Alloc(
-                                             a, total * (int)sizeof(*flat))
-                                       : nullptr;
+        SearchableListItem* flat =
+            total > 0
+                ? (SearchableListItem*)Alloc(a, total * (int)sizeof(*flat))
+                : nullptr;
         Str* titles = sectionCount > 0
                           ? (Str*)Alloc(a, sectionCount * (int)sizeof(*titles))
                           : nullptr;
@@ -767,8 +765,7 @@ El* SearchableList::IntoEl() {
             checked = delegate.IsItemChecked(path, &it, s, cx->app);
         }
         if (hasDelegate && delegate.isItemEnabled) {
-            enabled = enabled &&
-                      delegate.IsItemEnabled(path, &it, cx->app);
+            enabled = enabled && delegate.IsItemEnabled(path, &it, cx->app);
         }
         // SearchableListItem::render: an icon before the label when the item
         // gave one.
@@ -777,10 +774,14 @@ El* SearchableList::IntoEl() {
             label->Child(IconEl(a, it.icon, UiIconPx(UiSize::Small))
                              ->Fg(th.mutedFg));
         }
-        label->Child(TextEl(a, it.title)->Fg(
-            enabled || checked ? th.foreground : th.mutedFg));
-        El* content =
-            Div(a)->FlexRow()->W(kFill)->Gap(4)->ItemsCenter()->JustifyBetween();
+        label->Child(TextEl(a, it.title)
+                         ->Fg(enabled || checked ? th.foreground : th.mutedFg));
+        El* content = Div(a)
+                          ->FlexRow()
+                          ->W(kFill)
+                          ->Gap(4)
+                          ->ItemsCenter()
+                          ->JustifyBetween();
         content->Child(label);
         // render_item's badge, as the story's delegate puts its "Featured"
         // pill beside the custom row content.
@@ -794,9 +795,8 @@ El* SearchableList::IntoEl() {
                                            ->Fg(th.primaryFg)
                                            ->LineHeight(1.4f)));
         }
-        El* row = hasDelegate
-                      ? delegate.RenderItem(cx, path, &it, checked)
-                      : nullptr;
+        El* row =
+            hasDelegate ? delegate.RenderItem(cx, path, &it, checked) : nullptr;
         if (!row) {
             row = SearchableListItemElement::New(cx, (size_t)m)
                       ->Checked(checked)
@@ -808,12 +808,12 @@ El* SearchableList::IntoEl() {
                       ->IntoEl();
         }
         row->Role(AccessibilityRole::ListBoxOption)
-                      ->AriaLabel(it.title)
-                      ->AriaSelected(checked)
-                      ->AriaPositionInSet(m + 1)
-                      ->AriaSizeOfSet(s->matches.len)
-                      ->AriaDisabled(!enabled)
-                      ->Shrink0();
+            ->AriaLabel(it.title)
+            ->AriaSelected(checked)
+            ->AriaPositionInSet(m + 1)
+            ->AriaSizeOfSet(s->matches.len)
+            ->AriaDisabled(!enabled)
+            ->Shrink0();
         if (enabled) {
             BindPathClick(row, StrDup(a, fmt("row-%d", ix)),
                           ListenerArg(click, m));

@@ -817,8 +817,7 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     if (!inside) {
         int lineNo = 0;
         int lineX = 0;
-        pango_layout_index_to_line_x(tl->layout, index, FALSE, &lineNo,
-                                     &lineX);
+        pango_layout_index_to_line_x(tl->layout, index, FALSE, &lineNo, &lineX);
         PangoLayoutLine* line =
             pango_layout_get_line_readonly(tl->layout, lineNo);
         if (line) {

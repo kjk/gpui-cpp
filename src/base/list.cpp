@@ -358,8 +358,7 @@ void ListSetQuery(ListState* s, Ctx* cx, Str query) {
     StartSearch(s, cx, query, false);
 }
 
-void ListState::OnQueryInput(ListState* self, Ctx* cx,
-                             const InputEvent* ev) {
+void ListState::OnQueryInput(ListState* self, Ctx* cx, const InputEvent* ev) {
     if (!self || !self->queryInput || !ev ||
         ev->kind != InputEventKind::Change) {
         return;

@@ -153,8 +153,7 @@ struct DialogTriggerState {
             return;
         }
         if (self->handle.IsValid()) {
-            self->handle.SetOpen(cx, true,
-                                 DialogChangeReason::TriggerPress);
+            self->handle.SetOpen(cx, true, DialogChangeReason::TriggerPress);
         }
         if (self->onOpen.IsValid()) {
             ListenerCall(cx->app, cx->win, self->onOpen, ev);
@@ -163,13 +162,11 @@ struct DialogTriggerState {
     }
 };
 
-El* DialogTrigger::New(Ctx* cx, Listener onOpen, DialogHandle handle,
-                       Str id) {
+El* DialogTrigger::New(Ctx* cx, Listener onOpen, DialogHandle handle, Str id) {
     Arena* a = cx->a;
     El* e = Div(a);
-    Entity<DialogTriggerState> trigger =
-        ElementStateEntity<DialogTriggerState>(
-            cx, id, StrL("gpui::DialogTriggerState"));
+    Entity<DialogTriggerState> trigger = ElementStateEntity<DialogTriggerState>(
+        cx, id, StrL("gpui::DialogTriggerState"));
     if (DialogTriggerState* state = trigger.Get(cx)) {
         state->handle = handle;
         state->onOpen = onOpen;

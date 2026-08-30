@@ -270,8 +270,7 @@ static bool HtmlTagIs(Str raw, const char* name) {
     }
     at++;
     Str want = Str(name);
-    if (at + want.len > raw.len ||
-        !StrEq(Str(raw.s + at, want.len), want)) {
+    if (at + want.len > raw.len || !StrEq(Str(raw.s + at, want.len), want)) {
         return false;
     }
     char after = at + want.len < raw.len ? raw.s[at + want.len] : '\0';

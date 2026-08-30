@@ -82,10 +82,8 @@ struct ComboboxState {
 
     static void OnListChange(ComboboxState* self, Ctx* cx,
                              const ListEvent* event);
-    static void OnToggle(ComboboxState* self, Ctx* cx,
-                         const ClickEvent* event);
-    static void OnClear(ComboboxState* self, Ctx* cx,
-                        const ClickEvent* event);
+    static void OnToggle(ComboboxState* self, Ctx* cx, const ClickEvent* event);
+    static void OnClear(ComboboxState* self, Ctx* cx, const ClickEvent* event);
     static void OnMouseDownOut(ComboboxState* self, Ctx* cx,
                                const MouseDownEvent* event);
 
@@ -160,10 +158,9 @@ struct Combobox {
     Combobox* FocusRing(bool v);
     Combobox* Multiple(bool v = true);
     Combobox* Trigger(El* e);
-    Combobox* RenderTrigger(
-        void* data,
-        El* (*fn)(Ctx* cx, void* data,
-                  const ComboboxTriggerContext* trigger));
+    Combobox* RenderTrigger(void* data,
+                            El* (*fn)(Ctx* cx, void* data,
+                                      const ComboboxTriggerContext* trigger));
     Combobox* Footer(El* e);
     Combobox* RenderFooter(void* data, El* (*fn)(Ctx* cx, void* data));
     Combobox* RenderEmpty(void* data, El* (*fn)(Ctx* cx, void* data));

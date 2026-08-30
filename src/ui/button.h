@@ -242,8 +242,7 @@ struct ToggleVariants {
     static Toggle* WithVariant(Toggle* toggle, ToggleVariant variant);
     static Toggle* Ghost(Toggle* toggle);
     static Toggle* Outline(Toggle* toggle);
-    static ToggleGroup* WithVariant(ToggleGroup* group,
-                                    ToggleVariant variant);
+    static ToggleGroup* WithVariant(ToggleGroup* group, ToggleVariant variant);
     static ToggleGroup* Ghost(ToggleGroup* group);
     static ToggleGroup* Outline(ToggleGroup* group);
 };

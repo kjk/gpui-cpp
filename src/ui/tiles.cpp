@@ -56,8 +56,8 @@ static bool TilePanelTitleStyle(Ctx* cx, const TilePanelDef& panel,
     if (!panel.hasView || !panel.view.titleStyle || !out) {
         return false;
     }
-    return panel.view.titleStyle(cx, panel.view.data, &out->background,
-                                 &out->foreground);
+    return panel.view
+        .titleStyle(cx, panel.view.data, &out->background, &out->foreground);
 }
 
 // One of the five grab strips: four along the edges, and the corner that
@@ -185,13 +185,13 @@ El* Tiles::IntoEl() {
             if (hasStyle) {
                 bar->Bg(titleStyle.background)->Fg(titleStyle.foreground);
             }
-            bar->Child(Div(a)
-                           ->Flex1()
-                           ->MinW(64)
-                           ->ClipX()
-                           ->Fg(titleColor)
-                           ->Child(TilePanelTitle(cx, panel, titleColor)
-                                       ->Truncate()));
+            bar->Child(
+                Div(a)
+                    ->Flex1()
+                    ->MinW(64)
+                    ->ClipX()
+                    ->Fg(titleColor)
+                    ->Child(TilePanelTitle(cx, panel, titleColor)->Truncate()));
         }
         El* suffix = nullptr;
         if (p >= 0 && p < panels.len) {
@@ -208,8 +208,8 @@ El* Tiles::IntoEl() {
         }
         if (p >= 0 && p < panels.len && panels[p].hasView &&
             panels[p].view.toolbarButtons) {
-            if (El* tools = panels[p].view.toolbarButtons(
-                    cx, panels[p].view.data)) {
+            if (El* tools = panels[p]
+                                .view.toolbarButtons(cx, panels[p].view.data)) {
                 bar->Child(tools->Shrink0());
             }
         }

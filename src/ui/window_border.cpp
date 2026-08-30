@@ -25,8 +25,8 @@ Edges WindowPaddings(Window* window) {
     if (!window || !WindowClientDecorated(window)) {
         return {};
     }
-    float shadow = window->clientInset >= 0 ? window->clientInset
-                                             : kWindowShadowSize;
+    float shadow =
+        window->clientInset >= 0 ? window->clientInset : kWindowShadowSize;
     return WindowBorderInsets(shadow, window->tiling);
 }
 
@@ -137,12 +137,8 @@ El* WindowBorder::IntoEl() {
     float visualShadow = effectiveTiling.AllTiled() ? 0.f : shadowSize;
     Edges insets = WindowBorderInsets(visualShadow, effectiveTiling);
 
-    El* backdrop = Div(a)
-                       ->FlexCol()
-                       ->SizeFull()
-                       ->ClipX()
-                       ->ClipY()
-                       ->Bg(Rgba8(0, 0, 0, 0));
+    El* backdrop =
+        Div(a)->FlexCol()->SizeFull()->ClipX()->ClipY()->Bg(Rgba8(0, 0, 0, 0));
     if (insets.top > 0) {
         backdrop->PadT(insets.top);
     }
@@ -169,8 +165,8 @@ El* WindowBorder::IntoEl() {
                     ->Bg(Rgba8(0, 0, 0, 0));
     // The source deliberately uses neutral 20%/80%, independent of the
     // theme's semantic border token.
-    Rgba border = th.mode == ThemeMode::Dark ? Rgb(51, 51, 51)
-                                              : Rgb(204, 204, 204);
+    Rgba border =
+        th.mode == ThemeMode::Dark ? Rgb(51, 51, 51) : Rgb(204, 204, 204);
     float activeOpacity = 1.f;
     if (!WindowIsActive(cx)) {
         border = RgbaOpacity(border, 0.7f);
@@ -194,8 +190,7 @@ El* WindowBorder::IntoEl() {
         BoxShadow shadows[2] = {
             {0, 2, 10, -1, Rgba8(0, 0, 0, (uint8_t)(46 * activeOpacity)),
              false},
-            {0, 1, 3, 0, Rgba8(0, 0, 0, (uint8_t)(46 * activeOpacity)),
-             false},
+            {0, 1, 3, 0, Rgba8(0, 0, 0, (uint8_t)(46 * activeOpacity)), false},
         };
         frame->Shadows(shadows, 2);
     }

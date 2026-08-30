@@ -153,8 +153,7 @@ struct NativeMenu {
     NativeMenu& operator=(const NativeMenu&) = delete;
     ~NativeMenu();
     NativeMenu& Menu(Str label, InputAction action);
-    NativeMenu& MenuWithDisabled(Str label, bool disabled,
-                                 InputAction action);
+    NativeMenu& MenuWithDisabled(Str label, bool disabled, InputAction action);
     NativeMenu& Separator();
     bool IsEmpty() const { return items.len == 0; }
 };

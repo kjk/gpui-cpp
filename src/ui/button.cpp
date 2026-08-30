@@ -119,7 +119,8 @@ El* ButtonIcon::IntoEl() {
     if (loading && variant == ButtonIconVariant::Icon) {
         Spinner* wait = Spinner::New(cx)->Size(px);
         if (loadingIcon) {
-            if (loadingIcon->name != IconName::None) wait->Icon(loadingIcon->name);
+            if (loadingIcon->name != IconName::None)
+                wait->Icon(loadingIcon->name);
             if (loadingIcon->hasColor) wait->Color(loadingIcon->color);
         } else if (loadingIconName != IconName::None) {
             wait->Icon(loadingIconName);
@@ -127,7 +128,8 @@ El* ButtonIcon::IntoEl() {
         return wait->IntoEl();
     }
     if (variant == ButtonIconVariant::Spinner) {
-        return spinner ? spinner->Size(px)->IntoEl() : Spinner::New(cx)->Size(px)->IntoEl();
+        return spinner ? spinner->Size(px)->IntoEl()
+                       : Spinner::New(cx)->Size(px)->IntoEl();
     }
     if (variant == ButtonIconVariant::Progress) {
         return progress ? progress->Size(px)->IntoEl() : nullptr;
@@ -492,8 +494,7 @@ El* Button::IntoEl() {
     }
     if (hasCustom) {
         fg = customVariant.foreground;
-        bd = outline ? RgbaMixOklab(customVariant.color, transparentWhite,
-                                    0.4f)
+        bd = outline ? RgbaMixOklab(customVariant.color, transparentWhite, 0.4f)
                      : customVariant.color;
         bg = RgbaMixOklab(customVariant.color, clear, 0.2f);
         hover = customVariant.hover;
@@ -656,16 +657,19 @@ El* Button::IntoEl() {
     // while Base still removes its focus and activation behavior.
     bool interactive = !(disabled || loading);
     float rounding = th.radius;
-    if (rounded == ButtonRounded::None) rounding = 0;
-    else if (rounded == ButtonRounded::Small) rounding = th.radius * 0.5f;
-    else if (rounded == ButtonRounded::Large) rounding = th.radius * 2.f;
-    else if (rounded == ButtonRounded::Size) rounding = roundedPx;
+    if (rounded == ButtonRounded::None)
+        rounding = 0;
+    else if (rounded == ButtonRounded::Small)
+        rounding = th.radius * 0.5f;
+    else if (rounded == ButtonRounded::Large)
+        rounding = th.radius * 2.f;
+    else if (rounded == ButtonRounded::Size)
+        rounding = roundedPx;
     if (resolved.Has(StateFieldRadius)) rounding = resolved.style.radius;
-    AccessibilityRole role =
-        hasAccessibilityRole
-            ? accessibilityRole
-            : variant == ButtonVariant::Link ? AccessibilityRole::Link
-                                             : AccessibilityRole::Button;
+    AccessibilityRole role = hasAccessibilityRole ? accessibilityRole
+                             : variant == ButtonVariant::Link
+                                 ? AccessibilityRole::Link
+                                 : AccessibilityRole::Button;
     El* e = gpui::Button::New(cx, id, !interactive)
                 ->Role(role)
                 ->AriaDisabled(!interactive)
@@ -677,16 +681,14 @@ El* Button::IntoEl() {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Gap(gap)
-                ->Corners(cornerTL ? rounding : 0.f,
-                          cornerTR ? rounding : 0.f,
-                          cornerBR ? rounding : 0.f,
-                          cornerBL ? rounding : 0.f);
+                ->Corners(cornerTL ? rounding : 0.f, cornerTR ? rounding : 0.f,
+                          cornerBR ? rounding : 0.f, cornerBL ? rounding : 0.f);
     if (accessibilityId.s) {
         e->AccessibilityId(accessibilityId);
     }
     if (hasAccessibilityToggled) {
         e->AriaToggled(accessibilityToggled ? AccessibilityToggled::True
-                                           : AccessibilityToggled::False);
+                                            : AccessibilityToggled::False);
     }
     if (accessibilityLabel.s) {
         e->AriaLabel(accessibilityLabel);
@@ -940,13 +942,9 @@ El* Toggle::IntoEl() {
         pad = 12.f;
         font = 18.f;
     }
-    root->MinW(h)
-        ->H(h)
-        ->PadX(pad)
-        ->Corners(cornerTL ? th.radius : 0.f,
-                  cornerTR ? th.radius : 0.f,
-                  cornerBR ? th.radius : 0.f,
-                  cornerBL ? th.radius : 0.f);
+    root->MinW(h)->H(h)->PadX(pad)->Corners(
+        cornerTL ? th.radius : 0.f, cornerTR ? th.radius : 0.f,
+        cornerBR ? th.radius : 0.f, cornerBL ? th.radius : 0.f);
     if (!disabled && !checked) {
         root->HoverBg(th.tokens.accent)->HoverFg(th.accentFg);
     }
@@ -1015,8 +1013,8 @@ struct ToggleGroupState {
 
     ~ToggleGroupState() { VecReset(checked); }
 
-    static void OnChildClick(ToggleGroupState* self, Ctx* cx,
-                             const ClickEvent*, intptr_t ix) {
+    static void OnChildClick(ToggleGroupState* self, Ctx* cx, const ClickEvent*,
+                             intptr_t ix) {
         if (ix < 0 || ix >= self->checked.len) return;
         self->checked[(int)ix] = !self->checked[(int)ix];
         ToggleGroupEvent event{self->checked.els, self->checked.len};
@@ -1191,8 +1189,10 @@ El* DropdownButton::IntoEl() {
         button->Selected(isSelected)
             ->Disabled(disabled || button->disabled)
             ->WithSize(sz);
-        if (v == ButtonVariant::Custom) button->Custom(customValue);
-        else button->WithVariant(v);
+        if (v == ButtonVariant::Custom)
+            button->Custom(customValue);
+        else
+            button->WithVariant(v);
         if (outline) {
             button->Outline();
         }
@@ -1215,8 +1215,10 @@ El* DropdownButton::IntoEl() {
                             ->Selected(isSelected)
                             ->Disabled(disabled)
                             ->WithSize(sz);
-        if (v == ButtonVariant::Custom) caret->Custom(customValue);
-        else caret->WithVariant(v);
+        if (v == ButtonVariant::Custom)
+            caret->Custom(customValue);
+        else
+            caret->WithVariant(v);
         if (outline) {
             caret->Outline();
         }
@@ -1347,8 +1349,8 @@ struct ButtonGroupState {
     bool disabled = false;
     Listener onClick;
 
-    static void OnChildClick(ButtonGroupState* self, Ctx* cx,
-                             const ClickEvent*, intptr_t childIndex) {
+    static void OnChildClick(ButtonGroupState* self, Ctx* cx, const ClickEvent*,
+                             intptr_t childIndex) {
         if (self->disabled) return;
         Vec<int> next = self->selected;
         int at = -1;
@@ -1415,8 +1417,10 @@ El* ButtonGroup::IntoEl() {
             b->WithSize(size);
         }
         if (hasVariant) {
-            if (variant == ButtonVariant::Custom) b->Custom(customVariant);
-            else b->WithVariant(variant);
+            if (variant == ButtonVariant::Custom)
+                b->Custom(customVariant);
+            else
+                b->WithVariant(variant);
         }
         if (compact) {
             b->Compact();

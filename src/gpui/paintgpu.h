@@ -39,8 +39,8 @@
    What lives where: everything device-independent is shared with
    paint_win.cpp rather than written three times — the DirectWrite factory
    and its text formats, an IDWriteTextLayout (which is what a `TextLayout*`
-   is on Windows, so shaping, measurement, hit-testing and range rects are the same
-   code on all paths), and WIC image decode. D3D11 additionally borrows the
+   is on Windows, so shaping, measurement, hit-testing and range rects are the
+   same code on all paths), and WIC image decode. D3D11 additionally borrows the
    default backend's device; D3D12 owns its device, queue, triple-buffered
    command allocators and upload heaps. Only targets and submission differ. */
 

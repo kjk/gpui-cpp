@@ -54,8 +54,7 @@ struct SidebarGroup;
 // SidebarGroup can contain any one item type. Frame builders here own their
 // values in the arena, so the same contract is a POD function table: the
 // container supplies the collapsed state and stable path id at render time.
-using SidebarItemRender =
-    El* (*)(void* value, Ctx* cx, Str id, bool collapsed);
+using SidebarItemRender = El* (*)(void* value, Ctx* cx, Str id, bool collapsed);
 
 struct SidebarItem {
     void* value = nullptr;

@@ -111,8 +111,7 @@ struct DialogClose {
 // The trigger takes the press, not the click, and stops it there — Rust's
 // DialogTrigger is an on_mouse_down with cx.stop_propagation().
 struct DialogTrigger {
-    static El* New(Ctx* cx, Listener onOpen = {},
-                   DialogHandle handle = {},
+    static El* New(Ctx* cx, Listener onOpen = {}, DialogHandle handle = {},
                    Str id = StrL("dialog-trigger"));
 };
 

@@ -42,9 +42,8 @@ void DatePickerStory::OnChange(DatePickerStory* self, Ctx* cx,
                  date.start.month, date.start.day, date.end.year,
                  date.end.month, date.end.day);
     } else {
-        snprintf(self->value, sizeof(self->value),
-                 "Some(\"%d-%02d-%02d\")", date.start.year,
-                 date.start.month, date.start.day);
+        snprintf(self->value, sizeof(self->value), "Some(\"%d-%02d-%02d\")",
+                 date.start.year, date.start.month, date.start.day);
     }
     Notify(cx);
 }
@@ -56,8 +55,7 @@ static void InitializeStory(DatePickerStory* self, Ctx* cx) {
     self->seeded = true;
     LocalDate now = DateToday();
     for (int i = 0; i < DpCount; i++) {
-        self->pickers[i] = component::DatePickerStateNew(
-            cx, i == DpEmptyRange);
+        self->pickers[i] = component::DatePickerStateNew(cx, i == DpEmptyRange);
     }
 
     component::DatePickerState* state = self->pickers[DpDefault].Get(cx);
@@ -74,8 +72,8 @@ static void InitializeStory(DatePickerStory* self, Ctx* cx) {
     component::DatePickerStateSetDateFormat(state, StrL("%Y-%m-%d"), cx);
     component::DatePickerStateSetDisabledMatcher(
         state, DateMatcherRange(now, DateAddDays(now, 7)), cx);
-    component::DatePickerStateSetDate(
-        state, Date::Single(DateAddDays(now, -1)), cx);
+    component::DatePickerStateSetDate(state, Date::Single(DateAddDays(now, -1)),
+                                      cx);
 
     state = self->pickers[DpCustom].Get(cx);
     component::DatePickerStateSetDisabledMatcher(
@@ -89,12 +87,12 @@ static void InitializeStory(DatePickerStory* self, Ctx* cx) {
     state = self->pickers[DpBirthday].Get(cx);
     component::DatePickerStateSetYearRange(state, 1927, now.year + 1, cx);
 
-    self->subscriptions[0] = Subscribe(
-        cx, self->pickers[DpDefault], &DatePickerStory::OnChange);
-    self->subscriptions[1] = Subscribe(
-        cx, self->pickers[DpDateRange], &DatePickerStory::OnChange);
-    self->subscriptions[2] = Subscribe(
-        cx, self->pickers[DpEmptyRange], &DatePickerStory::OnChange);
+    self->subscriptions[0] =
+        Subscribe(cx, self->pickers[DpDefault], &DatePickerStory::OnChange);
+    self->subscriptions[1] =
+        Subscribe(cx, self->pickers[DpDateRange], &DatePickerStory::OnChange);
+    self->subscriptions[2] =
+        Subscribe(cx, self->pickers[DpEmptyRange], &DatePickerStory::OnChange);
 }
 
 static component::DatePicker* Picker(DatePickerStory* self, Ctx* cx,
@@ -111,22 +109,22 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     LocalDate now = DateToday();
 
     component::DateRangePreset singlePresets[] = {
-        component::DateRangePreset::Single(
-            StrL("Yesterday"), DateAddDays(now, -1)),
-        component::DateRangePreset::Single(
-            StrL("Last Week"), DateAddDays(now, -7)),
-        component::DateRangePreset::Single(
-            StrL("Last Month"), DateAddDays(now, -30)),
+        component::DateRangePreset::Single(StrL("Yesterday"),
+                                           DateAddDays(now, -1)),
+        component::DateRangePreset::Single(StrL("Last Week"),
+                                           DateAddDays(now, -7)),
+        component::DateRangePreset::Single(StrL("Last Month"),
+                                           DateAddDays(now, -30)),
     };
     component::DateRangePreset rangePresets[] = {
-        component::DateRangePreset::Range(
-            StrL("Last 7 Days"), DateAddDays(now, -7), now),
-        component::DateRangePreset::Range(
-            StrL("Last 14 Days"), DateAddDays(now, -14), now),
-        component::DateRangePreset::Range(
-            StrL("Last 30 Days"), DateAddDays(now, -30), now),
-        component::DateRangePreset::Range(
-            StrL("Last 90 Days"), DateAddDays(now, -90), now),
+        component::DateRangePreset::Range(StrL("Last 7 Days"),
+                                          DateAddDays(now, -7), now),
+        component::DateRangePreset::Range(StrL("Last 14 Days"),
+                                          DateAddDays(now, -14), now),
+        component::DateRangePreset::Range(StrL("Last 30 Days"),
+                                          DateAddDays(now, -30), now),
+        component::DateRangePreset::Range(StrL("Last 90 Days"),
+                                          DateAddDays(now, -90), now),
     };
 
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
@@ -135,11 +133,10 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     El* defaults = StorySection(
         cx, "Default", "Single-date selection with presets and clear action.");
     StorySectionBody(defaults)->FlexCol()->W(512)->Gap(12);
-    StorySectionAdd(defaults,
-                    Picker(self, cx, DpDefault)
-                        ->Cleanable()
-                        ->Presets(singlePresets, 3)
-                        ->IntoEl());
+    StorySectionAdd(defaults, Picker(self, cx, DpDefault)
+                                  ->Cleanable()
+                                  ->Presets(singlePresets, 3)
+                                  ->IntoEl());
     StorySectionAdd(
         defaults,
         StoryTxt(cx, StoryFmt(cx, "Value: %s", self->value), 14, th.mutedFg));
@@ -157,31 +154,28 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     El* range =
         StorySection(cx, "Date range", "Two months with range presets.");
     StorySectionBody(range)->W(512);
-    StorySectionAdd(range,
-                    Picker(self, cx, DpDateRange)
-                        ->NumberOfMonths(2)
-                        ->Cleanable()
-                        ->Presets(rangePresets, 4)
-                        ->IntoEl());
+    StorySectionAdd(range, Picker(self, cx, DpDateRange)
+                               ->NumberOfMonths(2)
+                               ->Cleanable()
+                               ->Presets(rangePresets, 4)
+                               ->IntoEl());
     page->Child(range);
 
     El* empty = StorySection(cx, "Empty range", "Empty range with presets.");
     StorySectionBody(empty)->W(512);
-    StorySectionAdd(empty,
-                    Picker(self, cx, DpEmptyRange)
-                        ->Placeholder(StrL("Range mode picker"))
-                        ->Cleanable()
-                        ->Presets(rangePresets, 4)
-                        ->IntoEl());
+    StorySectionAdd(empty, Picker(self, cx, DpEmptyRange)
+                               ->Placeholder(StrL("Range mode picker"))
+                               ->Cleanable()
+                               ->Presets(rangePresets, 4)
+                               ->IntoEl());
     page->Child(empty);
 
     El* birthday = StorySection(cx, "Year range", "Custom year range.");
     StorySectionBody(birthday)->W(512);
-    StorySectionAdd(birthday,
-                    Picker(self, cx, DpBirthday)
-                        ->Placeholder(StrL("Select birthday"))
-                        ->Cleanable()
-                        ->IntoEl());
+    StorySectionAdd(birthday, Picker(self, cx, DpBirthday)
+                                  ->Placeholder(StrL("Select birthday"))
+                                  ->Cleanable()
+                                  ->IntoEl());
     page->Child(birthday);
 
     El* custom = StorySection(cx, "Custom style", "Appearance-free input.");

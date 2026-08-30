@@ -32,10 +32,8 @@ void PanelRegistry::Register(Str panelName, PanelRegistryBuild build,
     VecAppend(items, entry);
 }
 
-bool PanelRegistry::BuildPanel(Str panelName,
-                               const PanelBuildContext* context,
-                               Window* win, App* app,
-                               DockPanelDef* out) const {
+bool PanelRegistry::BuildPanel(Str panelName, const PanelBuildContext* context,
+                               Window* win, App* app, DockPanelDef* out) const {
     if (!out) {
         return false;
     }

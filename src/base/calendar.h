@@ -128,10 +128,8 @@ struct CalendarState {
                        intptr_t year);
 };
 
-void CalendarStateInit(CalendarState* s, Ctx* cx,
-                       Date date = Date::Single());
-Entity<CalendarState> CalendarStateNew(Ctx* cx,
-                                       Date date = Date::Single());
+void CalendarStateInit(CalendarState* s, Ctx* cx, Date date = Date::Single());
+Entity<CalendarState> CalendarStateNew(Ctx* cx, Date date = Date::Single());
 bool CalendarStateApplyDate(CalendarState* s, Date date);
 void CalendarStateSetDate(CalendarState* s, Date date, Ctx* cx,
                           bool emit = false);
@@ -204,8 +202,8 @@ struct CalendarItemState {
 // user pointer, since an element here holds no closures.
 using CalendarItemFn = El* (*)(void* user, Ctx* cx, El* item,
                                const CalendarItemState& st);
-using CalendarLabelFn =
-    Str (*)(void* user, Ctx* cx, CalendarItemKind kind, int value);
+using CalendarLabelFn = Str (*)(void* user, Ctx* cx, CalendarItemKind kind,
+                                int value);
 
 // What the calendar is looking at and what it may do — everything except how
 // it looks, which is the item function's.

@@ -12,14 +12,9 @@ enum {
 
 // ANCHORS, and MAX_ITEMS.
 static const Anchor kAnchors[] = {
-    Anchor::TopLeft,
-    Anchor::TopCenter,
-    Anchor::TopRight,
-    Anchor::LeftCenter,
-    Anchor::RightCenter,
-    Anchor::BottomLeft,
-    Anchor::BottomCenter,
-    Anchor::BottomRight,
+    Anchor::TopLeft,      Anchor::TopCenter,   Anchor::TopRight,
+    Anchor::LeftCenter,   Anchor::RightCenter, Anchor::BottomLeft,
+    Anchor::BottomCenter, Anchor::BottomRight,
 };
 static const char* const kAnchorNames[] = {
     "TopLeft",     "TopCenter",  "TopRight",     "LeftCenter",
@@ -77,7 +72,11 @@ static NotifySpec NotifySpecFor(int which) {
     using K = component::NotificationType;
     switch (which) {
         case 0:
-            return {0, false, K::Info, nullptr, "This is a notification.",
+            return {0,
+                    false,
+                    K::Info,
+                    nullptr,
+                    "This is a notification.",
                     kNotifyTimeout};
         case 1:
             return {0,
@@ -88,7 +87,10 @@ static NotifySpec NotifySpecFor(int which) {
                     "successfully.",
                     kNotifyTimeout};
         case 2:
-            return {0, true, K::Success, nullptr,
+            return {0,
+                    true,
+                    K::Success,
+                    nullptr,
                     "We have received your payment successfully.",
                     kNotifyTimeout};
         case 3:
@@ -122,39 +124,46 @@ static NotifySpec NotifySpecFor(int which) {
                     kNotifyTimeout};
         }
         case 9:
-            return {900, true, K::Info, nullptr,
+            return {900,
+                    true,
+                    K::Info,
+                    nullptr,
                     "Only one of these is ever on screen at a time.",
                     kNotifyTimeout};
         case 10:
-            return {910, true, K::Info, nullptr, "Notification A",
+            return {910,           true, K::Info, nullptr, "Notification A",
                     kNotifyTimeout};
         case 11:
-            return {911, true, K::Info, nullptr, "Notification B",
+            return {911,           true, K::Info, nullptr, "Notification B",
                     kNotifyTimeout};
         // The system-delivered pair, both under one id: a second push
         // replaces the first in the notification center as it does in the
         // stack.
         case 50:
-            return {950, true,
+            return {950,
+                    true,
                     K::Info,
                     "Build finished",
                     "Delivered straight to the notification center.",
                     kNotifyTimeout};
         case 51:
-            return {950, true,
+            return {950,
+                    true,
                     K::Info,
                     "Build finished",
                     "Shown as a toast and in the notification center.",
                     0};
         case 21:
-            return {0, true,
+            return {0,
+                    true,
                     K::Info,
                     "on_click vs on_close",
                     "Click the body to fire on_click; click the X to close. "
                     "Watch the console.",
                     kNotifyTimeout};
         default:
-            return {0, false,
+            return {0,
+                    false,
                     K::Info,
                     nullptr,
                     "You can close this notification by clicking the Close "
@@ -255,8 +264,9 @@ static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
     // notifications that use the Theme default.
     if (which >= 30 && which < 38) {
         int ix = (int)which - 30;
-        item.Placement(kAnchors[ix]).Message(
-            StoryFmt(cx, "This notification is at %s.", kAnchorNames[ix]));
+        item.Placement(kAnchors[ix])
+            .Message(
+                StoryFmt(cx, "This notification is at %s.", kAnchorNames[ix]));
     }
     if (which == 40) {
         item.Content(EntityNew<NotificationMarkdownView>(cx->app));
@@ -278,8 +288,8 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     // story_toolbar_group(): the placement and max-items dropdowns.
-    const component::NotificationSettings& settings =
-        ThemeNow(cx->app).notification;
+    const component::NotificationSettings& settings = ThemeNow(cx->app)
+                                                          .notification;
     int placementIx = 2, maxIx = 4;
     for (int i = 0; i < kNAnchors; i++) {
         if (settings.placement == kAnchors[i]) {

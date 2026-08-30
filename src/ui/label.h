@@ -53,8 +53,7 @@ struct Label {
     Label* TextRight();
     Label* LineHeight(float mult);
     Str FullText() const;
-    int HighlightRanges(int totalLength, Selection* out,
-                        int capacity) const;
+    int HighlightRanges(int totalLength, Selection* out, int capacity) const;
     El* IntoEl();
 };
 

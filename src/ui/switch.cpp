@@ -66,16 +66,15 @@ El* Switch::IntoEl() {
     SwitchTrackStyles trackStyles;
     trackStyles.Checked(StateStyle().Bg(on));
     if (checked) {
-        trackStyles.Disabled(
-            StateStyle().Bg(BackgroundOpacity(on, 0.5f)));
+        trackStyles.Disabled(StateStyle().Bg(BackgroundOpacity(on, 0.5f)));
     }
     SwitchThumbStyles thumbStyles;
-    thumbStyles.Disabled(StateStyle().Bg(
-        BackgroundOpacity(th.tokens.switchThumb, 0.35f)));
+    thumbStyles.Disabled(
+        StateStyle().Bg(BackgroundOpacity(th.tokens.switchThumb, 0.35f)));
     // Rust builds the track's id from `(id, "track")`, so the part is named
     // apart from the switch it sits in.
-    El* track = SwitchTrack::New(cx, StrDup(a, fmt("%s-track", id)),
-                                 checked, disabled, &trackStyles)
+    El* track = SwitchTrack::New(cx, StrDup(a, fmt("%s-track", id)), checked,
+                                 disabled, &trackStyles)
                     ->W(trackW)
                     ->H(trackH)
                     ->Pad(2)
@@ -115,8 +114,8 @@ El* Switch::IntoEl() {
     track->Child(thumbEl);
     // gpui_base::Switch owns identity, focus and activation, and hands the
     // handler the value the activation produces.
-    El* root = gpui::Switch::New(cx, id, checked, disabled, onClick,
-                                 nullptr, nullptr, label)
+    El* root = gpui::Switch::New(cx, id, checked, disabled, onClick, nullptr,
+                                 nullptr, label)
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8);

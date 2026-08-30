@@ -74,13 +74,11 @@ inline void WindowOpenDialog(Ctx* cx, Entity<T> e, bool overlay = true) {
 }
 // open_alert_dialog: the entity's Render builds the opinionated AlertDialog
 // surface, replacing Rust's retained build closure.
-inline void WindowOpenAlertDialog(Ctx* cx, EntityId view,
-                                  bool overlay = true) {
+inline void WindowOpenAlertDialog(Ctx* cx, EntityId view, bool overlay = true) {
     WindowOpenDialog(cx, view, overlay);
 }
 template <typename T>
-inline void WindowOpenAlertDialog(Ctx* cx, Entity<T> e,
-                                  bool overlay = true) {
+inline void WindowOpenAlertDialog(Ctx* cx, Entity<T> e, bool overlay = true) {
     WindowOpenDialog(cx, e.id, overlay);
 }
 bool WindowHasActiveDialog(Ctx* cx);
@@ -96,8 +94,7 @@ void WindowOpenSheetAt(Ctx* cx, EntityId view,
                        component::SheetPlacement placement, float size);
 template <typename T>
 inline void WindowOpenSheetAt(Ctx* cx, Entity<T> e,
-                              component::SheetPlacement placement,
-                              float size) {
+                              component::SheetPlacement placement, float size) {
     WindowOpenSheetAt(cx, e.id, placement, size);
 }
 // open_sheet: Placement::Right, which is the default Rust picks.
@@ -124,10 +121,8 @@ int WindowPushNotification(Ctx* cx, component::NotificationType kind,
                            Str message);
 void WindowClearNotifications(Ctx* cx);
 int WindowNotificationCount(Ctx* cx);
-void WindowRemoveNotifications(Ctx* cx,
-                               component::NotificationTypeId type);
-void WindowRemoveNotification1(Ctx* cx,
-                               component::NotificationTypeId type,
+void WindowRemoveNotifications(Ctx* cx, component::NotificationTypeId type);
+void WindowRemoveNotification1(Ctx* cx, component::NotificationTypeId type,
                                uint32_t key);
 template <typename T>
 inline void WindowRemoveNotification(Ctx* cx) {

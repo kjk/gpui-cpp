@@ -32,8 +32,8 @@ El* BreadcrumbItem::IntoEl() {
                                   : AccessibilityRole::ListItem)
                  ->AriaLabel(label)
                  ->AriaDisabled(disabled)
-                 ->Child(TextEl(a, label)->Font(14)->Fg(
-                     lit ? th.foreground : th.mutedFg));
+                 ->Child(TextEl(a, label)->Font(14)->Fg(lit ? th.foreground
+                                                            : th.mutedFg));
     if (clickable) {
         // breadcrumb.rs asks for the hand in the same `when_some(on_click)`
         // that binds the click: a level with nowhere to go is not a link.

@@ -160,8 +160,7 @@ float DockSizing::Clamp(float value) const {
                                area.w - kDockPanelMinSize - oppositeDockSize);
             break;
         case DockPlacement::Bottom:
-            maxSize = std::max(kDockPanelMinSize,
-                               area.h - kDockPanelMinSize);
+            maxSize = std::max(kDockPanelMinSize, area.h - kDockPanelMinSize);
             break;
         case DockPlacement::Center:
             return value;
@@ -192,8 +191,7 @@ int DockPanelByName(const DockState* s, Str name) {
 int DockAddPanelDef(DockState* s, DockPanelDef def) {
     if (def.id.value == 0) {
         def.id = PanelId::FromU64(gNextDockPanelId++);
-        if (def.id.value == 0)
-            def.id = PanelId::FromU64(gNextDockPanelId++);
+        if (def.id.value == 0) def.id = PanelId::FromU64(gNextDockPanelId++);
     }
     VecAppend(s->panels, def);
     return s->panels.len - 1;
@@ -529,9 +527,8 @@ void DockSetActive(DockState* s, Ctx* cx, int node, int ix) {
     if (n.activeIx == ix) {
         return;
     }
-    int oldPanel = n.activeIx >= 0 && n.activeIx < n.panel.len
-                       ? n.panel[n.activeIx]
-                       : -1;
+    int oldPanel =
+        n.activeIx >= 0 && n.activeIx < n.panel.len ? n.panel[n.activeIx] : -1;
     int newPanel = n.panel[ix];
     n.activeIx = ix;
     // pending_scroll_to_ix: the tab that was just made active is brought into
@@ -921,9 +918,8 @@ void DockResizeSide(DockState* s, Ctx* cx, DockPlacement p, float x, float y) {
             ? s->right.size
             : 0;
     float opposite = p == DockPlacement::Left ? rightSize : leftSize;
-    DockSizing sizing = DockSizing::New(p)
-                            .WithAreaBounds(b)
-                            .WithOppositeDockSize(opposite);
+    DockSizing sizing =
+        DockSizing::New(p).WithAreaBounds(b).WithOppositeDockSize(opposite);
     side->SetSize(sizing.Clamp(sizing.SizeFromPointer({x, y})));
     Notify(cx);
 }

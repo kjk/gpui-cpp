@@ -69,8 +69,7 @@ El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
         // selection.
         ListActiveStyle st =
             ListActiveStyleOf(ListSettingsNow(cx->app), th.tokens.listActive,
-                              th.listActiveBorder,
-                              th.tokens.accent, selected);
+                              th.listActiveBorder, th.tokens.accent, selected);
         if (!secondarySelected) {
             row->Bg(st.bg);
         }
@@ -271,11 +270,11 @@ El* List::IntoEl() {
             s->loading = delegate.isLoading
                              ? delegate.isLoading(cx, delegate.data)
                              : false;
-            s->hasMore = delegate.hasMore
-                             ? delegate.hasMore(cx, delegate.data)
-                             : false;
+            s->hasMore =
+                delegate.hasMore ? delegate.hasMore(cx, delegate.data) : false;
             s->loadMoreThreshold = delegate.loadMoreThreshold
-                                       ? delegate.loadMoreThreshold(delegate.data)
+                                       ? delegate
+                                             .loadMoreThreshold(delegate.data)
                                        : 20;
             if (s->loadMoreThreshold < 0) {
                 s->loadMoreThreshold = 0;
@@ -375,8 +374,8 @@ El* List::IntoEl() {
             measureEntry = 0;
         }
         ListRow m = ListRowAt(s, ListRowOfEntry(s, measureEntry));
-        ListItem* probe = delegate.renderItem(cx, delegate.data, m.section,
-                                              m.row, m.entry);
+        ListItem* probe =
+            delegate.renderItem(cx, delegate.data, m.section, m.row, m.entry);
         if (probe) {
             float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
                                   probe->IntoEl(StrL("list-measure"), {}, {}))
@@ -388,18 +387,20 @@ El* List::IntoEl() {
     }
     float headerH = s->sectionHeaders ? s->headerH : 0;
     if (s->sectionHeaders && delegate.renderSectionHeader) {
-        float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
-                              delegate.renderSectionHeader(cx, delegate.data, 0))
-                        .h;
+        float got =
+            MeasureEl(cx->win ? &cx->win->paint : nullptr,
+                      delegate.renderSectionHeader(cx, delegate.data, 0))
+                .h;
         if (got > 0) {
             headerH = got;
         }
     }
     float footerH = s->sectionFooters ? s->footerH : 0;
     if (s->sectionFooters && delegate.renderSectionFooter) {
-        float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
-                              delegate.renderSectionFooter(cx, delegate.data, 0))
-                        .h;
+        float got =
+            MeasureEl(cx->win ? &cx->win->paint : nullptr,
+                      delegate.renderSectionFooter(cx, delegate.data, 0))
+                .h;
         if (got > 0) {
             footerH = got;
         }
@@ -439,13 +440,13 @@ El* List::IntoEl() {
         El* el = nullptr;
         if (row.kind == ListRowKind::SectionHeader) {
             el = delegate.renderSectionHeader
-                     ? delegate.renderSectionHeader(cx, delegate.data,
-                                                    row.section)
+                     ? delegate
+                           .renderSectionHeader(cx, delegate.data, row.section)
                      : nullptr;
         } else if (row.kind == ListRowKind::SectionFooter) {
             el = delegate.renderSectionFooter
-                     ? delegate.renderSectionFooter(cx, delegate.data,
-                                                    row.section)
+                     ? delegate
+                           .renderSectionFooter(cx, delegate.data, row.section)
                      : nullptr;
         } else if (delegate.renderItem) {
             ListItem* it = delegate.renderItem(cx, delegate.data, row.section,
@@ -461,8 +462,7 @@ El* List::IntoEl() {
                 el = it->IntoEl(StrDup(a, IndexPathIdStr(a, row.Path())),
                                 ListenerArg(click, row.entry),
                                 ListenerArg(down, row.entry));
-                el->AriaPositionInSet(row.row + 1)
-                    ->AriaSizeOfSet(s->count);
+                el->AriaPositionInSet(row.row + 1)->AriaSizeOfSet(s->count);
             }
         }
         // Each row takes the height it was measured at, which is what lets

@@ -28,7 +28,7 @@
 #define WIN_BACKEND_D3D11 1
 #define WIN_BACKEND_D3D12 1
 #else
-#if !defined(WIN_BACKEND_DIRECT2D) && !defined(WIN_BACKEND_D3D11) &&          \
+#if !defined(WIN_BACKEND_DIRECT2D) && !defined(WIN_BACKEND_D3D11) && \
     !defined(WIN_BACKEND_D3D12)
 #define WIN_BACKEND_DIRECT2D 1
 #endif
@@ -308,7 +308,7 @@ void TextLayoutRelease(TextLayout* tl);
 // the layout does not know the box it is going into. `clipW` of 0 leaves it
 // to the caller's own clip.
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                     bool clip, float clipW = 0);
+                    bool clip, float clipW = 0);
 void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
                 float fontSize, Rgba c, bool truncate, bool wrap = false,
                 float measMaxW = -1.f, int weight = 0, float lineH = 0);

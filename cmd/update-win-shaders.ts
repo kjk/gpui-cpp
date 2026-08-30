@@ -7,15 +7,7 @@
 //   bun cmd/update-win-shaders.ts --check
 //   bun cmd/update-win-shaders.ts --force  # compiler/encoding recipe changed
 
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -154,7 +146,7 @@ function decodeBase95(encoded: string, expected: number): Uint8Array {
 
 function wrap(encoded: string): string {
   const lines: string[] = [];
-  for (let i = 0; i < encoded.length; ) {
+  for (let i = 0; i < encoded.length;) {
     let end = Math.min(i + 100, encoded.length);
     // Space is a digit. Pick a nearby boundary that keeps it from becoming
     // trailing source whitespace; the last chunk meets the raw terminator on
@@ -193,19 +185,7 @@ function rawDelimiter(payloads: string[]): string {
 
 function compile(fxc: string, temp: string, shader: Shader): Uint8Array {
   const out = join(temp, `${shader.entry}.dxbc`);
-  const args = [
-    fxc,
-    "/nologo",
-    "/T",
-    shader.target,
-    "/E",
-    shader.entry,
-    "/O3",
-    "/WX",
-    "/Fo",
-    out,
-    hlslPath,
-  ];
+  const args = [fxc, "/nologo", "/T", shader.target, "/E", shader.entry, "/O3", "/WX", "/Fo", out, hlslPath];
   const result = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
   if ((result.exitCode ?? 1) !== 0) {
     const stdout = new TextDecoder().decode(result.stdout).trim();

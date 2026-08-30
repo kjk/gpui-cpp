@@ -139,8 +139,7 @@ bool KeyChordParse(Str spec, KeyChord* out) {
         bool secondary = base::StrEqI(part, "secondary");
         if (base::StrEqI(part, "ctrl") || (secondary && !GPUI_OS_MAC)) {
             c.ctrl = true;
-        } else if (base::StrEqI(part, "cmd") ||
-                   base::StrEqI(part, "super") ||
+        } else if (base::StrEqI(part, "cmd") || base::StrEqI(part, "super") ||
                    base::StrEqI(part, "win")) {
             c.platform = true;
         }
@@ -152,8 +151,7 @@ bool KeyChordParse(Str spec, KeyChord* out) {
             c.platform = true;
         }
 #endif
-        else if (base::StrEqI(part, "alt") ||
-                   base::StrEqI(part, "option")) {
+        else if (base::StrEqI(part, "alt") || base::StrEqI(part, "option")) {
             c.alt = true;
         } else if (base::StrEqI(part, "shift")) {
             c.shift = true;

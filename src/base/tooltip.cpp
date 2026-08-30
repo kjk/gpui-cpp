@@ -166,8 +166,7 @@ void TooltipOverlay::Hide(Ctx* cx) {
     }
 }
 
-void TooltipOverlay::OnShow(TooltipOverlay* self, Ctx* cx,
-                            const TickEvent*) {
+void TooltipOverlay::OnShow(TooltipOverlay* self, Ctx* cx, const TickEvent*) {
     self->showTask = 0;
     if (!self->hasPending) {
         return;
@@ -181,8 +180,7 @@ void TooltipOverlay::OnShow(TooltipOverlay* self, Ctx* cx,
     Notify(cx);
 }
 
-void TooltipOverlay::OnHide(TooltipOverlay* self, Ctx* cx,
-                            const TickEvent*) {
+void TooltipOverlay::OnHide(TooltipOverlay* self, Ctx* cx, const TickEvent*) {
     self->hideTask = 0;
     TooltipRequestClear(&self->content);
     self->hasContent = false;
@@ -225,10 +223,9 @@ El* TooltipOverlay::Render(TooltipOverlay* self, Ctx* cx) {
                                         self->previousBounds,
                                         self->content.triggerBounds)
             : TooltipTransition::Enter(self->animationEpoch);
-    El* rendered = self->renderer
-                       ? self->renderer(cx, view, transition,
-                                        self->rendererData)
-                       : Div(cx->a)->Child(view);
+    El* rendered = self->renderer ? self->renderer(cx, view, transition,
+                                                   self->rendererData)
+                                  : Div(cx->a)->Child(view);
     TooltipPositioner* positioner =
         TooltipPositioner::New(cx, self->content.triggerBounds);
     if (self->content.hasPreferredPlacement) {
@@ -241,8 +238,8 @@ El* TooltipOverlay::Render(TooltipOverlay* self, Ctx* cx) {
 
 TooltipPositioner* TooltipPositioner::New(Ctx* cx, Bounds triggerBounds) {
     TooltipPositioner* out = ArenaNew<TooltipPositioner>(cx->a);
-    out->positioner =
-        Positioner::Side(cx, triggerBounds)->Margin(kTooltipWindowMargin);
+    out->positioner = Positioner::Side(cx, triggerBounds)
+                          ->Margin(kTooltipWindowMargin);
     return out;
 }
 

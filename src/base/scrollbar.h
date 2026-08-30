@@ -248,9 +248,8 @@ struct PrepaintState {
     int statesLen = 0;
 };
 
-AxisPrepaintState ScrollbarPrepaintAxis(Axis axis, Bounds track,
-                                        float offset, float containerSize,
-                                        float contentSize,
+AxisPrepaintState ScrollbarPrepaintAxis(Axis axis, Bounds track, float offset,
+                                        float containerSize, float contentSize,
                                         const ScrollbarThumbStyle& style);
 
 struct Scrollbar {
@@ -269,25 +268,21 @@ struct Scrollbar {
     // it should now be and the caller stores it, rather than the box moving
     // itself.
     static El* New(Ctx* cx, Str id, float scrollY, float scrollX,
-                   Listener onScroll,
-                   ScrollAxis axis = ScrollAxis::Vertical);
+                   Listener onScroll, ScrollAxis axis = ScrollAxis::Vertical);
     static El* New(Ctx* cx, Str id, float scrollY, float scrollX,
                    Listener onScroll, ScrollAxis axis, ScrollbarMode mode);
 
     // The renderer-backed form of ScrollableElement::scrollbar: preserve the
     // caller's element as the viewport and attach the integrated scroll
     // handle/bar behavior to it. New(...) is Apply(...) with a fresh Div.
-    static El* Apply(Ctx* cx, El* element, Str id, float scrollY,
-                     float scrollX, Listener onScroll,
-                     ScrollAxis axis = ScrollAxis::Vertical);
-    static El* Apply(Ctx* cx, El* element, Str id, float scrollY,
-                     float scrollX, Listener onScroll, ScrollAxis axis,
-                     ScrollbarMode mode);
+    static El* Apply(Ctx* cx, El* element, Str id, float scrollY, float scrollX,
+                     Listener onScroll, ScrollAxis axis = ScrollAxis::Vertical);
+    static El* Apply(Ctx* cx, El* element, Str id, float scrollY, float scrollX,
+                     Listener onScroll, ScrollAxis axis, ScrollbarMode mode);
 
     // Source `Scrollbar::styles`, represented as a direct immutable style
     // value instead of a Rust build closure.
-    static El* ApplyStyles(Ctx* cx, El* element,
-                           const ScrollbarStyles& styles);
+    static El* ApplyStyles(Ctx* cx, El* element, const ScrollbarStyles& styles);
 
     // The vertical case, which is most of them.
     static El* Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll);

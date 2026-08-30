@@ -114,8 +114,7 @@ static uint32_t LabelLower(uint32_t c) {
     if (c >= 'A' && c <= 'Z') {
         return c + 0x20;
     }
-    if ((c >= 0x00c0 && c <= 0x00d6) ||
-        (c >= 0x00d8 && c <= 0x00de)) {
+    if ((c >= 0x00c0 && c <= 0x00d6) || (c >= 0x00d8 && c <= 0x00de)) {
         return c + 0x20;
     }
     // Latin Extended-A is predominantly alternating upper/lower pairs.
@@ -216,8 +215,7 @@ static int LabelHighlightRanges(const Label* label, Str full, int totalLength,
         // Rust advances one byte from the match and then moves to the next
         // character boundary, which deliberately retains overlapping hits.
         search = match + 1;
-        while (search < full.len &&
-               ((uint8_t)full.s[search] & 0xc0) == 0x80) {
+        while (search < full.len && ((uint8_t)full.s[search] & 0xc0) == 0x80) {
             search++;
         }
         if (search >= full.len) {
@@ -327,8 +325,7 @@ El* Label::IntoEl() {
     Str shown = masked ? LabelMasked(a, full) : full;
 
     int spanCap = shown.len + 1;
-    TextSpan* spans =
-        (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * spanCap);
+    TextSpan* spans = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * spanCap);
     int nSpans = LabelSpans(this, full, shown, th, spans, spanCap);
     El* styled = TextEl(a, shown);
     if (nSpans > 0) {

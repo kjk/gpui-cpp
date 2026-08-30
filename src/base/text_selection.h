@@ -29,8 +29,7 @@ struct TextSelectionContentKey {
     uint64_t Value() const { return raw; }
 };
 
-inline bool operator==(TextSelectionContentKey a,
-                       TextSelectionContentKey b) {
+inline bool operator==(TextSelectionContentKey a, TextSelectionContentKey b) {
     return a.raw == b.raw;
 }
 
@@ -153,8 +152,9 @@ struct TextSelectionEvent {
 using TextSelectionFocusFn = void (*)(void* user, Window* window, App* app);
 using TextSelectionClearFn = void (*)(void* user, App* app);
 using TextSelectionCopyFn = int (*)(void* user, App* app, char* out, int cap);
-using TextSelectionContentKeyFn = bool (*)(
-    void* user, Point point, const App* app, TextSelectionContentKey* out);
+using TextSelectionContentKeyFn = bool (*)(void* user, Point point,
+                                           const App* app,
+                                           TextSelectionContentKey* out);
 
 struct TextSelectionParticipantState;
 

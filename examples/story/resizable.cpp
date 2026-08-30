@@ -58,7 +58,8 @@ static El* PanelBox(Ctx* cx, const char* text) {
 
 static El* Frame(Ctx* cx, float h) {
     Arena* a = cx->a;
-    return Div(a)->FlexCol()->W(kFill)->H(h)->Border(1, ThemeNow(cx->app).border);
+    return Div(a)->FlexCol()->W(kFill)->H(h)->Border(1, ThemeNow(cx->app)
+                                                            .border);
 }
 
 El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {

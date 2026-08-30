@@ -153,11 +153,7 @@ El* GroupBox::IntoEl() {
         }
         box->Child(titleBox);
     }
-    El* content = Div(a)
-                      ->FlexCol()
-                      ->W(kFill)
-                      ->Gap(16)
-                      ->Fg(th.groupBoxFg);
+    El* content = Div(a)->FlexCol()->W(kFill)->Gap(16)->Fg(th.groupBoxFg);
     content->Radius(contentRadius >= 0 ? contentRadius : th.radius);
     if (variant == GroupBoxVariant::Fill) {
         content->Bg(th.groupBox);

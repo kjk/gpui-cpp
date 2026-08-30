@@ -33,52 +33,51 @@ struct ResolvedScrollbarThumb {
 
 static ResolvedScrollbarThumb ResolveThumb(
     const ScrollbarThumbStyle& state, const ScrollbarThumbStyle& local,
-    const ScrollbarThumbStyle& globalState,
-    const ScrollbarThumbStyle& global, Background defaultBackground,
-    float defaultWidth, float defaultInset, float defaultRadius) {
+    const ScrollbarThumbStyle& globalState, const ScrollbarThumbStyle& global,
+    Background defaultBackground, float defaultWidth, float defaultInset,
+    float defaultRadius) {
     ResolvedScrollbarThumb out;
-    out.background = state.hasBackground
-                         ? state.background
-                         : (local.hasBackground
-                                ? local.background
-                                : (globalState.hasBackground
-                                       ? globalState.background
-                                       : (global.hasBackground
-                                              ? global.background
-                                              : defaultBackground)));
-    out.width = state.hasWidth
-                    ? state.width
-                    : (local.hasWidth
-                           ? local.width
-                           : (globalState.hasWidth
-                                  ? globalState.width
-                                  : (global.hasWidth ? global.width
-                                                     : defaultWidth)));
-    out.inset = state.hasInset
-                    ? state.inset
-                    : (local.hasInset
-                           ? local.inset
-                           : (globalState.hasInset
-                                  ? globalState.inset
-                                  : (global.hasInset ? global.inset
-                                                     : defaultInset)));
-    out.radius = state.hasRadius
-                     ? state.radius
-                     : (local.hasRadius
-                            ? local.radius
-                            : (globalState.hasRadius
-                                   ? globalState.radius
-                                   : (global.hasRadius ? global.radius
-                                                       : defaultRadius)));
-    out.minLength = state.hasMinLength
-                        ? state.minLength
-                        : (local.hasMinLength
-                               ? local.minLength
-                               : (globalState.hasMinLength
-                                      ? globalState.minLength
-                                      : (global.hasMinLength
-                                             ? global.minLength
-                                             : 48.f)));
+    out.background =
+        state.hasBackground
+            ? state.background
+            : (local.hasBackground
+                   ? local.background
+                   : (globalState.hasBackground
+                          ? globalState.background
+                          : (global.hasBackground ? global.background
+                                                  : defaultBackground)));
+    out.width =
+        state.hasWidth
+            ? state.width
+            : (local.hasWidth
+                   ? local.width
+                   : (globalState.hasWidth
+                          ? globalState.width
+                          : (global.hasWidth ? global.width : defaultWidth)));
+    out.inset =
+        state.hasInset
+            ? state.inset
+            : (local.hasInset
+                   ? local.inset
+                   : (globalState.hasInset
+                          ? globalState.inset
+                          : (global.hasInset ? global.inset : defaultInset)));
+    out.radius =
+        state.hasRadius
+            ? state.radius
+            : (local.hasRadius ? local.radius
+                               : (globalState.hasRadius
+                                      ? globalState.radius
+                                      : (global.hasRadius ? global.radius
+                                                          : defaultRadius)));
+    out.minLength =
+        state.hasMinLength
+            ? state.minLength
+            : (local.hasMinLength
+                   ? local.minLength
+                   : (globalState.hasMinLength
+                          ? globalState.minLength
+                          : (global.hasMinLength ? global.minLength : 48.f)));
     return out;
 }
 
@@ -86,34 +85,34 @@ static void ResolveScrollbarStyles(El* box, const ScrollbarStyles& local,
                                    const ScrollbarStyles& global,
                                    Rgba foreground) {
     box->scrollThemeSet = true;
-    box->scrollTrack = ResolveTrackBackground(
-        local.track, local.track, global.track, global.track);
+    box->scrollTrack = ResolveTrackBackground(local.track, local.track,
+                                              global.track, global.track);
     box->scrollTrackHover = ResolveTrackBackground(
         local.trackHover, local.track, global.trackHover, global.track);
     box->scrollTrackActive = ResolveTrackBackground(
         local.trackActive, local.track, global.trackActive, global.track);
-    box->scrollTrackBorder = ResolveTrackBorder(
-        local.track, local.track, global.track, global.track);
+    box->scrollTrackBorder = ResolveTrackBorder(local.track, local.track,
+                                                global.track, global.track);
     box->scrollTrackHoverBorder = ResolveTrackBorder(
         local.trackHover, local.track, global.trackHover, global.track);
     box->scrollTrackActiveBorder = ResolveTrackBorder(
         local.trackActive, local.track, global.trackActive, global.track);
-    box->scrollTrackWidth = local.track.hasWidth
-                                ? local.track.width
-                                : (global.track.hasWidth ? global.track.width
-                                                         : 16.f);
+    box->scrollTrackWidth =
+        local.track.hasWidth
+            ? local.track.width
+            : (global.track.hasWidth ? global.track.width : 16.f);
 
     Background normalDefault(RgbaOpacity(foreground, 0.35f));
     Background activeDefault(RgbaOpacity(foreground, 0.55f));
     ResolvedScrollbarThumb normal =
         ResolveThumb(local.thumb, local.thumb, global.thumb, global.thumb,
                      normalDefault, 6, 4, 0);
-    ResolvedScrollbarThumb hover = ResolveThumb(
-        local.thumbHover, local.thumb, global.thumbHover, global.thumb,
-        activeDefault, 8, 4, 0);
-    ResolvedScrollbarThumb active = ResolveThumb(
-        local.thumbActive, local.thumb, global.thumbActive, global.thumb,
-        activeDefault, 8, 4, 0);
+    ResolvedScrollbarThumb hover =
+        ResolveThumb(local.thumbHover, local.thumb, global.thumbHover,
+                     global.thumb, activeDefault, 8, 4, 0);
+    ResolvedScrollbarThumb active =
+        ResolveThumb(local.thumbActive, local.thumb, global.thumbActive,
+                     global.thumb, activeDefault, 8, 4, 0);
     box->scrollThumb = normal.background;
     box->scrollThumbHover = hover.background;
     box->scrollThumbActive = active.background;
@@ -190,9 +189,9 @@ float ScrollbarThumbPos(float track, float thumb, float offset, float container,
     return ScrollbarThumbPos(track, thumb, offset, container, content, 0);
 }
 
-AxisPrepaintState ScrollbarPrepaintAxis(
-    Axis axis, Bounds track, float offset, float containerSize,
-    float contentSize, const ScrollbarThumbStyle& style) {
+AxisPrepaintState ScrollbarPrepaintAxis(Axis axis, Bounds track, float offset,
+                                        float containerSize, float contentSize,
+                                        const ScrollbarThumbStyle& style) {
     AxisPrepaintState out;
     out.axis = axis;
     out.barHitbox = track;
@@ -306,17 +305,16 @@ El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
     return Apply(cx, Div(cx->a), id, scrollY, scrollX, onScroll, axis, mode);
 }
 
-El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY,
-                     float scrollX, Listener onScroll, ScrollAxis axis) {
+El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY, float scrollX,
+                     Listener onScroll, ScrollAxis axis) {
     const BaseTheme* theme = BaseThemeGlobal(cx->app);
     ScrollbarMode mode =
         theme ? theme->scrollbar.mode : ScrollbarMode::Scrolling;
     return Apply(cx, element, id, scrollY, scrollX, onScroll, axis, mode);
 }
 
-El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY,
-                     float scrollX, Listener onScroll, ScrollAxis axis,
-                     ScrollbarMode mode) {
+El* Scrollbar::Apply(Ctx* cx, El* element, Str id, float scrollY, float scrollX,
+                     Listener onScroll, ScrollAxis axis, ScrollbarMode mode) {
     El* box = ApplyScrollbarTheme(cx, element ? element : Div(cx->a))
                   ->ScrollMode(mode);
     // Each axis is asked for on its own: a box that only scrolls down still

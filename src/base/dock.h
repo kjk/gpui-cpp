@@ -41,8 +41,12 @@ struct NodeId {
     uint64_t AsU64() const { return value; }
 };
 
-inline bool operator==(NodeId a, NodeId b) { return a.value == b.value; }
-inline bool operator!=(NodeId a, NodeId b) { return !(a == b); }
+inline bool operator==(NodeId a, NodeId b) {
+    return a.value == b.value;
+}
+inline bool operator!=(NodeId a, NodeId b) {
+    return !(a == b);
+}
 
 struct PanelId {
     uint64_t value = 0;
@@ -54,8 +58,12 @@ struct PanelId {
     uint64_t AsU64() const { return value; }
 };
 
-inline bool operator==(PanelId a, PanelId b) { return a.value == b.value; }
-inline bool operator!=(PanelId a, PanelId b) { return !(a == b); }
+inline bool operator==(PanelId a, PanelId b) {
+    return a.value == b.value;
+}
+inline bool operator!=(PanelId a, PanelId b) {
+    return !(a == b);
+}
 
 // The four places a Dock can be. Center is the DockArea's own item, which is
 // not a Dock and never closes.
@@ -92,7 +100,7 @@ struct DropPlaceholderBounds {
     Size size = {};
 
     static DropPlaceholderBounds ForPlacement(Bounds bounds,
-                                               const Placement* placement);
+                                              const Placement* placement);
     Bounds In(Bounds parent) const {
         return {parent.x + origin.x, parent.y + origin.y, size.w, size.h};
     }

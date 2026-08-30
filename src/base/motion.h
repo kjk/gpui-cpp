@@ -172,8 +172,8 @@ MotionStep<T> MotionAdvance(MotionState<T>* st, T target, const Motion& m,
     }
     float elapsedMs = (float)((now - st->startedAt) * 1000.0);
     float progress = MotionProgress(m, elapsedMs);
-    T sampled = motion::Interpolate<T>::Between(
-        st->from, st->target, MotionSample(m, progress));
+    T sampled = motion::Interpolate<T>::Between(st->from, st->target,
+                                                MotionSample(m, progress));
     if (!MotionEq(st->target, target)) {
         // The target moved: carry on from where the last one had got to.
         st->from = sampled;

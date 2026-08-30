@@ -12,9 +12,8 @@ RadioStyles& RadioStyles::Disabled(const StateStyle& style) {
     return *this;
 }
 
-El* Radio::New(Ctx* cx, Str id, bool checked, bool disabled,
-               Listener onChange, const RadioStyles* styles,
-               const StateStyle* instance) {
+El* Radio::New(Ctx* cx, Str id, bool checked, bool disabled, Listener onChange,
+               const RadioStyles* styles, const StateStyle* instance) {
     Arena* a = cx->a;
     El* e = Div(a)
                 ->PathClick(id)

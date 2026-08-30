@@ -38,8 +38,8 @@ struct PopoverStory {
 // render_item: `ListItem::new(ix).child(format!("Item {}", ix.row))`.
 static component::ListItem* PopListItem(Ctx* cx, void*, int, int row, int) {
     return component::ListItem::New(
-        cx,
-        StoryTxt(cx, StoryFmt(cx, "Item %d", row), 14, ThemeNow(cx->app).foreground));
+        cx, StoryTxt(cx, StoryFmt(cx, "Item %d", row), 14,
+                     ThemeNow(cx->app).foreground));
 }
 
 // Kbd::format, as menu.cpp spells it: the platform's own shortcut text.

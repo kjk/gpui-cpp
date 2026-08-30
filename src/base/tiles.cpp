@@ -637,8 +637,8 @@ void TileContext::BringToFront() const {
 void TileContext::ToggleZoom() const {
     const TileItem* item = Item();
     if (state && item) {
-        state->zoomedPanel = state->zoomedPanel == item->panel ? -1
-                                                               : item->panel;
+        state->zoomedPanel =
+            state->zoomedPanel == item->panel ? -1 : item->panel;
     }
 }
 
@@ -653,8 +653,8 @@ void TileContext::Close() const {
     TilesRemove(state, ix);
 }
 
-bool snap_edge(float edge, const float* candidates, int count,
-               float threshold, float* out) {
+bool snap_edge(float edge, const float* candidates, int count, float threshold,
+               float* out) {
     return TileSnapEdge(edge, candidates, count, threshold, out);
 }
 

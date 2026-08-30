@@ -543,12 +543,12 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
                 sk->CustomLabel(component::SankeyLabel::New(value));
                 if (node.growth != kTslaNoGrowth) {
                     bool up = node.growth >= 0;
-                    sk->CustomLabel(component::SankeyLabel::New(
-                                        StoryFmt(cx, "%s %+.2f%%",
-                                                 up ? "\xE2\x96\xB2"
-                                                    : "\xE2\x96\xBC",
-                                                 (double)node.growth))
-                                        .Color(up ? th.success : th.danger));
+                    sk->CustomLabel(
+                        component::SankeyLabel::New(
+                            StoryFmt(cx, "%s %+.2f%%",
+                                     up ? "\xE2\x96\xB2" : "\xE2\x96\xBC",
+                                     (double)node.growth))
+                            .Color(up ? th.success : th.danger));
                 }
                 sk->CustomLabel(component::SankeyLabel::New(Str(node.name))
                                     .Color(th.mutedFg));

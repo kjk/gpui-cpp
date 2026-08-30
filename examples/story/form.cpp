@@ -66,8 +66,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
     const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
-        self->namePrefix =
-            component::SelectState::New(cx->app);
+        self->namePrefix = component::SelectState::New(cx->app);
         if (component::SelectState* st = self->namePrefix.Get(cx)) {
             component::SearchableListSelectOnly(st->List(), 0);
         }

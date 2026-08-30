@@ -102,8 +102,7 @@ struct DateRangePreset {
     LocalDate end = {};
     intptr_t arg = 0;
 
-    static DateRangePreset Single(Str label, LocalDate date,
-                                  intptr_t arg = 0);
+    static DateRangePreset Single(Str label, LocalDate date, intptr_t arg = 0);
     static DateRangePreset Range(Str label, LocalDate start, LocalDate end,
                                  intptr_t arg = 0);
 };
@@ -135,14 +134,12 @@ struct DatePickerState {
 
     static void OnCalendar(DatePickerState* self, Ctx* cx,
                            const CalendarEvent* ev);
-    static void OnToggle(DatePickerState* self, Ctx* cx,
-                         const ClickEvent* ev);
+    static void OnToggle(DatePickerState* self, Ctx* cx, const ClickEvent* ev);
     static void OnOpenChange(DatePickerState* self, Ctx* cx,
                              const ClickEvent* ev, intptr_t open);
     static void OnDismiss(DatePickerState* self, Ctx* cx,
                           const MouseUpEvent* ev);
-    static void OnClear(DatePickerState* self, Ctx* cx,
-                        const ClickEvent* ev);
+    static void OnClear(DatePickerState* self, Ctx* cx, const ClickEvent* ev);
 };
 
 Entity<DatePickerState> DatePickerStateNew(Ctx* cx, bool range = false);
@@ -157,8 +154,8 @@ void DatePickerStateSetNumberOfMonths(DatePickerState* state, int count,
                                       Ctx* cx = nullptr);
 void DatePickerStateSetFirstDayOfWeek(DatePickerState* state, int weekday,
                                       Ctx* cx = nullptr);
-void DatePickerStateSetDisabledMatcher(DatePickerState* state,
-                                       Matcher matcher, Ctx* cx = nullptr);
+void DatePickerStateSetDisabledMatcher(DatePickerState* state, Matcher matcher,
+                                       Ctx* cx = nullptr);
 void DatePickerStateSetYearRange(DatePickerState* state, int minYear,
                                  int maxYear, Ctx* cx = nullptr);
 void DatePickerStateSelectPreset(DatePickerState* state,

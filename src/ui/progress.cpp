@@ -82,9 +82,9 @@ El* Progress::IntoEl() {
                               MotionNew(kProgressMotionMs));
         indicator->WFrac(v / 100.f);
     }
-    El* root = gpui::Progress::New(cx, id.s ? id : StrL("progress"), value,
-                                   loading)
-                   ->W(w);
+    El* root =
+        gpui::Progress::New(cx, id.s ? id : StrL("progress"), value, loading)
+            ->W(w);
     return root->Child(gpui::ProgressTrack::New(cx)
                            ->W(w)
                            ->H(h)

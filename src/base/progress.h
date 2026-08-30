@@ -15,8 +15,7 @@ namespace gpui {
 float ProgressClampValue(float value);
 
 struct Progress {
-    static El* New(Ctx* cx, Str id, float value = 0,
-                   bool indeterminate = false,
+    static El* New(Ctx* cx, Str id, float value = 0, bool indeterminate = false,
                    Str accessibilityLabel = {});
 };
 

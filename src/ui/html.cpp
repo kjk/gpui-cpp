@@ -76,8 +76,7 @@ Str Minifier::Minify(Arena* a, Str source) {
     bool whitespace = precedingWhitespace;
     Str raw = {};
     while (at < source.len) {
-        if (base::StrStartsWithI(Str(source.s + at, source.len - at),
-                                 "<!--")) {
+        if (base::StrStartsWithI(Str(source.s + at, source.len - at), "<!--")) {
             int end = at + 4;
             while (end + 2 < source.len &&
                    !(source.s[end] == '-' && source.s[end + 1] == '-' &&
@@ -123,10 +122,9 @@ Str Minifier::Minify(Arena* a, Str source) {
                 nameEnd++;
             }
             Str name(source.s + nameAt, nameEnd - nameAt);
-            if (!close && (base::StrEqI(name, "pre") ||
-                           base::StrEqI(name, "textarea") ||
-                           base::StrEqI(name, "script") ||
-                           base::StrEqI(name, "style"))) {
+            if (!close &&
+                (base::StrEqI(name, "pre") || base::StrEqI(name, "textarea") ||
+                 base::StrEqI(name, "script") || base::StrEqI(name, "style"))) {
                 raw = name;
             } else if (close && raw.s && base::StrEqI(name, raw)) {
                 raw = {};
@@ -326,8 +324,7 @@ static Str HtmlAttrRaw(Str attrs, const char* name) {
             at++; // nothing consumed: step over the odd byte
             continue;
         }
-        bool match = nl == nameLen &&
-                     base::StrEqI(Str(attrs.s + ns, nl), name);
+        bool match = nl == nameLen && base::StrEqI(Str(attrs.s + ns, nl), name);
         while (at < attrs.len && HtmlIsSpace(attrs.s[at])) {
             at++;
         }
@@ -432,8 +429,8 @@ static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
         base::StrEqI(n, "dd") || base::StrEqI(n, "summary") ||
         base::StrEqI(n, "figcaption")) {
         *kind = MdKind::Paragraph;
-    } else if (n.len == 2 && base::StrStartsWithI(n, "h") &&
-               n.s[1] >= '1' && n.s[1] <= '6') {
+    } else if (n.len == 2 && base::StrStartsWithI(n, "h") && n.s[1] >= '1' &&
+               n.s[1] <= '6') {
         *kind = MdKind::Heading;
         *level = (uint8_t)(n.s[1] - '0');
     } else if (base::StrEqI(n, "blockquote")) {
@@ -642,7 +639,7 @@ struct HtmlBuild {
     bool raw = false;
     // html5ever's open-element stack is a Vec. Arena-backed segments keep the
     // same shape here without imposing a port-only nesting depth.
-    ArenaVec<HtmlOpen> stack {};
+    ArenaVec<HtmlOpen> stack{};
 };
 
 static MdNode* HtmlNewNode(HtmlBuild* b, MdKind k) {

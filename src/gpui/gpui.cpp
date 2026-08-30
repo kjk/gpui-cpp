@@ -733,8 +733,7 @@ El* El::Shadows(const BoxShadow* values, int count) {
         count > 0x7fffffff / (int)sizeof(BoxShadow)) {
         return this;
     }
-    BoxShadow* copy =
-        (BoxShadow*)Alloc(arena, count * (int)sizeof(BoxShadow));
+    BoxShadow* copy = (BoxShadow*)Alloc(arena, count * (int)sizeof(BoxShadow));
     if (!copy) {
         return this;
     }
@@ -820,15 +819,16 @@ enum class ScrollbarPaintState : uint8_t {
 static Background ScrollbarThumbBg(const El* e, const RuntimeStyle& th,
                                    ScrollbarPaintState state, float alpha) {
     if (!e->scrollThemeSet) {
-        return ScrollbarThumbBg(th, state == ScrollbarPaintState::HoverThumb ||
-                                        state == ScrollbarPaintState::Active,
+        return ScrollbarThumbBg(th,
+                                state == ScrollbarPaintState::HoverThumb ||
+                                    state == ScrollbarPaintState::Active,
                                 alpha);
     }
-    Background c = state == ScrollbarPaintState::Active
-                       ? e->scrollThumbActive
-                       : (state == ScrollbarPaintState::HoverThumb
-                              ? e->scrollThumbHover
-                              : e->scrollThumb);
+    Background c =
+        state == ScrollbarPaintState::Active
+            ? e->scrollThumbActive
+            : (state == ScrollbarPaintState::HoverThumb ? e->scrollThumbHover
+                                                        : e->scrollThumb);
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
@@ -849,7 +849,7 @@ static Background ScrollbarBarBg(const El* e, const RuntimeStyle& th,
                 state == ScrollbarPaintState::HoverThumb
             ? e->scrollTrackActive
             : (state == ScrollbarPaintState::HoverBar ? e->scrollTrackHover
-                                                       : e->scrollTrack);
+                                                      : e->scrollTrack);
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
@@ -902,8 +902,7 @@ static float ScrollbarThumbInset(const El* e, ScrollbarPaintState state) {
                       : e->scrollThumbInset);
 }
 
-static float ScrollbarThumbMinLength(const El* e,
-                                     ScrollbarPaintState state) {
+static float ScrollbarThumbMinLength(const El* e, ScrollbarPaintState state) {
     if (!e->scrollThemeSet) return 48.f;
     return state == ScrollbarPaintState::Active
                ? e->scrollThumbActiveMinLength
@@ -2153,16 +2152,35 @@ static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
 static uint8_t ElTextWeight(const El* e) {
     uint8_t w = kFontWeightNormal;
     switch ((FontWeight)e->style.fontWeight) {
-        case FontWeight::Thin: w = kFontWeightThin; break;
-        case FontWeight::ExtraLight: w = kFontWeightExtraLight; break;
-        case FontWeight::Light: w = kFontWeightLight; break;
-        case FontWeight::Normal: w = kFontWeightExplicitNormal; break;
-        case FontWeight::Medium: w = kFontWeightMedium; break;
-        case FontWeight::Semibold: w = kFontWeightSemibold; break;
-        case FontWeight::Bold: w = kFontWeightBold; break;
-        case FontWeight::ExtraBold: w = kFontWeightExtraBold; break;
-        case FontWeight::Black: w = kFontWeightBlack; break;
-        default: break;
+        case FontWeight::Thin:
+            w = kFontWeightThin;
+            break;
+        case FontWeight::ExtraLight:
+            w = kFontWeightExtraLight;
+            break;
+        case FontWeight::Light:
+            w = kFontWeightLight;
+            break;
+        case FontWeight::Normal:
+            w = kFontWeightExplicitNormal;
+            break;
+        case FontWeight::Medium:
+            w = kFontWeightMedium;
+            break;
+        case FontWeight::Semibold:
+            w = kFontWeightSemibold;
+            break;
+        case FontWeight::Bold:
+            w = kFontWeightBold;
+            break;
+        case FontWeight::ExtraBold:
+            w = kFontWeightExtraBold;
+            break;
+        case FontWeight::Black:
+            w = kFontWeightBlack;
+            break;
+        default:
+            break;
     }
     if (e->style.fontWeight == 0 && e->style.fontBold) {
         w = kFontWeightBold;
@@ -3273,8 +3291,8 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     if (e->style.fontWeight || e->style.fontBold || e->style.fontSemibold ||
         e->style.fontMedium) {
         for (El* c = e->first; c; c = c->next) {
-            if (c->style.fontWeight || c->style.fontBold || c->style.fontSemibold ||
-                c->style.fontMedium) {
+            if (c->style.fontWeight || c->style.fontBold ||
+                c->style.fontSemibold || c->style.fontMedium) {
                 continue;
             }
             c->style.fontWeight = e->style.fontWeight;
@@ -3590,8 +3608,7 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
         int had = lc->tree.ChildCount(prev);
         if (i < had) {
             taffy::NodeId old = lc->tree.ChildAtIndex(prev, i);
-            LayoutNode* oldRec =
-                (LayoutNode*)lc->tree.GetNodeContext(old);
+            LayoutNode* oldRec = (LayoutNode*)lc->tree.GetNodeContext(old);
             if (oldRec && oldRec->kind == (uint8_t)c->kind) {
                 taffy::NodeId now = LayoutSync(sc, c, old, true, false);
                 if (now != old) {
@@ -3723,29 +3740,29 @@ AnchoredPosition AnchoredSideResolve(Bounds trigger, Size popup, Size view,
     // positioner.rs order: preferred, opposite, then the roomier side.
     int placed = 0;
     if (preferred == 3) {
-        placed = popup.w <= availRight
-                     ? 3
-                     : (popup.w <= availLeft
-                            ? 2
-                            : (availRight >= availLeft ? 3 : 2));
+        placed =
+            popup.w <= availRight
+                ? 3
+                : (popup.w <= availLeft ? 2
+                                        : (availRight >= availLeft ? 3 : 2));
     } else if (preferred == 2) {
-        placed = popup.w <= availLeft
-                     ? 2
-                     : (popup.w <= availRight
-                            ? 3
-                            : (availLeft >= availRight ? 2 : 3));
+        placed =
+            popup.w <= availLeft
+                ? 2
+                : (popup.w <= availRight ? 3
+                                         : (availLeft >= availRight ? 2 : 3));
     } else if (preferred == 1) {
-        placed = popup.h <= availBelow
-                     ? 1
-                     : (popup.h <= availAbove
-                            ? 0
-                            : (availBelow >= availAbove ? 1 : 0));
+        placed =
+            popup.h <= availBelow
+                ? 1
+                : (popup.h <= availAbove ? 0
+                                         : (availBelow >= availAbove ? 1 : 0));
     } else {
-        placed = popup.h <= availAbove
-                     ? 0
-                     : (popup.h <= availBelow
-                            ? 1
-                            : (availBelow >= availAbove ? 1 : 0));
+        placed =
+            popup.h <= availAbove
+                ? 0
+                : (popup.h <= availBelow ? 1
+                                         : (availBelow >= availAbove ? 1 : 0));
     }
 
     float alignedX = trigger.x;
@@ -3784,16 +3801,14 @@ AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
     Bounds bounds = BoundsAt(at, popup);
     if (anchor == Anchor::TopCenter || anchor == Anchor::BottomCenter) {
         bounds.x -= popup.w * 0.5f;
-    } else if (anchor == Anchor::TopRight ||
-               anchor == Anchor::BottomRight ||
+    } else if (anchor == Anchor::TopRight || anchor == Anchor::BottomRight ||
                anchor == Anchor::RightCenter) {
         bounds.x -= popup.w;
     }
     if (anchor == Anchor::BottomLeft || anchor == Anchor::BottomCenter ||
         anchor == Anchor::BottomRight) {
         bounds.y -= popup.h;
-    } else if (anchor == Anchor::LeftCenter ||
-               anchor == Anchor::RightCenter) {
+    } else if (anchor == Anchor::LeftCenter || anchor == Anchor::RightCenter) {
         bounds.y -= popup.h * 0.5f;
     }
     AnchoredPosition out = {};
@@ -3805,8 +3820,7 @@ AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
 // anchored under or over its trigger, one centred on it, and the
 // `relative(f)` half of a left/right inset. Each moves a subtree that taffy
 // has already sized and placed.
-static void PlaceAnchored(El* e, float viewW, float viewH,
-                          float clientInset) {
+static void PlaceAnchored(El* e, float viewW, float viewH, float clientInset) {
     for (El* c = e->first; c; c = c->next) {
         PlaceAnchored(c, viewW, viewH, clientInset);
         const Style& s = c->style;
@@ -3918,10 +3932,10 @@ static void PlaceAnchored(El* e, float viewW, float viewH,
                     ? AnchoredCornerResolve(s.anchor, s.positionerPoint,
                                             {c->w, c->h}, {viewW, viewH},
                                             margin)
-                    : AnchoredSideResolve(
-                          s.positionerTrigger, {c->w, c->h}, {viewW, viewH},
-                          margin, s.positionerPlacement, s.positionerAlign,
-                          s.anchorGap);
+                    : AnchoredSideResolve(s.positionerTrigger, {c->w, c->h},
+                                          {viewW, viewH}, margin,
+                                          s.positionerPlacement,
+                                          s.positionerAlign, s.anchorGap);
             ax = resolved.bounds.x;
             ay = resolved.bounds.y;
         }
@@ -3986,8 +4000,7 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
     // reuses its slots. A child in a list cannot be dropped first — that
     // shifts the indices the caller is walking.
     if (lc->hasRoot) {
-        LayoutNode* rec =
-            (LayoutNode*)lc->tree.GetNodeContext(lc->root);
+        LayoutNode* rec = (LayoutNode*)lc->tree.GetNodeContext(lc->root);
         if (!rec || rec->kind != (uint8_t)e->kind) {
             LayoutDropSubtree(lc, lc->root);
             lc->hasRoot = false;
@@ -5173,8 +5186,7 @@ bool LineSafeClipBottom(const LineSpan* spans, int count, float boxBottom,
         }
         float bottom = span.top + span.lineHeight;
         while (bottom <= span.bottom + epsilon) {
-            if (bottom <= clip + epsilon &&
-                (!found || bottom > lastBottom)) {
+            if (bottom <= clip + epsilon && (!found || bottom > lastBottom)) {
                 found = true;
                 lastBottom = bottom;
                 lastHeight = span.lineHeight;
@@ -5215,8 +5227,7 @@ static Bounds BoundsIntersect(Bounds a, Bounds b) {
     float y = a.y > b.y ? a.y : b.y;
     float right = a.Right() < b.Right() ? a.Right() : b.Right();
     float bottom = a.Bottom() < b.Bottom() ? a.Bottom() : b.Bottom();
-    return {x, y, right > x ? right - x : 0.f,
-            bottom > y ? bottom - y : 0.f};
+    return {x, y, right > x ? right - x : 0.f, bottom > y ? bottom - y : 0.f};
 }
 
 static Bounds HitMaskedBounds(PaintCtx* ctx, Bounds bounds) {
@@ -5258,8 +5269,8 @@ static bool ResolveLineClamp(PaintCtx* ctx, El* e, float* clipBottom) {
         LineClampEvent ev = {clamped};
         ListenerCall(ctx->app, ctx->window, e->onLineClamp, &ev);
     }
-    bool tighter = clamped &&
-                   LineSafeClipBottom(spans.els, spans.len, boxBottom,
+    bool tighter =
+        clamped && LineSafeClipBottom(spans.els, spans.len, boxBottom,
                                       contentBottom, clipBottom);
     VecReset(spans);
     return tighter;
@@ -5319,8 +5330,7 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
                 off = e->text.len;
             }
             int n = 0;
-            if (off > 0 &&
-                (e->caretLineEndAffinity || off == e->text.len)) {
+            if (off > 0 && (e->caretLineEndAffinity || off == e->text.len)) {
                 // The trailing edge of everything before it.
                 n = TextLayoutRangeRects(tl, e->text, 0, off, r, 32);
                 if (n > 0) {
@@ -5456,11 +5466,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // recorded a hit rect, and whatever was around it if it did not.
     int outerHitParent = ctx->hitParent;
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
-        e->clickAction || e->onHover.IsValid() ||
-        e->onMouseMove.IsValid() || e->onMouseDown.IsValid() ||
-        e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
-        e->onMouseDownOut.IsValid() || e->onMouseUpOut.IsValid() ||
-        e->drag.IsValid() || e->onDrop.IsValid() ||
+        e->clickAction || e->onHover.IsValid() || e->onMouseMove.IsValid() ||
+        e->onMouseDown.IsValid() || e->onMouseUp.IsValid() ||
+        e->onDragMove.IsValid() || e->onMouseDownOut.IsValid() ||
+        e->onMouseUpOut.IsValid() || e->drag.IsValid() || e->onDrop.IsValid() ||
         e->cursor != CursorKind::Arrow || e->slider || e->stopMouseDown ||
         e->suppressTextSelection || e->scrollMaskAxes) {
         HitRect hr;
@@ -5909,9 +5918,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                          e->style.overflowX == Overflow::Scroll &&
                          e->contentW > e->w + 1.f && e->w > 0;
     bool onBand =
-        overBox &&
-        ((canVertical && ctx->mouseX >= e->x + e->w - trackW) ||
-         (canHorizontal && ctx->mouseY >= e->y + e->h - trackW));
+        overBox && ((canVertical && ctx->mouseX >= e->x + e->w - trackW) ||
+                    (canHorizontal && ctx->mouseY >= e->y + e->h - trackW));
     bool barVisible = !e->noScrollbar;
     float barAlpha = 1.f;
     float barSlide = 0.f;
@@ -5997,8 +6005,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                                   : (onBar ? ScrollbarPaintState::HoverBar
                                            : ScrollbarPaintState::Normal));
         float inset = ScrollbarThumbInset(e, state);
-        float rawThumbH = ScrollbarThumbSize(
-            e->h, e->h, e->contentH, ScrollbarThumbMinLength(e, state));
+        float rawThumbH = ScrollbarThumbSize(e->h, e->h, e->contentH,
+                                             ScrollbarThumbMinLength(e, state));
         float thumbH = rawThumbH - inset * 2.f;
         if (thumbH < 0) thumbH = 0;
         float wantW = ScrollbarThumbWidth(e, state);
@@ -6009,14 +6017,14 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                             barMotion.expand, TimeNow(), &ctx->wantsAnimFrame);
         }
         float thumbX = e->x + e->w - thumbW - inset;
-        float thumbY = e->y + inset +
-                       ScrollbarThumbPos(e->h, rawThumbH, e->scrollY, e->h,
-                                         e->contentH);
+        float thumbY =
+            e->y + inset +
+            ScrollbarThumbPos(e->h, rawThumbH, e->scrollY, e->h, e->contentH);
         // The track, which every default theme leaves transparent — the band
         // is Rust's WIDTH and reaches the whole length of the box. A vertical
         // bar slides in from the right, so the slide is along x.
-        FillBackground(ctx, e->x + e->w - trackW + barSlide, e->y, trackW,
-                       e->h, 0, nullptr,
+        FillBackground(ctx, e->x + e->w - trackW + barSlide, e->y, trackW, e->h,
+                       0, nullptr,
                        ScrollbarBarBg(e, barTheme, state, barAlpha));
         FillBackground(ctx, thumbX + barSlide, thumbY, thumbW, thumbH,
                        ThumbRadius(e, barTheme, state, thumbW, thumbH), nullptr,
@@ -6032,8 +6040,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         float normalRaw = ScrollbarThumbSize(
             e->w, e->w, e->contentW,
             ScrollbarThumbMinLength(e, ScrollbarPaintState::Normal));
-        float normalStart = ScrollbarThumbPos(e->w, normalRaw, e->scrollX,
-                                              e->w, e->contentW, marginEnd);
+        float normalStart = ScrollbarThumbPos(e->w, normalRaw, e->scrollX, e->w,
+                                              e->contentW, marginEnd);
         float normalLength = normalRaw - normalInset * 2.f;
         if (normalLength < 0) normalLength = 0;
         bool pointerOnThumb =
@@ -6048,8 +6056,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                                   : (onBar ? ScrollbarPaintState::HoverBar
                                            : ScrollbarPaintState::Normal));
         float inset = ScrollbarThumbInset(e, state);
-        float rawThumbW = ScrollbarThumbSize(
-            e->w, e->w, e->contentW, ScrollbarThumbMinLength(e, state));
+        float rawThumbW = ScrollbarThumbSize(e->w, e->w, e->contentW,
+                                             ScrollbarThumbMinLength(e, state));
         float thumbW = rawThumbW - inset * 2.f;
         if (thumbW < 0) thumbW = 0;
         float wantH = ScrollbarThumbWidth(e, state);
@@ -6064,8 +6072,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                        ScrollbarThumbPos(e->w, rawThumbW, e->scrollX, e->w,
                                          e->contentW, marginEnd);
         // A horizontal bar slides up from the bottom, so its slide is along y.
-        FillBackground(ctx, e->x, e->y + e->h - trackW + barSlide, e->w,
-                       trackW, 0, nullptr,
+        FillBackground(ctx, e->x, e->y + e->h - trackW + barSlide, e->w, trackW,
+                       0, nullptr,
                        ScrollbarBarBg(e, barTheme, state, barAlpha));
         FillBackground(ctx, thumbX, thumbY + barSlide, thumbW, thumbH,
                        ThumbRadius(e, barTheme, state, thumbH, thumbW), nullptr,
@@ -6383,8 +6391,7 @@ static bool TextHitOwnerMatches(const TextHit& hit, EntityId owner) {
     return !owner.IsValid() || hit.owner == owner;
 }
 
-static bool AtomReached(PaintCtx* ctx, int i, int a, int b,
-                        EntityId owner) {
+static bool AtomReached(PaintCtx* ctx, int i, int a, int b, EntityId owner) {
     const TextHit& t = ctx->texts[i];
     const SelBlock* blk = t.src ? t.src->block : nullptr;
     const TextHit* prev = i > 0 ? &ctx->texts[i - 1] : nullptr;
@@ -6463,8 +6470,7 @@ static int CopyTextHitsFiltered(PaintCtx* ctx, int a, int b, int scope,
         // block walk below emits; the piece of text after it is empty. Plain
         // skips it: `Paragraph::text` lays the children's text end to end and
         // an image child has none.
-        bool atom =
-            t.atom && src && t.src && AtomReached(ctx, i, a, b, owner);
+        bool atom = t.atom && src && t.src && AtomReached(ctx, i, a, b, owner);
         if ((lo >= hi || !t.text.s) && !atom) {
             sep = sep || spansGap;
             continue;
@@ -6539,9 +6545,8 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
     return CopyTextHitsFiltered(ctx, a, b, scope, {}, out, cap, fmt);
 }
 
-int CopyTextHitsInEntity(PaintCtx* ctx, int a, int b, int scope,
-                         EntityId owner, char* out, int cap,
-                         SelectionFormat fmt) {
+int CopyTextHitsInEntity(PaintCtx* ctx, int a, int b, int scope, EntityId owner,
+                         char* out, int cap, SelectionFormat fmt) {
     return CopyTextHitsFiltered(ctx, a, b, scope, owner, out, cap, fmt);
 }
 

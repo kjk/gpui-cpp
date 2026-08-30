@@ -87,14 +87,13 @@ struct SearchableListDelegate {
     const SearchableListItem* Item(IndexPath path) const;
     bool Position(Str value, IndexPath* out) const;
     bool Matches(const SearchableListItem* value, Str query) const;
-    El* RenderItem(Ctx* cx, IndexPath path,
-                   const SearchableListItem* value, bool checked) const;
+    El* RenderItem(Ctx* cx, IndexPath path, const SearchableListItem* value,
+                   bool checked) const;
     El* RenderSectionHeader(Ctx* cx, int section) const;
     bool IsItemEnabled(IndexPath path, const SearchableListItem* value,
                        const App* app) const;
     bool IsItemChecked(IndexPath path, const SearchableListItem* value,
-                       const SearchableListState* state,
-                       const App* app) const;
+                       const SearchableListState* state, const App* app) const;
     void OnWillChange(SearchableListState* state,
                       const SearchableListChange* changes, int n) const;
     void OnConfirm(const SearchableListState* state, IndexPath path,

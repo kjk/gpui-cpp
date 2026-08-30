@@ -143,8 +143,8 @@ static void FrameBenchTick(Window* win, float secs) {
     logf(
         "frame-bench n=%d mean=%.3fms median=%.3fms p95=%.3fms min=%.3fms "
         "max=%.3fms",
-        n, sum / n, samples[n / 2], samples[(int)((float)n * 0.95f)], samples[0],
-        samples[n - 1]);
+        n, sum / n, samples[n / 2], samples[(int)((float)n * 0.95f)],
+        samples[0], samples[n - 1]);
     double sb = 0, sl = 0, sp = 0;
     for (int i = 0; i < n; i++) {
         sb += build[i];
@@ -448,9 +448,9 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         }
         if (s->scrollY != was && s->autoScroll.hasLastDrag) {
             bool affinity = false;
-            int offset = InputIndexForPosition(
-                s, &win->paint, s->autoScroll.lastDrag.x,
-                s->autoScroll.lastDrag.y, &affinity);
+            int offset =
+                InputIndexForPosition(s, &win->paint, s->autoScroll.lastDrag.x,
+                                      s->autoScroll.lastDrag.y, &affinity);
             InputSelectToWithAffinity(s, win->app, win, offset, affinity);
         }
         WindowRequestAnimationFrame(win);
@@ -1124,8 +1124,8 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
         InputFocus(s, win->app, win);
     }
     bool lineEndAffinity = false;
-    int offset = InputIndexForPosition(s, &win->paint, in.x, in.y,
-                                       &lineEndAffinity);
+    int offset =
+        InputIndexForPosition(s, &win->paint, in.x, in.y, &lineEndAffinity);
     // `M::on_click(..)`, which is go-to-definition and returns true when it
     // took the press — so the same click does not also move the caret.
     if (InputClickDefinition(s, win->app, win, offset,
@@ -1137,11 +1137,9 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
     } else if (in.clickCount == 2) {
         InputSelectWord(s, win->app, win, offset);
     } else if (in.modifiers.shift) {
-        InputSelectToWithAffinity(s, win->app, win, offset,
-                                  lineEndAffinity);
+        InputSelectToWithAffinity(s, win->app, win, offset, lineEndAffinity);
     } else {
-        InputMoveToWithAffinity(s, win->app, win, offset,
-                                lineEndAffinity);
+        InputMoveToWithAffinity(s, win->app, win, offset, lineEndAffinity);
     }
     s->selecting = true;
 }
@@ -1195,8 +1193,7 @@ static ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
             return &ctx->scrolls[i];
         }
         if (s.barX && ScrollsX(s) && x >= s.bounds.x && x <= s.bounds.Right() &&
-            y >= s.bounds.Bottom() - s.trackWidth &&
-            y <= s.bounds.Bottom()) {
+            y >= s.bounds.Bottom() - s.trackWidth && y <= s.bounds.Bottom()) {
             *horizontal = true;
             return &ctx->scrolls[i];
         }
@@ -1235,39 +1232,36 @@ static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
     float content = horizontal ? s->contentW : s->contentH;
     float origin = horizontal ? s->bounds.x : s->bounds.y;
     float at = horizontal ? x : y;
-    float marginEnd =
-        horizontal && s->barY && ScrollsY(*s) ? s->trackWidth : 0;
-    float rawThumb = ScrollbarThumbSize(track, track, content,
-                                        s->thumbMinLength);
-    float rawStart = origin + ScrollbarThumbPos(
-                                  track, rawThumb,
-                                  horizontal ? s->scrollX : s->scrollY, track,
-                                  content, marginEnd);
+    float marginEnd = horizontal && s->barY && ScrollsY(*s) ? s->trackWidth : 0;
+    float rawThumb =
+        ScrollbarThumbSize(track, track, content, s->thumbMinLength);
+    float rawStart =
+        origin + ScrollbarThumbPos(track, rawThumb,
+                                   horizontal ? s->scrollX : s->scrollY, track,
+                                   content, marginEnd);
     float thumbStart = rawStart + s->thumbInset;
     float thumbLength = rawThumb - s->thumbInset * 2.f;
     if (thumbLength < 0) thumbLength = 0;
-    bool crossInside = horizontal
-                           ? y <= s->bounds.Bottom() - s->thumbInset
-                           : x <= s->bounds.Right() - s->thumbInset;
-    bool onThumb = crossInside && at >= thumbStart &&
-                   at <= thumbStart + thumbLength;
+    bool crossInside = horizontal ? y <= s->bounds.Bottom() - s->thumbInset
+                                  : x <= s->bounds.Right() - s->thumbInset;
+    bool onThumb =
+        crossInside && at >= thumbStart && at <= thumbStart + thumbLength;
     if (!onThumb) {
         // The painted hover thumb is wider than the resting one. A press on
         // the extra pixels is still a grab, not a jump down the track.
-        rawThumb = ScrollbarThumbSize(track, track, content,
-                                      s->thumbHoverMinLength);
-        rawStart = origin + ScrollbarThumbPos(
-                                track, rawThumb,
-                                horizontal ? s->scrollX : s->scrollY, track,
-                                content, marginEnd);
+        rawThumb =
+            ScrollbarThumbSize(track, track, content, s->thumbHoverMinLength);
+        rawStart =
+            origin + ScrollbarThumbPos(track, rawThumb,
+                                       horizontal ? s->scrollX : s->scrollY,
+                                       track, content, marginEnd);
         float hoverStart = rawStart + s->thumbHoverInset;
         float hoverLength = rawThumb - s->thumbHoverInset * 2.f;
         if (hoverLength < 0) hoverLength = 0;
         bool hoverCross = horizontal
                               ? y <= s->bounds.Bottom() - s->thumbHoverInset
                               : x <= s->bounds.Right() - s->thumbHoverInset;
-        if (hoverCross && at >= hoverStart &&
-            at <= hoverStart + hoverLength) {
+        if (hoverCross && at >= hoverStart && at <= hoverStart + hoverLength) {
             onThumb = true;
             thumbStart = hoverStart;
             thumbLength = hoverLength;
@@ -1277,20 +1271,19 @@ static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
         // The pointer has already selected thumb_hover in prepaint. Resolve
         // that state's potentially different inset and minimum before
         // retaining the grab point.
-        rawThumb = ScrollbarThumbSize(track, track, content,
-                                      s->thumbHoverMinLength);
-        rawStart = origin + ScrollbarThumbPos(
-                                track, rawThumb,
-                                horizontal ? s->scrollX : s->scrollY, track,
-                                content, marginEnd);
+        rawThumb =
+            ScrollbarThumbSize(track, track, content, s->thumbHoverMinLength);
+        rawStart =
+            origin + ScrollbarThumbPos(track, rawThumb,
+                                       horizontal ? s->scrollX : s->scrollY,
+                                       track, content, marginEnd);
         thumbStart = rawStart + s->thumbHoverInset;
         thumbLength = rawThumb - s->thumbHoverInset * 2.f;
         if (thumbLength < 0) thumbLength = 0;
-        crossInside = horizontal
-                          ? y <= s->bounds.Bottom() - s->thumbHoverInset
-                          : x <= s->bounds.Right() - s->thumbHoverInset;
-        onThumb = crossInside && at >= thumbStart &&
-                  at <= thumbStart + thumbLength;
+        crossInside = horizontal ? y <= s->bounds.Bottom() - s->thumbHoverInset
+                                 : x <= s->bounds.Right() - s->thumbHoverInset;
+        onThumb =
+            crossInside && at >= thumbStart && at <= thumbStart + thumbLength;
     }
     if (onThumb) {
         win->scrollDragId = s->id;
@@ -1346,12 +1339,11 @@ static void ScrollbarDrag(Window* win, float x, float y) {
     float content = horizontal ? s->contentW : s->contentH;
     float origin = horizontal ? s->bounds.x : s->bounds.y;
     float at = horizontal ? x : y;
-    float rawThumb = ScrollbarThumbSize(track, track, content,
-                                        s->thumbActiveMinLength);
+    float rawThumb =
+        ScrollbarThumbSize(track, track, content, s->thumbActiveMinLength);
     float thumb = rawThumb - s->thumbActiveInset * 2.f;
     if (thumb < 0) thumb = 0;
-    float marginEnd =
-        horizontal && s->barY && ScrollsY(*s) ? s->trackWidth : 0;
+    float marginEnd = horizontal && s->barY && ScrollsY(*s) ? s->trackWidth : 0;
     float off = ScrollbarOffsetForDrag(at, win->scrollDragGrab, origin, track,
                                        thumb, track, content, marginEnd);
     ScrollbarEmit(win, s, horizontal ? off : s->scrollX,
@@ -1417,8 +1409,7 @@ static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt) {
 }
 
 static bool SemanticKeyStep(Window* win, int key, bool ctrl, bool alt) {
-    if (ctrl || alt || !win->focusId ||
-        (key != KeyUp && key != KeyDown)) {
+    if (ctrl || alt || !win->focusId || (key != KeyUp && key != KeyDown)) {
         return false;
     }
     for (int i = 0; i < win->focusEls.len; i++) {
@@ -1577,8 +1568,7 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         s->autoScroll.lastDrag = Point{x, y};
         s->autoScroll.hasLastDrag = true;
         bool affinity = false;
-        int offset =
-            InputIndexForPosition(s, &win->paint, x, y, &affinity);
+        int offset = InputIndexForPosition(s, &win->paint, x, y, &affinity);
         InputSelectToWithAffinity(s, win->app, win, offset, affinity);
         // A drag that has reached the edge of a field with somewhere to go
         // keeps scrolling it until the pointer comes back in. A single-line
@@ -1664,8 +1654,8 @@ static void HitChain(Window* win, float x, float y, Vec<int>* out) {
 // inside-out for the Bubble phase, stopping wherever a handler said to.
 // `pick` answers the handler an element registered, or an invalid Listener.
 template <typename Ev, typename Pick>
-static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
-                          Pick pick, bool stopMouseDown = false) {
+static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev, Pick pick,
+                          bool stopMouseDown = false) {
     win->stopPropagation = false;
     for (int k = chain.len - 1; k >= 0 && !win->stopPropagation; k--) {
         const HitRect& hr = win->paint.hits[chain[k]];
@@ -1700,8 +1690,7 @@ static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
 static void DispatchMouseDownOut(Window* win, const MouseDownEvent& in) {
     for (int i = 0; i < win->paint.hits.len; i++) {
         const HitRect& hr = win->paint.hits[i];
-        if (hr.onMouseDownOut.IsValid() &&
-            !hr.bounds.Contains({in.x, in.y})) {
+        if (hr.onMouseDownOut.IsValid() && !hr.bounds.Contains({in.x, in.y})) {
             ListenerCall(win->app, win, hr.onMouseDownOut, &in);
         }
     }
@@ -1736,9 +1725,11 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         HitChain(win, x, y, &chain);
         MouseDownEvent ev = in;
         DispatchChain(
-            win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
+            win, chain, &ev,
+            [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
-            }, true);
+            },
+            true);
         VecReset(chain);
         DispatchMouseDownOut(win, in);
         ClearPendingClick(win);
@@ -1830,9 +1821,11 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         HitChain(win, x, y, &chain);
         MouseDownEvent ev = in;
         DispatchChain(
-            win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
+            win, chain, &ev,
+            [](const HitRect& hr, DispatchPhase phase) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
-            }, true);
+            },
+            true);
         VecReset(chain);
     }
     DispatchMouseDownOut(win, in);
@@ -2066,9 +2059,8 @@ static bool ScrollMaskIsTopmost(Window* win, const ScrollRect& s, float x,
 
 #if !GPUI_OS_WASM
 static OngoingScroll* ScrollLockFor(Window* win, int id, Axis maskAxis) {
-    int* slotId = maskAxis == Axis::Horizontal
-                      ? &win->scrollLockHorizontalId
-                      : &win->scrollLockVerticalId;
+    int* slotId = maskAxis == Axis::Horizontal ? &win->scrollLockHorizontalId
+                                               : &win->scrollLockVerticalId;
     OngoingScroll* slot = maskAxis == Axis::Horizontal
                               ? &win->scrollLockHorizontal
                               : &win->scrollLockVertical;
@@ -2156,8 +2148,7 @@ static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
             Point horizontal = {};
             Point vertical = {};
             if (s.maskAxes & 1) {
-                horizontal =
-                    ScrollMaskDelta(win, s, in, Axis::Horizontal);
+                horizontal = ScrollMaskDelta(win, s, in, Axis::Horizontal);
             }
             if (s.maskAxes & 2) {
                 vertical = ScrollMaskDelta(win, s, in, Axis::Vertical);
@@ -2187,8 +2178,8 @@ static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
                 return;
             }
             if (takeY) {
-                float offY = ClampScroll(s.scrollY - vertical.y, s.contentH,
-                                         s.bounds.h);
+                float offY =
+                    ClampScroll(s.scrollY - vertical.y, s.contentH, s.bounds.h);
                 if (offY == s.scrollY) {
                     // Vertical scroll chaining: the parent gets the wheel at
                     // the edge or when this viewport has no overflow.

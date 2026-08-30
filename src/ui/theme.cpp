@@ -757,7 +757,6 @@ const Theme& ThemeNow(const App* app) {
     return ThemeGet(app) == ThemeMode::Dark ? ThemeDark(app) : ThemeLight(app);
 }
 
-
 SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
     SemanticThemeTokens out;
     SemanticColorTokens& c = out.colors;
@@ -849,16 +848,14 @@ void ThemeApplySemanticTokens(Theme* t, const SemanticThemeTokens& tokens) {
     // need the complete resolved snapshot retain SemanticThemeTokens.
 }
 
-
 void ThemeSyncBase(App* app) {
     if (!app) {
         return;
     }
     const Theme& ui = ThemeNow(app);
     BaseTheme base;
-    base.appearance = ui.mode == ThemeMode::Dark
-                          ? BaseThemeAppearance::Dark
-                          : BaseThemeAppearance::Light;
+    base.appearance = ui.mode == ThemeMode::Dark ? BaseThemeAppearance::Dark
+                                                 : BaseThemeAppearance::Light;
     base.tokens = ThemeSemanticTokens(ui, ThemeFontSize(app));
     base.scrollbar.mode = ScrollbarModeNow(app);
     base.scrollbar.motion = ScrollbarMotionFor(base.scrollbar.mode);
@@ -1089,46 +1086,65 @@ bool ThemeParseColor(Str s, Rgba* out) {
 // ─── the gradient grammar — color.rs parse_linear_gradient ───────────────
 
 static const ColorName kPublicColorNames[] = {
-    ColorName::Neutral, ColorName::Gray,    ColorName::Red,
-    ColorName::Orange,  ColorName::Amber,   ColorName::Yellow,
-    ColorName::Lime,    ColorName::Green,   ColorName::Emerald,
-    ColorName::Teal,    ColorName::Cyan,    ColorName::Sky,
-    ColorName::Blue,    ColorName::Indigo,  ColorName::Violet,
-    ColorName::Purple,  ColorName::Fuchsia, ColorName::Pink,
-    ColorName::Rose,
+    ColorName::Neutral, ColorName::Gray,   ColorName::Red,    ColorName::Orange,
+    ColorName::Amber,   ColorName::Yellow, ColorName::Lime,   ColorName::Green,
+    ColorName::Emerald, ColorName::Teal,   ColorName::Cyan,   ColorName::Sky,
+    ColorName::Blue,    ColorName::Indigo, ColorName::Violet, ColorName::Purple,
+    ColorName::Fuchsia, ColorName::Pink,   ColorName::Rose,
 };
 
 static const char* ColorNameText(ColorName name) {
     switch (name) {
-        case ColorName::White: return "white";
-        case ColorName::Black: return "black";
-        case ColorName::Neutral: return "neutral";
-        case ColorName::Gray: return "gray";
-        case ColorName::Red: return "red";
-        case ColorName::Orange: return "orange";
-        case ColorName::Amber: return "amber";
-        case ColorName::Yellow: return "yellow";
-        case ColorName::Lime: return "lime";
-        case ColorName::Green: return "green";
-        case ColorName::Emerald: return "emerald";
-        case ColorName::Teal: return "teal";
-        case ColorName::Cyan: return "cyan";
-        case ColorName::Sky: return "sky";
-        case ColorName::Blue: return "blue";
-        case ColorName::Indigo: return "indigo";
-        case ColorName::Violet: return "violet";
-        case ColorName::Purple: return "purple";
-        case ColorName::Fuchsia: return "fuchsia";
-        case ColorName::Pink: return "pink";
-        case ColorName::Rose: return "rose";
+        case ColorName::White:
+            return "white";
+        case ColorName::Black:
+            return "black";
+        case ColorName::Neutral:
+            return "neutral";
+        case ColorName::Gray:
+            return "gray";
+        case ColorName::Red:
+            return "red";
+        case ColorName::Orange:
+            return "orange";
+        case ColorName::Amber:
+            return "amber";
+        case ColorName::Yellow:
+            return "yellow";
+        case ColorName::Lime:
+            return "lime";
+        case ColorName::Green:
+            return "green";
+        case ColorName::Emerald:
+            return "emerald";
+        case ColorName::Teal:
+            return "teal";
+        case ColorName::Cyan:
+            return "cyan";
+        case ColorName::Sky:
+            return "sky";
+        case ColorName::Blue:
+            return "blue";
+        case ColorName::Indigo:
+            return "indigo";
+        case ColorName::Violet:
+            return "violet";
+        case ColorName::Purple:
+            return "purple";
+        case ColorName::Fuchsia:
+            return "fuchsia";
+        case ColorName::Pink:
+            return "pink";
+        case ColorName::Rose:
+            return "rose";
     }
     return "black";
 }
 
 const ColorName* ColorNameAll(int* count) {
     if (count) {
-        *count = (int)(sizeof(kPublicColorNames) /
-                       sizeof(kPublicColorNames[0]));
+        *count =
+            (int)(sizeof(kPublicColorNames) / sizeof(kPublicColorNames[0]));
     }
     return kPublicColorNames;
 }
@@ -1143,8 +1159,9 @@ bool ColorNameParse(Str value, ColorName* out) {
         *out = ColorName::Black;
         return true;
     }
-    for (int i = 0; i < (int)(sizeof(kPublicColorNames) /
-                              sizeof(kPublicColorNames[0])); i++) {
+    for (int i = 0;
+         i < (int)(sizeof(kPublicColorNames) / sizeof(kPublicColorNames[0]));
+         i++) {
         ColorName candidate = kPublicColorNames[i];
         if (base::StrEqI(value, ColorNameText(candidate))) {
             *out = candidate;
@@ -1263,8 +1280,7 @@ static bool ParseGradientDirection(Str dir, float* out) {
 // parse_linear_gradient_angle: `135deg`, or `to bottom right`.
 static bool ParseGradientAngle(Str angle, float* out) {
     angle = base::StrTrimAscii(angle);
-    if (angle.len > 3 &&
-        base::StrEqI(Str(angle.s + angle.len - 3, 3), "deg")) {
+    if (angle.len > 3 && base::StrEqI(Str(angle.s + angle.len - 3, 3), "deg")) {
         Str num = base::StrTrimAscii(Str(angle.s, angle.len - 3));
         float deg = ParseFloatOr(num.s, num.len, 1e30f);
         if (deg >= 1e29f) {
@@ -1279,8 +1295,8 @@ static bool ParseGradientAngle(Str angle, float* out) {
         return true;
     }
     if (base::StrStartsWithI(angle, "to ")) {
-        return ParseGradientDirection(base::StrTrimAscii(Str(angle.s + 3, angle.len - 3)),
-                                      out);
+        return ParseGradientDirection(
+            base::StrTrimAscii(Str(angle.s + 3, angle.len - 3)), out);
     }
     return false;
 }
@@ -1320,8 +1336,7 @@ static bool ParseColorStop(Str stop, float defaultPct, ColorStop* out) {
 
 static bool ParseLinearGradient(Str s, Background* out) {
     s = base::StrTrimAscii(s);
-    if (!base::StrStartsWithI(s, "linear-gradient(") ||
-        s.s[s.len - 1] != ')') {
+    if (!base::StrStartsWithI(s, "linear-gradient(") || s.s[s.len - 1] != ')') {
         return false;
     }
     const int kPrefix = 16; // "linear-gradient("
@@ -1971,8 +1986,7 @@ int ThemeRegistryLoadStr(App* app, Str json) {
         cfg.colors = JsonGet(t, "colors");
         cfg.fontSize = JsonFloatOr(t, "font.size", 0);
         cfg.fontFamily = JsonString(JsonGet(t, "font.family"));
-        cfg.monoFontFamily =
-            JsonString(JsonGet(t, "mono_font.family"));
+        cfg.monoFontFamily = JsonString(JsonGet(t, "mono_font.family"));
         cfg.monoFontSize = JsonFloatOr(t, "mono_font.size", 0);
         cfg.radius = JsonFloatOr(t, "radius", -1);
         cfg.radiusLg = JsonFloatOr(t, "radius.lg", -1);
@@ -2068,9 +2082,8 @@ static void ApplyShadowLevel(const JsonValue* obj, const char* key,
     for (; item; item = v->kind == JsonKind::Array ? item->next : nullptr) {
         if (item->kind != JsonKind::Object) continue;
         if (v->kind == JsonKind::Array) VecAppend(*level, BoxShadow{});
-        BoxShadow* out = v->kind == JsonKind::Array
-                             ? &(*level)[level->len - 1]
-                             : &(*level)[0];
+        BoxShadow* out = v->kind == JsonKind::Array ? &(*level)[level->len - 1]
+                                                    : &(*level)[0];
         ApplyFloatField(item, "x", &out->x);
         ApplyFloatField(item, "y", &out->y);
         ApplyFloatField(item, "blur", &out->blur);
@@ -2134,8 +2147,7 @@ bool SemanticThemeConfigParse(const JsonValue* value,
         ParseStringOption(colors, "accent", &out->colors.accent);
         ParseStringOption(colors, "accent_foreground",
                           &out->colors.accentForeground);
-        ParseStringOption(colors, "destructive",
-                          &out->colors.destructive);
+        ParseStringOption(colors, "destructive", &out->colors.destructive);
         ParseStringOption(colors, "destructive_foreground",
                           &out->colors.destructiveForeground);
         ParseStringOption(colors, "border", &out->colors.border);
@@ -2167,8 +2179,7 @@ bool SemanticThemeConfigParse(const JsonValue* value,
         ParseTextStyleConfig(typography, "md", &out->typography.md);
         ParseTextStyleConfig(typography, "lg", &out->typography.lg);
         ParseTextStyleConfig(typography, "xl", &out->typography.xl);
-        ParseTextStyleConfig(typography, "mono_md",
-                             &out->typography.monoMd);
+        ParseTextStyleConfig(typography, "mono_md", &out->typography.monoMd);
     }
     if (const JsonValue* shadow = JsonGet(value, "shadow")) {
         out->shadow.sm = JsonGet(shadow, "sm");
@@ -2199,8 +2210,7 @@ static void ApplyConfiguredTextStyle(const SemanticTextStyleConfig& value,
     if (value.weight.has) out->weight = value.weight.value;
 }
 
-static void ApplyConfiguredShadow(const JsonValue* value,
-                                  Vec<BoxShadow>* out) {
+static void ApplyConfiguredShadow(const JsonValue* value, Vec<BoxShadow>* out) {
     if (!value) return;
     JsonValue wrapper;
     wrapper.kind = JsonKind::Object;
@@ -2217,20 +2227,19 @@ bool SemanticThemeConfig::ApplyTo(SemanticThemeTokens* out) const {
     ApplyConfiguredColor(colors.background, &out->colors.background);
     ApplyConfiguredColor(colors.foreground, &out->colors.foreground);
     ApplyConfiguredColor(colors.surface, &out->colors.surface);
-    ApplyConfiguredColor(colors.surfaceForeground,
-                         &out->colors.surfaceForeground);
+    ApplyConfiguredColor(colors.surfaceForeground, &out->colors
+                                                        .surfaceForeground);
     ApplyConfiguredColor(colors.primary, &out->colors.primary);
-    ApplyConfiguredColor(colors.primaryForeground,
-                         &out->colors.primaryForeground);
+    ApplyConfiguredColor(colors.primaryForeground, &out->colors
+                                                        .primaryForeground);
     ApplyConfiguredColor(colors.secondary, &out->colors.secondary);
-    ApplyConfiguredColor(colors.secondaryForeground,
-                         &out->colors.secondaryForeground);
+    ApplyConfiguredColor(colors.secondaryForeground, &out->colors
+                                                          .secondaryForeground);
     ApplyConfiguredColor(colors.muted, &out->colors.muted);
-    ApplyConfiguredColor(colors.mutedForeground,
-                         &out->colors.mutedForeground);
+    ApplyConfiguredColor(colors.mutedForeground, &out->colors.mutedForeground);
     ApplyConfiguredColor(colors.accent, &out->colors.accent);
-    ApplyConfiguredColor(colors.accentForeground,
-                         &out->colors.accentForeground);
+    ApplyConfiguredColor(colors.accentForeground, &out->colors
+                                                       .accentForeground);
     ApplyConfiguredColor(colors.destructive, &out->colors.destructive);
     ApplyConfiguredColor(colors.destructiveForeground,
                          &out->colors.destructiveForeground);
@@ -2352,10 +2361,10 @@ bool ThemeApplySemanticConfigStr(App* app, ThemeMode mode, Str json,
     // point into the document. They move to the registry's own arena — where
     // every theme's name already lives — so the answer outlives the parse.
     if (ok && registry && registry->arena) {
-        tokens.typography.sans =
-            StrDup(registry->arena, tokens.typography.sans);
-        tokens.typography.mono =
-            StrDup(registry->arena, tokens.typography.mono);
+        tokens.typography
+            .sans = StrDup(registry->arena, tokens.typography.sans);
+        tokens.typography
+            .mono = StrDup(registry->arena, tokens.typography.mono);
     }
     ArenaDelete(a);
     if (!ok) {

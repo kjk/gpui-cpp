@@ -15,8 +15,7 @@ struct PanelBuildContext {
 };
 
 using PanelRegistryBuild = DockPanelDef (*)(const PanelBuildContext* context,
-                                            Window* win, App* app,
-                                            void* data);
+                                            Window* win, App* app, void* data);
 
 struct PanelRegistryEntry {
     Str name = {};

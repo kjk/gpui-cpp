@@ -97,21 +97,18 @@ El* DialogButtonProps::RenderOk(Ctx* cx, Str id, bool outline) const {
     return button->IntoEl();
 }
 El* DialogButtonProps::RenderCancel(Ctx* cx, Str id) const {
-    Button* button = Button::New(cx, id)
-                         ->Label(cancelText.s ? cancelText
-                                             : Tr("Dialog.cancel"))
-                         ->OnClickAction(action::Cancel());
+    Button* button =
+        Button::New(cx, id)
+            ->Label(cancelText.s ? cancelText : Tr("Dialog.cancel"))
+            ->OnClickAction(action::Cancel());
     ApplyDialogButtonVariant(button, cancelVariant);
     return button->IntoEl();
 }
 
 DialogContent* DialogContent::New(Ctx* cx) {
     DialogContent* part = ArenaNew<DialogContent>(cx->a);
-    part->root = Div(cx->a)
-                     ->FlexCol()
-                     ->W(kFill)
-                     ->Flex1()
-                     ->Radius(ThemeNow(cx->app).radiusLg);
+    part->root = Div(cx->a)->FlexCol()->W(kFill)->Flex1()->Radius(
+        ThemeNow(cx->app).radiusLg);
     return part;
 }
 DialogContent* DialogContent::Child(El* child) {
@@ -137,10 +134,8 @@ El* DialogHeader::IntoEl() {
 
 DialogTitle* DialogTitle::New(Ctx* cx) {
     DialogTitle* part = ArenaNew<DialogTitle>(cx->a);
-    part->root = gpui::DialogTitle::New(cx)
-                     ->Font(16)
-                     ->Semibold()
-                     ->LineHeight(1.f);
+    part->root =
+        gpui::DialogTitle::New(cx)->Font(16)->Semibold()->LineHeight(1.f);
     return part;
 }
 DialogTitle* DialogTitle::Child(El* child) {
@@ -169,12 +164,9 @@ El* DialogDescription::IntoEl() {
 DialogFooter* DialogFooter::New(Ctx* cx) {
     DialogFooter* part = ArenaNew<DialogFooter>(cx->a);
     float radius = ThemeNow(cx->app).radiusLg;
-    part->root = Div(cx->a)
-                     ->FlexRow()
-                     ->Gap(8)
-                     ->JustifyEnd()
-                     ->LineHeight(1.f)
-                     ->Corners(0, 0, radius, radius);
+    part->root =
+        Div(cx->a)->FlexRow()->Gap(8)->JustifyEnd()->LineHeight(1.f)->Corners(
+            0, 0, radius, radius);
     return part;
 }
 DialogFooter* DialogFooter::Child(El* child) {
@@ -389,14 +381,13 @@ El* Dialog::Header() {
         head->Child(ic);
     }
     if (description.s && description.len > 0) {
-        head->Child(
-            DialogDescription::New(cx)
-                ->Child(TextEl(a, description)
-                            ->Font(14)
-                            ->Fg(th.mutedFg)
-                            ->Wrap()
-                            ->W(kFill))
-                ->IntoEl());
+        head->Child(DialogDescription::New(cx)
+                        ->Child(TextEl(a, description)
+                                    ->Font(14)
+                                    ->Fg(th.mutedFg)
+                                    ->Wrap()
+                                    ->W(kFill))
+                        ->IntoEl());
     }
     if (body) {
         head->Child(body);
@@ -437,11 +428,9 @@ El* Dialog::Actions() {
     // the top one's close x lit up the one behind it too.
     El* cancel = nullptr;
     if (buttonProps.showCancel) {
-        cancel = buttonProps.RenderCancel(
-            cx, LayerId(StrL("dialog-cancel")));
+        cancel = buttonProps.RenderCancel(cx, LayerId(StrL("dialog-cancel")));
     }
-    El* ok = buttonProps.RenderOk(cx, LayerId(StrL("dialog-ok")),
-                                  okOutline);
+    El* ok = buttonProps.RenderOk(cx, LayerId(StrL("dialog-ok")), okOutline);
 
     // Stacked, the primary action leads; in a row it sits at the end.
     if (footerVertical) {
@@ -535,15 +524,15 @@ El* Dialog::IntoEl(WinSize size) {
                     ->H(viewH)
                     ->FlexCol()
                     ->ItemsCenter()
-                     ->PadT((viewH * 0.1f + (float)layerIx * 16.f) * delta)
+                    ->PadT((viewH * 0.1f + (float)layerIx * 16.f) * delta)
                     ->Child(panel);
     Str trap = StrDup(a, fmt("dialog-%d", layerIx));
     // The escape and enter bindings, on the popup that traps the focus. They
     // run the same two handlers the Cancel and OK buttons carry, which is
     // what Rust's on_action pair does with a ClickEvent::default().
     if (keyboard) {
-        DialogBindKeys(cx, popup, trap, buttonProps.onCancel,
-                       buttonProps.onOk, buttonProps.onClose);
+        DialogBindKeys(cx, popup, trap, buttonProps.onCancel, buttonProps.onOk,
+                       buttonProps.onClose);
     }
     El* host = nullptr;
     if (alertHost) {

@@ -60,8 +60,8 @@ static const component::CommandItem kPopular[] = {
 // each keeps its own height inside the virtual list; a row here says how tall
 // it is, which is the same thing said in the other direction.
 static El* CompactRow(Ctx* cx, const component::CommandItem*) {
-    return Div(cx->a)->FlexRow()->W(kFill)->Child(
-        StoryTxt(cx, StrL("Compact custom row"), 14, ThemeNow(cx->app).foreground));
+    return Div(cx->a)->FlexRow()->W(kFill)->Child(StoryTxt(
+        cx, StrL("Compact custom row"), 14, ThemeNow(cx->app).foreground));
 }
 static El* ExpandedRow(Ctx* cx, const component::CommandItem*) {
     const Theme& th = ThemeNow(cx->app);

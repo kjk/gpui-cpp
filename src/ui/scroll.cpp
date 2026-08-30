@@ -87,8 +87,7 @@ El* ScrollableElement::VerticalScrollbar(Ctx* cx, El* element, Str id,
 }
 
 El* ScrollableElement::HorizontalScrollbar(Ctx* cx, El* element, Str id,
-                                           float scrollX,
-                                           Listener onScroll) {
+                                           float scrollX, Listener onScroll) {
     return Scrollbar(cx, element, id, 0, scrollX, onScroll,
                      ScrollbarAxis::Horizontal);
 }

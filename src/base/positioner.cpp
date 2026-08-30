@@ -6,8 +6,8 @@ ResolvedPosition PositionSide(Bounds trigger, Size popup, Size view,
                               float margin, const Placement* preferred,
                               Align align, float offset) {
     AnchoredPosition resolved = AnchoredSideResolve(
-        trigger, popup, view, margin,
-        preferred ? (int)*preferred : -1, (int)align, offset);
+        trigger, popup, view, margin, preferred ? (int)*preferred : -1,
+        (int)align, offset);
     ResolvedPosition out = {};
     out.bounds = resolved.bounds;
     out.placement = (Placement)resolved.placement;
@@ -15,8 +15,8 @@ ResolvedPosition PositionSide(Bounds trigger, Size popup, Size view,
     return out;
 }
 
-ResolvedPosition PositionCorner(Anchor anchor, Point at, Size popup,
-                                Size view, float margin) {
+ResolvedPosition PositionCorner(Anchor anchor, Point at, Size popup, Size view,
+                                float margin) {
     AnchoredPosition resolved =
         AnchoredCornerResolve(anchor, at, popup, view, margin);
     ResolvedPosition out = {};
@@ -86,8 +86,7 @@ El* Positioner::IntoEl() {
     s.positionerCorner = strategy == Strategy::Corner;
     s.positionerTrigger = trigger;
     s.positionerPoint = point;
-    s.positionerPlacement =
-        hasPlacement ? (int8_t)placement : (int8_t)-1;
+    s.positionerPlacement = hasPlacement ? (int8_t)placement : (int8_t)-1;
     s.positionerAlign = (uint8_t)align;
     s.anchor = anchor;
     s.anchorGap = offset;

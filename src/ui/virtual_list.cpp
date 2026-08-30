@@ -86,7 +86,7 @@ static El* ThemedDefaultRow(void* user, Ctx* cx, int ix) {
 // The caller's row builder takes no user pointer, so it is carried through
 // one — `Tree::item(..)`'s closure has the same shape and the same problem.
 static El* CallerRow(void* user, Ctx* cx, int ix) {
-    auto fn = (El* (*)(Ctx*, int))user;
+    auto fn = (El * (*)(Ctx*, int)) user;
     return fn(cx, ix);
 }
 

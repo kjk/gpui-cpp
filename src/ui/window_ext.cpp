@@ -203,8 +203,7 @@ int WindowNotificationCount(Ctx* cx) {
     return st ? st->items.len : 0;
 }
 
-void WindowRemoveNotifications(Ctx* cx,
-                               component::NotificationTypeId type) {
+void WindowRemoveNotifications(Ctx* cx, component::NotificationTypeId type) {
     WindowLayers* l = LayersOf(cx);
     if (!l || !l->notifications.IsValid()) {
         return;
@@ -215,8 +214,7 @@ void WindowRemoveNotifications(Ctx* cx,
     }
 }
 
-void WindowRemoveNotification1(Ctx* cx,
-                               component::NotificationTypeId type,
+void WindowRemoveNotification1(Ctx* cx, component::NotificationTypeId type,
                                uint32_t key) {
     WindowLayers* l = LayersOf(cx);
     if (!l || !l->notifications.IsValid()) {

@@ -8,7 +8,9 @@ namespace gpui {
 
 namespace component {
 
-Notification Notification::New() { return {}; }
+Notification Notification::New() {
+    return {};
+}
 
 Notification Notification::Info(Str value) {
     Notification n;
@@ -246,8 +248,7 @@ int NotificationSystemCount() {
 }
 
 int NotificationSystemCount(const App* app) {
-    NotificationSystemState* state =
-        AppGlobalGet<NotificationSystemState>(app);
+    NotificationSystemState* state = AppGlobalGet<NotificationSystemState>(app);
     return state ? state->entries.len : 0;
 }
 
@@ -319,8 +320,8 @@ void NotificationSystemDismissByType(NotificationTypeId type, Window* win) {
     NotificationSystemDismissIdentity(type, false, 0, win);
 }
 
-void NotificationSystemDismissByTypeKey(NotificationTypeId type,
-                                         uint32_t key, Window* win) {
+void NotificationSystemDismissByTypeKey(NotificationTypeId type, uint32_t key,
+                                        Window* win) {
     NotificationSystemDismissIdentity(type, true, key, win);
 }
 
@@ -388,8 +389,8 @@ void NotificationListState::OnSystemResponse(NotificationListState* self,
     NotificationSystemState* state = SysState(cx->app);
     if (state) {
         for (int i = 0; i < state->entries.len; i++) {
-            if (state->entries[i].id == id &&
-                state->entries[i].win == cx->win) {
+            if (state->entries[i].id == id && state->entries[i]
+                                                      .win == cx->win) {
                 onClick = state->entries[i].onClick;
                 SysEntryRemoveAt(state, i);
                 break;
@@ -598,9 +599,9 @@ static void NotificationDismissIdentity(NotificationListState* s, Ctx* cx,
     }
     for (int i = 0; i < s->items.len; i++) {
         const NotificationItem& item = s->items[i];
-        bool matches = item.identityType == type &&
-                       (!hasKey || (item.identityHasKey &&
-                                    item.identityKey == key));
+        bool matches =
+            item.identityType == type &&
+            (!hasKey || (item.identityHasKey && item.identityKey == key));
         if (!matches) {
             continue;
         }
@@ -641,8 +642,8 @@ static bool NotificationAdvanceImpl(NotificationListState* s, Ctx* cx,
     // paints progress within Starting/Ending, so those ticks repaint too.
     bool animating = false;
     for (int i = 0; i < s->stack.entries.len; i++) {
-        animating = animating ||
-                    s->stack.entries[i].status != ToastStatus::Present;
+        animating = animating || s->stack.entries[i]
+                                         .status != ToastStatus::Present;
     }
     // Whatever the stack dropped goes from the list with it.
     for (int i = s->items.len - 1; i >= 0; i--) {
@@ -780,7 +781,7 @@ El* NotificationList::IntoEl() {
 
     // Group after applying the global visibility limit. A notification-level
     // placement creates a separate stable stack, exactly as grouped() does.
-    ArenaVec<int> groups[8] {};
+    ArenaVec<int> groups[8]{};
     int groupOrder[8] = {};
     int groupCount = 0;
     bool present[8] = {};
@@ -826,18 +827,16 @@ El* NotificationList::IntoEl() {
         bool expanded = s->stackHovered[aix] || s->stackFocused[aix];
 
         float* heights = (float*)Alloc(a, (int)sizeof(float) * group.len);
-        float* collapsedOff =
-            (float*)Alloc(a, (int)sizeof(float) * group.len);
-        float* expandedOff =
-            (float*)Alloc(a, (int)sizeof(float) * group.len);
+        float* collapsedOff = (float*)Alloc(a, (int)sizeof(float) * group.len);
+        float* expandedOff = (float*)Alloc(a, (int)sizeof(float) * group.len);
         for (int i = 0; i < group.len; i++) {
             const Notification& item = s->items[group[i]];
             heights[i] = item.measured.h > 0 ? item.measured.h : s->itemH;
         }
         float expandedH = 0;
         float collapsedH = ToastStackGeometry(
-            heights, group.len, kToastCollapsedPeek, kToastExpandedGap,
-            bottom, collapsedOff, expandedOff, &expandedH);
+            heights, group.len, kToastCollapsedPeek, kToastExpandedGap, bottom,
+            collapsedOff, expandedOff, &expandedH);
         Str anchorKey = StrDup(a, fmt("%d", aix));
         float stackH = SpringValue(
             cx, MotionId(StrL("notification-stack-height"), anchorKey),
@@ -859,8 +858,8 @@ El* NotificationList::IntoEl() {
         bool right = anchor == Anchor::TopRight ||
                      anchor == Anchor::RightCenter ||
                      anchor == Anchor::BottomRight;
-        bool center = anchor == Anchor::TopCenter ||
-                      anchor == Anchor::BottomCenter;
+        bool center =
+            anchor == Anchor::TopCenter || anchor == Anchor::BottomCenter;
         float left = right ? win.dipW - settings.width - settings.margins.right
                            : (center ? (win.dipW - settings.width) * 0.5f
                                      : settings.margins.left);
@@ -884,8 +883,7 @@ El* NotificationList::IntoEl() {
             Str key = StrDup(a, fmt("%d", item.id));
             float visible = SpringValue(
                 cx, MotionId(StrL("toast-visibility"), key),
-                (expanded || rank < kToastCollapsedVisible) ? 1.f : 0.f,
-                fade);
+                (expanded || rank < kToastCollapsedVisible) ? 1.f : 0.f, fade);
             if (visible <= 0.01f) {
                 continue;
             }
@@ -893,9 +891,9 @@ El* NotificationList::IntoEl() {
             // narrower it is than the front one. Both are the card's own
             // transitions, keyed on its id, so a stack that opens moves each
             // of them from wherever it had got to.
-            float off = SpringValue(
-                cx, MotionId(StrL("toast-offset"), key),
-                expanded ? expandedOff[i] : collapsedOff[i], geometry);
+            float off = SpringValue(cx, MotionId(StrL("toast-offset"), key),
+                                    expanded ? expandedOff[i] : collapsedOff[i],
+                                    geometry);
             float shrink = SpringValue(
                 cx, MotionId(StrL("toast-inset"), key),
                 expanded ? 0.f
@@ -908,7 +906,8 @@ El* NotificationList::IntoEl() {
             float transitionOpacity = 1.f;
             float transitionY = 0.f;
             if (entry.status == ToastStatus::Starting) {
-                float delta = (float)entry.elapsedMs / (float)kToastTransitionMs;
+                float delta =
+                    (float)entry.elapsedMs / (float)kToastTransitionMs;
                 if (delta > 1.f) delta = 1.f;
                 transitionOpacity = delta;
                 transitionY = (bottom ? 1.f : -1.f) * 96.f * (1.f - delta);
@@ -920,11 +919,9 @@ El* NotificationList::IntoEl() {
             }
 
             Listener close = ListenTo(
-                state, &NotificationListState::OnCloseClick,
-                (intptr_t)item.id);
+                state, &NotificationListState::OnCloseClick, (intptr_t)item.id);
             Listener click = ListenTo(
-                state, &NotificationListState::OnItemClick,
-                (intptr_t)item.id);
+                state, &NotificationListState::OnItemClick, (intptr_t)item.id);
             El* card = gpui::Toast::New(cx, StrL("notification"))
                            ->TransitionStatus(entry.status)
                            ->IntoEl()

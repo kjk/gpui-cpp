@@ -68,8 +68,8 @@ DateSelectionResult DatePickerSelectDate(bool range, LocalDate value,
 // The picker takes focus even when disabled — Rust tracks the handle either
 // way and only drops it out of tab traversal, so a click still lands on it.
 struct DatePicker {
-    static El* New(Ctx* cx, Str id, bool disabled = false,
-                   bool open = false, Listener onOpenChange = {});
+    static El* New(Ctx* cx, Str id, bool disabled = false, bool open = false,
+                   Listener onOpenChange = {});
 };
 } // namespace gpui
 #endif // GPUI_BASE_DATE_PICKER_H_

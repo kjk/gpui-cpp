@@ -60,16 +60,14 @@ static bool SamePoint(Point a, Point b) {
 static bool SameEndpoint(const TextSelectionEndpoint& a,
                          const TextSelectionEndpoint& b) {
     return a.entity == b.entity && a.hasEntity == b.hasEntity &&
-           SamePoint(a.point, b.point) &&
-           a.contentKey == b.contentKey &&
+           SamePoint(a.point, b.point) && a.contentKey == b.contentKey &&
            a.hasContentKey == b.hasContentKey;
 }
 
 static bool SameSnapshot(const TextSelectionSnapshot& a,
                          const TextSelectionSnapshot& b) {
     return SameEndpoint(a.anchor, b.anchor) &&
-           SameEndpoint(a.cursor, b.cursor) &&
-           a.selecting == b.selecting &&
+           SameEndpoint(a.cursor, b.cursor) && a.selecting == b.selecting &&
            a.hasWindowPoints == b.hasWindowPoints &&
            (!a.hasWindowPoints ||
             (SamePoint(a.windowPoints.anchor, b.windowPoints.anchor) &&
@@ -198,9 +196,8 @@ static bool ParticipantContains(const TextSelectionParticipantState* state,
             state->registration.bounds.Contains(point));
 }
 
-static TextSelectionParticipantState* ParticipantAt(Window* window,
-                                                     Point point,
-                                                     EntityId* outId) {
+static TextSelectionParticipantState* ParticipantAt(Window* window, Point point,
+                                                    EntityId* outId) {
     WindowSelection* selection = window ? window->sel : nullptr;
     if (!selection || !window->app) return nullptr;
     TextSelectionParticipantState* hit = nullptr;
@@ -221,35 +218,33 @@ static TextSelectionParticipantState* ParticipantAt(Window* window,
         Bounds bounds = state->registration.bounds;
         if (!first || bounds.y < first->registration.bounds.y ||
             (bounds.y == first->registration.bounds.y &&
-             state->registration.documentOrder <
-                 first->registration.documentOrder)) {
+             state->registration.documentOrder < first->registration
+                                                     .documentOrder)) {
             first = state;
             firstId = id;
         }
         if (bounds.y <= point.y &&
-            (!predecessor ||
-             bounds.y > predecessor->registration.bounds.y ||
+            (!predecessor || bounds.y > predecessor->registration.bounds.y ||
              (bounds.y == predecessor->registration.bounds.y &&
-              state->registration.documentOrder <
-                  predecessor->registration.documentOrder))) {
+              state->registration.documentOrder < predecessor->registration
+                                                      .documentOrder))) {
             predecessor = state;
             predecessorId = id;
         }
         if (ParticipantContains(state, point)) {
             float area = bounds.w * bounds.h;
             if (!hit || area < hitArea ||
-                (area == hitArea &&
-                 state->registration.documentOrder <
-                     hit->registration.documentOrder)) {
+                (area == hitArea && state->registration.documentOrder <
+                                        hit->registration.documentOrder)) {
                 hit = state;
                 hitId = id;
                 hitArea = area;
             }
         }
     }
-    TextSelectionParticipantState* result = hit ? hit : predecessor
-                                                        ? predecessor
-                                                        : first;
+    TextSelectionParticipantState* result = hit           ? hit
+                                            : predecessor ? predecessor
+                                                          : first;
     if (result && outId) {
         *outId = hit ? hitId : predecessor ? predecessorId : firstId;
     }
@@ -275,16 +270,14 @@ static TextSelectionEndpoint ParticipantEndpoint(
 }
 
 static bool ComputeParticipantSnapshot(TextSelectionParticipantState* receiver,
-                                       App* app,
-                                       TextSelectionSnapshot* out) {
+                                       App* app, TextSelectionSnapshot* out) {
     if (!receiver || !receiver->window || !receiver->window->sel ||
         !receiver->registered || !out) {
         return false;
     }
     WindowSelection* selection = receiver->window->sel;
-    if (!TextSelectionPublishes(&selection->gesture) ||
-        selection->anchor < 0 || selection->cursor < 0 ||
-        selection->anchor == selection->cursor ||
+    if (!TextSelectionPublishes(&selection->gesture) || selection->anchor < 0 ||
+        selection->cursor < 0 || selection->anchor == selection->cursor ||
         !selection->hasWindowPoints ||
         receiver->registration.scope != selection->activeScope) {
         return false;
@@ -295,12 +288,12 @@ static bool ComputeParticipantSnapshot(TextSelectionParticipantState* receiver,
     TextSelectionParticipantState* cursor =
         ParticipantAt(receiver->window, selection->cursorPoint, &cursorId);
     if (!anchor || !cursor) return false;
-    uint64_t first = anchor->registration.documentOrder <
-                             cursor->registration.documentOrder
+    uint64_t first = anchor->registration.documentOrder < cursor->registration
+                                                              .documentOrder
                          ? anchor->registration.documentOrder
                          : cursor->registration.documentOrder;
-    uint64_t last = anchor->registration.documentOrder >
-                            cursor->registration.documentOrder
+    uint64_t last = anchor->registration.documentOrder > cursor->registration
+                                                             .documentOrder
                         ? anchor->registration.documentOrder
                         : cursor->registration.documentOrder;
     uint64_t order = receiver->registration.documentOrder;
@@ -311,8 +304,8 @@ static bool ComputeParticipantSnapshot(TextSelectionParticipantState* receiver,
         if (receiver->self != anchorId && receiver->self != cursorId) {
             coverage = TextSelectionCoverage::Full;
         } else if ((receiver->self == anchorId) ==
-                   (anchor->registration.documentOrder <
-                    cursor->registration.documentOrder)) {
+                   (anchor->registration.documentOrder < cursor->registration
+                                                             .documentOrder)) {
             coverage = TextSelectionCoverage::ToEnd;
         } else {
             coverage = TextSelectionCoverage::FromStart;
@@ -329,17 +322,16 @@ static bool ComputeParticipantSnapshot(TextSelectionParticipantState* receiver,
     Point anchorPoint = selection->anchorPoint;
     Point cursorPoint = selection->cursorPoint;
     bool selecting = selection->gesture.selecting;
-    TextSelectionEndpoint anchorEndpoint = ParticipantEndpoint(
-        anchorRegistration, anchorResolver, anchorResolverUser, anchorId,
-        anchorPoint, app);
-    TextSelectionEndpoint cursorEndpoint = ParticipantEndpoint(
-        cursorRegistration, cursorResolver, cursorResolverUser, cursorId,
-        cursorPoint, app);
-    *out = TextSelectionSnapshot::New(
-               anchorEndpoint, cursorEndpoint)
+    TextSelectionEndpoint anchorEndpoint =
+        ParticipantEndpoint(anchorRegistration, anchorResolver,
+                            anchorResolverUser, anchorId, anchorPoint, app);
+    TextSelectionEndpoint cursorEndpoint =
+        ParticipantEndpoint(cursorRegistration, cursorResolver,
+                            cursorResolverUser, cursorId, cursorPoint, app);
+    *out = TextSelectionSnapshot::New(anchorEndpoint, cursorEndpoint)
                .WithSelecting(selecting)
-               .WithWindowPoints(TextSelectionWindowPoints::New(
-                   anchorPoint, cursorPoint))
+               .WithWindowPoints(
+                   TextSelectionWindowPoints::New(anchorPoint, cursorPoint))
                .WithCoverage(coverage);
     return true;
 }
@@ -380,8 +372,7 @@ static void WindowSelectionPublish(Window* window) {
             for (int j = 0; j < selection->participants.len; j++) {
                 if (selection->participants[j] != id) continue;
                 for (int k = j; k < selection->participants.len - 1; k++) {
-                    selection->participants[k] =
-                        selection->participants[k + 1];
+                    selection->participants[k] = selection->participants[k + 1];
                 }
                 selection->participants.len--;
                 break;
@@ -398,8 +389,7 @@ static void WindowSelectionPublish(Window* window) {
     selection->publishing = false;
 }
 
-static void ParticipantAutoScroll(Window* window, Point point,
-                                  bool stopping) {
+static void ParticipantAutoScroll(Window* window, Point point, bool stopping) {
     if (!window || !window->sel || !window->app ||
         !window->sel->hasWindowPoints) {
         return;
@@ -409,9 +399,8 @@ static void ParticipantAutoScroll(Window* window, Point point,
         ParticipantAt(window, window->sel->anchorPoint, &id);
     if (!state) return;
     float delta = 0;
-    bool has = !stopping &&
-               AutoScrollComputeDelta(point.y, state->registration.bounds,
-                                      &delta);
+    bool has = !stopping && AutoScrollComputeDelta(
+                                point.y, state->registration.bounds, &delta);
     TextSelectionEvent event;
     event.kind = TextSelectionEventKind::AutoScroll;
     event.autoScroll = delta;
@@ -500,22 +489,22 @@ static bool PointInSelectionBand(Point position, float charWidth,
         return x >= std::min(selectionStart.x, selectionEnd.x) &&
                x <= std::max(selectionStart.x, selectionEnd.x);
     }
-    Point topPoint = selectionStart.y < selectionEnd.y ? selectionStart
-                                                        : selectionEnd;
-    Point bottomPoint = selectionStart.y < selectionEnd.y ? selectionEnd
-                                                           : selectionStart;
+    Point topPoint =
+        selectionStart.y < selectionEnd.y ? selectionStart : selectionEnd;
+    Point bottomPoint =
+        selectionStart.y < selectionEnd.y ? selectionEnd : selectionStart;
     if (topPoint.y >= position.y && topPoint.y < position.y + lineHeight) {
         return x >= topPoint.x;
     }
-    if (bottomPoint.y >= position.y &&
-        bottomPoint.y < position.y + lineHeight) {
+    if (bottomPoint.y >= position.y && bottomPoint
+                                               .y < position.y + lineHeight) {
         return x <= bottomPoint.x;
     }
     return true;
 }
 
 static TextSelectionRange ProjectRun(const TextSelectionRun& run,
-    const TextSelectionSnapshot& snapshot) {
+                                     const TextSelectionSnapshot& snapshot) {
     TextSelectionRange out;
     if (!run.layout || run.text.len <= 0) return out;
     if (snapshot.coverage == TextSelectionCoverage::Full) {
@@ -534,8 +523,8 @@ static TextSelectionRange ProjectRun(const TextSelectionRun& run,
                                      rects, 2);
         bool selected = false;
         for (int i = 0; i < n; i++) {
-            Point position = {run.bounds.x + rects[i].x,
-                              run.bounds.y + rects[i].y};
+            Point position = {run.bounds.x + rects[i].x, run.bounds.y + rects[i]
+                                                                            .y};
             float width = rects[i].w > 0 ? rects[i].w : rects[i].h * 0.5f;
             float height = rects[i].h > 0 ? rects[i].h : run.bounds.h;
             if (PointInSelectionBand(position, width,
@@ -581,9 +570,8 @@ TextSelectionProjection TextSelectionHandle::UpdateRuns(
     for (int i = 0; i < count; i++) {
         if (!out.ranges[i].selected) continue;
         int insert = order.len;
-        while (insert > 0 &&
-               values[order[insert - 1]].documentOrder >
-                   values[i].documentOrder) {
+        while (insert > 0 && values[order[insert - 1]]
+                                     .documentOrder > values[i].documentOrder) {
             insert--;
         }
         VecAppend(order, 0);
@@ -596,8 +584,8 @@ TextSelectionProjection TextSelectionHandle::UpdateRuns(
     for (int i = 0; i < order.len; i++) {
         int ix = order[i];
         const TextSelectionRange& range = out.ranges[ix];
-        selected.Append(Str(values[ix].text.s + range.start,
-                            range.end - range.start));
+        selected.Append(
+            Str(values[ix].text.s + range.start, range.end - range.start));
     }
     VecReset(order);
     StrFree(participant->projectedCopyText);
@@ -640,8 +628,8 @@ void TextSelectionHandle::CopyWith(TextSelectionCopyFn fn, void* user,
     }
 }
 
-void TextSelectionHandle::ResolveContentKeyWith(
-    TextSelectionContentKeyFn fn, void* user, App* app) const {
+void TextSelectionHandle::ResolveContentKeyWith(TextSelectionContentKeyFn fn,
+                                                void* user, App* app) const {
     if (TextSelectionParticipantState* participant =
             ParticipantState(*this, app)) {
         participant->resolveContentKey = fn;
@@ -731,8 +719,8 @@ void WindowSelectionClear(Window* win) {
         }
         for (int i = 0; i < participants.len; i++) {
             TextSelectionParticipantState* participant =
-                (TextSelectionParticipantState*)EntityGet(
-                    win->app, participants[i]);
+                (TextSelectionParticipantState*)EntityGet(win->app,
+                                                          participants[i]);
             if (!participant) continue;
             TextSelectionClearFn clear = participant->clear;
             void* clearUser = participant->clearUser;
@@ -746,8 +734,7 @@ void WindowSelectionClear(Window* win) {
             EntityEmit(win->app, win, participant->self, &cleared);
             TextSelectionEvent selectionChanged;
             selectionChanged.kind = TextSelectionEventKind::SelectionChanged;
-            EntityEmit(win->app, win, participant->self,
-                       &selectionChanged);
+            EntityEmit(win->app, win, participant->self, &selectionChanged);
             if (clear) clear(clearUser, win->app);
         }
         VecReset(participants);
@@ -796,9 +783,8 @@ void WindowSelectionPress(Window* win, float x, float y, int clickCount,
     int scope = 0;
     int a = 0;
     int b = 0;
-    int activeScope = s->activeScope.raw != 0
-                          ? s->activeScope.RuntimeScope()
-                          : -1;
+    int activeScope =
+        s->activeScope.raw != 0 ? s->activeScope.RuntimeScope() : -1;
     if (TextMultiClickRangeIn(ctx, x, y, clickCount, activeScope, &a, &b,
                               &scope)) {
         s->scope = scope;
@@ -917,8 +903,8 @@ int WindowSelectionTextForEntity(Window* win, EntityId owner, char* out,
     if (!WindowSelectionHasEntity(win, owner)) return 0;
     WindowSelection* selection = win->sel;
     return CopyTextHitsInEntity(&win->paint, selection->anchor,
-                                selection->cursor, selection->scope, owner,
-                                out, cap, fmt);
+                                selection->cursor, selection->scope, owner, out,
+                                cap, fmt);
 }
 
 void WindowSelectionSelectAll(Window* win, EntityId owner) {
@@ -953,8 +939,7 @@ void WindowSelectionSelectAll(Window* win, EntityId owner) {
     if (!found || first == last) return;
     selection->scope = scope;
     if (selection->activeScope.raw == 0) {
-        selection->activeScope =
-            TextSelectionScopeId::FromRaw((uint64_t)scope);
+        selection->activeScope = TextSelectionScopeId::FromRaw((uint64_t)scope);
     }
     selection->anchor = first;
     selection->cursor = last;
@@ -1018,8 +1003,8 @@ int TextSelection::SelectedText(Window* window, App* app, char* out, int cap) {
                                ? participant->projectedCopyText
                                : participant->fallbackCopyText);
         int insert = active.len;
-        while (insert > 0 &&
-               active[insert - 1].documentOrder > item.documentOrder) {
+        while (insert > 0 && active[insert - 1]
+                                     .documentOrder > item.documentOrder) {
             insert--;
         }
         VecAppend(active, {});
@@ -1146,15 +1131,13 @@ void WindowSelectionFinishFrame(Window* win) {
         TextSelectionParticipantState* participant =
             (TextSelectionParticipantState*)EntityGet(win->app, id);
         if (participant && participant->window == win &&
-            participant->registrationGeneration ==
-                selection->frameGeneration) {
+            participant->registrationGeneration == selection->frameGeneration) {
             continue;
         }
         for (int j = 0; j < selection->participants.len; j++) {
             if (selection->participants[j] != id) continue;
             for (int k = j; k < selection->participants.len - 1; k++) {
-                selection->participants[k] =
-                    selection->participants[k + 1];
+                selection->participants[k] = selection->participants[k + 1];
             }
             selection->participants.len--;
             break;

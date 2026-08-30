@@ -15,10 +15,10 @@
 
 @implementation GpuiNoRedirectDelegate
 - (void)URLSession:(NSURLSession*)session
-              task:(NSURLSessionTask*)task
-willPerformHTTPRedirection:(NSHTTPURLResponse*)response
-        newRequest:(NSURLRequest*)request
-  completionHandler:(void (^)(NSURLRequest*))completionHandler {
+                          task:(NSURLSessionTask*)task
+    willPerformHTTPRedirection:(NSHTTPURLResponse*)response
+                    newRequest:(NSURLRequest*)request
+             completionHandler:(void (^)(NSURLRequest*))completionHandler {
     (void)session;
     (void)task;
     (void)response;
@@ -78,14 +78,14 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
         GpuiNoRedirectDelegate* delegate =
             noRedirect ? [[GpuiNoRedirectDelegate alloc] init] : nil;
-        NSURLSession* session = noRedirect
-                                    ? [NSURLSession
-                                          sessionWithConfiguration:
-                                              [NSURLSessionConfiguration
-                                                  defaultSessionConfiguration]
-                                                       delegate:delegate
-                                                  delegateQueue:nil]
-                                    : [NSURLSession sharedSession];
+        NSURLSession* session =
+            noRedirect
+                ? [NSURLSession
+                      sessionWithConfiguration:[NSURLSessionConfiguration
+                                                   defaultSessionConfiguration]
+                                      delegate:delegate
+                                 delegateQueue:nil]
+                : [NSURLSession sharedSession];
         NSURLSessionDataTask* task = [session
             dataTaskWithRequest:req
               completionHandler:^(NSData* d, NSURLResponse* r, NSError* e) {
@@ -113,10 +113,9 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
         out->status = (int)[rsp statusCode];
         if (noRedirect && out->status >= 300 && out->status < 400) {
             NSString* location = [rsp valueForHTTPHeaderField:@"Location"];
-            NSURL* target = location
-                                ? [NSURL URLWithString:location
-                                       relativeToURL:[rsp URL]]
-                                : nil;
+            NSURL* target = location ? [NSURL URLWithString:location
+                                              relativeToURL:[rsp URL]]
+                                     : nil;
             out->redirectUrl = StrFromNS([[target absoluteURL] absoluteString]);
         }
         Str ct = StrFromNS([rsp valueForHTTPHeaderField:@"Content-Type"]);

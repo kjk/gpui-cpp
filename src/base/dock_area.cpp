@@ -486,7 +486,8 @@ El* RenderNode(const AreaCtx& ac, int node) {
 El* RenderDragPreview(const AreaCtx& ac) {
     Ctx* cx = ac.cx;
     const DragPayload* drag = WindowActiveDrag(cx);
-    if (!drag || !base::StrEq(drag->kind, kDockPanelDrag) || !ac.r->dragPreview) {
+    if (!drag || !base::StrEq(drag->kind, kDockPanelDrag) ||
+        !ac.r->dragPreview) {
         return nullptr;
     }
     int panelIx = drag->ix;

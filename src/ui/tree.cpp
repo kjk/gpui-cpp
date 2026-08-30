@@ -25,8 +25,8 @@ Tree* Tree::Icons(bool v) {
 // The themed row — crates/ui/src/tree.rs. tree_story.rs's row is an icon and
 // a label and nothing else: File for a leaf, FolderOpen for an open folder
 // and Folder for a shut one.
-static El* TreeRow(void* user, Ctx* cx, int,
-                   const TreeEntry& entry, TreeEntryState entryState) {
+static El* TreeRow(void* user, Ctx* cx, int, const TreeEntry& entry,
+                   TreeEntryState entryState) {
     Tree* self = (Tree*)user;
     const Theme& th = ThemeNow(cx->app);
     TreeState* s = self->state.Get(cx);

@@ -271,8 +271,8 @@ void TilesUndo(TilesState* s);
 void TilesRedo(TilesState* s);
 
 // tiles_geometry.rs exact entry points over the established implementation.
-bool snap_edge(float edge, const float* candidates, int count,
-               float threshold, float* out);
+bool snap_edge(float edge, const float* candidates, int count, float threshold,
+               float* out);
 Bounds compute_resized_bounds(Bounds previous, const float* newX,
                               const float* newY, const float* newW,
                               const float* newH, const Bounds* others,

@@ -68,8 +68,8 @@ struct RenderOptions {
 
 // Rust expresses this as a trait. The C++ port's no-owning-callback seam is a
 // renderer plus its caller-owned payload; it has the same RenderOptions input.
-using SettingFieldElementFn =
-    El* (*)(void* user, const RenderOptions* options, Ctx* cx);
+using SettingFieldElementFn = El* (*)(void* user, const RenderOptions* options,
+                                      Ctx* cx);
 
 struct SettingFieldElement {
     void* user = nullptr;

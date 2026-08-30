@@ -35,8 +35,7 @@ El* PopupPlaceContent(El* content, PopupAnchor anchor, float offsetY) {
     // can measure the trigger and child in one layout pass, so it does not
     // need Rust's first-frame prepaint capture; the resulting bounds are the
     // same. Deferred is the structural equivalent of with_priority(100).
-    return content
-        ->AnchorCorner(anchor, kPopupWindowMargin, offsetY)
+    return content->AnchorCorner(anchor, kPopupWindowMargin, offsetY)
         ->Deferred();
 }
 

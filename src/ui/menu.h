@@ -179,8 +179,7 @@ struct AppMenuBarState {
     // what a menu bar does everywhere.
     static void OnMenuHover(AppMenuBarState* self, Ctx* cx,
                             const HoverEvent* ev, intptr_t ix);
-    static void OnAction(AppMenuBarState* self, Ctx* cx,
-                         const ActionEvent* ev);
+    static void OnAction(AppMenuBarState* self, Ctx* cx, const ActionEvent* ev);
 };
 
 struct AppMenuBarItem {

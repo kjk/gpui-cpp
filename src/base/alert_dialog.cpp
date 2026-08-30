@@ -38,10 +38,8 @@ El* AlertDialogAction::New(Ctx* cx) {
     return Div(a)->PathClick(id)->OnClickAction(action::Confirm());
 }
 // The trigger takes the press, not the click, as its Rust counterpart does.
-El* AlertDialogTrigger::New(Ctx* cx, Listener onOpen,
-                            DialogHandle handle) {
-    return DialogTrigger::New(cx, onOpen, handle,
-                              StrL("alert-dialog-trigger"));
+El* AlertDialogTrigger::New(Ctx* cx, Listener onOpen, DialogHandle handle) {
+    return DialogTrigger::New(cx, onOpen, handle, StrL("alert-dialog-trigger"));
 }
 
 AlertDialog* AlertDialog::New(Ctx* cx) {

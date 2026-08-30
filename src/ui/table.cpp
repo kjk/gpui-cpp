@@ -735,12 +735,11 @@ El* DataTable::BuildEl() {
         nColumns = delegate.columnsCount ? delegate.columnsCount(cx, data) : 0;
         nRows = delegate.rowsCount ? delegate.rowsCount(cx, data) : 0;
         if (nColumns > 0) {
-            TableColumn* generated = (TableColumn*)Alloc(
-                a, nColumns * (int)sizeof(TableColumn));
+            TableColumn* generated =
+                (TableColumn*)Alloc(a, nColumns * (int)sizeof(TableColumn));
             for (int c = 0; c < nColumns; c++) {
-                generated[c] = delegate.column
-                                   ? delegate.column(cx, data, c)
-                                   : TableColumn{};
+                generated[c] = delegate.column ? delegate.column(cx, data, c)
+                                               : TableColumn{};
             }
             columns = generated;
         } else {
@@ -875,10 +874,10 @@ El* DataTable::BuildEl() {
             // A band that ends where the pinned columns do belongs to that
             // pane; one that straddles the seam rides with the scrolling
             // side, which is where most of it is.
-            El* band = hasDelegate && delegate.renderGroupTh
-                           ? delegate.renderGroupTh(cx, data, cells[i].label,
-                                                    span, w)
-                           : nullptr;
+            El* band =
+                hasDelegate && delegate.renderGroupTh
+                    ? delegate.renderGroupTh(cx, data, cells[i].label, span, w)
+                    : nullptr;
             if (!band) {
                 band = GroupBand(cx, cells[i].label, w, last);
             } else {
@@ -955,11 +954,8 @@ El* DataTable::BuildEl() {
         // render_th: the head is the content and the resize handle beside it,
         // and only the content carries the padding — the handle has to reach
         // the column's edge.
-        El* content = Div(a)
-                          ->FlexRow()
-                          ->Flex1()
-                          ->ItemsCenter()
-                          ->JustifyBetween();
+        El* content =
+            Div(a)->FlexRow()->Flex1()->ItemsCenter()->JustifyBetween();
         TableColumnPadding(content, col);
         if (!col.sortable) {
             if (col.center) {
@@ -1015,15 +1011,15 @@ El* DataTable::BuildEl() {
                                 : nullptr;
         scrollPane->Child(
             delegateEmpty ? delegateEmpty
-            : empty ? empty
-                  : Div(a)
-                        ->FlexCol()
-                        ->W(kFill)
-                        ->H(h > 0 ? h : 160)
-                        ->ItemsCenter()
-                        ->JustifyCenter()
-                        ->Child(IconEl(a, IconName::Inbox, 48)
-                                    ->Fg(RgbaOpacity(th.mutedFg, 0.6f))));
+            : empty       ? empty
+                    : Div(a)
+                          ->FlexCol()
+                          ->W(kFill)
+                          ->H(h > 0 ? h : 160)
+                          ->ItemsCenter()
+                          ->JustifyCenter()
+                          ->Child(IconEl(a, IconName::Inbox, 48)
+                                      ->Fg(RgbaOpacity(th.mutedFg, 0.6f))));
         return box;
     }
 
@@ -1090,8 +1086,8 @@ El* DataTable::BuildEl() {
                             ? delegate.renderTr(cx, data, r)
                             : nullptr;
         if (!rowScroll) {
-            rowScroll = gpui::TableRow::New(
-                cx, StrDup(a, fmt("row-%d", r)), r + 1);
+            rowScroll =
+                gpui::TableRow::New(cx, StrDup(a, fmt("row-%d", r)), r + 1);
         }
         rowScroll->PathClick(StrDup(a, fmt("row-%d", r)))
             ->Role(AccessibilityRole::Row)
@@ -1176,10 +1172,10 @@ El* DataTable::BuildEl() {
                 // render_td clips what it holds to the column. Dragging an
                 // edge in makes a column narrower than its text, and without
                 // this the text would spill over the next column.
-                float padding = columns[c].hasPaddings
-                                    ? columns[c].paddings.left +
-                                          columns[c].paddings.right
-                                    : 16.f;
+                float padding =
+                    columns[c].hasPaddings
+                        ? columns[c].paddings.left + columns[c].paddings.right
+                        : 16.f;
                 float inner = ColWidth(s, c) - padding;
                 cellEl->MaxW(inner > 1 ? inner : 1)->Truncate();
                 td->Child(cellEl);

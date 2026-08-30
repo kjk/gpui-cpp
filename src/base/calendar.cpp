@@ -38,7 +38,8 @@ bool Date::IsComplete() const {
 }
 
 bool Date::IsActive(LocalDate value) const {
-    return (CalendarDateValid(start) && CalendarDateCompare(start, value) == 0) ||
+    return (CalendarDateValid(start) &&
+            CalendarDateCompare(start, value) == 0) ||
            (kind == DateKind::Range && CalendarDateValid(end) &&
             CalendarDateCompare(end, value) == 0);
 }
@@ -87,8 +88,7 @@ bool DateMatcherMatches(const Matcher& matcher, LocalDate date) {
             return (matcher.weekdayMask &
                     (1u << CalendarWeekday(date.year, date.month, date.day))) !=
                    0;
-        case MatcherKind::Interval:
-        {
+        case MatcherKind::Interval: {
             LocalDate before = CalendarDateValid(matcher.interval.before)
                                    ? matcher.interval.before
                                    : matcher.from;
@@ -290,13 +290,12 @@ bool CalendarNextYearPage(CalendarState* s) {
     return true;
 }
 
-void CalendarState::OnDate(CalendarState* self, Ctx* cx,
-                           const ClickEvent*, intptr_t dateKey) {
+void CalendarState::OnDate(CalendarState* self, Ctx* cx, const ClickEvent*,
+                           intptr_t dateKey) {
     CalendarStateSelectDate(self, DatePickerDateFromKey(dateKey), cx, true);
 }
 
-void CalendarState::OnPrev(CalendarState* self, Ctx* cx,
-                           const ClickEvent*) {
+void CalendarState::OnPrev(CalendarState* self, Ctx* cx, const ClickEvent*) {
     if (self->view == CalendarView::Day) {
         CalendarPrevMonth(self);
     } else if (self->view == CalendarView::Year) {
@@ -305,8 +304,7 @@ void CalendarState::OnPrev(CalendarState* self, Ctx* cx,
     Notify(cx);
 }
 
-void CalendarState::OnNext(CalendarState* self, Ctx* cx,
-                           const ClickEvent*) {
+void CalendarState::OnNext(CalendarState* self, Ctx* cx, const ClickEvent*) {
     if (self->view == CalendarView::Day) {
         CalendarNextMonth(self);
     } else if (self->view == CalendarView::Year) {
@@ -329,8 +327,8 @@ void CalendarState::OnYearToggle(CalendarState* self, Ctx* cx,
     Notify(cx);
 }
 
-void CalendarState::OnMonth(CalendarState* self, Ctx* cx,
-                            const ClickEvent*, intptr_t month) {
+void CalendarState::OnMonth(CalendarState* self, Ctx* cx, const ClickEvent*,
+                            intptr_t month) {
     self->currentMonth = (int)month;
     self->view = CalendarView::Day;
     Notify(cx);
@@ -514,8 +512,7 @@ static El* CalMonthGrid(Ctx* cx, const CalendarOpts& o, int year, int month) {
     }
     panel->Child(header);
 
-    int offset =
-        (CalendarWeekday(year, month, 1) - o.firstDayOfWeek + 7) % 7;
+    int offset = (CalendarWeekday(year, month, 1) - o.firstDayOfWeek + 7) % 7;
     int cells = CalendarGridCells(offset, CalendarDaysInMonth(year, month));
     LocalDate first = DateAddDays({year, month, 1}, -offset);
     El* week = nullptr;

@@ -78,7 +78,8 @@ int GpuiMain(int argc, char** argv) {
         // Rust has no equivalent — `build_as_child` panics. Saying it out
         // loud is worth more than a window with a hole in it.
         logf(
-            "webview: no native webview runtime on this machine; the page will stay "
+            "webview: no native webview runtime on this machine; the page will "
+            "stay "
             "empty\n");
     }
     return AppRunView(StrL("WebView"), 1024, 768, view.id, app, WinOpts{});

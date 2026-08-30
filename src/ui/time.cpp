@@ -265,8 +265,8 @@ El* Calendar::IntoEl() {
     // a month — because that one is built `border_0().rounded_none().p_0()`
     // and so has none of the padding the panel width above counts in. The
     // three pairs differ by exactly the 12 either side.
-    float width = (CalendarWidth(size) - (bare ? 24.f : 0.f)) *
-                  (float)numberOfMonths;
+    float width =
+        (CalendarWidth(size) - (bare ? 24.f : 0.f)) * (float)numberOfMonths;
     // The source-shaped path delegates all structure and behavior to Base's
     // retained calendar. The legacy controlled path below remains for
     // callers written against the first C++ surface.
@@ -348,7 +348,7 @@ DateRangePresetValue DateRangePresetValue::Range(LocalDate start,
 
 Date DateRangePresetValue::IntoDate() const {
     return kind == DateRangePresetValueKind::Range ? Date::Range(start, end)
-                                                    : Date::Single(start);
+                                                   : Date::Single(start);
 }
 
 DateRangePreset DateRangePreset::Single(Str label, LocalDate date,
@@ -397,9 +397,10 @@ static void AppendDateNumber(Arena* a, StrBuilder* out, int value, int digits) {
 
 static void AppendDateNumeric(Arena* a, StrBuilder* out, int value, int digits,
                               char defaultPad, char modifier) {
-    char pad = modifier == '-' ? 0 : modifier == '_' ? ' '
-                               : modifier == '0'     ? '0'
-                                                     : defaultPad;
+    char pad = modifier == '-'   ? 0
+               : modifier == '_' ? ' '
+               : modifier == '0' ? '0'
+                                 : defaultPad;
     if (!pad || digits <= 1) {
         AppendDateNumber(a, out, value, 1);
         return;
@@ -438,13 +439,13 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     };
     static const char* longMonths[] = {
-        "",          "January",   "February", "March",    "April",
-        "May",       "June",      "July",     "August",   "September",
-        "October",   "November",  "December",
+        "",        "January",  "February", "March",  "April",
+        "May",     "June",     "July",     "August", "September",
+        "October", "November", "December",
     };
     static const char* shortDays[] = {"Sun", "Mon", "Tue", "Wed",
                                       "Thu", "Fri", "Sat"};
-    static const char* longDays[] = {"Sunday",   "Monday", "Tuesday",
+    static const char* longDays[] = {"Sunday",    "Monday",   "Tuesday",
                                      "Wednesday", "Thursday", "Friday",
                                      "Saturday"};
     StrBuilder out;
@@ -466,7 +467,9 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
             directive = pattern.s[++i];
         }
         switch (directive) {
-            case '%': StrBuilderAppendChar(a, out, '%'); break;
+            case '%':
+                StrBuilderAppendChar(a, out, '%');
+                break;
             case 'Y':
                 AppendDateNumeric(a, &out, date.year, 4, '0', modifier);
                 break;
@@ -502,7 +505,9 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
             case 'a':
                 StrBuilderAppend(a, out, Str(shortDays[weekday]));
                 break;
-            case 'A': StrBuilderAppend(a, out, Str(longDays[weekday])); break;
+            case 'A':
+                StrBuilderAppend(a, out, Str(longDays[weekday]));
+                break;
             case 'w':
                 AppendDateNumeric(a, &out, weekday, 1, 0, modifier);
                 break;
@@ -511,15 +516,14 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
                                   modifier);
                 break;
             case 'U':
-                AppendDateNumeric(a, &out,
-                                  (yearDay - 1 + 7 - weekday) / 7, 2, '0',
-                                  modifier);
+                AppendDateNumeric(a, &out, (yearDay - 1 + 7 - weekday) / 7, 2,
+                                  '0', modifier);
                 break;
             case 'W': {
                 int mondayWeekday = (weekday + 6) % 7;
                 AppendDateNumeric(a, &out,
-                                  (yearDay - 1 + 7 - mondayWeekday) / 7, 2,
-                                  '0', modifier);
+                                  (yearDay - 1 + 7 - mondayWeekday) / 7, 2, '0',
+                                  modifier);
                 break;
             }
             case 'G':
@@ -532,9 +536,9 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
                 AppendDateNumeric(a, &out, isoWeek, 2, '0', modifier);
                 break;
             case 'F':
-                StrBuilderAppend(a, out,
-                                 fmt("%04d-%02d-%02d", date.year, date.month,
-                                     date.day));
+                StrBuilderAppend(
+                    a, out,
+                    fmt("%04d-%02d-%02d", date.year, date.month, date.day));
                 break;
             case 'D':
             case 'x':
@@ -549,8 +553,12 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
                 StrBuilderAppendChar(a, out, '-');
                 AppendDateNumeric(a, &out, date.year, 4, '0', modifier);
                 break;
-            case 't': StrBuilderAppendChar(a, out, '\t'); break;
-            case 'n': StrBuilderAppendChar(a, out, '\n'); break;
+            case 't':
+                StrBuilderAppendChar(a, out, '\t');
+                break;
+            case 'n':
+                StrBuilderAppendChar(a, out, '\n');
+                break;
             default:
                 // Keep an unsupported chrono directive visible and stable.
                 StrBuilderAppendChar(a, out, '%');
@@ -597,8 +605,8 @@ Entity<DatePickerState> DatePickerStateNew(Ctx* cx, bool range) {
     state->date = range ? Date::Range() : Date::Single();
     state->dateFormat = StrDup(StrL("%Y/%m/%d"));
     state->calendar = CalendarStateNew(cx, state->date);
-    state->calendarSubscription = SubscribeTo(
-        cx->app, state->calendar, out, &DatePickerState::OnCalendar);
+    state->calendarSubscription = SubscribeTo(cx->app, state->calendar, out,
+                                              &DatePickerState::OnCalendar);
     return out;
 }
 
@@ -621,8 +629,7 @@ void DatePickerStateSetDate(DatePickerState* state, Date date, Ctx* cx,
     NotifyDatePicker(state, cx);
 }
 
-void DatePickerStateSetDateFormat(DatePickerState* state, Str format,
-                                  Ctx* cx) {
+void DatePickerStateSetDateFormat(DatePickerState* state, Str format, Ctx* cx) {
     if (!state) {
         return;
     }
@@ -655,8 +662,8 @@ void DatePickerStateSetFirstDayOfWeek(DatePickerState* state, int weekday,
     NotifyDatePicker(state, cx);
 }
 
-void DatePickerStateSetDisabledMatcher(DatePickerState* state,
-                                       Matcher matcher, Ctx* cx) {
+void DatePickerStateSetDisabledMatcher(DatePickerState* state, Matcher matcher,
+                                       Ctx* cx) {
     if (!state) {
         return;
     }
@@ -734,8 +741,8 @@ void DatePickerState::OnDismiss(DatePickerState* self, Ctx* cx,
 void DatePickerState::OnClear(DatePickerState* self, Ctx* cx,
                               const ClickEvent*) {
     WindowStopPropagation(cx);
-    Date empty = self->date.kind == DateKind::Range ? Date::Range()
-                                                     : Date::Single();
+    Date empty =
+        self->date.kind == DateKind::Range ? Date::Range() : Date::Single();
     DatePickerStateSetDate(self, empty, cx, true);
 }
 
@@ -750,8 +757,8 @@ DatePicker* DatePicker::New(Ctx* cx) {
 DatePicker* DatePicker::New(Ctx* cx, Entity<DatePickerState> state) {
     DatePicker* d = New(cx);
     d->state = state;
-    d->id = StrDup(cx->a, fmt("date-picker-%d-%u", state.id.index,
-                              state.id.gen));
+    d->id =
+        StrDup(cx->a, fmt("date-picker-%d-%u", state.id.index, state.id.gen));
     if (DatePickerState* retained = state.Get(cx)) {
         d->numberOfMonths = retained->numberOfMonths;
     }
@@ -904,8 +911,7 @@ struct DatePresetAction {
     Entity<DatePickerState> picker = {};
     Date value = {};
 
-    static void OnClick(DatePresetAction* self, Ctx* cx,
-                        const ClickEvent*) {
+    static void OnClick(DatePresetAction* self, Ctx* cx, const ClickEvent*) {
         if (!self) {
             return;
         }
@@ -937,8 +943,7 @@ static El* RetainedDatePickerIntoEl(DatePicker* self) {
                                     : Tr("DatePicker.placeholder");
     }
     Listener toggle = ListenTo(self->state, &DatePickerState::OnToggle);
-    Listener setOpen = ListenTo(self->state,
-                                &DatePickerState::OnOpenChange);
+    Listener setOpen = ListenTo(self->state, &DatePickerState::OnOpenChange);
     Listener clear = ListenTo(self->state, &DatePickerState::OnClear);
 
     float height = 32, padX = 10, font = 14;
@@ -1002,8 +1007,8 @@ static El* RetainedDatePickerIntoEl(DatePicker* self) {
                                   ->IntoEl()
                                   ->StopClick());
         } else {
-            triggerRow->Child(
-                IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
+            triggerRow
+                ->Child(IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
         }
     }
     trigger->Child(triggerRow);
@@ -1034,24 +1039,22 @@ static El* RetainedDatePickerIntoEl(DatePicker* self) {
                     astate->picker = self->state;
                     astate->value = PresetDate(preset);
                 }
-                list->Child(Button::New(
-                                cx, StrDup(a, fmt("date-preset-%d", i)))
-                                ->WithSize(UiSize::Small)
-                                ->Ghost()
-                                ->TabStop(false)
-                                ->Label(preset.label)
-                                ->OnClick(
-                                    ListenTo(action, &DatePresetAction::OnClick))
-                                ->IntoEl());
+                list->Child(
+                    Button::New(cx, StrDup(a, fmt("date-preset-%d", i)))
+                        ->WithSize(UiSize::Small)
+                        ->Ghost()
+                        ->TabStop(false)
+                        ->Label(preset.label)
+                        ->OnClick(ListenTo(action, &DatePresetAction::OnClick))
+                        ->IntoEl());
             }
             content->Child(list);
         }
-        Calendar* calendar =
-            Calendar::New(cx, state->calendar)
-                ->WithSize(self->size)
-                ->NumberOfMonths(self->numberOfMonths)
-                ->FirstDayOfWeek(state->firstDayOfWeek)
-                ->Bare();
+        Calendar* calendar = Calendar::New(cx, state->calendar)
+                                 ->WithSize(self->size)
+                                 ->NumberOfMonths(self->numberOfMonths)
+                                 ->FirstDayOfWeek(state->firstDayOfWeek)
+                                 ->Bare();
         content->Child(calendar->IntoEl());
         popup = Div(a)
                     ->Pad(12)
@@ -1064,8 +1067,8 @@ static El* RetainedDatePickerIntoEl(DatePicker* self) {
                     ->Child(content);
     }
 
-    El* root = gpui::DatePicker::New(cx, self->id, self->disabled,
-                                     state->open, setOpen)
+    El* root = gpui::DatePicker::New(cx, self->id, self->disabled, state->open,
+                                     setOpen)
                    ->TrackFocus(state->focus)
                    ->TabStop(!self->disabled)
                    ->FlexNone()

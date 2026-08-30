@@ -89,11 +89,9 @@ static const ContentTypeRow kContentTypes[] = {
     {InCtPassword, "Password", true, component::InputContentType::Password},
     {InCtNewPassword, "New password", true,
      component::InputContentType::NewPassword},
-    {InCtOtp, "One-time code", false,
-     component::InputContentType::OneTimeCode},
+    {InCtOtp, "One-time code", false, component::InputContentType::OneTimeCode},
     {InCtEmail, "Email", false, component::InputContentType::EmailAddress},
-    {InCtTel, "Telephone", false,
-     component::InputContentType::TelephoneNumber},
+    {InCtTel, "Telephone", false, component::InputContentType::TelephoneNumber},
     {InCtUrl, "URL", false, component::InputContentType::Url},
     {InCtCard, "Credit card number", false,
      component::InputContentType::CreditCardNumber},
@@ -101,8 +99,7 @@ static const ContentTypeRow kContentTypes[] = {
      component::InputContentType::CreditCardExpiration},
     {InCtCardCvc, "Credit card security code", true,
      component::InputContentType::CreditCardSecurityCode},
-    {InCtPostal, "Postal code", false,
-     component::InputContentType::PostalCode},
+    {InCtPostal, "Postal code", false, component::InputContentType::PostalCode},
 };
 
 struct InputStory {
@@ -214,8 +211,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         line->Child(StoryTxt(cx, StoryDup(cx, row.label), 14, th.foreground)
                         ->W(192)
                         ->Shrink0());
-        component::Input* in =
-            Field(self, cx, row.slot, focus, clear)->ContentType(row.contentType);
+        component::Input* in = Field(self, cx, row.slot, focus, clear)
+                                   ->ContentType(row.contentType);
         if (row.maskToggle) {
             in->Masked(!self->revealed[row.slot])
                 ->MaskToggle()

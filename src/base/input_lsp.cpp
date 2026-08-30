@@ -22,8 +22,7 @@ void CompletionProvider::Install(InputState* state,
 
 void CodeActionProvider::Install(InputState* state) const {
     if (state && codeActions) {
-        InputAddCodeActionProvider(state, codeActions, data,
-                                   performCodeAction);
+        InputAddCodeActionProvider(state, codeActions, data, performCodeAction);
     }
 }
 
@@ -137,8 +136,7 @@ Lsp& Lsp::DocumentColors(const DocumentColorProvider& provider) {
     return *this;
 }
 
-Lsp& Lsp::SemanticTokens(
-    const DocumentRangeSemanticTokensProvider& provider) {
+Lsp& Lsp::SemanticTokens(const DocumentRangeSemanticTokensProvider& provider) {
     semanticTokensProvider = provider;
     return *this;
 }
@@ -189,7 +187,8 @@ int Lsp::DocumentColorsForRange(Selection visible, DocumentColor* out,
     int total = 0;
     for (int i = 0; i < state->documentColors.len; i++) {
         const DocumentColor& color = state->documentColors[i];
-        if (color.range.start >= visible.end || color.range.end <= visible.start ||
+        if (color.range.start >= visible.end ||
+            color.range.end <= visible.start ||
             color.range.start >= color.range.end) {
             continue;
         }
@@ -201,9 +200,9 @@ int Lsp::DocumentColorsForRange(Selection visible, DocumentColor* out,
     return total;
 }
 
-int Lsp::SemanticTokensForRange(
-    Selection visible, const HighlightStyleResolver& resolver, TextSpan* out,
-    int cap) const {
+int Lsp::SemanticTokensForRange(Selection visible,
+                                const HighlightStyleResolver& resolver,
+                                TextSpan* out, int cap) const {
     if (!state || state->semanticTokens.len <= 0) {
         return 0;
     }

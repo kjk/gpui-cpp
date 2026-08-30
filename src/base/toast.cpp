@@ -237,8 +237,8 @@ El* ToastStack::IntoEl() {
         state->heights.len--;
     }
     if (state->bounds.w > 0 && cx->win) {
-        state->hovered = state->bounds.Contains({cx->win->mouseX,
-                                                cx->win->mouseY});
+        state->hovered = state->bounds
+                             .Contains({cx->win->mouseX, cx->win->mouseY});
     }
     state->focused = hasFocus && FocusHandleContainsFocused(cx->win, focus);
     bool expanded = state->IsExpanded();
@@ -253,11 +253,10 @@ El* ToastStack::IntoEl() {
     for (int i = 0; i < count; i++) {
         ToastMeasurement* measured =
             ToastStackMeasurement(state, children[i].key, true);
-        heights[i] = measured && measured->bounds.h > 0
-                         ? measured->bounds.h
-                         : children[i].child->style.height > 0
-                               ? children[i].child->style.height
-                               : 0;
+        heights[i] = measured && measured->bounds.h > 0 ? measured->bounds.h
+                     : children[i].child->style.height > 0
+                         ? children[i].child->style.height
+                         : 0;
     }
     float expandedHeight = 0;
     float collapsedHeight = ToastStackGeometry(
@@ -266,9 +265,9 @@ El* ToastStack::IntoEl() {
     Spring geometry = SpringNew((float)motion.durationMs);
     geometry.epsilon = 0.1f;
     Spring fade = SpringNew((float)motion.durationMs);
-    float stackHeight = SpringValue(
-        cx, MotionId(id, StrL("height")),
-        expanded ? expandedHeight : collapsedHeight, geometry);
+    float stackHeight =
+        SpringValue(cx, MotionId(id, StrL("height")),
+                    expanded ? expandedHeight : collapsedHeight, geometry);
 
     El* root = Div(arena)
                    ->Id(id)
@@ -279,26 +278,24 @@ El* ToastStack::IntoEl() {
         root->TrackFocus(focus);
     }
     float stackWidth = state->bounds.w;
-    int visibleLayers = motion.collapsedVisible > 0
-                            ? motion.collapsedVisible
-                            : 1;
+    int visibleLayers =
+        motion.collapsedVisible > 0 ? motion.collapsedVisible : 1;
     for (int i = 0; i < count; i++) {
         const ToastStackItem& item = children[i];
         int rank = count - 1 - i;
         Str key = StrDup(arena, fmt("%u", item.key));
-        float offset = SpringValue(
-            cx, MotionId(key, StrL("offset")),
-            expanded ? expandedOffsets[i] : collapsed[i], geometry);
+        float offset =
+            SpringValue(cx, MotionId(key, StrL("offset")),
+                        expanded ? expandedOffsets[i] : collapsed[i], geometry);
         int visibleRank = rank < visibleLayers ? rank : visibleLayers - 1;
-        float targetInset = expanded
-                                ? 0.f
-                                : stackWidth * motion.collapsedScaleStep *
-                                      (float)visibleRank / 2.f;
-        float inset = SpringValue(cx, MotionId(key, StrL("inset")),
-                                  targetInset, geometry);
-        float opacity = SpringValue(
-            cx, MotionId(key, StrL("visibility")),
-            (expanded || rank < visibleLayers) ? 1.f : 0.f, fade);
+        float targetInset = expanded ? 0.f
+                                     : stackWidth * motion.collapsedScaleStep *
+                                           (float)visibleRank / 2.f;
+        float inset = SpringValue(cx, MotionId(key, StrL("inset")), targetInset,
+                                  geometry);
+        float opacity =
+            SpringValue(cx, MotionId(key, StrL("visibility")),
+                        (expanded || rank < visibleLayers) ? 1.f : 0.f, fade);
         if (opacity <= 0.001f) {
             continue;
         }

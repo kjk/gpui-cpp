@@ -80,8 +80,8 @@ void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
         s->previousFocus = {};
     }
     s->open = open;
-    BaseDeferredPopoverSet(cx->app,
-                           s->self.IsValid() ? s->self : cx->self, open);
+    BaseDeferredPopoverSet(cx->app, s->self.IsValid() ? s->self : cx->self,
+                           open);
     PopoverReportOpenChange(s, cx);
 }
 

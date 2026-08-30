@@ -1674,11 +1674,9 @@ static El* Footer(StoryApp* app, Ctx* cx) {
                 // The theme in force, which is whatever the registry
                 // last installed for this mode rather than always one of
                 // the two defaults.
-                ->Child(StoryTxt(cx,
-                                 ThemeRegistryActive(cx->app,
-                                                     ThemeGet(cx->app)),
-                                 12,
-                                 th.mutedFg))
+                ->Child(StoryTxt(
+                    cx, ThemeRegistryActive(cx->app, ThemeGet(cx->app)), 12,
+                    th.mutedFg))
                 ->Child(StoryTxt(cx, StrL("v0.5.1"), 12, th.mutedFg))
                 // gallery.rs puts the repository link last in the bar's
                 // right group, as a ghost icon button.

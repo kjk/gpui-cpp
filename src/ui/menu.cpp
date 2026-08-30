@@ -9,10 +9,14 @@ namespace gpui {
 namespace component {
 
 namespace popup_menu {
-void init() { PopupMenuInitKeys(); }
+void init() {
+    PopupMenuInitKeys();
+}
 } // namespace popup_menu
 
-Str AppMenuBarContext() { return StrL("AppMenuBar"); }
+Str AppMenuBarContext() {
+    return StrL("AppMenuBar");
+}
 
 namespace app_menu_bar {
 void init() {
@@ -269,11 +273,7 @@ El* PopupMenu::IntoEl() {
     // `popup-menu` is enough; the port has no entity to push, so the menu's
     // own name stands in for one.
     El* root = PopoverSurface(
-        cx, Div(a)
-                ->Id(id)
-                ->Role(AccessibilityRole::Menu)
-                ->FlexCol()
-                ->W(menuW));
+        cx, Div(a)->Id(id)->Role(AccessibilityRole::Menu)->FlexCol()->W(menuW));
     // The menu's own name, so a row is `("item", ix)` and two menus on one
     // page do not have to be told apart by their rows' spelling.
     root->Id(id);
@@ -347,22 +347,21 @@ El* PopupMenu::IntoEl() {
             continue;
         }
         bool lit =
-            selected == i && !it.disabled &&
-            it.kind != PopupMenuItem::Label;
-        El* row = Div(a)
-                      ->Role(AccessibilityRole::MenuItem)
-                      ->AriaLabel(it.label)
-                      ->AriaSelected(lit)
-                      ->AriaDisabled(it.disabled ||
-                                    it.kind == MenuItemKind::Label)
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->MinH(itemH)
-                      ->PadX(8)
-                      ->Gap(4)
-                      ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Radius(radius);
+            selected == i && !it.disabled && it.kind != PopupMenuItem::Label;
+        El* row =
+            Div(a)
+                ->Role(AccessibilityRole::MenuItem)
+                ->AriaLabel(it.label)
+                ->AriaSelected(lit)
+                ->AriaDisabled(it.disabled || it.kind == MenuItemKind::Label)
+                ->FlexRow()
+                ->W(kFill)
+                ->MinH(itemH)
+                ->PadX(8)
+                ->Gap(4)
+                ->ItemsCenter()
+                ->JustifyBetween()
+                ->Radius(radius);
         if (lit) {
             row->Bg(th.tokens.accent);
         }
@@ -545,8 +544,8 @@ DropdownMenuPopover* DropdownMenuPopover::New(Ctx* cx, Str id) {
 }
 
 DropdownMenuPopover* DropdownMenuPopover::Anchor(gpui::Anchor value) {
-    anchorRight = value == gpui::Anchor::TopRight ||
-                  value == gpui::Anchor::BottomRight;
+    anchorRight =
+        value == gpui::Anchor::TopRight || value == gpui::Anchor::BottomRight;
     return this;
 }
 
@@ -589,8 +588,7 @@ void ContextMenuState::OnMouseDown(ContextMenuState* self, Ctx* cx,
     PopupMenuOpen(menu, cx);
 }
 
-ContextMenu* ContextMenuExt::Wrap(Ctx* cx, Str id, El* child,
-                                  PopupMenu* menu) {
+ContextMenu* ContextMenuExt::Wrap(Ctx* cx, Str id, El* child, PopupMenu* menu) {
     return ContextMenu::New(cx, id)->Child(child)->Menu(menu);
 }
 
