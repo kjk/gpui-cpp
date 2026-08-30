@@ -148,6 +148,9 @@ static El* RowMatchWashes(Arena* a, El* el, const InputEditorStyle& style,
 // size is, rather than the phi box every other line of text gets.
 static const float kInputLineH = 20.f;
 
+static float DisplayLineH(const InputState* s, int row, float lineH);
+static float DisplayRowDocY(const InputState* s, int row, float lineH);
+
 // One bullet per character, not per byte, for a masked field.
 static Str MaskedRun(Arena* a, Str text) {
     int chars = 0;
@@ -460,8 +463,14 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
         FoldMapRebuild(&state->folds, rows);
         state->contentH = (float)FoldMapDisplayRowCount(&state->folds) * lineH;
     }
-    if (wrap && state->contentBox.h > 0) {
-        state->contentH = state->contentBox.h;
+    if (wrap) {
+        // Sum laid-out heights. contentBox.h is the last painted column,
+        // which includes that frame's scroll and is wrong the moment a
+        // spacer is rebuilt.
+        float wrapped = DisplayRowDocY(state, rows, lineH);
+        if (wrapped > 0) {
+            state->contentH = wrapped;
+        }
     }
     // The boxes the rows will report into. Sized here, before any of them is
     // built, so the pointers handed out stay put for the frame. The values
@@ -562,44 +571,34 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
             padTop = (float)firstRow * lineH;
             padBottom = (float)(rows - endRow) * lineH;
         } else {
-            // The recorded boxes are in window coordinates; the content box
-            // is where the first of them starts, so the difference is the
-            // offset into the scrolled document.
-            float origin = state->contentBox.y;
+            // Heights only: a box's window y is last-painted and goes stale
+            // the moment that row leaves the viewport. Subtracting it from
+            // contentBox.y (which embeds this frame's scrollY) made firstRow
+            // stick at the old band, so the viewport was empty (white) until
+            // a click's scroll_to jumped back there.
             float at = 0;
             int first = -1;
             int end = rows;
             for (int i = 0; i < rows; i++) {
-                float h = state->rowBoxes[i].h;
-                if (h <= 0) {
-                    h = lineH;
-                }
-                float y = state->rowBoxes[i].h > 0
-                              ? state->rowBoxes[i].y - origin
-                              : at;
-                if (first < 0 && y + h > top) {
+                float h = DisplayLineH(state, i, lineH);
+                if (first < 0 && at + h > top) {
                     first = i;
-                    padTop = y;
                 }
-                if (y > bottom) {
+                if (at > bottom) {
                     end = i;
                     break;
                 }
-                at = y + h;
+                at += h;
             }
             firstRow = first < 0 ? 0 : first;
             endRow = end < firstRow ? firstRow : end;
             firstRow = firstRow > kSlack ? firstRow - kSlack : 0;
             endRow = endRow + kSlack > rows ? rows : endRow + kSlack;
-            padTop = 0;
-            for (int i = 0; i < firstRow; i++) {
-                float h = state->rowBoxes[i].h;
-                padTop += h > 0 ? h : lineH;
-            }
-            padBottom = 0;
-            for (int i = endRow; i < rows; i++) {
-                float h = state->rowBoxes[i].h;
-                padBottom += h > 0 ? h : lineH;
+            padTop = DisplayRowDocY(state, firstRow, lineH);
+            padBottom = DisplayRowDocY(state, rows, lineH) -
+                        DisplayRowDocY(state, endRow, lineH);
+            if (padBottom < 0) {
+                padBottom = 0;
             }
         }
         // A wrap walk over empty boxes, or a viewH that is still the full
@@ -613,7 +612,11 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
             if (endRow > rows) {
                 endRow = rows;
             }
-            padBottom = (float)(rows - endRow) * lineH;
+            padBottom = DisplayRowDocY(state, rows, lineH) -
+                        DisplayRowDocY(state, endRow, lineH);
+            if (padBottom < 0) {
+                padBottom = 0;
+            }
         }
     }
     if (padTop > 0) {
@@ -1936,10 +1939,7 @@ void InputScrollToCursor(InputState* s, InputMoveDir dir) {
     row = FoldMapNearestVisibleLine(&s->folds, row);
     // Where that row actually starts: a wrapping editor's rows are uneven, so
     // the arithmetic only holds when nothing wrapped.
-    float caretY = (float)row * lineH;
-    if (row < s->rowBoxes.len && s->rowBoxes.len > 0) {
-        caretY = s->rowBoxes[row].y - s->rowBoxes[0].y;
-    }
+    float caretY = DisplayRowDocY(s, row, lineH);
     InputScrollToCaret(s, s->caretX, caretY, dir);
 }
 
@@ -1950,10 +1950,7 @@ void InputScrollToOffset(InputState* s, int offset, InputMoveDir dir) {
     float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
     int row = RopeOffsetToPoint(InputValue(s), offset).row;
     row = FoldMapNearestVisibleLine(&s->folds, row);
-    float y = (float)row * lineH;
-    if (row < s->rowBoxes.len && s->rowBoxes.len > 0) {
-        y = s->rowBoxes[row].y - s->rowBoxes[0].y;
-    }
+    float y = DisplayRowDocY(s, row, lineH);
     InputScrollToCaret(s, -1, y, dir);
 }
 
@@ -3610,6 +3607,20 @@ static float DisplayLineH(const InputState* s, int row, float lineH) {
     return lineH;
 }
 
+// Document y of `row`: sum of laid-out heights above it. Window y on
+// rowBoxes is last-painted and goes stale the moment that row leaves the
+// viewport, so nothing that scrolls may subtract two of those.
+static float DisplayRowDocY(const InputState* s, int row, float lineH) {
+    if (!s || row <= 0) {
+        return 0;
+    }
+    float y = 0;
+    for (int i = 0; i < row; i++) {
+        y += DisplayLineH(s, i, lineH);
+    }
+    return y;
+}
+
 // Where a vertical move of `lines` rows from `from` lands, and what to aim
 // at on the next one — move_to and select_to both recompute the aim from
 // where the caret ended up, and the whole point of a walk is to keep aiming
@@ -4367,17 +4378,20 @@ static int FirstVisibleOffset(const InputState* s) {
         return 0;
     }
     int row = 0;
+    float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
     if (s->rowBoxes.len > 0) {
-        float top = s->rowBoxes[0].y + s->scrollY;
-        // A folded-away row has a zeroed box, so it is stepped over rather
-        // than compared: its y would read as above everything.
-        while (row + 1 < s->rowBoxes.len &&
-               (s->rowBoxes[row + 1].h <= 0 || s->rowBoxes[row + 1].y <= top)) {
-            row++;
+        float at = 0;
+        for (int i = 0; i < s->rowBoxes.len; i++) {
+            float h = DisplayLineH(s, i, lineH);
+            if (at + h > s->scrollY) {
+                row = i;
+                break;
+            }
+            at += h;
+            row = i;
         }
         row = FoldMapNearestVisibleLine(&s->folds, row);
     } else {
-        float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
         row = (int)(s->scrollY / lineH);
     }
     return RopeLineStartOffset(text, row);
@@ -4611,24 +4625,31 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
     float relY = 0;
     if (s->rowBoxes.len == rows && rows > 0) {
         // The rows are uneven, so the one under the press is found by walking
-        // them rather than by dividing.
-        // Past the last row, the press takes the last row there is. A
-        // folded-away one has a zeroed box and never matches the walk, so
-        // only this fallback has to be snapped back onto a visible line.
+        // heights rather than window y. Off-screen boxes keep the y they had
+        // when last painted; after a scroll those still cover the viewport
+        // and a click would map to the old band, then scroll_to would jump
+        // the view back there.
+        float originY = b.y;
+        if (s->inputBounds.h > 0) {
+            originY = s->inputBounds.y - s->scrollY;
+        }
+        float docY = y - originY;
+        float at = 0;
         row = FoldMapNearestVisibleLine(&s->folds, rows - 1);
         for (int i = 0; i < rows; i++) {
-            const Bounds& rb = s->rowBoxes[i];
-            if (rb.h <= 0) {
+            float h = DisplayLineH(s, i, lineH);
+            if (h <= 0) {
                 continue;
             }
-            if (y < rb.y + rb.h) {
+            if (docY < at + h) {
                 row = i;
+                relY = docY - at;
+                if (relY < 0) {
+                    relY = 0;
+                }
                 break;
             }
-        }
-        relY = y - s->rowBoxes[row].y;
-        if (relY < 0) {
-            relY = 0;
+            at += h;
         }
     } else {
         // lastBounds is the first row's text, which is only painted while

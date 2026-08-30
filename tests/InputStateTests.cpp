@@ -2642,6 +2642,69 @@ static void AClickInAScrolledEditorMapsThroughScrollY() {
     utassert(at == InputLineStartOffset(&state, 405));
 }
 
+// Wrap walks rowBoxes. After a scroll the off-screen rows still hold the
+// window y they had when last painted, which still covers the viewport, so
+// a click would map to the old band and scroll_to would jump back there.
+static void AClickInAWrappedScrolledEditorIgnoresStaleWindowY() {
+    const int kLines = 40;
+    char* buf = (char*)Alloc(nullptr, kLines * 2);
+    utassert(buf);
+    for (int i = 0; i < kLines; i++) {
+        buf[i * 2] = 'x';
+        buf[i * 2 + 1] = '\n';
+    }
+    InputState state;
+    state.kind = InputKind::Editor;
+    state.softWrap = true;
+    InputSetValue(&state, Str(buf, kLines * 2));
+    Free(nullptr, buf);
+    state.lastLineH = 20;
+    state.lastFont = 14;
+    state.lastBounds = {12, 80, 200, 20};
+    state.inputBounds = {0, 80, 400, 400};
+    state.scrollY = 200;
+    int rows = InputLinesLen(&state);
+    for (int i = 0; i < rows; i++) {
+        Bounds box = {12, 80.f + (float)i * 20.f, 200, 20};
+        VecAppend(state.rowBoxes, box);
+    }
+    PaintCtx ctx = {};
+    int at = InputIndexForPosition(&state, &ctx, 12, 80.f + 30.f, nullptr);
+    utassert(at == InputLineStartOffset(&state, 11));
+}
+
+static void ScrollToCursorUsesDocumentYNotStaleWindowY() {
+    const int kLines = 40;
+    char* buf = (char*)Alloc(nullptr, kLines * 2);
+    utassert(buf);
+    for (int i = 0; i < kLines; i++) {
+        buf[i * 2] = 'x';
+        buf[i * 2 + 1] = '\n';
+    }
+    InputState state;
+    state.kind = InputKind::Editor;
+    state.softWrap = true;
+    InputSetValue(&state, Str(buf, kLines * 2));
+    Free(nullptr, buf);
+    state.lastLineH = 20;
+    state.viewH = 400;
+    state.contentH = (float)kLines * 20.f;
+    state.scrollY = 400;
+    // Row 0 last painted at the top of the file; row 20 is on screen now
+    // at the same window y. Subtracting those would put the caret at 0.
+    int rows = InputLinesLen(&state);
+    for (int i = 0; i < rows; i++) {
+        Bounds box = {12, 80.f + (float)i * 20.f, 200, 20};
+        if (i == 20) {
+            box.y = 80;
+        }
+        VecAppend(state.rowBoxes, box);
+    }
+    state.selectedRange = SelectionAt(InputLineStartOffset(&state, 20));
+    InputScrollToCursor(&state, InputMoveDir::None);
+    utassert(state.scrollY > 200);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -2728,4 +2791,6 @@ void TestInputState() {
     SoftWrapBoundariesKeepTheVisualRowAffinity();
     ALongDocumentBuildsOnlyTheVisibleBand();
     AClickInAScrolledEditorMapsThroughScrollY();
+    AClickInAWrappedScrolledEditorIgnoresStaleWindowY();
+    ScrollToCursorUsesDocumentYNotStaleWindowY();
 }
