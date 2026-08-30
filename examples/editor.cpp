@@ -13,10 +13,9 @@
    itself.
 
    Under it is the status bar, with the caret's one-based `line:column (byte)`
-   on the right opening the Go to line dialog. Five of its eight switches are
-   here — line numbers, soft wrap, indent guides, folding, read only. The
-   three that are not are the three the editor engine has no setting for yet:
-   show whitespaces, scroll beyond last line, and cursor surrounding lines.
+   on the right opening the Go to line dialog. All eight switches are here:
+   line numbers, soft wrap, show whitespaces, indent guides, folding, read
+   only, scroll beyond last line, and cursor surrounding lines.
 
    The diagnostics are the part that differs and says so. Upstream lints the
    open document with the `autocorrect` crate and publishes what it finds
@@ -76,9 +75,13 @@ struct EditorApp {
     // The switches the status bar carries.
     bool lineNumbers = true;
     bool softWrap = false;
+    bool showWhitespaces = false;
     bool indentGuides = true;
     bool folding = true;
     bool readOnly = false;
+    // -1 is None ("default"); cycle_rows walks 0, 3, 8, then back.
+    int scrollBeyondLastLine = -1;
+    int cursorSurroundingLines = -1;
 
     // The two the appearance menu keeps for itself: Rust's AppState carries
     // these, since neither is a theme setting.
@@ -783,10 +786,36 @@ static int DocumentColorsIn(void*, Str text, DocumentColor* out, int cap) {
 enum {
     kToggleLineNumbers = 0,
     kToggleSoftWrap,
+    kToggleWhitespaces,
     kToggleIndentGuides,
     kToggleFolding,
     kToggleReadOnly
 };
+
+enum {
+    kCycleScrollBeyond = 0,
+    kCycleCursorSurrounding
+};
+
+static int CycleRows(int v) {
+    if (v < 0) {
+        return 0;
+    }
+    if (v == 0) {
+        return 3;
+    }
+    if (v == 3) {
+        return 8;
+    }
+    return -1;
+}
+
+static Str RowsLabel(Arena* a, int v) {
+    if (v < 0) {
+        return StrL("default");
+    }
+    return StrDup(a, fmt("%d", v));
+}
 
 static void OnToggle(EditorApp* self, Ctx* cx, const ClickEvent*,
                      intptr_t which) {
@@ -799,6 +828,10 @@ static void OnToggle(EditorApp* self, Ctx* cx, const ClickEvent*,
             self->softWrap = !self->softWrap;
             self->editor.softWrap = self->softWrap;
             break;
+        case kToggleWhitespaces:
+            self->showWhitespaces = !self->showWhitespaces;
+            self->editor.showWhitespaces = self->showWhitespaces;
+            break;
         case kToggleIndentGuides:
             self->indentGuides = !self->indentGuides;
             break;
@@ -810,6 +843,18 @@ static void OnToggle(EditorApp* self, Ctx* cx, const ClickEvent*,
             self->readOnly = !self->readOnly;
             self->editor.readonly = self->readOnly;
             break;
+    }
+    Notify(cx);
+}
+
+static void OnCycleRows(EditorApp* self, Ctx* cx, const ClickEvent*,
+                        intptr_t which) {
+    if (which == kCycleScrollBeyond) {
+        self->scrollBeyondLastLine = CycleRows(self->scrollBeyondLastLine);
+        self->editor.scrollBeyondLastLine = self->scrollBeyondLastLine;
+    } else {
+        self->cursorSurroundingLines = CycleRows(self->cursorSurroundingLines);
+        self->editor.cursorSurroundingLines = self->cursorSurroundingLines;
     }
     Notify(cx);
 }
@@ -874,6 +919,46 @@ static El* ToggleButton(Ctx* cx, Str id, Str label, bool on, Listener toggle,
         b->Icon(IconName::Check);
     }
     return b->OnClick(ListenerArg(toggle, which))->IntoEl();
+}
+
+// editor.rs's file-tree row: ListItem with py_0p5, px_2, pl(16*depth+8),
+// gap_2. ListItem itself paints text_base (16), so a row is that line box
+// plus 2px of pad each side — closer together than the story tree's 34px
+// py_1 / text_base rows. The wrapper also has p_1 and the sidebar fill.
+static const float kFileTreeRowH = 28;
+
+static El* FileTreeRow(void*, Ctx* cx, int, const TreeEntry& entry,
+                       TreeEntryState entryState) {
+    const Theme& th = ThemeNow(cx->app);
+    const TreeItem* it = entry.item;
+    if (!it) {
+        return nullptr;
+    }
+    Arena* a = cx->a;
+    Rgba fg = it->disabled ? th.mutedFg : th.sidebarFg;
+    El* row = Div(a)
+                  ->FlexRow()
+                  ->W(kFill)
+                  ->H(kFileTreeRowH)
+                  ->PadR(8)
+                  ->PadL(8.f + (float)it->depth * 16.f)
+                  ->Gap(8)
+                  ->ItemsCenter()
+                  ->Radius(th.radius);
+    if (!it->disabled) {
+        row->HoverBg(th.tokens.muted);
+    }
+    if (entryState.IsSelected()) {
+        row->Bg(th.tokens.accent);
+    } else if (entryState.IsRightClicked()) {
+        row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
+    }
+    IconName ic = !it->folder    ? IconName::File
+                  : it->expanded ? IconName::FolderOpen
+                                 : IconName::Folder;
+    row->Child(IconEl(a, ic, 16)->Fg(fg));
+    row->Child(TextEl(a, it->label)->Font(16)->Fg(fg));
+    return row;
 }
 
 // ─── the title bar ────────────────────────────────────────────────────────
@@ -1396,6 +1481,7 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
         self->seeded = true;
         self->tree = EntityNewState<TreeState>(cx->app);
         if (TreeState* s = self->tree.Get(cx)) {
+            s->rowH = kFileTreeRowH;
             LoadDir(s, ".", -1, 2);
             TreeRebuild(s);
             self->treeSub = Subscribe(cx, self->tree, &OnTreeEvent);
@@ -1412,8 +1498,11 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     // the labels, not only after a toggle.
     self->editor.mode.lineNumber = self->lineNumbers;
     self->editor.softWrap = self->softWrap;
+    self->editor.showWhitespaces = self->showWhitespaces;
     self->editor.mode.folding = self->folding;
     self->editor.readonly = self->readOnly;
+    self->editor.scrollBeyondLastLine = self->scrollBeyondLastLine;
+    self->editor.cursorSurroundingLines = self->cursorSurroundingLines;
 
     EditorInitKeys();
     // build_menus() once: the OS menu bar is installed from it, the title bar
@@ -1443,13 +1532,19 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
             }
         }
     }
-    El* tree =
-        component::Tree::New(cx, StrL("files"), self->tree)->H(bodyH)->IntoEl();
+    // p_1 on the tree wrapper, subtracted from the list height so the
+    // virtualized rows still fill the pane.
+    float treeH = bodyH > 8 ? bodyH - 8 : bodyH;
+    El* tree = TreeList::New(cx, StrL("files"), self->tree, treeH, &FileTreeRow,
+                             nullptr)
+                   ->Bg(th.sidebar);
     El* left = Div(a)
                    ->FlexCol()
                    ->W(240)
                    ->H(bodyH)
                    ->Shrink0()
+                   ->Pad(4)
+                   ->Bg(th.sidebar)
                    ->BorderR(1, th.border)
                    ->Child(tree);
 
@@ -1471,17 +1566,37 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     El* body = Div(a)->FlexRow()->W(kFill)->H(bodyH)->Child(left)->Child(right);
 
     Listener toggle = Listen(cx, &OnToggle);
+    Listener cycle = Listen(cx, &OnCycleRows);
     component::StatusBar* bar = component::StatusBar::New(cx);
     bar->Left(ToggleButton(cx, StrL("line-number"), StrL("Line Number"),
                            self->lineNumbers, toggle, kToggleLineNumbers));
     bar->Left(ToggleButton(cx, StrL("soft-wrap"), StrL("Soft Wrap"),
                            self->softWrap, toggle, kToggleSoftWrap));
+    bar->Left(ToggleButton(cx, StrL("show-whitespace"),
+                           StrL("Show Whitespaces"), self->showWhitespaces,
+                           toggle, kToggleWhitespaces));
     bar->Left(ToggleButton(cx, StrL("indent-guides"), StrL("Indent Guides"),
                            self->indentGuides, toggle, kToggleIndentGuides));
     bar->Left(ToggleButton(cx, StrL("folding"), StrL("Folding"), self->folding,
                            toggle, kToggleFolding));
     bar->Left(ToggleButton(cx, StrL("readonly"), StrL("Read only"),
                            self->readOnly, toggle, kToggleReadOnly));
+    bar->Left(
+        component::Button::New(cx, StrL("scroll-beyond-last-line"))
+            ->Ghost()
+            ->WithSize(UiSize::XSmall)
+            ->Label(StrDup(a, fmt("Scroll Beyond: %s",
+                                  RowsLabel(a, self->scrollBeyondLastLine))))
+            ->OnClick(ListenerArg(cycle, kCycleScrollBeyond))
+            ->IntoEl());
+    bar->Left(
+        component::Button::New(cx, StrL("cursor-surrounding-lines"))
+            ->Ghost()
+            ->WithSize(UiSize::XSmall)
+            ->Label(StrDup(a, fmt("Cursor Surrounding: %s",
+                                  RowsLabel(a, self->cursorSurroundingLines))))
+            ->OnClick(ListenerArg(cycle, kCycleCursorSurrounding))
+            ->IntoEl());
     // render_go_to_line_button: the point one-based the way an editor counts
     // it, and the byte the caret stands on beside it.
     RopePoint at = InputCursorPosition(&self->editor);

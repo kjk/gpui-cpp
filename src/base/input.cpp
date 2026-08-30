@@ -619,6 +619,14 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
             }
         }
     }
+    // empty_bottom_height: extra scrollable space past the last line, so
+    // the caret can sit in the upper half of a code editor. Ghost lines
+    // are overlaid here rather than stacked, so they do not share this.
+    float emptyBottom =
+        InputEmptyBottomHeight(state->mode.kind == LayoutModeKind::CodeEditor,
+                               state->scrollBeyondLastLine, vh, lineH);
+    state->contentH += emptyBottom;
+    padBottom += emptyBottom;
     if (padTop > 0) {
         col->Child(Div(a)->W(kFill)->Shrink0()->H(padTop));
     }
@@ -982,7 +990,8 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
             el->CaretOut(&state->caretWinX, &state->caretWinY);
         }
         // indent_guides: a hairline every tab stop of the row's own leading
-        // whitespace, drawn behind the text.
+        // whitespace, drawn behind the text. show_whitespaces shares the
+        // same underlay: a mid-dot on every space and an arrow on every tab.
         El* guides = nullptr;
         if (colW > 0) {
             int lead = 0;
@@ -1001,6 +1010,55 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
                             ->W(1)
                             ->H(kFill)
                             ->Bg(style.indentGuide));
+                }
+            }
+        }
+        if (state->showWhitespaces) {
+            float charW = colW > 0 ? colW : font * 0.6f;
+            if (charW > 0) {
+                if (!guides) {
+                    guides = Div(a)->Absolute()->Left(0)->Top(0)->H(kFill);
+                }
+                int displayCol = 0;
+                Rgba invis = style.mutedForeground;
+                for (int i = 0; i < line.len;) {
+                    unsigned char c = (unsigned char)line.s[i];
+                    if (c == ' ' || c == '\t') {
+                        float startX = charW * (float)displayCol;
+                        float x = c == ' '
+                                      ? startX + charW * 0.5f - font * 0.25f
+                                      : startX;
+                        if (x < 0) {
+                            x = 0;
+                        }
+                        El* mark = TextEl(a, c == ' ' ? StrL("\xE2\x80\xA2")
+                                                      : StrL("\xE2\x86\x92"))
+                                       ->Font(c == ' ' ? font * 0.5f : font)
+                                       ->Fg(invis);
+                        guides->Child(Div(a)
+                                          ->Absolute()
+                                          ->Left(x)
+                                          ->Top(0)
+                                          ->H(kFill)
+                                          ->ItemsCenter()
+                                          ->Child(mark));
+                        displayCol++;
+                        i++;
+                        continue;
+                    }
+                    if ((c & 0x80) == 0) {
+                        i++;
+                    } else if ((c & 0xE0) == 0xC0) {
+                        i += 2;
+                    } else if ((c & 0xF0) == 0xE0) {
+                        i += 3;
+                    } else {
+                        i += 4;
+                    }
+                    if (i > line.len) {
+                        i = line.len;
+                    }
+                    displayCol++;
                 }
             }
         }
@@ -1874,6 +1932,40 @@ static void UpdatePreferredColumn(InputState* s) {
 // field scrolls sideways to reach it.
 static const float kInputRightMargin = 5.f;
 
+// BOTTOM_MARGIN_ROWS: the default trailing space and the default
+// cursor-surrounding clearance, in line-heights.
+static const int kBottomMarginRows = 3;
+
+float InputEmptyBottomHeight(bool isCodeEditor, int overrideRows,
+                             float viewportH, float lineH) {
+    if (!isCodeEditor) {
+        return 0;
+    }
+    if (overrideRows >= 0) {
+        return (float)overrideRows * lineH;
+    }
+    float half = viewportH * 0.5f;
+    float floor = (float)kBottomMarginRows * lineH;
+    return half > floor ? half : floor;
+}
+
+float InputCursorSurroundingPadding(bool isAutoGrow, int overrideLines,
+                                    int visibleLines, float lineH) {
+    if (isAutoGrow) {
+        return lineH;
+    }
+    float raw;
+    if (overrideLines >= 0) {
+        raw = (float)overrideLines * lineH;
+    } else if (visibleLines < kBottomMarginRows * 8) {
+        raw = lineH;
+    } else {
+        raw = (float)kBottomMarginRows * lineH;
+    }
+    float half = (float)visibleLines * lineH * 0.5f;
+    return raw < half ? raw : half;
+}
+
 void InputScrollToCaret(InputState* s, float caretX, float caretY,
                         InputMoveDir dir) {
     if (!s) {
@@ -1903,9 +1995,22 @@ void InputScrollToCaret(InputState* s, float caretX, float caretY,
     }
 
     // Down the page: the caret's whole line has to be inside the box, with a
-    // line's clearance at whichever edge it came in from.
+    // line's clearance at whichever edge it came in from. A code editor
+    // walking with Up/Down uses cursor_surrounding_lines instead, the way
+    // scroll_to and layout_cursor share one helper in Rust.
     if (s->viewH > 0) {
-        if (caretY - lineH < s->scrollY) {
+        bool surrounding = dir != InputMoveDir::None &&
+                           s->mode.kind == LayoutModeKind::CodeEditor;
+        if (surrounding) {
+            int visible = lineH > 0 ? (int)(s->viewH / lineH) : 0;
+            float edge = InputCursorSurroundingPadding(
+                false, s->cursorSurroundingLines, visible, lineH);
+            if (caretY - edge + lineH < s->scrollY) {
+                s->scrollY = caretY - edge + lineH;
+            } else if (caretY + edge > s->scrollY + s->viewH) {
+                s->scrollY = caretY + edge - s->viewH;
+            }
+        } else if (caretY - lineH < s->scrollY) {
             s->scrollY = caretY - lineH;
         } else if (caretY + lineH + lineH > s->scrollY + s->viewH) {
             s->scrollY = caretY + lineH + lineH - s->viewH;

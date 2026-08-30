@@ -3827,6 +3827,14 @@ struct InputState {
     // so one row's cell locates it.
     Bounds gutterBox = {};
     bool softWrap = true;
+    // show_whitespaces: paint a mid-dot on every space and an arrow on
+    // every tab. Off until the editor's status bar turns it on.
+    bool showWhitespaces = false;
+    // scroll_beyond_last_line / cursor_surrounding_lines: -1 is None
+    // (the default heuristic), >= 0 is Some(n). VSCode's
+    // editor.scrollBeyondLastLine and editor.cursorSurroundingLines.
+    int scrollBeyondLastLine = -1;
+    int cursorSurroundingLines = -1;
     // text_align: 0 left, 1 center, 2 right.
     int align = 0;
     // A press is down and every move until the release extends the selection.
@@ -4021,6 +4029,13 @@ enum class InputMoveDir : uint8_t {
 // same way, so a vertical walk does not fight itself.
 void InputScrollToCaret(InputState* s, float caretX, float caretY,
                         InputMoveDir dir);
+// empty_bottom_height / cursor_surrounding_padding. `overrideRows` and
+// `overrideLines` are -1 for None. The editor example's status bar is
+// what turns the overrides.
+float InputEmptyBottomHeight(bool isCodeEditor, int overrideRows,
+                             float viewportH, float lineH);
+float InputCursorSurroundingPadding(bool isAutoGrow, int overrideLines,
+                                    int visibleLines, float lineH);
 // A negative `caretX` leaves the sideways offset alone, which is what
 // scrolling to something that is not the caret wants: a search match is a
 // row to bring into view, and how far across it sits is not measurable

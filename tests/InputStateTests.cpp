@@ -1627,6 +1627,53 @@ static void TheOffsetStaysInsideTheContent() {
     utassertnear(s.scrollY, 0.f);
 }
 
+static void EmptyBottomHeightMatchesRust() {
+    // crates/base/src/input/base/element.rs empty_bottom_height.
+    float lineH = 20;
+    for (int rows : {-1, 0, 3, 99}) {
+        utassertnear(InputEmptyBottomHeight(false, rows, 800, lineH), 0.f);
+    }
+    utassertnear(InputEmptyBottomHeight(true, -1, 800, lineH), 400.f);
+    utassertnear(InputEmptyBottomHeight(true, -1, 40, lineH), 60.f);
+    for (int rows : {0, 1, 3, 8, 64}) {
+        float want = (float)rows * lineH;
+        utassertnear(InputEmptyBottomHeight(true, rows, 800, lineH), want);
+        utassertnear(InputEmptyBottomHeight(true, rows, 20, lineH), want);
+    }
+}
+
+static void CursorSurroundingPaddingMatchesRust() {
+    float lineH = 20;
+    for (int lines : {-1, 0, 3, 99}) {
+        for (int visible : {0, 1, 8, 64}) {
+            utassertnear(
+                InputCursorSurroundingPadding(true, lines, visible, lineH),
+                lineH);
+        }
+    }
+    int fewVisible = 3 * 8 - 1;
+    utassertnear(InputCursorSurroundingPadding(false, -1, fewVisible, lineH),
+                 lineH);
+    utassertnear(InputCursorSurroundingPadding(false, -1, 24, lineH),
+                 3.f * lineH);
+    utassertnear(InputCursorSurroundingPadding(false, -1, 100, lineH),
+                 3.f * lineH);
+
+    utassertnear(InputCursorSurroundingPadding(false, 50, 10, lineH), 100.f);
+    utassertnear(InputCursorSurroundingPadding(false, 3, 40, lineH), 60.f);
+}
+
+static void CodeEditorSurroundingUsesTheOverride() {
+    InputState s;
+    SeedScroll(&s);
+    s.mode.kind = LayoutModeKind::CodeEditor;
+    s.cursorSurroundingLines = 3;
+    s.viewH = 200;
+    s.contentH = 800;
+    InputScrollToCaret(&s, 0, 180, InputMoveDir::Down);
+    utassertnear(s.scrollY, 40.f);
+}
+
 static void ASidewaysCaretPullsTheRunAcross() {
     InputState s;
     SeedScroll(&s);
@@ -2773,6 +2820,9 @@ void TestInputState() {
     ScrollToBringsTheCaretIntoView();
     AVerticalWalkDoesNotFightItself();
     TheOffsetStaysInsideTheContent();
+    EmptyBottomHeightMatchesRust();
+    CursorSurroundingPaddingMatchesRust();
+    CodeEditorSurroundingUsesTheOverride();
     ASidewaysCaretPullsTheRunAcross();
     TheNumberKeysStepTheField();
     TypingAWordOpensTheMenu();
