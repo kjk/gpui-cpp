@@ -1429,7 +1429,7 @@ static El* EditorTitleBar(EditorApp* self, Ctx* cx, const MenuDef* defs,
                           int nDefs) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
-    El* menus = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
+    El* menus = Div(a)->FlexRow()->H(kFill)->ItemsCenter()->Shrink0();
     if (self->appMenuBar) {
         menus->Child(EditorMenuBar(cx, defs, nDefs));
     } else {
@@ -1443,6 +1443,7 @@ static El* EditorTitleBar(EditorApp* self, Ctx* cx, const MenuDef* defs,
             ->FlexRow()
             ->H(kFill)
             ->ItemsCenter()
+            ->Shrink0()
             ->PadX(8)
             ->Gap(2)
             ->Child(EditorAppearanceMenu(self, cx))
@@ -1538,11 +1539,19 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     El* tree = TreeList::New(cx, StrL("files"), self->tree, treeH, &FileTreeRow,
                              nullptr)
                    ->Bg(th.sidebar);
+    // Rust's `resizable_panel().size(px(240.))` next to a flex editor: the
+    // pane's width is a number, not min-content of the longest filename, so
+    // a right-edge resize does not walk the labels around. MaxW pins it;
+    // ClipX keeps a long name from forcing the box.
     El* left = Div(a)
                    ->FlexCol()
                    ->W(240)
-                   ->H(bodyH)
-                   ->Shrink0()
+                   ->MinW(240)
+                   ->MaxW(240)
+                   ->H(kFill)
+                   ->FlexNone()
+                   ->ClipX()
+                   ->ClipY()
                    ->Pad(4)
                    ->Bg(th.sidebar)
                    ->BorderR(1, th.border)
@@ -1561,9 +1570,21 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
         ed->Folding();
     }
     ed->Diagnostics(self->diagnostics, self->nDiagnostics);
-    El* right = Div(a)->FlexCol()->Flex1()->H(bodyH)->Child(ed->IntoEl());
+    El* right =
+        Div(a)->FlexCol()->Flex1()->MinW(0)->H(kFill)->Child(ed->IntoEl());
 
-    El* body = Div(a)->FlexRow()->W(kFill)->H(bodyH)->Child(left)->Child(right);
+    // flex_1 between the title bar and the status bar, the way Rust's
+    // `v_flex().flex_1()` around the resizable + status bar is. An explicit
+    // H(dipH - chrome) fought the 1px window border and the status bar's
+    // own height, so a 1px width change could restretch the whole column.
+    El* body = Div(a)
+                   ->FlexRow()
+                   ->W(kFill)
+                   ->Flex1()
+                   ->MinW(0)
+                   ->MinH(0)
+                   ->Child(left)
+                   ->Child(right);
 
     Listener toggle = Listen(cx, &OnToggle);
     Listener cycle = Listen(cx, &OnCycleRows);
@@ -1615,7 +1636,7 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     if (cx->win->opts.clientTitleBar) {
         root->Child(EditorTitleBar(self, cx, defs, nDefs));
     }
-    root->Child(body)->Child(bar->IntoEl());
+    root->Child(body)->Child(bar->IntoEl()->Shrink0());
     if (self->dialogOpen) {
         root->Child(component::Dialog::New(cx)
                         ->Open(true)

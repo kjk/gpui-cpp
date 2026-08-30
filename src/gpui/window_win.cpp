@@ -457,12 +457,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             }
             auto* p = (NCCALCSIZE_PARAMS*)lParam;
             LONG top = p->rgrc[0].top;
-            LRESULT r = DefWindowProcW(hwnd, msg, wParam, lParam);
+            DefWindowProcW(hwnd, msg, wParam, lParam);
             p->rgrc[0].top = top;
             if (IsZoomed(hwnd)) {
                 p->rgrc[0].top += BorderYPx();
             }
-            return r;
+            // DefWindowProc answers WVR_VALIDRECTS and copies the old client
+            // into the new one. With the caption inset removed, that copy is
+            // one frame off the layout — menus and the file tree walk a few
+            // pixels during a right-edge drag. WVR_REDRAW invalidates the
+            // whole client instead; WM_SIZE paints it at the new size.
+            return WVR_REDRAW;
         }
         case WM_NCHITTEST: {
             LRESULT hit = DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -511,7 +516,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         case WM_SIZE:
             win->paint.dpi = HostDpi(hwnd);
-            InvalidateRect(hwnd, nullptr, FALSE);
+            // Paint now, not after a coalesced WM_PAINT: during a live
+            // resize DWM otherwise composites the last flip buffer stretched
+            // to the new client, which is the same walk the menus do.
+            if (wParam != SIZE_MINIMIZED) {
+                RenderFrame(win);
+                ValidateRect(hwnd, nullptr);
+            }
             return 0;
         case WM_DPICHANGED: {
             auto* r = (RECT*)lParam;

@@ -390,6 +390,10 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         desc.BufferCount = 3;
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
         desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        // Stretch is the default and is what DWM does with the last buffer
+        // while the window is between sizes. None keeps left-side content
+        // where it was; the new strip is empty until this frame presents.
+        desc.Scaling = DXGI_SCALING_NONE;
         HRESULT hr = ctx->pa->dxgiFactory->CreateSwapChainForHwnd(
             ctx->pa->d3d, hwnd, &desc, nullptr, nullptr, &t->swap);
         if (FAILED(hr)) {

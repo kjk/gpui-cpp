@@ -5,9 +5,8 @@ namespace gpui {
 
 Rgba ResizableHandleColor(const base_theme::Theme& theme, bool active) {
     if (active) {
-        return theme.resizable.hasActiveHandle
-                   ? theme.resizable.activeHandle
-                   : theme.tokens.colors.ring;
+        return theme.resizable.hasActiveHandle ? theme.resizable.activeHandle
+                                               : theme.tokens.colors.ring;
     }
     return theme.resizable.hasHandle ? theme.resizable.handle
                                      : theme.tokens.colors.border;
@@ -210,9 +209,9 @@ bool ResizableState::ResizePanel(Ctx* cx, int ix, float size) {
         handle = ix - 1;
         requested = sizes[handle] + sizes[ix] - size;
     }
-    bool changed = ResizablePanelResize(sizes.els, mins.els, maxs.els,
-                                        sizes.len, handle, requested,
-                                        ContainerSize());
+    bool changed =
+        ResizablePanelResize(sizes.els, mins.els, maxs.els, sizes.len, handle,
+                             requested, ContainerSize());
     // Rust calls done_resizing for every valid panel, even when the requested
     // value was already current or the range clamps it back to that value.
     if (onResized.IsValid()) {
@@ -250,8 +249,10 @@ bool ResizableState::RemovePanel(Ctx* cx, int ix) {
     if (ix < grows.len) ResizableVecRemove(&grows, ix);
     if (ix < shown.len) ResizableVecRemove(&shown, ix);
     if (ix < laid.len) ResizableVecRemove(&laid, ix);
-    if (dragging == ix) dragging = -1;
-    else if (dragging > ix) dragging--;
+    if (dragging == ix)
+        dragging = -1;
+    else if (dragging > ix)
+        dragging--;
     ResizableAdjustToContainer(sizes.els, sizes.len, ContainerSize());
     Notify(cx);
     return true;
@@ -280,8 +281,9 @@ void ResizableState::Clear() {
     lastContainer = 0;
 }
 
-ResizablePanelGroup* ResizablePanelGroup::New(
-    Ctx* cx, Str id, Entity<ResizableState> state, gpui::Axis axis) {
+ResizablePanelGroup* ResizablePanelGroup::New(Ctx* cx, Str id,
+                                              Entity<ResizableState> state,
+                                              gpui::Axis axis) {
     Arena* a = cx->a;
     ResizablePanelGroup* r = ArenaNew<ResizablePanelGroup>(a);
     r->a = a;
@@ -361,8 +363,8 @@ ResizeHandle* ResizeHandle::OnDrag(Listener listener) {
     return this;
 }
 
-ResizeHandle* ResizeHandle::WithAppearance(
-    void* user, ResizeHandleRenderer renderer) {
+ResizeHandle* ResizeHandle::WithAppearance(void* user,
+                                           ResizeHandleRenderer renderer) {
     appearanceUser = user;
     appearance = renderer;
     return this;
@@ -382,8 +384,10 @@ El* ResizeHandle::IntoEl() {
     El* line = appearance ? appearance(appearanceUser, &context, cx) : nullptr;
     if (!line) {
         line = Div(cx->a)->Bg(active ? activeColor : color);
-        if (AxisIsHorizontal(axis)) line->W(kResizeHandleSize)->H(kFill);
-        else line->H(kResizeHandleSize)->W(kFill);
+        if (AxisIsHorizontal(axis))
+            line->W(kResizeHandleSize)->H(kFill);
+        else
+            line->H(kResizeHandleSize)->W(kFill);
     }
     El* handle = Div(cx->a)
                      ->Absolute()
@@ -395,9 +399,7 @@ El* ResizeHandle::IntoEl() {
         handle->OnDrag(kResizeDrag, 0)->OnDragMove(onDrag);
     }
     if (AxisIsHorizontal(axis)) {
-        handle->Cursor(CursorKind::ColResize)
-            ->Top(0)
-            ->H(kFill);
+        handle->Cursor(CursorKind::ColResize)->Top(0)->H(kFill);
         if (hasPlacement && SideIsLeft(placement)) {
             // The left dock is the source's special one-sided hit band:
             // right(1), w(1), pl(4). Keep its line at the outer edge.
@@ -425,8 +427,10 @@ ResizeHandle* resize_handle(Ctx* cx, Str id, Axis axis) {
 }
 
 ResizablePanelGroup* ResizablePanelGroup::Size(float v) {
-    if (AxisIsHorizontal(groupAxis)) height = v;
-    else width = v;
+    if (AxisIsHorizontal(groupAxis))
+        height = v;
+    else
+        width = v;
     return this;
 }
 
@@ -442,7 +446,7 @@ ResizablePanelGroup* ResizablePanelGroup::Axis(gpui::Axis value) {
 }
 
 ResizablePanelGroup* ResizablePanelGroup::HandleColors(Rgba rest,
-                                                        Rgba dragging) {
+                                                       Rgba dragging) {
     handleColor = rest;
     handleDragColor = dragging;
     return this;
@@ -461,7 +465,7 @@ ResizablePanelGroup* ResizablePanelGroup::OnResize(Listener listener) {
 }
 
 ResizablePanelGroup* ResizablePanelGroup::Panel(El* content, float size,
-                                                 float min, float max) {
+                                                float min, float max) {
     panels.Append(a, content);
     sizes.Append(a, size);
     mins.Append(a, min);
@@ -499,7 +503,7 @@ ResizablePanelGroup* ResizablePanelGroup::Child(ResizablePanel* panel) {
 }
 
 ResizablePanelGroup* ResizablePanelGroup::Children(ResizablePanel** values,
-                                                    int count) {
+                                                   int count) {
     panels.len = 0;
     sizes.len = 0;
     mins.len = 0;
@@ -579,7 +583,18 @@ El* ResizablePanelGroup::IntoEl() {
     // growing panel's `width: 100%` is what makes it the one that gives way.
     float container = horiz ? s->bounds.w : s->bounds.h;
     bool resolved = true;
+    bool anyGrow = false;
     for (int i = 0; i < panels.len; i++) {
+        if (shown[i] && grows[i]) {
+            anyGrow = true;
+        }
+        // A growing panel stays a flex item: writing the laid size back would
+        // pin it, then adjust_to_container_size would scale a 240px sidebar
+        // with the window — the jump Rust's `size.is_none()` guard exists to
+        // stop.
+        if (grows[i]) {
+            continue;
+        }
         if (s->sizes[i] <= 0 && shown[i] && i < s->laid.len) {
             float was = horiz ? s->laid[i].w : s->laid[i].h;
             if (was > 0) {
@@ -588,10 +603,11 @@ El* ResizablePanelGroup::IntoEl() {
         }
         resolved = resolved && (s->sizes[i] > 0 || !shown[i]);
     }
-    // adjust_to_container_size: every panel keeps the share it had when the
-    // container changes size. A group that is still waiting for the layout to
-    // answer has nothing to keep the share of.
-    if (resolved && container > 0 && s->lastContainer > 0 &&
+    // adjust_to_container_size: every *sized* panel keeps the share it had
+    // when the container changes size. A group that still has a flex panel
+    // leaves the line to taffy — rescaling from a placeholder (or from a
+    // grow panel's last laid width) drags the sized neighbours with it.
+    if (!anyGrow && resolved && container > 0 && s->lastContainer > 0 &&
         container != s->lastContainer) {
         ResizableAdjustToContainer(s->sizes.els, s->sizes.len, container);
     }
@@ -678,10 +694,9 @@ El* ResizablePanelGroup::IntoEl() {
                 h->nextUp = up;
             }
             ResizeHandleContext handleContext = {s->axis, active};
-            El* line = handleAppearance
-                           ? handleAppearance(handleAppearanceUser,
-                                              &handleContext, cx)
-                           : nullptr;
+            El* line = handleAppearance ? handleAppearance(handleAppearanceUser,
+                                                           &handleContext, cx)
+                                        : nullptr;
             bool builtInLine = line == nullptr;
             if (!line) {
                 line = Div(a)->Bg(active ? handleDragColor : handleColor);
@@ -760,12 +775,12 @@ ResizablePanel* ResizablePanel::Visible(bool value) {
 }
 
 ResizablePanelGroup* h_resizable(Ctx* cx, Str id,
-                                  Entity<ResizableState> state) {
+                                 Entity<ResizableState> state) {
     return ResizablePanelGroup::New(cx, id, state, Axis::Horizontal);
 }
 
 ResizablePanelGroup* v_resizable(Ctx* cx, Str id,
-                                  Entity<ResizableState> state) {
+                                 Entity<ResizableState> state) {
     return ResizablePanelGroup::New(cx, id, state, Axis::Vertical);
 }
 

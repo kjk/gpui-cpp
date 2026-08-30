@@ -51,6 +51,7 @@ El* StatusBar::IntoEl() {
     El* bar = Div(a)
                   ->FlexRow()
                   ->W(kFill)
+                  ->Shrink0()
                   ->ItemsCenter()
                   ->Gap(8)
                   ->PadY(4)

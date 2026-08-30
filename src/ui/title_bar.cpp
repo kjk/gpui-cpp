@@ -65,8 +65,13 @@ TitleBar* TitleBar::New(Ctx* cx) {
     // background; Rust runs that mix down a 180° gradient to the plain title
     // bar color, which this fills flat.
     Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
-    t->content =
-        Div(a)->FlexRow()->H(kFill)->Flex1()->ItemsCenter()->JustifyBetween();
+    t->content = Div(a)
+                     ->FlexRow()
+                     ->H(kFill)
+                     ->Flex1()
+                     ->MinW(0)
+                     ->ItemsCenter()
+                     ->JustifyBetween();
     t->bar = Div(a)
                  ->FlexRow()
                  ->W(kFill)
