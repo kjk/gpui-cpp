@@ -277,36 +277,25 @@ static const float kFoldIcon = 14.f;
 static const float kFoldIconHitbox = 18.f;
 
 // Whether the pointer is over the gutter, which is what decides if the
-// chevrons show. Rust inserts one hitbox over the whole line-number column;
-// the column is at the same x on every row, so the first row's cell is where
-// it is, and the rows themselves say how far down it reaches.
-static bool GutterHovered(const InputState* s, Window* win, float gutterW) {
+// chevrons show. Rust inserts one hitbox over the whole line-number column
+// (fold icons included) at the editor's visible height; the column is the
+// same x on every row, so last frame's gutter strip locates it. rowBoxes
+// are only filled when the text wraps, so they cannot be the vertical
+// extent — without wrap that test never passed and the chevrons stayed
+// hidden until a click folded the line.
+static bool GutterHovered(const InputState* s, Window* win) {
     if (!win || s->gutterBox.w <= 0) {
         return false;
     }
     float x = win->mouseX;
-    if (x < s->gutterBox.x || x >= s->gutterBox.x + gutterW) {
+    if (x < s->gutterBox.x || x >= s->gutterBox.x + s->gutterBox.w) {
         return false;
     }
-    float top = 0, bottom = 0;
-    bool any = false;
-    for (int i = 0; i < s->rowBoxes.len; i++) {
-        const Bounds& b = s->rowBoxes[i];
-        if (b.h <= 0) {
-            continue;
-        }
-        if (!any || b.y < top) {
-            top = b.y;
-        }
-        if (!any || b.y + b.h > bottom) {
-            bottom = b.y + b.h;
-        }
-        any = true;
-    }
-    if (!any) {
+    const Bounds& clip = s->inputBounds.h > 0 ? s->inputBounds : s->contentBox;
+    if (clip.h <= 0) {
         return false;
     }
-    return win->mouseY >= top && win->mouseY < bottom;
+    return win->mouseY >= clip.y && win->mouseY < clip.y + clip.h;
 }
 
 // One cell of the fold gutter: a chevron when the line opens a fold, and an
@@ -314,16 +303,13 @@ static bool GutterHovered(const InputState* s, Window* win, float gutterW) {
 // the same place on every row.
 static El* FoldChevron(Arena* a, InputState* state,
                        const InputEditorStyle& style, int row, int caretRow,
-                       bool gutterHover) {
+                       float lineH, bool gutterHover) {
     // size(FOLD_ICON_HITBOX_WIDTH, line_height): the height is spelled out
     // because a wrapped row's band is items-start rather than stretch, so
     // a cell with no chevron in it would otherwise measure as nothing and
     // a press could not land on it.
-    El* cell = Div(a)
-                   ->W(kFoldIconHitbox)
-                   ->H(kInputLineH)
-                   ->ItemsCenter()
-                   ->JustifyCenter();
+    El* cell =
+        Div(a)->W(kFoldIconHitbox)->H(lineH)->ItemsCenter()->JustifyCenter();
     if (!FoldMapIsCandidate(&state->folds, row)) {
         return cell;
     }
@@ -345,10 +331,25 @@ static El* FoldChevron(Arena* a, InputState* state,
     if (!gutterHover && !folded && row != caretRow) {
         return cell;
     }
-    return cell->Child(
-        IconEl(a, folded ? IconName::ChevronRight : IconName::ChevronDown,
-               kFoldIcon)
-            ->Fg(style.mutedForeground));
+    // crates/ui Input's fold_icon_renderer: a ghost xsmall button, 14px,
+    // whose hover fill is what makes the chevron a target rather than a
+    // glyph. PathClick gives it a hover id so the wash lands and so moving
+    // onto the icon invalidates the frame.
+    El* icon = Div(a)
+                   ->W(kFoldIcon)
+                   ->H(kFoldIcon)
+                   ->Radius(4)
+                   ->ItemsCenter()
+                   ->JustifyCenter()
+                   ->PathClick(StrDup(a, fmt("fold-%d", row)))
+                   ->HoverBg(RgbaOpacity(style.mutedForeground, 0.25f))
+                   ->Cursor(CursorKind::Pointer)
+                   ->Child(IconEl(a,
+                                  folded ? IconName::ChevronRight
+                                         : IconName::ChevronDown,
+                                  kFoldIcon)
+                               ->Fg(style.mutedForeground));
+    return cell->Child(icon);
 }
 
 // element.rs compose_decoration_collections, kept flat. Lived beside the
@@ -502,7 +503,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
     // caret's own row, or over a fold that is closed — a column of them on
     // every candidate line would read as noise. This is last frame's boxes,
     // which is one frame stale and is what Rust's hitbox is too.
-    bool gutterHover = folding && GutterHovered(state, cx->win, numW + foldW);
+    bool gutterHover = folding && GutterHovered(state, cx->win);
     VecClear(state->foldIcons);
     if (folding) {
         VecReserve(state->foldIcons, state->folds.candidates.len);
@@ -1099,13 +1100,29 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& projected,
             num->Mono();
         }
         El* numCell = Div(a)->W(numW)->JustifyEnd()->Child(num);
-        if (row == 0) {
-            numCell->BoundsOut(&state->gutterBox);
-        }
-        band->Child(numCell);
         if (folding) {
-            band->Child(
-                FoldChevron(a, state, style, row, caretRow, gutterHover));
+            // The line-number column and the fold icons are one hit strip,
+            // the way Rust's line_number_hitbox covers both. PathClick on
+            // every row so entering the gutter from the text changes hover
+            // id and rebuilds — otherwise the editor already owns hover and
+            // a move over the numbers would not show the chevrons.
+            El* gutter = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->PathClick(
+                StrDup(a, fmt("gutter-%d", row)));
+            if (!wrap) {
+                gutter->H(lineH);
+            }
+            gutter->Child(numCell);
+            gutter->Child(FoldChevron(a, state, style, row, caretRow, lineH,
+                                      gutterHover));
+            if (row == firstRow) {
+                gutter->BoundsOut(&state->gutterBox);
+            }
+            band->Child(gutter);
+        } else {
+            if (row == 0) {
+                numCell->BoundsOut(&state->gutterBox);
+            }
+            band->Child(numCell);
         }
         if (guides) {
             El* pane = Div(a)->Flex1()->Child(guides)->Child(el);

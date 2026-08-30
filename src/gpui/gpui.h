@@ -3821,10 +3821,11 @@ struct InputState {
     // last frame's and are rebuilt with it.
     FoldMap folds;
     Vec<FoldIconBox> foldIcons;
-    // The line-number cell of the first row, which is what says where the
-    // gutter is. Rust hangs a hitbox over the whole column and shows the
-    // chevrons while it is hovered; the column is the same x for every row,
-    // so one row's cell locates it.
+    // The line-number + fold strip, which is what says where the gutter is.
+    // Rust hangs a hitbox over the whole column and shows the chevrons
+    // while it is hovered; the column is the same x for every row, so one
+    // visible row's cell locates it. y/h of this box are one row; the
+    // hover test uses the editor's clip for the vertical extent.
     Bounds gutterBox = {};
     bool softWrap = true;
     // show_whitespaces: paint a mid-dot on every space and an arrow on
