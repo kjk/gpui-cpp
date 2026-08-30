@@ -13,6 +13,9 @@
    and everything in `util/mdx.rs` and `util/location.rs` (MDX is not
    ported). */
 
+// These tests reach the crate's internals (the tokenizer, CharKind, the
+// event stream), which the amalgam hides from ordinary consumers.
+#define GPUI_INCLUDE_PRIVATE_API 1
 #include "Test.h"
 
 using namespace markdown;
@@ -191,8 +194,8 @@ static void TestMarkdownConstants() {
     for (int32_t i = 1; i < 2125; i++) {
         const char* prev =
             kCharacterReferenceNames + kCharacterReferences[i - 1].nameOff;
-        const char* cur =
-            kCharacterReferenceNames + kCharacterReferences[i].nameOff;
+        const char* cur = kCharacterReferenceNames + kCharacterReferences[i]
+                                                         .nameOff;
         utassert(strcmp(prev, cur) < 0);
     }
 }
@@ -206,7 +209,8 @@ static void TestMarkdownClassify() {
     utassert(Classify('.') == markdown::CharKind::Punctuation);
     utassert(Classify('a') == markdown::CharKind::Other);
     // Beyond ASCII, which is what util/unicode.rs is for.
-    utassert(Classify(0x00a0) == markdown::CharKind::Whitespace); // no-break space
+    utassert(Classify(0x00a0) ==
+             markdown::CharKind::Whitespace); // no-break space
     utassert(Classify(0x2014) == markdown::CharKind::Punctuation); // em dash
     utassert(Classify(0x00e9) == markdown::CharKind::Other);       // é
     // End of file counts as whitespace.
@@ -243,8 +247,9 @@ static void TestMarkdownCharacterReference(Arena* a) {
     utassert(base::StrEq(DecodeNamed(a, StrL("amp")), "&"));
     utassert(base::StrEq(DecodeNamed(a, StrL("AMP")), "&"));
     utassert(base::StrEq(DecodeNamed(a, StrL("copy")), "\xc2\xa9"));
-    utassert(base::StrEq(DecodeNamed(a, StrL("CounterClockwiseContourIntegral")),
-                "\xe2\x88\xb3"));
+    utassert(
+        base::StrEq(DecodeNamed(a, StrL("CounterClockwiseContourIntegral")),
+                    "\xe2\x88\xb3"));
     // The two values `constant.cpp` writes as `\u` escapes rather than as
     // themselves, because gcc rejects a bidi character in a literal.
     utassert(base::StrEq(DecodeNamed(a, StrL("lrm")), "\xe2\x80\x8e"));
@@ -256,7 +261,8 @@ static void TestMarkdownCharacterReference(Arena* a) {
     utassert(base::StrEq(DecodeNumeric(a, StrL("65"), 10), "A"));
     utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), "A"));
     // Out of range, a surrogate, and a forbidden control: U+FFFD.
-    utassert(base::StrEq(DecodeNumeric(a, StrL("1114112"), 10), "\xef\xbf\xbd"));
+    utassert(
+        base::StrEq(DecodeNumeric(a, StrL("1114112"), 10), "\xef\xbf\xbd"));
     utassert(base::StrEq(DecodeNumeric(a, StrL("d800"), 16), "\xef\xbf\xbd"));
     utassert(base::StrEq(DecodeNumeric(a, StrL("0"), 10), "\xef\xbf\xbd"));
 }
@@ -436,8 +442,7 @@ static void TestMarkdownLinks(Arena* a) {
     utassert(NodeRefKind(shortcut) == ReferenceKind::Shortcut);
     utassert(Is(shortcut, NodeStrKind::Identifier, "foo"));
     utassert(NodeRefKind(Child(Child(root, 2), 0)) == ReferenceKind::Full);
-    utassert(NodeRefKind(Child(Child(root, 3), 0)) ==
-             ReferenceKind::Collapsed);
+    utassert(NodeRefKind(Child(Child(root, 3), 0)) == ReferenceKind::Collapsed);
 
     // An undefined reference is not a link at all.
     root = Parse(a, "[nope]\n");
@@ -454,19 +459,25 @@ static void TestMarkdownLinks(Arena* a) {
 
 static void TestMarkdownTable(Arena* a) {
     TestSuite("markdown table");
-    Node* root = Parse(a, "| a | b | c | d |\n"
-                          "| - |:- |:-:| -:|\n"
-                          "| 1 | 2 | 3 | 4 |\n");
+    Node* root = Parse(a,
+                       "| a | b | c | d |\n"
+                       "| - |:- |:-:| -:|\n"
+                       "| 1 | 2 | 3 | 4 |\n");
     Node* table = Child(root, 0);
     utassert(table->kind == NodeKind::Table);
     Arena* into = gParsedInto;
     utassert(ArenaAlignCount(into, NodePerKind(into, table)) == 4);
-    utassert(ArenaAlignAt(into, NodePerKind(into, table), 0) == AlignKind::None);
-    utassert(ArenaAlignAt(into, NodePerKind(into, table), 1) == AlignKind::Left);
-    utassert(ArenaAlignAt(into, NodePerKind(into, table), 2) == AlignKind::Center);
-    utassert(ArenaAlignAt(into, NodePerKind(into, table), 3) == AlignKind::Right);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 0) ==
+             AlignKind::None);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 1) ==
+             AlignKind::Left);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 2) ==
+             AlignKind::Center);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 3) ==
+             AlignKind::Right);
     // Past the end, and a table with no alignments at all.
-    utassert(ArenaAlignAt(into, NodePerKind(into, table), 4) == AlignKind::None);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 4) ==
+             AlignKind::None);
     utassert(ArenaAlignCount(into, kArenaAlignNone) == 0);
     utassert(NodeChildCount(gParsedInto, table) == 2);
     Node* head = Child(table, 0);
@@ -503,7 +514,8 @@ static void TestMarkdownTable(Arena* a) {
     Node* wideRoot = Parse(a, src);
     Node* wideTable = Child(wideRoot, 0);
     utassert(wideTable->kind == NodeKind::Table);
-    utassert(ArenaAlignCount(gParsedInto, NodePerKind(gParsedInto, wideTable)) == wide);
+    utassert(ArenaAlignCount(gParsedInto,
+                             NodePerKind(gParsedInto, wideTable)) == wide);
     for (int32_t i = 0; i < wide; i++) {
         AlignKind want = AlignKind::None;
         if (i % 4 == 1) {
@@ -513,7 +525,8 @@ static void TestMarkdownTable(Arena* a) {
         } else if (i % 4 == 3) {
             want = AlignKind::Right;
         }
-        utassert(ArenaAlignAt(gParsedInto, NodePerKind(gParsedInto, wideTable), i) == want);
+        utassert(ArenaAlignAt(gParsedInto, NodePerKind(gParsedInto, wideTable),
+                              i) == want);
     }
 }
 
@@ -521,7 +534,8 @@ static void TestMarkdownHtmlAndFootnotes(Arena* a) {
     TestSuite("markdown html");
     Node* root = Parse(a, "<div>\n  <b>x</b>\n</div>\n");
     utassert(Child(root, 0)->kind == NodeKind::Html);
-    utassert(Is(Child(root, 0), NodeStrKind::Value, "<div>\n  <b>x</b>\n</div>"));
+    utassert(
+        Is(Child(root, 0), NodeStrKind::Value, "<div>\n  <b>x</b>\n</div>"));
 
     root = Parse(a, "a <b>c</b> d\n");
     Node* p = Child(root, 0);

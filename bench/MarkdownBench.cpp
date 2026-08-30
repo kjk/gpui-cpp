@@ -37,6 +37,10 @@
    now, and the 256 KB shape went from 1.0 s to 61 ms. The events produced are
    the same; see `EditMap` in src/markdown/util.h. */
 
+// The tokenize/to_mdast split below measures through the crate's internals
+// (ParseState, the event stream), which the amalgam hides from ordinary
+// consumers.
+#define GPUI_INCLUDE_PRIVATE_API 1
 #include "Bench.h"
 
 // `gpui::CharKind` and `markdown::CharKind` both exist, so this file names
@@ -82,10 +86,10 @@ struct Doc {
 // Words to build sentences out of. Short and long ones both, since a run of
 // data ends at the next marker byte and the marker density is what the text
 // tokenizer feels.
-static const char* kWords[16] = {"the",     "layout",   "engine",  "reads",
-                                 "a",       "document", "and",     "renders",
+static const char* kWords[16] = {"the",     "layout",   "engine",   "reads",
+                                 "a",       "document", "and",      "renders",
                                  "it",      "into",     "elements", "that",
-                                 "measure", "their",    "own",     "text"};
+                                 "measure", "their",    "own",      "text"};
 
 static void AddWords(Doc* d, BenchRng* rng, int count) {
     for (int i = 0; i < count; i++) {
@@ -207,8 +211,8 @@ static void BuildTable(Doc* d, int32_t target) {
 static void BuildEntities(Doc* d, int32_t target) {
     BenchRng rng;
     rng.Seed(kStandardRngSeed);
-    const char* refs[6] = {"&amp;",  "&copy;", "&nbsp;",
-                           "&#65;",  "&#x41;", "&hellip;"};
+    const char* refs[6] = {"&amp;", "&copy;", "&nbsp;",
+                           "&#65;", "&#x41;", "&hellip;"};
     while (!d->Full(target)) {
         for (int word = 0; word < 40; word++) {
             if (word % 5 == 4) {

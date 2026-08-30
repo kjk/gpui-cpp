@@ -13,6 +13,9 @@
    ported), and `new_should_allocate_default_capacity` (the C++ tree's slot
    vector has no capacity to assert on before a node is added). */
 
+// These tests reach the crate's internals (MaybeMin/MaybeMax and friends in
+// taffy_math.h), which the amalgam hides from ordinary consumers.
+#define GPUI_INCLUDE_PRIVATE_API 1
 #include "Test.h"
 
 using namespace taffy;
@@ -805,7 +808,7 @@ static void TestHiddenLayout() {
     // Whatever size and display mode the nodes had, every layout resolves to
     // zero because the root is display:none.
     TaffyNodeId all[] = {root,         child00,      child01,
-                    grandchild00, grandchild01, grandchild02};
+                         grandchild00, grandchild01, grandchild02};
     for (TaffyNodeId n : all) {
         const Layout& l = tree.GetLayout(n);
         utassert(l.size == SizeF::Zero());
@@ -1727,9 +1730,12 @@ static void TestScrollColumnDoesNotShrink() {
     textStyle.size = SizeDim::FromLengths(149.0f, 22.0f);
 
     taffy::Style leaf;
-    leaf.size = {taffy::Dimension::Percent(1.0f), taffy::Dimension::Length(400.0f)};
-    leaf.alignItems = taffy::OptAlignItems(taffy::AlignItems{taffy::AlignItemsKeyword::Center});
-    leaf.justifyContent = taffy::OptJustifyContent(taffy::AlignContent{taffy::AlignContentKeyword::Center});
+    leaf.size = {taffy::Dimension::Percent(1.0f),
+                 taffy::Dimension::Length(400.0f)};
+    leaf.alignItems = taffy::OptAlignItems(
+        taffy::AlignItems{taffy::AlignItemsKeyword::Center});
+    leaf.justifyContent = taffy::OptJustifyContent(
+        taffy::AlignContent{taffy::AlignContentKeyword::Center});
     TaffyNodeId ta = tree.NewLeaf(textStyle);
     TaffyNodeId a = tree.NewWithChildren(leaf, &ta, 1);
     leaf.size.height = taffy::Dimension::Length(300.0f);
@@ -1841,8 +1847,8 @@ static void TestTaffy013Regressions() {
         taffy::Style childStyle;
         childStyle.direction = taffy::Direction::Rtl;
         childStyle.size = SizeDim::FromLengths(10.0f, 10.0f);
-        childStyle.alignSelf = OptAlignSelf(
-            AlignItems{AlignItemsKeyword::SelfStart});
+        childStyle
+            .alignSelf = OptAlignSelf(AlignItems{AlignItemsKeyword::SelfStart});
         TaffyNodeId child = tree.NewLeaf(childStyle);
         taffy::Style rootStyle;
         rootStyle.flexDirection = FlexDirection::Column;
@@ -1877,9 +1883,8 @@ static void TestTaffy013Regressions() {
         style.gridTemplateColumns = GridTemplateOf(&component, 1);
         uint16_t repeats = 0;
         uint16_t count = 0;
-        GridExplicitSizeForTest(style, None(), true,
-                                AbsoluteAxis::Horizontal, NoCalc(), &repeats,
-                                &count);
+        GridExplicitSizeForTest(style, None(), true, AbsoluteAxis::Horizontal,
+                                NoCalc(), &repeats, &count);
         utassert(count == 10000);
     }
 }

@@ -14,6 +14,14 @@
 // drops the two halves that are not this platform's before anything parses
 // them. On macOS the whole file is Objective-C++, because the mac half is.
 //
+// The ported crates' implementation-private headers (markdown's tokenizer,
+// taffy's compute internals, autocorrect's internal.h) are inlined behind
+// `#if GPUI_INCLUDE_PRIVATE_API`, which gpui.h defaults to 0: a consumer of
+// the amalgam sees only the public surface. gpui.cpp (and the autocorrect
+// pair's .cpp) define it to 1 before including the header, being the
+// implementation; a test that reaches into the internals does the same.
+// The split is computed from the include graph, not maintained by hand.
+//
 // The published source set lives in a repo of its own and this script run by hand is
 // the only thing that writes it. Nothing automatic may: the three platform
 // builds, the test runner and CI all amalgamate into .work/, which is
@@ -625,6 +633,35 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     }
   }
 
+  // Which library headers are implementation-private. The ported crates
+  // each have a small public surface (markdown.h + mdast.h, the taffy tree
+  // and style headers gpui.h reaches, wry.h) and a larger private one
+  // (tokenizers, compute internals); consumers of the amalgam get only the
+  // public closure, and gpui.cpp — which is the implementation — defines
+  // GPUI_INCLUDE_PRIVATE_API 1 to see the rest. The split is computed, not
+  // listed: a crate header is public exactly when some header outside the
+  // crate's own directory (transitively) includes it.
+  const privateDirs = isolatedDirs.filter((d) => d !== "src/autocorrect/");
+  const inPrivateDir = (rel: string) => privateDirs.some((d) => rel.startsWith(d));
+  const publicHeaders = new Set<string>();
+  const visitPublic = (rel: string) => {
+    if (publicHeaders.has(rel)) {
+      return;
+    }
+    publicHeaders.add(rel);
+    for (const dep of quotedDeps(rel, readLf(rel))) {
+      if (dep.endsWith(".h")) {
+        visitPublic(dep);
+      }
+    }
+  };
+  for (const rel of headers) {
+    if (!inPrivateDir(rel)) {
+      visitPublic(rel);
+    }
+  }
+  const isPrivateHeader = (rel: string) => inPrivateDir(rel) && !publicHeaders.has(rel);
+
   const headerOrder = topoHeaders(headers);
   const headerChunks: string[] = [
     "#ifndef GPUI_H_",
@@ -634,11 +671,18 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     "#endif",
     `#define GPUI_MARKDOWN_FULL ${markdown === "full" ? 1 : 0}`,
     `#define GPUI_MARKDOWN_MINI ${markdown === "mini" ? 1 : 0}`,
+    "#ifndef GPUI_INCLUDE_PRIVATE_API",
+    "#define GPUI_INCLUDE_PRIVATE_API 0",
+    "#endif",
     "",
   ];
   for (const rel of headerOrder) {
     const body = stripInternalIncludes(rel, readLf(rel));
     if (!body.trim()) {
+      continue;
+    }
+    if (isPrivateHeader(rel)) {
+      headerChunks.push("#if GPUI_INCLUDE_PRIVATE_API", `#line 1 "${rel}"`, body, "#endif", "");
       continue;
     }
     headerChunks.push(`#line 1 "${rel}"`, body, "");
@@ -734,8 +778,10 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   }
 
   // Comments do not survive into dist/, so the blocks below carry none: what
-  // they are is documented at the top of this script instead.
-  const chunks: string[] = ['#include "gpui.h"'];
+  // they are is documented at the top of this script instead. gpui.cpp is
+  // the implementation, so it opts into the private library headers before
+  // pulling the amalgam in.
+  const chunks: string[] = ["#define GPUI_INCLUDE_PRIVATE_API 1", '#include "gpui.h"'];
   if (portableIncludes.size > 0) {
     chunks.push("", ...sortedIncludes(portableIncludes));
   }
@@ -779,13 +825,16 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   writeIfChanged(quickjsHeaderPath, quickjsHeaderText);
   writeIfChanged(quickjsSourcePath, quickjsSourceText);
 
-  // The autocorrect pair. The header carries the public API *and* the
-  // port's internal.h — the tests exercise the toggle internals — and pulls
-  // in gpui.h for the base types the sources see through base.h. The source
-  // is the port's files concatenated, one translation unit of its own.
+  // The autocorrect pair. The header carries the public API, and — behind
+  // the same GPUI_INCLUDE_PRIVATE_API gate as the amalgam's private library
+  // headers — the port's internal.h, which the tests exercise. It pulls in
+  // gpui.h for the base types the sources see through base.h (which also
+  // supplies the gate's default). The source is the port's files
+  // concatenated, one translation unit of its own.
   if (acHeaders.length === 0 || acCpps.length === 0) {
     throw new Error("no src/autocorrect/ sources to amalgamate");
   }
+  const acPublicHeader = "src/autocorrect/autocorrect.h";
   const acHeaderChunks: string[] = [
     "#ifndef AUTOCORRECT_AMALGAM_H_",
     "#define AUTOCORRECT_AMALGAM_H_",
@@ -795,7 +844,12 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   // topoHeaders orders by dependency and pulls base.h into the walk; only
   // the port's own headers belong in the pair — gpui.h above carries base.
   for (const rel of topoHeaders(acHeaders).filter((h) => acHeaders.includes(h))) {
-    acHeaderChunks.push(`#line 1 "${rel}"`, stripInternalIncludes(rel, readLf(rel)), "");
+    const body = stripInternalIncludes(rel, readLf(rel));
+    if (rel !== acPublicHeader) {
+      acHeaderChunks.push("#if GPUI_INCLUDE_PRIVATE_API", `#line 1 "${rel}"`, body, "#endif", "");
+      continue;
+    }
+    acHeaderChunks.push(`#line 1 "${rel}"`, body, "");
   }
   acHeaderChunks.push("#endif");
   const acIncludes = new Set<string>();
@@ -811,7 +865,7 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     }
     acBodyChunks.push(`#line 1 "${rel}"`, body, "");
   }
-  const acSourceChunks: string[] = ['#include "autocorrect/autocorrect.h"'];
+  const acSourceChunks: string[] = ["#define GPUI_INCLUDE_PRIVATE_API 1", '#include "autocorrect/autocorrect.h"'];
   if (acIncludes.size > 0) {
     acSourceChunks.push("", ...sortedIncludes(acIncludes));
   }

@@ -10313,3 +10313,18 @@ for the base types and carries `internal.h` for the tests), and
 (editor, tests). Every other binary shrank back by the linter's ~150 kB of
 source; `gpui.h`/`gpui.cpp` carry no `autocorrect` symbol. Consumers write
 `#include "autocorrect/autocorrect.h"` after `gpui.h`.
+
+Follow-up: the amalgam now hides the ported crates' implementation-private
+headers. `gpui.h` defaults `GPUI_INCLUDE_PRIVATE_API` to 0 and inlines the
+private headers — markdown's constant/state/event/util/tokenizer/construct,
+markdown-mini's implementation header, taffy's taffy_math/compute, and the
+autocorrect pair's internal.h — behind `#if GPUI_INCLUDE_PRIVATE_API`;
+`gpui.cpp` (and `autocorrect/autocorrect.cpp`) define it to 1 before their
+include, being the implementation. The public/private split is computed from
+the include graph (a crate header is public iff a header outside the crate's
+directory transitively includes it), so it tracks the tree by itself. The
+four test/bench files that legitimately reach internals (MarkdownTests,
+TaffyTests, AutocorrectTests, MarkdownBench) opt in the same way. Verified
+with compile probes: `markdown::Tokenizer` / `autocorrect::Toggle` fail to
+name without the define and compile with it, while `markdown::Node`,
+`taffy::Style` and the autocorrect public API stay visible either way.

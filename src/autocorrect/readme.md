@@ -26,9 +26,12 @@ amalgam**: only the editor example (and the tests) use it, so
 targets that ask for it (`autocorrectTargets`). A consumer writes
 `#include "autocorrect/autocorrect.h"` after `gpui.h`; the generated pair
 header pulls `gpui.h` in itself for the base types, and also carries
-`internal.h`, which the tests reach into. The sources here still see only
-`base.h` — the `gpui.h` include is packaging, done by the generator, because
-the amalgamated world has no standalone base header.
+`internal.h` behind `#if GPUI_INCLUDE_PRIVATE_API` (default 0), the same
+gate the amalgam puts the other crates' private headers behind — the pair's
+own `.cpp` and `tests/AutocorrectTests.cpp` define it to 1 to reach the
+internals. The sources here still see only `base.h` — the `gpui.h` include
+is packaging, done by the generator, because the amalgamated world has no
+standalone base header.
 
 ```cpp
 Arena* a = ArenaNew();

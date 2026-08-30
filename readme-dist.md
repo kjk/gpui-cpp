@@ -97,6 +97,13 @@ Compile QuickJS with `/TC /std:c11 /experimental:c11atomics` under MSVC
 `-x c -std=gnu11` under clang, GCC and emscripten. `build.ts` supplies the full
 warning and platform flags.
 
+The headers private to the bundled library ports (markdown's tokenizer,
+taffy's layout internals, autocorrect's internals) sit behind
+`#if GPUI_INCLUDE_PRIVATE_API`, which defaults to 0: including `gpui.h`
+gives you the public API only. Define `GPUI_INCLUDE_PRIVATE_API 1` before
+the include if you want to reach the internals; `gpui.cpp` and
+`autocorrect/autocorrect.cpp` already do, being the implementation.
+
 No other dependencies, no nested build system, no STL containers.
 
 ## This copy

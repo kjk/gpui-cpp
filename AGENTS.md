@@ -354,7 +354,14 @@ amalgamates `src/autocorrect/` into its own
 `autocorrect/autocorrect.h` + `autocorrect/autocorrect.cpp` pair — the linter
 is not part of GPUI, so `cmd/build.ts` compiles and links that pair only into
 the targets that use it (the editor example and the tests). All six files
-are the same on every platform. `.work/` is gitignored and is what
+are the same on every platform. The ported crates' implementation-private
+headers (markdown's tokenizer, taffy's compute internals, autocorrect's
+internal.h) are inlined behind `#if GPUI_INCLUDE_PRIVATE_API`, which
+`gpui.h` defaults to 0 — a consumer sees only the public surface, and
+`gpui.cpp` (the implementation) and the few tests that reach the internals
+define it to 1 before their first include. The split is computed from the
+include graph: a crate header is public exactly when a header outside the
+crate's directory transitively includes it. `.work/` is gitignored and is what
 every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
 it. The published copy is a repo of its own,
 [gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to

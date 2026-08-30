@@ -8,11 +8,13 @@
    the two cases that would show `ios` → `iOS` assert the spacing-only
    result — src/autocorrect/readme.md records the difference. */
 
+// The pair's header carries the port's internal.h behind the private-API
+// gate; the toggle tests below reach into it.
+#define GPUI_INCLUDE_PRIVATE_API 1
 #include "Test.h"
 
 // Not part of the gpui amalgam: the pair is compiled and linked only into
-// the editor example and this test binary. Its header also carries the
-// port's internal.h, which the toggle tests below reach into.
+// the editor example and this test binary.
 #include "autocorrect/autocorrect.h"
 
 #include <stdio.h>
