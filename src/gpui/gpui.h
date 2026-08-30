@@ -2561,9 +2561,10 @@ struct TextHit {
     int scope = 0;
 };
 
-// Shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots. Entries live
-// for a second of frames so a virtualized editor scrolling back does not
-// reshape every line it just left.
+// Shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots. Entries stay
+// until the table is large, so a virtualized editor jumping around a file
+// does not reshape every line it just left — and so EndFrame does not
+// rebuild the table on every notch.
 struct TextMeasCache {
     void* slots = nullptr;
     int cap = 0;
@@ -4966,6 +4967,10 @@ struct Window {
     float scrollDragGrab = 0;
     // Which of the box's two bars is being dragged.
     bool scrollDragHorizontal = false;
+    // The field a thumb drag writes to, used when scrollId is 0 so the
+    // next frame can still find the box. BindInput is enough; the id is
+    // not.
+    InputState* scrollDragInput = nullptr;
     InputState* input = nullptr;
     // This window's one TooltipOverlay. Created on first use, the way a
     // field's blink cursor is.

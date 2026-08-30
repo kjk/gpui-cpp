@@ -2360,15 +2360,36 @@ void TextMeasEndFrame(PaintCtx* ctx) {
     uint32_t frame = c->frame;
     TextMeasSlot* old = (TextMeasSlot*)c->slots;
     int oldCap = c->cap;
-    // Keep a second of frames, not just the previous one: a virtualized
-    // editor scrolling back otherwise reshapes every line it just left
-    // (CreateTextLayout of the visible band, every notch).
+    // Do not rebuild the table until it is large. Compacting every frame
+    // that aged one slot out of a 90-frame window was the hitch on editor
+    // scroll-back: alloc, rehash, and Release of every line just left, then
+    // CreateTextLayout of the same lines on the way up. 4096 unique runs is
+    // a long document's visible band visited several times over.
+    const int kMaxKeep = 4096;
+    if (c->used <= kMaxKeep) {
+        return;
+    }
     const uint32_t kKeep = 90;
     int keep = 0;
+    int keepNow = 0;
     for (int i = 0; i < oldCap; i++) {
-        if (old[i].occupied && old[i].lastUsed + kKeep >= frame) {
+        if (!old[i].occupied) {
+            continue;
+        }
+        if (old[i].lastUsed == frame) {
+            keepNow++;
+        }
+        if (old[i].lastUsed + kKeep >= frame) {
             keep++;
         }
+    }
+    // A burst that filled the table in fewer than 90 frames still has to
+    // shed something; keep only this frame's runs rather than none.
+    uint32_t minKeep = (keep > kMaxKeep && keepNow > 0)
+                           ? frame
+                           : (frame > kKeep ? frame - kKeep : 1);
+    if (minKeep == frame) {
+        keep = keepNow;
     }
     if (keep == c->used) {
         return;
@@ -2391,7 +2412,7 @@ void TextMeasEndFrame(PaintCtx* ctx) {
         if (!old[i].occupied) {
             continue;
         }
-        if (old[i].lastUsed + kKeep < frame) {
+        if (old[i].lastUsed < minKeep) {
             TextMeasFreeSlot(&old[i]);
             continue;
         }
@@ -6845,6 +6866,14 @@ static void IdCollect(El* e, uint32_t parent) {
         e->style.focusId = IdToClick(here);
     }
     if (e->scrollFromPath) {
+        e->scrollId = IdToClick(here);
+    } else if (e->scrollId == 0 && e->id.s && e->id.len > 0 &&
+               (e->style.overflowY == Overflow::Scroll ||
+                e->style.overflowX == Overflow::Scroll)) {
+        // A named scroll box has to be findable next frame, or a thumb
+        // grab sets scrollDragId to 0 and the move handler treats that as
+        // "not dragging". PathId fills clickId and leaves scrollId alone;
+        // the highlighter's editor was the one that hit it.
         e->scrollId = IdToClick(here);
     }
     for (El* c = e->first; c; c = c->next) {

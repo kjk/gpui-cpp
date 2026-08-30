@@ -298,6 +298,56 @@ static void ATrackPressMovesOnceAndOnlyAThumbPressDrags() {
     EntityDropAll(&app);
 }
 
+static void AThumbPressOnAnInputScrollerDragsEvenWithoutAScrollId() {
+    // The code editor's highlighter box binds the InputState. Until it also
+    // named a scrollId, a thumb grab stored 0 and the move handler skipped
+    // the drag. The field is enough to find the box next move.
+    App app = {};
+    Window* win = new Window();
+    win->app = &app;
+    InputState field;
+    ScrollRect scroll =
+        TestScrollRect(0, {0, 0, 100, 100}, 100, 400, 0, -1, Listener{});
+    scroll.trackWidth = 20;
+    scroll.input = &field;
+    VecAppend(win->paint.scrolls, scroll);
+
+    PlatformInput thumb =
+        InputMouseDown(MouseButton::Left, 85, 10, {}, 1, false);
+    WindowDispatchInput(win, &thumb);
+    utassert(win->scrollDragInput == &field);
+    utassert(win->scrollDragId == 0);
+
+    PlatformInput move = InputMouseMove(85, 50, true, MouseButton::Left, {});
+    WindowDispatchInput(win, &move);
+    utassert(field.scrollY > 0);
+
+    VecReset(win->paint.scrolls);
+    delete win;
+}
+
+static void TheHighlighterScrollerHasAStableScrollId() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+    InputState state;
+    state.kind = InputKind::Editor;
+    state.softWrap = false;
+    El* el = component::Highlighter::New(&cx, StrL("editor"), &state)
+                 ->Searchable(false)
+                 ->H(400)
+                 ->IntoEl();
+    utassert(el->style.overflowY == Overflow::Scroll);
+    utassert(el->scrollFromPath);
+    utassert(el->style.overflowX == Overflow::Scroll);
+
+    AppGlobalClear(&app);
+    ArenaDelete(a);
+}
+
 void TestScrollbar() {
     TestSuite("scrollbar");
     TheThumbShrinksWithWhatIsVisible();
@@ -309,6 +359,8 @@ void TestScrollbar() {
     ScrollableElementPreservesTheSourceElementAndMask();
     ScrollableMasksChainAndTrapLikeTheSource();
     ATrackPressMovesOnceAndOnlyAThumbPressDrags();
+    AThumbPressOnAnInputScrollerDragsEvenWithoutAScrollId();
+    TheHighlighterScrollerHasAStableScrollId();
 }
 
 // The timing a styled layer projects, which is what these assert against.

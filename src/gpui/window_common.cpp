@@ -1251,6 +1251,28 @@ static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
                            : x <= s->bounds.Right() - s->thumbInset;
     bool onThumb = crossInside && at >= thumbStart &&
                    at <= thumbStart + thumbLength;
+    if (!onThumb) {
+        // The painted hover thumb is wider than the resting one. A press on
+        // the extra pixels is still a grab, not a jump down the track.
+        rawThumb = ScrollbarThumbSize(track, track, content,
+                                      s->thumbHoverMinLength);
+        rawStart = origin + ScrollbarThumbPos(
+                                track, rawThumb,
+                                horizontal ? s->scrollX : s->scrollY, track,
+                                content, marginEnd);
+        float hoverStart = rawStart + s->thumbHoverInset;
+        float hoverLength = rawThumb - s->thumbHoverInset * 2.f;
+        if (hoverLength < 0) hoverLength = 0;
+        bool hoverCross = horizontal
+                              ? y <= s->bounds.Bottom() - s->thumbHoverInset
+                              : x <= s->bounds.Right() - s->thumbHoverInset;
+        if (hoverCross && at >= hoverStart &&
+            at <= hoverStart + hoverLength) {
+            onThumb = true;
+            thumbStart = hoverStart;
+            thumbLength = hoverLength;
+        }
+    }
     if (onThumb) {
         // The pointer has already selected thumb_hover in prepaint. Resolve
         // that state's potentially different inset and minimum before
@@ -1274,6 +1296,7 @@ static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
         win->scrollDragId = s->id;
         win->scrollDragHorizontal = horizontal;
         win->scrollDragGrab = at - thumbStart;
+        win->scrollDragInput = s->input;
         return;
     }
     // A track press moves once; only pressing the thumb starts a drag.
@@ -1283,8 +1306,12 @@ static void ScrollbarPress(Window* win, ScrollRect* s, float x, float y,
                   horizontal ? s->scrollY : off);
 }
 
-// The scroll rect of an id, from the frame on screen.
+// The scroll rect of an id, from the frame on screen. Zero is "not a
+// handle": several boxes can have it, and a lookup would grab the wrong one.
 static ScrollRect* ScrollRectById(Window* win, int id) {
+    if (id == 0) {
+        return nullptr;
+    }
     for (int i = win->paint.scrolls.len - 1; i >= 0; i--) {
         if (win->paint.scrolls[i].id == id) {
             return &win->paint.scrolls[i];
@@ -1293,8 +1320,24 @@ static ScrollRect* ScrollRectById(Window* win, int id) {
     return nullptr;
 }
 
-static void ScrollbarDrag(Window* win, float x, float y) {
+static ScrollRect* ScrollRectForDrag(Window* win) {
     ScrollRect* s = ScrollRectById(win, win->scrollDragId);
+    if (s) {
+        return s;
+    }
+    if (!win->scrollDragInput) {
+        return nullptr;
+    }
+    for (int i = win->paint.scrolls.len - 1; i >= 0; i--) {
+        if (win->paint.scrolls[i].input == win->scrollDragInput) {
+            return &win->paint.scrolls[i];
+        }
+    }
+    return nullptr;
+}
+
+static void ScrollbarDrag(Window* win, float x, float y) {
+    ScrollRect* s = ScrollRectForDrag(win);
     if (!s || (!s->onScroll.IsValid() && !s->input)) {
         return;
     }
@@ -1520,8 +1563,9 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         SliderDrag(win, pressed, {x, y});
     }
     // The bar keeps every move until the release, wherever the pointer has
-    // got to — the same rule the slider and on_drag_move go by.
-    if (win->scrollDragId && win->mouseDown) {
+    // got to — the same rule the slider and on_drag_move go by. A zero
+    // scrollId still drags when the press named the InputState.
+    if (win->mouseDown && (win->scrollDragId || win->scrollDragInput)) {
         ScrollbarDrag(win, x, y);
     }
     // InputState::on_drag_move: the field that took the press keeps every move
@@ -1852,6 +1896,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     // landed.
     win->scrollDragId = 0;
     win->scrollDragGrab = 0;
+    win->scrollDragInput = nullptr;
     WindowSelectionRelease(win);
     if (win->onMouseUp.IsValid()) {
         ListenerCall(win->app, win, win->onMouseUp, &in);

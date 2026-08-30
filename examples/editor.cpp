@@ -1407,6 +1407,13 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
         Lint(self);
     }
     cx->win->input = self->dialogOpen ? &self->goToLine : &self->editor;
+    // InputState defaults wrap on; the bar's switch is off. Copy every
+    // frame so the highlighter's ScrollX / virtualization path matches
+    // the labels, not only after a toggle.
+    self->editor.mode.lineNumber = self->lineNumbers;
+    self->editor.softWrap = self->softWrap;
+    self->editor.mode.folding = self->folding;
+    self->editor.readonly = self->readOnly;
 
     EditorInitKeys();
     // build_menus() once: the OS menu bar is installed from it, the title bar
@@ -1543,6 +1550,7 @@ int GpuiMain(int argc, char** argv) {
     self->editor.mode.tabSize = 4;
     self->editor.mode.lineNumber = true;
     self->editor.mode.folding = true;
+    self->editor.softWrap = false;
     InputSetPlaceholder(&self->editor, StrL("Enter your code here..."));
     // The completion provider, which is what makes the menu open as a word is
     // typed and on `.`.
