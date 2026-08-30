@@ -10328,3 +10328,26 @@ TaffyTests, AutocorrectTests, MarkdownBench) opt in the same way. Verified
 with compile probes: `markdown::Tokenizer` / `autocorrect::Toggle` fail to
 name without the define and compile with it, while `markdown::Node`,
 `taffy::Style` and the autocorrect public API stay visible either way.
+
+Follow-up: the autocorrect pair moved to `extras/autocorrect/` and stands
+alone. Instead of including `gpui.h`, its generated header inlines `base.h`
+behind a `GPUI_BASE_H_` guard that `gpui.h` now wraps its own inlined copy
+in, so the two amalgams can meet in one translation unit in either order —
+or the pair can be compiled with no `gpui.h` in sight (the base
+implementation still comes from `gpui.cpp` at link time). Verified with
+compile probes: gpui.h+extras in both orders, extras alone, and the
+private-API gate at the new path. `readme-dist.md` documents
+`extras/autocorrect/` with an `<autocorrect-version>` placeholder that
+`writeDistReadme` fills from the pin in `cmd/run.ts`, beside
+`<checkin-sha1>`.
+
+Follow-up: the standard editor build compiles the amalgamated
+`extras/autocorrect` pair; only the non-amalgam build touches
+`src/autocorrect` directly. `editor.cpp` spells one include —
+`"autocorrect/autocorrect.h"` — and the build supplies the right `-I`:
+`<amalgam>/extras` in standard builds, `src` in the non-amalgam one.
+`cmd/build-non-amalgam.ts` (an undocumented near-duplicate) folded into
+`cmd/build-no-amalgam.ts`, which now builds `hello_world_no_amalgam` and
+the non-amalgam `editor` — the structural check for both amalgams.
+`fps/fps.h` joined the non-amalgam force-include surface, which the editor
+needed and hello_world never had.

@@ -31,6 +31,8 @@ bun cmd/build.ts -rel -asan system_monitor
 bun cmd/build.ts -wasm system_monitor
 bun cmd/build.ts -clang -rel showcase   # Windows: clang-cl, not cl.exe
 bun cmd/build-no-amalgam.ts -rel         # one object per source, header build check
+                                         # (hello_world_no_amalgam + editor, the
+                                         # example that uses src/autocorrect raw)
 bun cmd/build-no-amalgam.ts -clang -rel  # same check through clang-cl on Windows
 bun cmd/clang-tidy.ts                    # clang-tidy over all src/**/*.cpp
 bun cmd/run.ts -wasm showcase
@@ -350,10 +352,14 @@ maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
 `cmd/update-dist.ts` amalgamates `src/` into `gpui.h` and `gpui.cpp`, copies
 the separately compiled `quickjs/quickjs.h` and `quickjs/quickjs.c`, and
-amalgamates `src/autocorrect/` into its own
-`autocorrect/autocorrect.h` + `autocorrect/autocorrect.cpp` pair — the linter
+amalgamates `src/autocorrect/` into its own standalone
+`extras/autocorrect/autocorrect.h` + `autocorrect.cpp` pair — the linter
 is not part of GPUI, so `cmd/build.ts` compiles and links that pair only into
-the targets that use it (the editor example and the tests). All six files
+the targets that use it (the editor example and the tests). The pair's
+header inlines `base.h` (all the port depends on) behind a `GPUI_BASE_H_`
+guard shared with `gpui.h`'s own inlined copy, so the two amalgams can meet
+in one translation unit in either order; the base implementation still comes
+from `gpui.cpp` at link time. All six files
 are the same on every platform. The ported crates' implementation-private
 headers (markdown's tokenizer, taffy's compute internals, autocorrect's
 internal.h) are inlined behind `#if GPUI_INCLUDE_PRIVATE_API`, which

@@ -1,24 +1,22 @@
 // Build the library as ordinary translation units: one object per .cpp,
-// followed by a separately compiled hello_world_no_amalgam example. This is a
-// structural check that the amalgam is not hiding declaration or link errors.
+// followed by separately compiled examples — hello_world_no_amalgam (which
+// includes the source tree's public headers by their real paths) and editor
+// (the one example that uses src/autocorrect, which the standard build
+// compiles as the extras/autocorrect amalgam instead). This is a structural
+// check that the amalgams are not hiding declaration or link errors.
 //
 //   bun cmd/build-no-amalgam.ts -rel
 //   bun cmd/build-no-amalgam.ts -clang -rel
 
-import {
-  build,
-  checkBuildFlags,
-  defaultBuildFlags,
-  formatElapsed,
-  platformFor,
-  takeBuildFlag,
-} from "./build.ts";
+import { build, checkBuildFlags, defaultBuildFlags, formatElapsed, platformFor, takeBuildFlag } from "./build.ts";
 
 const usage = `Usage: bun cmd/build-no-amalgam.ts [-rel|-dbg] [-asan] [-clang] [-clean]
                          [--win-backend=d2d|d3d11|d3d12|all]
 
 Compiles every platform-appropriate src/**/*.cpp into its own object and links
-examples/hello_world_no_amalgam.cpp as hello_world_no_amalgam.`;
+examples/hello_world_no_amalgam.cpp as hello_world_no_amalgam and
+examples/editor.cpp as editor (the example that compiles against
+src/autocorrect directly).`;
 
 function die(message?: string): never {
   if (message) {
@@ -44,7 +42,7 @@ async function main(): Promise<void> {
   }
   checkBuildFlags(flags, plat, die);
   await build({
-    names: ["hello_world_no_amalgam"],
+    names: ["hello_world_no_amalgam", "editor"],
     plat,
     flags,
     fail: die,

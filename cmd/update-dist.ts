@@ -1,10 +1,12 @@
 // Amalgamate src/**/*.h and src/**/*.cpp into gpui.h and gpui.cpp. Two source
 // sets stay separate: QuickJS, whose generated C11 amalgam and public header
 // are copied as quickjs/quickjs.c + quickjs.h, and the autocorrect port,
-// amalgamated into its own autocorrect/autocorrect.h + autocorrect.cpp pair —
-// only the editor example and the tests use it, so it is compiled and linked
-// only into those targets rather than into every binary. All six files are
-// the same on every platform.
+// amalgamated into its own standalone extras/autocorrect/autocorrect.h +
+// autocorrect.cpp pair (base.h inlined behind a GPUI_BASE_H_ guard shared
+// with gpui.h, so both amalgams can meet in one translation unit) — only the
+// editor example and the tests use it, so it is compiled and linked only
+// into those targets rather than into every binary. All six files are the
+// same on every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
 // _mac.cpp, _wasm.cpp, _mem_posix.cpp for the Linux and macOS halves both,
@@ -45,6 +47,9 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+// The upstream pins live in run.ts (which guards its main, so this import
+// runs no CLI); the dist readme names the autocorrect version from there.
+import { autocorrect as autocorrectPin } from "./run.ts";
 
 const root = resolve(import.meta.dir, "..");
 
@@ -681,6 +686,13 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     if (!body.trim()) {
       continue;
     }
+    if (rel === "src/base.h") {
+      // The standalone extras/autocorrect pair inlines base.h too; the
+      // shared guard lets one translation unit include both amalgams, in
+      // either order, without base being declared twice.
+      headerChunks.push("#ifndef GPUI_BASE_H_", "#define GPUI_BASE_H_", `#line 1 "${rel}"`, body, "#endif", "");
+      continue;
+    }
     if (isPrivateHeader(rel)) {
       headerChunks.push("#if GPUI_INCLUDE_PRIVATE_API", `#line 1 "${rel}"`, body, "#endif", "");
       continue;
@@ -825,12 +837,16 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   writeIfChanged(quickjsHeaderPath, quickjsHeaderText);
   writeIfChanged(quickjsSourcePath, quickjsSourceText);
 
-  // The autocorrect pair. The header carries the public API, and — behind
-  // the same GPUI_INCLUDE_PRIVATE_API gate as the amalgam's private library
-  // headers — the port's internal.h, which the tests exercise. It pulls in
-  // gpui.h for the base types the sources see through base.h (which also
-  // supplies the gate's default). The source is the port's files
-  // concatenated, one translation unit of its own.
+  // The extras/autocorrect pair — the ported autocorrect crate as a
+  // standalone amalgam. The header inlines base.h (the only thing the port
+  // depends on) behind the same GPUI_BASE_H_ guard gpui.h wraps its own
+  // copy in, so one translation unit can include gpui.h and this header in
+  // either order; it carries the public API, and — behind the same
+  // GPUI_INCLUDE_PRIVATE_API gate as the amalgam's private library headers,
+  // defaulted here too so the pair stands alone — the port's internal.h,
+  // which the tests exercise. The source is the port's files concatenated,
+  // one translation unit of its own; the base *implementation* still comes
+  // from gpui.cpp at link time.
   if (acHeaders.length === 0 || acCpps.length === 0) {
     throw new Error("no src/autocorrect/ sources to amalgamate");
   }
@@ -838,11 +854,18 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const acHeaderChunks: string[] = [
     "#ifndef AUTOCORRECT_AMALGAM_H_",
     "#define AUTOCORRECT_AMALGAM_H_",
-    '#include "gpui.h"',
+    "#ifndef GPUI_INCLUDE_PRIVATE_API",
+    "#define GPUI_INCLUDE_PRIVATE_API 0",
+    "#endif",
+    "#ifndef GPUI_BASE_H_",
+    "#define GPUI_BASE_H_",
+    '#line 1 "src/base.h"',
+    stripInternalIncludes("src/base.h", readLf("src/base.h")),
+    "#endif",
     "",
   ];
   // topoHeaders orders by dependency and pulls base.h into the walk; only
-  // the port's own headers belong in the pair — gpui.h above carries base.
+  // the port's own headers belong here — base is inlined above.
   for (const rel of topoHeaders(acHeaders).filter((h) => acHeaders.includes(h))) {
     const body = stripInternalIncludes(rel, readLf(rel));
     if (rel !== acPublicHeader) {
@@ -865,7 +888,9 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     }
     acBodyChunks.push(`#line 1 "${rel}"`, body, "");
   }
-  const acSourceChunks: string[] = ["#define GPUI_INCLUDE_PRIVATE_API 1", '#include "autocorrect/autocorrect.h"'];
+  // Quoted includes resolve against the including file first, so the pair
+  // works wherever the two files sit beside each other.
+  const acSourceChunks: string[] = ["#define GPUI_INCLUDE_PRIVATE_API 1", '#include "autocorrect.h"'];
   if (acIncludes.size > 0) {
     acSourceChunks.push("", ...sortedIncludes(acIncludes));
   }
@@ -876,7 +901,7 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const acSourceText = tidy
     ? collapseBlankRuns(finish(acSourceChunks.join("\n"), true))
     : finish(acSourceChunks.join("\n"), false);
-  const autocorrectDir = join(absOut, "autocorrect");
+  const autocorrectDir = join(absOut, "extras", "autocorrect");
   mkdirSync(autocorrectDir, { recursive: true });
   const autocorrectHeaderPath = join(autocorrectDir, "autocorrect.h");
   const autocorrectSourcePath = join(autocorrectDir, "autocorrect.cpp");
@@ -1038,9 +1063,14 @@ const shaPlaceholder = /<checkin-sha1>/g;
 
 function writeDistReadme(sha: string): string {
   const src = join(root, "readme-dist.md");
-  const text = readFileSync(src, "utf8").replace(shaPlaceholder, sha);
+  const text = readFileSync(src, "utf8")
+    .replace(shaPlaceholder, sha)
+    .replaceAll("<autocorrect-version>", autocorrectPin.version);
   if (!text.includes(sha)) {
     die("readme-dist.md has no <checkin-sha1> to fill in");
+  }
+  if (!text.includes(autocorrectPin.version)) {
+    die("readme-dist.md has no <autocorrect-version> to fill in");
   }
   const abs = join(root, distRepoDir, "readme.md");
   writeFileSync(abs, text, "utf8");

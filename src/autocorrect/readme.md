@@ -20,18 +20,23 @@ tree; `cmd/update-dist.ts` fails the build if that stops being true.
 
 Unlike the other three crate ports, this one is **not part of the gpui
 amalgam**: only the editor example (and the tests) use it, so
-`cmd/update-dist.ts` amalgamates this directory into its own
-`autocorrect/autocorrect.h` + `autocorrect/autocorrect.cpp` pair beside
+`cmd/update-dist.ts` amalgamates this directory into its own standalone
+`extras/autocorrect/autocorrect.h` + `autocorrect.cpp` pair beside
 `quickjs/`, and `cmd/build.ts` compiles and links that pair only into the
-targets that ask for it (`autocorrectTargets`). A consumer writes
-`#include "autocorrect/autocorrect.h"` after `gpui.h`; the generated pair
-header pulls `gpui.h` in itself for the base types, and also carries
-`internal.h` behind `#if GPUI_INCLUDE_PRIVATE_API` (default 0), the same
-gate the amalgam puts the other crates' private headers behind — the pair's
-own `.cpp` and `tests/AutocorrectTests.cpp` define it to 1 to reach the
-internals. The sources here still see only `base.h` — the `gpui.h` include
-is packaging, done by the generator, because the amalgamated world has no
-standalone base header.
+targets that ask for it (`autocorrectTargets`). The include spells the same
+either way — `#include "autocorrect/autocorrect.h"` — because the standard
+build adds `-I <amalgam>/extras` and the non-amalgam build
+(`cmd/build-no-amalgam.ts`, which compiles the editor against the raw
+sources here) adds `-I src`. The generated pair header
+inlines `base.h` — the only thing the port depends on — behind a
+`GPUI_BASE_H_` guard shared with `gpui.h`'s own inlined copy, so a
+translation unit can include `gpui.h` and
+`extras/autocorrect/autocorrect.h` in either order, or the pair alone; the
+base *implementation* still comes from `gpui.cpp` at link time. The header
+also carries `internal.h` behind `#if GPUI_INCLUDE_PRIVATE_API` (default
+0), the same gate the amalgam puts the other crates' private headers
+behind — the pair's own `.cpp` and `tests/AutocorrectTests.cpp` define it
+to 1 to reach the internals.
 
 ```cpp
 Arena* a = ArenaNew();

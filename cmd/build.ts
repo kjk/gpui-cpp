@@ -408,7 +408,7 @@ function amalgamSrc(): string[] {
 const autocorrectTargets = new Set(["editor", "tests"]);
 
 function extraSrcFor(name: string): string[] {
-  return autocorrectTargets.has(name) ? [amalgamPath("autocorrect/autocorrect.cpp")] : [];
+  return autocorrectTargets.has(name) ? [amalgamPath("extras/autocorrect/autocorrect.cpp")] : [];
 }
 
 function cppDir(rel: string): string[] {
@@ -446,10 +446,13 @@ function allCppDir(rel: string): string[] {
 
 function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[] | null {
   if (nonAmalgam) {
-    if (name !== "hello_world" && name !== "hello_world_no_amalgam") return null;
+    // hello_world proves every src object compiles and links as a normal
+    // app; editor is the one example that additionally uses src/autocorrect
+    // (the standard build compiles the extras/autocorrect amalgam instead,
+    // and editor.cpp switches its include on GPUI_AMALGAM).
+    if (name !== "hello_world" && name !== "hello_world_no_amalgam" && name !== "editor") return null;
     const markdown = process.env.GPUI_MARKDOWN ?? "full";
-    const example =
-      name === "hello_world_no_amalgam" ? "examples/hello_world_no_amalgam.cpp" : "examples/hello_world.cpp";
+    const example = name === "hello_world_no_amalgam" ? "examples/hello_world_no_amalgam.cpp" : `examples/${name}.cpp`;
     return [
       example,
       ...allCppDir("src").filter((f) => {
@@ -537,7 +540,10 @@ function quotedIncludes(rel: string, memo: Map<string, string[]>): string[] {
   let m: RegExpExecArray | null;
   while ((m = includeRe.exec(text))) {
     const inc = m[1]!.replaceAll("\\", "/");
-    const candidates = [`${dir}/${inc}`, amalgamPath(inc), `src/${inc}`];
+    // <amalgam>/extras mirrors the -I the compile gets, so the editor's
+    // "autocorrect/autocorrect.h" tracks the generated pair header (which
+    // carries internal.h too), not just the src/ original.
+    const candidates = [`${dir}/${inc}`, amalgamPath(inc), amalgamPath(`extras/${inc}`), `src/${inc}`];
     for (const raw of candidates) {
       const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
       if (!existsSync(join(root, norm))) {
@@ -1072,8 +1078,13 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
             "gpui/accessibility_win.h",
             "/FI",
             "sys/executor.h",
+            "/FI",
+            "fps/fps.h",
           ]
-        : ["/I", amalgamDir()]),
+        : // <amalgam>/extras holds the standalone autocorrect pair, so
+          // `#include "autocorrect/autocorrect.h"` spells the same in the
+          // amalgam and non-amalgam (-I src) builds.
+          ["/I", amalgamDir(), "/I", amalgamPath("extras")]),
       backendDefine,
       "/DUNICODE",
       "/D_UNICODE",
@@ -1144,8 +1155,11 @@ function cflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): 
           "gpui/accessibility_win.h",
           "-include",
           "sys/executor.h",
+          "-include",
+          "fps/fps.h",
         ]
-      : ["-I", amalgamDir()]),
+      : // See the MSVC branch: extras/ carries the autocorrect pair.
+        ["-I", amalgamDir(), "-I", amalgamPath("extras")]),
     "-Wall",
     "-Wextra",
     "-Werror",
@@ -1359,8 +1373,8 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
     "gpui.cpp",
     "quickjs/quickjs.h",
     "quickjs/quickjs.c",
-    "autocorrect/autocorrect.h",
-    "autocorrect/autocorrect.cpp",
+    "extras/autocorrect/autocorrect.h",
+    "extras/autocorrect/autocorrect.cpp",
   ];
   for (const f of published) {
     const abs = join(root, amalgamDir(), f);
@@ -1373,7 +1387,7 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
     if (f.startsWith("quickjs/")) {
       quickjsBytes += fileBytes;
       quickjsLines += fileLines;
-    } else if (f.startsWith("autocorrect/")) {
+    } else if (f.startsWith("extras/")) {
       autocorrectBytes += fileBytes;
       autocorrectLines += fileLines;
     } else {
@@ -1385,7 +1399,7 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
     `amalgam ${amalgamPath("gpui.h")} + ${amalgamPath("gpui.cpp")} ` +
       `(as published, ${amalgamSize(bytes, lines)}); ${amalgamPath("quickjs/quickjs.h")} + ` +
       `${amalgamPath("quickjs/quickjs.c")} (${amalgamSize(quickjsBytes, quickjsLines)}); ` +
-      `${amalgamPath("autocorrect/autocorrect.h")} + ${amalgamPath("autocorrect/autocorrect.cpp")} ` +
+      `${amalgamPath("extras/autocorrect/autocorrect.h")} + ${amalgamPath("extras/autocorrect/autocorrect.cpp")} ` +
       `(${amalgamSize(autocorrectBytes, autocorrectLines)})`,
   );
 }

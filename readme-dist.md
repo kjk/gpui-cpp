@@ -2,9 +2,9 @@
 
 The amalgamated build of [gpui-cpp](https://github.com/kjk/gpui-cpp): GPUI is
 `gpui.h` and `gpui.cpp`, its QuickJS-NG engine is the separate generated
-`quickjs/quickjs.h` and `quickjs/quickjs.c`, and the `autocorrect` CJK linter
-the editor example uses is the separate generated
-`autocorrect/autocorrect.h` and `autocorrect/autocorrect.cpp` (optional: only
+`quickjs/quickjs.h` and `quickjs/quickjs.c`, and the ported `autocorrect`
+CJK linter the editor example uses is the separate generated
+`extras/autocorrect/autocorrect.h` and `autocorrect.cpp` (optional: only
 that example needs it). Everything beside those generated files
 is here so you can run them before you commit to them — every example, the
 assets they load, and the build and run scripts used by the source repo.
@@ -57,9 +57,10 @@ runtime removes them from `argv` before calling `GpuiMain`.
 ```
 gpui.h, gpui.cpp     the C++20 library amalgam
 quickjs/             pinned QuickJS-NG as one C11 header and one C source
-autocorrect/         the autocorrect CJK linter port as its own C++ pair;
-                     compiled and linked only into the editor example and
-                     the tests
+extras/autocorrect/  the ported autocorrect crate (<autocorrect-version>),
+                     amalgamated into its own C++ pair but not part of
+                     gpui.cpp; compiled and linked only into the editor
+                     example and the tests
 gpui_shell/           command-line JavaScript application host
 examples/            every example, including story/ and showcase/
 assets/              icons, images and documents the examples load at runtime
@@ -73,9 +74,15 @@ build.ts, run.ts     the source repo's own build and run scripts
 
 Drop the GPUI pair and `quickjs/` into your tree, `#include "gpui.h"` where you
 need the API, compile `gpui.cpp` as C++20, and compile `quickjs/quickjs.c` as
-C11. `autocorrect/` is optional: take its pair too only if you want the CJK
-copywriting linter (`#include "autocorrect/autocorrect.h"`, compile
-`autocorrect/autocorrect.cpp` as C++20). The platform halves are already
+C11. `extras/autocorrect/` is the ported
+[autocorrect](https://github.com/huacnlee/autocorrect) crate at
+<autocorrect-version>, amalgamated into a pair of its own but not part of
+`gpui.cpp` — take it too only if you want the CJK copywriting linter
+(`#include` its `autocorrect.h`, compile its `autocorrect.cpp` as C++20 and
+link it beside `gpui.cpp`, which provides the base layer it shares). The
+header inlines that base layer behind the same `GPUI_BASE_H_` guard
+`gpui.h` uses, so the two headers can meet in one translation unit in
+either order. The platform halves are already
 inside `gpui.cpp` behind `GPUI_OS_*`
 guards, so the same source set builds on all four:
 
@@ -102,7 +109,7 @@ taffy's layout internals, autocorrect's internals) sit behind
 `#if GPUI_INCLUDE_PRIVATE_API`, which defaults to 0: including `gpui.h`
 gives you the public API only. Define `GPUI_INCLUDE_PRIVATE_API 1` before
 the include if you want to reach the internals; `gpui.cpp` and
-`autocorrect/autocorrect.cpp` already do, being the implementation.
+`extras/autocorrect/autocorrect.cpp` already do, being the implementation.
 
 No other dependencies, no nested build system, no STL containers.
 

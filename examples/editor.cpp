@@ -38,8 +38,11 @@
 #include "gpui.h"
 
 // The autocorrect port is not part of the gpui amalgam: it is this example's
-// linter, so it comes as its own pair and cmd/build.ts compiles and links it
-// only here (and into the tests).
+// linter, so the standard build compiles it as its own amalgamated pair
+// under extras/ and links it only here (and into the tests); the non-amalgam
+// build is the one consumer of the raw src/autocorrect sources. Both spell
+// the include the same way — cmd/build.ts points -I at <amalgam>/extras in
+// the standard build and at src/ in the non-amalgam one.
 #include "autocorrect/autocorrect.h"
 
 using namespace gpui;
