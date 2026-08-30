@@ -198,7 +198,8 @@ function compile(fxc: string, temp: string, shader: Shader): Uint8Array {
 const source = readFileSync(hlslPath);
 const hash = sourceHash(source);
 const old = existsSync(cppPath) ? readFileSync(cppPath, "utf8") : "";
-const hashCurrent = old.includes(`source-sha256: ${hash}`);
+const recorded = old.match(/source-sha256:\s*([0-9a-f]{64})/);
+const hashCurrent = recorded?.[1] === hash;
 if (hashCurrent && !force) {
   console.log("Windows shader bytecode is current");
   process.exit(0);

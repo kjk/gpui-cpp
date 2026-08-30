@@ -30,9 +30,10 @@ const cppGlobs = [
 
 const tsGlobs = ["cmd/*.ts"];
 
-// Generated files: the generator lays them out itself, and clang-format would
-// unpack the byte rows in the icon table into one byte a line.
-const generated = new Set(["src/gpui/asset_icons.cpp"]);
+// Generated files: the generator lays them out itself. clang-format would
+// unpack the byte rows in the icon table into one byte a line, and wrap the
+// source-sha256 marker that cmd/build.ts uses to reject stale shader bytecode.
+const generated = new Set(["src/gpui/asset_icons.cpp", "src/gpui/paintgpu_shaders_win.cpp"]);
 
 async function globFiles(patterns: string[]): Promise<string[]> {
   const files: string[] = [];
@@ -149,7 +150,7 @@ if (paths.length > 0) {
     const ext = extname(raw).toLowerCase();
     const norm = raw.replaceAll("\\", "/");
     if (cppExt.has(ext)) {
-      if (wantCpp) {
+      if (wantCpp && !generated.has(norm)) {
         cppFiles.push(norm);
       }
     } else if (tsExt.has(ext)) {

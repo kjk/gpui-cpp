@@ -68,7 +68,10 @@ function ensureWinShadersCurrent(fail: (msg: string) => never): void {
   }
   const hash = new Bun.CryptoHasher("sha256").update(readFileSync(sourcePath)).digest("hex");
   const generated = readFileSync(generatedPath, "utf8");
-  if (!generated.includes(`source-sha256: ${hash}`)) {
+  // Allow whitespace between the marker and the hash so a comment wrap does
+  // not look like a stale compile; the 64-hex digest is the actual check.
+  const recorded = generated.match(/source-sha256:\s*([0-9a-f]{64})/);
+  if (!recorded || recorded[1] !== hash) {
     fail("Windows shader bytecode is stale; run bun cmd/update-win-shaders.ts");
   }
 }
