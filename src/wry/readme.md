@@ -232,3 +232,11 @@ freed state, matching the ownership of Rust's responder closure. If teardown
 has already destroyed the dispatch window, the copied response and COM
 references are released instead of leaked; a missing handler receives a 500
 response rather than a null call.
+
+## The standalone extras/ pair
+
+Besides being compiled into the gpui amalgam, this library is also
+amalgamated on its own by `cmd/update-dist.ts` into an `extras/` pair (one
+header + one source, base inlined, the implementation included) for using
+it without gpui. `readme-dist.md` documents the pairs; never link one
+beside `gpui.cpp`, which already contains this code.

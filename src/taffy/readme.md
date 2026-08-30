@@ -158,3 +158,11 @@ git -C <a taffy checkout> log --oneline v0.13.0..vNEW -- src
 
 The C++ file that owns each Rust file is in the table above, and every function
 keeps its Rust name in CamelCase, so a diff maps across mechanically.
+
+## The standalone extras/ pair
+
+Besides being compiled into the gpui amalgam, this library is also
+amalgamated on its own by `cmd/update-dist.ts` into an `extras/` pair (one
+header + one source, base inlined, the implementation included) for using
+it without gpui. `readme-dist.md` documents the pairs; never link one
+beside `gpui.cpp`, which already contains this code.

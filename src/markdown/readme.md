@@ -212,3 +212,11 @@ byte offsets beside them so the lookup is still the binary search their sort
 is for. Transcribing them again means writing the runs and, for the
 references, the offsets into them: `markdown constants` in `tests/` walks both
 runs against the table and fails if the two ever disagree.
+
+## The standalone extras/ pair
+
+Besides being compiled into the gpui amalgam, this library is also
+amalgamated on its own by `cmd/update-dist.ts` into an `extras/` pair (one
+header + one source, base inlined, the implementation included) for using
+it without gpui. `readme-dist.md` documents the pairs; never link one
+beside `gpui.cpp`, which already contains this code.

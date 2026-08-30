@@ -352,14 +352,18 @@ maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
 `cmd/update-dist.ts` amalgamates `src/` into `gpui.h` and `gpui.cpp`, copies
 the separately compiled `quickjs/quickjs.h` and `quickjs/quickjs.c`, and
-amalgamates `src/autocorrect/` into its own standalone
-`extras/autocorrect/autocorrect.h` + `autocorrect.cpp` pair — the linter
-is not part of GPUI, so `cmd/build.ts` compiles and links that pair only into
-the targets that use it (the editor example and the tests). The pair's
-header inlines `base.h` (all the port depends on) behind a `GPUI_BASE_H_`
-guard shared with `gpui.h`'s own inlined copy, so the two amalgams can meet
-in one translation unit in either order; the base implementation still comes
-from `gpui.cpp` at link time. All six files
+amalgamates each ported library crate into a standalone pair under
+`extras/` — one header + one source, the header inlining `base.h` behind a
+`GPUI_BASE_H_` guard shared with `gpui.h`'s own inlined copy, so a pair
+header and `gpui.h` can meet in one translation unit in either order.
+`extras/autocorrect/` is the one pair not inside `gpui.cpp`: the linter
+links beside it (base implementation from `gpui.cpp`), and `cmd/build.ts`
+compiles it only into the targets that use it (the editor example and the
+tests). `extras/taffy/`, `extras/markdown/`, `extras/markdown-mini/` and
+`extras/wry/` are also inside `gpui.cpp`; their pairs exist for using one
+library without gpui, so each carries the base implementation and must
+never link beside `gpui.cpp`. `readme-dist.md` documents them for the
+snapshot's readers. All six files
 are the same on every platform. The ported crates' implementation-private
 headers (markdown's tokenizer, taffy's compute internals, autocorrect's
 internal.h) are inlined behind `#if GPUI_INCLUDE_PRIVATE_API`, which
@@ -372,7 +376,7 @@ every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
 it. The published copy is a repo of its own,
 [gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to
 `.work/gpui-cpp-dist` and refreshed only by running `bun cmd/update-dist.ts` by
-hand: that syncs the clone, writes the GPUI, QuickJS and autocorrect pairs into it, builds every example
+hand: that syncs the clone, writes the GPUI and QuickJS pairs and the extras/ pairs into it, builds every example
 against it (`GPUI_AMALGAM_DIR` points the platform build at that copy, and its
 objects go to their own `out/*_dist` tree), rewrites its readme with the
 gpui-cpp commit it came from and a compare link showing what it is behind by,

@@ -1,12 +1,14 @@
-// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h and gpui.cpp. Two source
-// sets stay separate: QuickJS, whose generated C11 amalgam and public header
-// are copied as quickjs/quickjs.c + quickjs.h, and the autocorrect port,
-// amalgamated into its own standalone extras/autocorrect/autocorrect.h +
-// autocorrect.cpp pair (base.h inlined behind a GPUI_BASE_H_ guard shared
-// with gpui.h, so both amalgams can meet in one translation unit) — only the
-// editor example and the tests use it, so it is compiled and linked only
-// into those targets rather than into every binary. All six files are the
-// same on every platform.
+// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h and gpui.cpp. QuickJS
+// stays separate: its generated C11 amalgam and public header are copied as
+// quickjs/quickjs.c + quickjs.h. Each ported library crate is additionally
+// amalgamated into a standalone pair under extras/ (base.h inlined behind a
+// GPUI_BASE_H_ guard shared with gpui.h, so a pair header and gpui.h can
+// meet in one translation unit): autocorrect — the one not inside gpui.cpp,
+// compiled and linked only into the editor example and the tests — plus
+// taffy, markdown, markdown-mini and wry, which ARE inside gpui.cpp and
+// whose pairs exist for using one library without gpui (each carries the
+// base implementation, so those must never link beside gpui.cpp). All the
+// generated files are the same on every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
 // _mac.cpp, _wasm.cpp, _mem_posix.cpp for the Linux and macOS halves both,
@@ -48,8 +50,8 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 // The upstream pins live in run.ts (which guards its main, so this import
-// runs no CLI); the dist readme names the autocorrect version from there.
-import { autocorrect as autocorrectPin } from "./run.ts";
+// runs no CLI); the dist readme names the extras crate versions from there.
+import { autocorrect as autocorrectPin, markdown as markdownPin, taffy as taffyPin, wry as wryPin } from "./run.ts";
 
 const root = resolve(import.meta.dir, "..");
 
@@ -87,10 +89,8 @@ export type BuildDistResult = {
   quickjsSourceBytes: number;
   quickjsHeaderLines: number;
   quickjsSourceLines: number;
-  autocorrectHeaderPath: string;
-  autocorrectSourcePath: string;
-  autocorrectBytes: number;
-  autocorrectLines: number;
+  /** The standalone extras/ pairs, one entry per library. */
+  extras: { dir: string; bytes: number; lines: number }[];
   headerBytes: number;
   sourceBytes: number;
   headerLines: number;
@@ -837,76 +837,187 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   writeIfChanged(quickjsHeaderPath, quickjsHeaderText);
   writeIfChanged(quickjsSourcePath, quickjsSourceText);
 
-  // The extras/autocorrect pair — the ported autocorrect crate as a
-  // standalone amalgam. The header inlines base.h (the only thing the port
-  // depends on) behind the same GPUI_BASE_H_ guard gpui.h wraps its own
-  // copy in, so one translation unit can include gpui.h and this header in
-  // either order; it carries the public API, and — behind the same
-  // GPUI_INCLUDE_PRIVATE_API gate as the amalgam's private library headers,
-  // defaulted here too so the pair stands alone — the port's internal.h,
-  // which the tests exercise. The source is the port's files concatenated,
-  // one translation unit of its own; the base *implementation* still comes
-  // from gpui.cpp at link time.
-  if (acHeaders.length === 0 || acCpps.length === 0) {
-    throw new Error("no src/autocorrect/ sources to amalgamate");
-  }
-  const acPublicHeader = "src/autocorrect/autocorrect.h";
-  const acHeaderChunks: string[] = [
-    "#ifndef AUTOCORRECT_AMALGAM_H_",
-    "#define AUTOCORRECT_AMALGAM_H_",
-    "#ifndef GPUI_INCLUDE_PRIVATE_API",
-    "#define GPUI_INCLUDE_PRIVATE_API 0",
-    "#endif",
-    "#ifndef GPUI_BASE_H_",
-    "#define GPUI_BASE_H_",
-    '#line 1 "src/base.h"',
-    stripInternalIncludes("src/base.h", readLf("src/base.h")),
-    "#endif",
-    "",
-  ];
-  // topoHeaders orders by dependency and pulls base.h into the walk; only
-  // the port's own headers belong here — base is inlined above.
-  for (const rel of topoHeaders(acHeaders).filter((h) => acHeaders.includes(h))) {
-    const body = stripInternalIncludes(rel, readLf(rel));
-    if (rel !== acPublicHeader) {
-      acHeaderChunks.push("#if GPUI_INCLUDE_PRIVATE_API", `#line 1 "${rel}"`, body, "#endif", "");
-      continue;
+  // The extras/ pairs — each ported library crate as a standalone amalgam,
+  // one header + one source. Every pair's header inlines base.h (the only
+  // thing the ports depend on) behind the same GPUI_BASE_H_ guard gpui.h
+  // wraps its own copy in, so gpui.h and a pair header can meet in one
+  // translation unit in either order, and carries the library's private
+  // headers behind the same GPUI_INCLUDE_PRIVATE_API gate (defaulted here
+  // too, so a pair stands alone).
+  //
+  // Two consumption models, told apart by `withBaseImpl`. autocorrect is
+  // not in gpui.cpp, so its pair holds declarations only and links beside
+  // gpui.cpp, which provides the base implementation. taffy, markdown and
+  // markdown-mini ARE in gpui.cpp — their pairs exist for using one library
+  // without gpui at all, so each inlines the base implementation (base.cpp
+  // and its platform halves behind GPUI_OS_* guards) and must NOT be linked
+  // beside gpui.cpp: the symbols would be there twice.
+  const baseImplCpps = allFoundCpps.filter((rel) => /^src\/base(_\w+)?\.cpp$/.test(rel));
+  const extras: { dir: string; bytes: number; lines: number }[] = [];
+  const writeExtrasPair = (spec: {
+    dir: string; // "extras/taffy"
+    headerName: string; // "taffy.h"
+    guard: string; // "TAFFY_AMALGAM_H_"
+    headers: string[];
+    isPublic: (rel: string) => boolean;
+    cpps: string[];
+    withBaseImpl: boolean;
+  }) => {
+    if (spec.headers.length === 0 || spec.cpps.length === 0) {
+      throw new Error(`no sources to amalgamate for ${spec.dir}`);
     }
-    acHeaderChunks.push(`#line 1 "${rel}"`, body, "");
-  }
-  acHeaderChunks.push("#endif");
-  const acIncludes = new Set<string>();
-  const acBodyChunks: string[] = [];
-  for (const rel of acCpps) {
-    let body = stripInternalIncludes(rel, readLf(rel));
-    if (tidy) {
-      const lifted = liftIncludes(body);
-      body = lifted.body;
-      for (const l of lifted.includes) {
-        acIncludes.add(l);
+    const headerChunks: string[] = [
+      `#ifndef ${spec.guard}`,
+      `#define ${spec.guard}`,
+      "#ifndef GPUI_INCLUDE_PRIVATE_API",
+      "#define GPUI_INCLUDE_PRIVATE_API 0",
+      "#endif",
+      "#ifndef GPUI_BASE_H_",
+      "#define GPUI_BASE_H_",
+      '#line 1 "src/base.h"',
+      stripInternalIncludes("src/base.h", readLf("src/base.h")),
+      "#endif",
+      "",
+    ];
+    // topoHeaders orders by dependency and pulls base.h into the walk; only
+    // the pair's own headers belong here — base is inlined above.
+    for (const rel of topoHeaders(spec.headers).filter((h) => spec.headers.includes(h))) {
+      const body = stripInternalIncludes(rel, readLf(rel));
+      if (!spec.isPublic(rel)) {
+        headerChunks.push("#if GPUI_INCLUDE_PRIVATE_API", `#line 1 "${rel}"`, body, "#endif", "");
+        continue;
+      }
+      headerChunks.push(`#line 1 "${rel}"`, body, "");
+    }
+    headerChunks.push("#endif");
+
+    const sources = spec.withBaseImpl ? [...baseImplCpps, ...spec.cpps] : spec.cpps;
+    const portable = sources.filter((f) => filePlatforms(f).length === 0);
+    const platform = sources.filter((f) => filePlatforms(f).length > 0);
+    // The same static-name collision rule as gpui.cpp, over this pair's own
+    // translation unit: two files clash only when one platform's view of the
+    // pair holds both.
+    const names = new Map<string, string[]>();
+    for (const rel of sources) {
+      names.set(rel, staticNames(stripInternalIncludes(rel, readLf(rel))));
+    }
+    const clashing = new Set<string>();
+    for (const p of allPlatforms) {
+      const visible = [...portable, ...platform.filter((f) => filePlatforms(f).includes(p))];
+      const owners = new Map<string, Set<string>>();
+      for (const rel of visible) {
+        for (const name of names.get(rel) ?? []) {
+          const set = owners.get(name) ?? new Set<string>();
+          set.add(rel);
+          owners.set(name, set);
+        }
+      }
+      for (const [name, files] of owners) {
+        if (files.size > 1) {
+          clashing.add(name);
+        }
       }
     }
-    acBodyChunks.push(`#line 1 "${rel}"`, body, "");
-  }
-  // Quoted includes resolve against the including file first, so the pair
-  // works wherever the two files sit beside each other.
-  const acSourceChunks: string[] = ["#define GPUI_INCLUDE_PRIVATE_API 1", '#include "autocorrect.h"'];
-  if (acIncludes.size > 0) {
-    acSourceChunks.push("", ...sortedIncludes(acIncludes));
-  }
-  acSourceChunks.push("", ...acBodyChunks);
-  const acHeaderText = tidy
-    ? collapseBlankRuns(finish(acHeaderChunks.join("\n"), true))
-    : finish(acHeaderChunks.join("\n"), false);
-  const acSourceText = tidy
-    ? collapseBlankRuns(finish(acSourceChunks.join("\n"), true))
-    : finish(acSourceChunks.join("\n"), false);
-  const autocorrectDir = join(absOut, "extras", "autocorrect");
-  mkdirSync(autocorrectDir, { recursive: true });
-  const autocorrectHeaderPath = join(autocorrectDir, "autocorrect.h");
-  const autocorrectSourcePath = join(autocorrectDir, "autocorrect.cpp");
-  writeIfChanged(autocorrectHeaderPath, acHeaderText);
-  writeIfChanged(autocorrectSourcePath, acSourceText);
+    const pairChunk = (rel: string, lift: Set<string> | null): string => {
+      let body = stripInternalIncludes(rel, readLf(rel));
+      const local = new Set((names.get(rel) ?? []).filter((n) => clashing.has(n)));
+      body = renameIdents(body, local, filePrefix(rel));
+      if (lift && tidy) {
+        const lifted = liftIncludes(body);
+        body = lifted.body;
+        for (const l of lifted.includes) {
+          lift.add(l);
+        }
+      }
+      const plats = filePlatforms(rel);
+      if (plats.length === 0) {
+        return [`#line 1 "${rel}"`, body, ""].join("\n");
+      }
+      // Platform chunks keep their includes in place, inside the guard.
+      return [guardFor(plats), `#line 1 "${rel}"`, body, "#endif", ""].join("\n");
+    };
+    const liftedIncludes = new Set<string>();
+    const portableChunks = portable.map((rel) => pairChunk(rel, liftedIncludes));
+    const platformChunks = platform.map((rel) => pairChunk(rel, null));
+    // Quoted includes resolve against the including file first, so the pair
+    // works wherever the two files sit beside each other.
+    const sourceChunks: string[] = ["#define GPUI_INCLUDE_PRIVATE_API 1", `#include "${spec.headerName}"`];
+    if (liftedIncludes.size > 0) {
+      sourceChunks.push("", ...sortedIncludes(liftedIncludes));
+    }
+    sourceChunks.push("", ...portableChunks, ...platformChunks);
+    const headerText = tidy
+      ? collapseBlankRuns(finish(headerChunks.join("\n"), true))
+      : finish(headerChunks.join("\n"), false);
+    const sourceText = tidy
+      ? collapseBlankRuns(finish(sourceChunks.join("\n"), true))
+      : finish(sourceChunks.join("\n"), false);
+    const dirAbs = join(absOut, spec.dir);
+    mkdirSync(dirAbs, { recursive: true });
+    writeIfChanged(join(dirAbs, spec.headerName), headerText);
+    writeIfChanged(join(dirAbs, spec.headerName.replace(/\.h$/, ".cpp")), sourceText);
+    extras.push({
+      dir: spec.dir,
+      bytes: Buffer.byteLength(headerText, "utf8") + Buffer.byteLength(sourceText, "utf8"),
+      lines: countLines(headerText) + countLines(sourceText),
+    });
+  };
+
+  writeExtrasPair({
+    dir: "extras/autocorrect",
+    headerName: "autocorrect.h",
+    guard: "AUTOCORRECT_AMALGAM_H_",
+    headers: acHeaders,
+    isPublic: (rel) => rel === "src/autocorrect/autocorrect.h",
+    cpps: acCpps,
+    withBaseImpl: false,
+  });
+  writeExtrasPair({
+    dir: "extras/taffy",
+    headerName: "taffy.h",
+    guard: "TAFFY_AMALGAM_H_",
+    headers: headers.filter((rel) => rel.startsWith("src/taffy/")),
+    isPublic: (rel) => publicHeaders.has(rel),
+    cpps: foundCpps.filter((rel) => rel.startsWith("src/taffy/")),
+    withBaseImpl: true,
+  });
+  writeExtrasPair({
+    dir: "extras/markdown",
+    headerName: "markdown.h",
+    guard: "MARKDOWN_AMALGAM_H_",
+    headers: headers.filter((rel) => rel.startsWith("src/markdown/")),
+    isPublic: (rel) => publicHeaders.has(rel),
+    cpps: foundCpps.filter((rel) => rel.startsWith("src/markdown/")),
+    withBaseImpl: true,
+  });
+  writeExtrasPair({
+    dir: "extras/wry",
+    headerName: "wry.h",
+    guard: "WRY_AMALGAM_H_",
+    headers: headers.filter((rel) => rel.startsWith("src/wry/")),
+    isPublic: (rel) => publicHeaders.has(rel),
+    cpps: foundCpps.filter((rel) => rel.startsWith("src/wry/")),
+    withBaseImpl: true,
+  });
+  // markdown-mini implements markdown's own public header, so its pair
+  // carries the same markdown.h/mdast.h surface (and the same guard: the
+  // two parsers are interchangeable, never both) over the mini sources plus
+  // the shared mdast storage — which also needs constant.h, private, for
+  // its tab arithmetic.
+  writeExtrasPair({
+    dir: "extras/markdown-mini",
+    headerName: "markdown.h",
+    guard: "MARKDOWN_AMALGAM_H_",
+    headers: [
+      "src/markdown/markdown.h",
+      "src/markdown/mdast.h",
+      "src/markdown/constant.h",
+      ...headers.filter((rel) => rel.startsWith("src/markdown-mini/")),
+    ],
+    isPublic: (rel) => publicHeaders.has(rel),
+    cpps: [...foundCpps.filter((rel) => rel.startsWith("src/markdown-mini/")), "src/markdown/mdast.cpp"],
+    withBaseImpl: true,
+  });
 
   return {
     outDir,
@@ -918,10 +1029,7 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     quickjsSourceBytes: Buffer.byteLength(quickjsSourceText, "utf8"),
     quickjsHeaderLines: countLines(quickjsHeaderText),
     quickjsSourceLines: countLines(quickjsSourceText),
-    autocorrectHeaderPath: srcRel(autocorrectHeaderPath),
-    autocorrectSourcePath: srcRel(autocorrectSourcePath),
-    autocorrectBytes: Buffer.byteLength(acHeaderText, "utf8") + Buffer.byteLength(acSourceText, "utf8"),
-    autocorrectLines: countLines(acHeaderText) + countLines(acSourceText),
+    extras,
     headerBytes: Buffer.byteLength(headerText, "utf8"),
     sourceBytes: Buffer.byteLength(sourceText, "utf8"),
     headerLines: countLines(headerText),
@@ -1063,14 +1171,21 @@ const shaPlaceholder = /<checkin-sha1>/g;
 
 function writeDistReadme(sha: string): string {
   const src = join(root, "readme-dist.md");
-  const text = readFileSync(src, "utf8")
-    .replace(shaPlaceholder, sha)
-    .replaceAll("<autocorrect-version>", autocorrectPin.version);
+  const versions = [
+    ["<autocorrect-version>", autocorrectPin.version],
+    ["<taffy-version>", taffyPin.version],
+    ["<markdown-version>", markdownPin.version],
+    ["<wry-version>", wryPin.version],
+  ] as const;
+  let text = readFileSync(src, "utf8").replace(shaPlaceholder, sha);
   if (!text.includes(sha)) {
     die("readme-dist.md has no <checkin-sha1> to fill in");
   }
-  if (!text.includes(autocorrectPin.version)) {
-    die("readme-dist.md has no <autocorrect-version> to fill in");
+  for (const [placeholder, version] of versions) {
+    if (!text.includes(placeholder)) {
+      die(`readme-dist.md has no ${placeholder} to fill in`);
+    }
+    text = text.replaceAll(placeholder, version);
   }
   const abs = join(root, distRepoDir, "readme.md");
   writeFileSync(abs, text, "utf8");

@@ -1345,18 +1345,28 @@ function amalgamSize(bytes: number, lines: number): string {
   return `${formatHumanBytes(bytes)}, ${lines.toLocaleString("en-US")} lines`;
 }
 
+/** The standalone extras/ pairs: <dir>/<file>.h + .cpp. */
+const extrasPairs = [
+  ["extras/autocorrect", "autocorrect"],
+  ["extras/taffy", "taffy"],
+  ["extras/markdown", "markdown"],
+  ["extras/markdown-mini", "markdown"],
+  ["extras/wry", "wry"],
+] as const;
+
 export async function ensureAmalgam(fail: (msg: string) => never): Promise<void> {
   if (!isDist && amalgamIsWork()) {
     const { buildDist } = await import("./update-dist.ts");
     const a = buildDist({ outDir: ".work" });
+    const extrasBytes = a.extras.reduce((n, e) => n + e.bytes, 0);
+    const extrasLines = a.extras.reduce((n, e) => n + e.lines, 0);
     console.log(
       `amalgam ${a.headerPath} + ${a.sourcePath} ` +
         `(${a.headerCount} headers, ${a.sourceCount} + ${a.platformSourceCount} sources, markdown ${a.markdown}, ` +
         `${amalgamSize(a.headerBytes + a.sourceBytes, a.headerLines + a.sourceLines)}); ` +
         `${a.quickjsHeaderPath} + ${a.quickjsSourcePath} ` +
         `(${amalgamSize(a.quickjsHeaderBytes + a.quickjsSourceBytes, a.quickjsHeaderLines + a.quickjsSourceLines)}); ` +
-        `${a.autocorrectHeaderPath} + ${a.autocorrectSourcePath} ` +
-        `(${amalgamSize(a.autocorrectBytes, a.autocorrectLines)})`,
+        `${a.extras.length} extras/ pairs (${amalgamSize(extrasBytes, extrasLines)})`,
     );
     return;
   }
@@ -1366,15 +1376,14 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
   let lines = 0;
   let quickjsBytes = 0;
   let quickjsLines = 0;
-  let autocorrectBytes = 0;
-  let autocorrectLines = 0;
+  let extrasBytes = 0;
+  let extrasLines = 0;
   const published = [
     "gpui.h",
     "gpui.cpp",
     "quickjs/quickjs.h",
     "quickjs/quickjs.c",
-    "extras/autocorrect/autocorrect.h",
-    "extras/autocorrect/autocorrect.cpp",
+    ...extrasPairs.flatMap(([dir, name]) => [`${dir}/${name}.h`, `${dir}/${name}.cpp`]),
   ];
   for (const f of published) {
     const abs = join(root, amalgamDir(), f);
@@ -1388,8 +1397,8 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
       quickjsBytes += fileBytes;
       quickjsLines += fileLines;
     } else if (f.startsWith("extras/")) {
-      autocorrectBytes += fileBytes;
-      autocorrectLines += fileLines;
+      extrasBytes += fileBytes;
+      extrasLines += fileLines;
     } else {
       bytes += fileBytes;
       lines += fileLines;
@@ -1399,8 +1408,7 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
     `amalgam ${amalgamPath("gpui.h")} + ${amalgamPath("gpui.cpp")} ` +
       `(as published, ${amalgamSize(bytes, lines)}); ${amalgamPath("quickjs/quickjs.h")} + ` +
       `${amalgamPath("quickjs/quickjs.c")} (${amalgamSize(quickjsBytes, quickjsLines)}); ` +
-      `${amalgamPath("extras/autocorrect/autocorrect.h")} + ${amalgamPath("extras/autocorrect/autocorrect.cpp")} ` +
-      `(${amalgamSize(autocorrectBytes, autocorrectLines)})`,
+      `${extrasPairs.length} ${amalgamPath("extras")}/ pairs (${amalgamSize(extrasBytes, extrasLines)})`,
   );
 }
 

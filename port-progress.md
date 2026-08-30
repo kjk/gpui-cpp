@@ -10351,3 +10351,21 @@ Follow-up: the standard editor build compiles the amalgamated
 the non-amalgam `editor` — the structural check for both amalgams.
 `fps/fps.h` joined the non-amalgam force-include surface, which the editor
 needed and hello_world never had.
+
+Follow-up: extras/ now carries all five library ports as standalone
+amalgams — autocorrect (the one not inside gpui.cpp, linked beside it) plus
+taffy, markdown, markdown-mini and wry, whose pairs inline the base
+*implementation* too (base.cpp and its platform halves behind GPUI_OS_*
+guards) so one library can be used with no gpui at all; those four must
+never link beside gpui.cpp. The pair generator is one helper
+(writeExtrasPair) with per-pair static-collision renaming, the GPUI_BASE_H_
+and GPUI_INCLUDE_PRIVATE_API gates, and platform chunks guarded like
+gpui.cpp's. markdown and markdown-mini share one header name, guard and API
+— drop-in swaps. Verified end to end: standalone programs compiled, linked
+and ran against each pair with /W4 /WX and only `void base::log(base::Str)`
+provided (wry additionally links ole32/user32/comctl32/shlwapi/advapi32/
+shell32 and was link-probed); mini needed markdown/constant.h in its pair
+for mdast's tab arithmetic, caught by the probe. readme-dist.md documents
+each pair with crate versions filled from the cmd/run.ts pins
+(<taffy-version>, <markdown-version>, <wry-version> beside
+<autocorrect-version>).

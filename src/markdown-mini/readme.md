@@ -19,3 +19,11 @@ numeric entities, and the small named-entity set `amp`, `lt`, `gt`, `quot`,
 For size, it omits GFM tables, task lists, footnotes, raw HTML, autolinks,
 reference-style links, math/frontmatter, strikethrough, and the full HTML5
 named-entity database. Unsupported syntax remains ordinary readable text.
+
+## The standalone extras/ pair
+
+Besides being compiled into the gpui amalgam, this library is also
+amalgamated on its own by `cmd/update-dist.ts` into an `extras/` pair (one
+header + one source, base inlined, the implementation included) for using
+it without gpui. `readme-dist.md` documents the pairs; never link one
+beside `gpui.cpp`, which already contains this code.
