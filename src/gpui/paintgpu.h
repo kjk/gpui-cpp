@@ -74,6 +74,9 @@ void* PaintSharedDwrite(PaintApp* pa);
 // The premultiplied BGRA WIC decoded, which is what ImageDecode keeps. False
 // when the image never decoded.
 bool PaintImagePixels(const Image* img, const uint8_t** bgra, int* w, int* h);
+// IDWriteTextLayout*. TextLayout is wrapped so its stable scene generation
+// can live beside the native object.
+void* PaintTextLayoutNative(TextLayout* tl);
 
 // ─── the GPU backend ─────────────────────────────────────────────────────
 //

@@ -82,6 +82,9 @@ struct Prim {
     // Image* or TextLayout*, both of which outlive the frame in a cache above
     // this layer.
     void* ref = nullptr;
+    // Monotonic identity from the resource, unlike an address that an
+    // allocator may hand to a different resource after this frame.
+    uint64_t resourceGeneration = 0;
     uint64_t hash = 0;
 };
 
@@ -265,13 +268,7 @@ static uint64_t HashPrim(const Prim& p) {
     memcpy(&c0, &p.color, 4);
     memcpy(&c1, &p.color2, 4);
     w[7] = ((uint64_t)c1 << 32) | c0;
-    // A cached shaped run keeps its address across frames, so the pointer is
-    // the run's identity. A run that was dropped and whose address was reused
-    // by another would compare equal — but the run's own size is in g2/g3
-    // above and its position and colour beside them, so the collision needs
-    // text that shapes to the same size, in the same place, in the same
-    // colour. See scene.h.
-    w[8] = (uint64_t)(uintptr_t)p.ref;
+    w[8] = p.resourceGeneration;
     w[9] = (p.path >= 0 && p.path < gPaths.len) ? gPaths[p.path].hash : 0;
     uint64_t h = kHashSeed;
     for (int i = 0; i < 10; i++) {
@@ -651,6 +648,7 @@ void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     p->g3 = b.h;
     p->e0 = radius;
     p->ref = img;
+    p->resourceGeneration = ImageGeneration(img);
 }
 
 void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
@@ -662,6 +660,7 @@ void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     p->g2 = sz.w;
     p->g3 = sz.h;
     p->ref = tl;
+    p->resourceGeneration = TextLayoutGeneration(tl);
     p->color = PaintFade(ctx, c);
     p->e0 = clipW;
     if (clip) {

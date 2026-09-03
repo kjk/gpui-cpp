@@ -3023,7 +3023,7 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     if (!gB.target || !tl) {
         return;
     }
-    auto* layout = (IDWriteTextLayout*)tl;
+    auto* layout = (IDWriteTextLayout*)PaintTextLayoutNative(tl);
     Rgba faded = PaintFade(ctx, c);
     if (faded.a == 0) {
         return;

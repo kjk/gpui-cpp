@@ -11,6 +11,16 @@
 
 namespace gpui {
 
+static uint64_t gNextPaintResourceGeneration = 1;
+
+static uint64_t PaintResourceGenerationNew() {
+    uint64_t id = gNextPaintResourceGeneration++;
+    if (id == 0) {
+        id = gNextPaintResourceGeneration++;
+    }
+    return id;
+}
+
 struct PaintApp {
     // A cairo-backed font map context, so a layout can be shaped and measured
     // without a target bound.
@@ -520,6 +530,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
 // see beyond ImageDecode returning null.
 
 struct Image {
+    uint64_t generation = 0;
     cairo_surface_t* surface = nullptr;
     int w = 0;
     int h = 0;
@@ -559,6 +570,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         return nullptr;
     }
     auto* img = new Image();
+    img->generation = PaintResourceGenerationNew();
     img->surface = surface;
     img->w = cairo_image_surface_get_width(surface);
     img->h = cairo_image_surface_get_height(surface);
@@ -573,6 +585,10 @@ void ImageFree(Image* img) {
         cairo_surface_destroy(img->surface);
     }
     delete img;
+}
+
+uint64_t ImageGeneration(const Image* img) {
+    return img ? img->generation : 0;
 }
 
 Size ImageSizePx(const Image* img) {
@@ -618,6 +634,7 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
 // DirectWrite backend nothing has to convert offsets.
 
 struct TextLayout {
+    uint64_t generation = 0;
     PangoLayout* layout = nullptr;
     // What TextLayoutNew reported, kept so TextLayoutSize can answer without
     // measuring again.
@@ -708,6 +725,7 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     }
 
     auto* tl = new TextLayout();
+    tl->generation = PaintResourceGenerationNew();
     tl->layout = l;
     tl->lines = pango_layout_get_line_count(l);
     if (tl->lines < 1) {
@@ -754,6 +772,10 @@ void TextLayoutRelease(TextLayout* tl) {
         g_object_unref(tl->layout);
     }
     delete tl;
+}
+
+uint64_t TextLayoutGeneration(const TextLayout* tl) {
+    return tl ? tl->generation : 0;
 }
 
 // Where the glyphs sit inside the phi-tall line box.

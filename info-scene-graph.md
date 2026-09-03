@@ -114,18 +114,16 @@ profile requires it.
 
 The worthwhile near-term work is narrower:
 
-1. Give retained paint resources stable generation-based identities instead of
-   hashing their addresses.
-2. Benchmark real scrolling, hover, caret, popup and chart-tick invalidations.
+1. Benchmark real scrolling, hover, caret, popup and chart-tick invalidations.
    Keep damage mode only if those workloads demonstrate a useful total-frame
    improvement without stale output.
-3. If path construction remains material, key paths relative to their origin
+2. If path construction remains material, key paths relative to their origin
    and draw cached geometry with a translation.
-4. Enable the recorder on Linux, macOS and wasm only after measuring its cost
+3. Enable the recorder on Linux, macOS and wasm only after measuring its cost
    on those backends.
-5. Port `BoundsTree` and typed batches only when an ordering problem or a new
+4. Port `BoundsTree` and typed batches only when an ordering problem or a new
    renderer needs them.
 
-Per-window ownership was the first implementation following this analysis. The
-remaining items do not commit the project to the full retained-scene
-architecture.
+Per-window ownership and stable resource generations were the first
+implementations following this analysis. The remaining items do not commit the
+project to the full retained-scene architecture.

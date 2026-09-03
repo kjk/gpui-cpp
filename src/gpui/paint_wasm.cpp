@@ -29,6 +29,16 @@
 
 namespace gpui {
 
+static uint64_t gNextPaintResourceGeneration = 1;
+
+static uint64_t PaintResourceGenerationNew() {
+    uint64_t id = gNextPaintResourceGeneration++;
+    if (id == 0) {
+        id = gNextPaintResourceGeneration++;
+    }
+    return id;
+}
+
 // ─── the JavaScript half ──────────────────────────────────────────────────
 //
 // One state object, built once. Every other EM_JS body starts by picking it
@@ -1142,6 +1152,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
 // ─── images ───────────────────────────────────────────────────────────────
 
 struct Image {
+    uint64_t generation = 0;
     int js = 0;
 };
 
@@ -1155,6 +1166,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         return nullptr;
     }
     auto* img = new Image();
+    img->generation = PaintResourceGenerationNew();
     img->js = id;
     return img;
 }
@@ -1167,6 +1179,10 @@ void ImageFree(Image* img) {
         GpJsImageFree(img->js);
     }
     delete img;
+}
+
+uint64_t ImageGeneration(const Image* img) {
+    return img ? img->generation : 0;
 }
 
 // Zero until the browser has decoded it. The caller lays the picture out at
@@ -1192,6 +1208,7 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
 // ─── shaped text ──────────────────────────────────────────────────────────
 
 struct TextLayout {
+    uint64_t generation = 0;
     int js = 0;
     int refs = 1;
     // What TextLayoutNew reported, kept so TextLayoutSize can answer without
@@ -1219,6 +1236,7 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
         outSize->h = size[1];
     }
     auto* tl = new TextLayout();
+    tl->generation = PaintResourceGenerationNew();
     tl->js = id;
     tl->size = Size{size[0], size[1]};
     return tl;
@@ -1245,6 +1263,10 @@ void TextLayoutRelease(TextLayout* tl) {
         GpJsTextFree(tl->js);
     }
     delete tl;
+}
+
+uint64_t TextLayoutGeneration(const TextLayout* tl) {
+    return tl ? tl->generation : 0;
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,

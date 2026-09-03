@@ -22,6 +22,16 @@
 
 namespace gpui {
 
+static uint64_t gNextPaintResourceGeneration = 1;
+
+static uint64_t PaintResourceGenerationNew() {
+    uint64_t id = gNextPaintResourceGeneration++;
+    if (id == 0) {
+        id = gNextPaintResourceGeneration++;
+    }
+    return id;
+}
+
 static WinPaintOptions gWinPaintOptions = {
 #if WIN_BACKEND_D3D11 && !WIN_BACKEND_ALL
     WinPaintBackend::D3D11,
@@ -1284,6 +1294,7 @@ static int WideOffToUtf8(Str s, int woff) {
 // made for is no longer the one being drawn into.
 
 struct Image {
+    uint64_t generation = 0;
     int w = 0;
     int h = 0;
     uint8_t* bgra = nullptr;
@@ -1338,6 +1349,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         auto* px = (uint8_t*)Alloc(nullptr, (int)size);
         if (px && SUCCEEDED(conv->CopyPixels(nullptr, stride, size, px))) {
             img = new Image();
+            img->generation = PaintResourceGenerationNew();
             img->w = (int)w;
             img->h = (int)h;
             img->bgra = px;
@@ -1360,6 +1372,10 @@ void ImageFree(Image* img) {
     Rel(&img->bmp);
     Free(nullptr, img->bgra);
     delete img;
+}
+
+uint64_t ImageGeneration(const Image* img) {
+    return img ? img->generation : 0;
 }
 
 // The GPU backend makes its own texture out of the same pixels rather than a
@@ -1478,8 +1494,14 @@ static void ApplyLineHeight(IDWriteTextLayout* layout, float fontSize,
     layout->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, box, baseline);
 }
 
+struct TextLayout {
+    IDWriteTextLayout* layout = nullptr;
+    uint64_t generation = 0;
+    int refs = 1;
+};
+
 static IDWriteTextLayout* Dw(TextLayout* tl) {
-    return (IDWriteTextLayout*)tl;
+    return tl ? tl->layout : nullptr;
 }
 
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
@@ -1529,7 +1551,10 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
         outSize->w = m.widthIncludingTrailingWhitespace;
         outSize->h = m.height;
     }
-    return (TextLayout*)layout;
+    auto* tl = new TextLayout();
+    tl->layout = layout;
+    tl->generation = PaintResourceGenerationNew();
+    return tl;
 }
 
 Size TextLayoutSize(TextLayout* tl) {
@@ -1545,14 +1570,24 @@ Size TextLayoutSize(TextLayout* tl) {
 
 void TextLayoutAddRef(TextLayout* tl) {
     if (tl) {
-        Dw(tl)->AddRef();
+        tl->refs++;
     }
 }
 
 void TextLayoutRelease(TextLayout* tl) {
-    if (tl) {
-        Dw(tl)->Release();
+    if (!tl || --tl->refs > 0) {
+        return;
     }
+    Rel(&tl->layout);
+    delete tl;
+}
+
+uint64_t TextLayoutGeneration(const TextLayout* tl) {
+    return tl ? tl->generation : 0;
+}
+
+void* PaintTextLayoutNative(TextLayout* tl) {
+    return Dw(tl);
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,

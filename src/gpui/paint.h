@@ -272,6 +272,10 @@ struct Image;
 // the caller shows as the image's alt text.
 Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len);
 void ImageFree(Image* img);
+// Monotonic identity assigned when the resource is made. Unlike its address,
+// this is never reused while the process runs, so retained-frame hashes do
+// not confuse a new allocation with the object that previously occupied it.
+uint64_t ImageGeneration(const Image* img);
 // The image's own size in pixels.
 Size ImageSizePx(const Image* img);
 // Draw it scaled into `b`. The caller has already picked the box, so this is
@@ -301,6 +305,7 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
 Size TextLayoutSize(TextLayout* tl);
 void TextLayoutAddRef(TextLayout* tl);
 void TextLayoutRelease(TextLayout* tl);
+uint64_t TextLayoutGeneration(const TextLayout* tl);
 // `clip` cuts the run at `clipW` — GPUI's `truncate()`, which is
 // `text_overflow: Ellipsis`, so what the backend draws is the run trimmed with
 // an ellipsis rather than cut through a glyph. A non-wrapping run is shaped

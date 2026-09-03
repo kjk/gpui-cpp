@@ -14,6 +14,16 @@
 
 namespace gpui {
 
+static uint64_t gNextPaintResourceGeneration = 1;
+
+static uint64_t PaintResourceGenerationNew() {
+    uint64_t id = gNextPaintResourceGeneration++;
+    if (id == 0) {
+        id = gNextPaintResourceGeneration++;
+    }
+    return id;
+}
+
 // A resolved font, keyed by the size and weight byte the element tree asks
 // for. Small and linear: a frame uses a handful of distinct fonts.
 struct FontSlot {
@@ -531,6 +541,7 @@ static int U16OffToUtf8(Str s, int u16off) {
 // one layer down.
 
 struct Image {
+    uint64_t generation = 0;
     CGImageRef image = nullptr;
     int w = 0;
     int h = 0;
@@ -551,6 +562,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         return nullptr;
     }
     auto* img = new Image();
+    img->generation = PaintResourceGenerationNew();
     img->image = CGImageRetain(cg);
     img->w = (int)CGImageGetWidth(cg);
     img->h = (int)CGImageGetHeight(cg);
@@ -565,6 +577,10 @@ void ImageFree(Image* img) {
         CGImageRelease(img->image);
     }
     delete img;
+}
+
+uint64_t ImageGeneration(const Image* img) {
+    return img ? img->generation : 0;
 }
 
 Size ImageSizePx(const Image* img) {
@@ -611,6 +627,7 @@ struct MacLine {
 };
 
 struct TextLayout {
+    uint64_t generation = 0;
     int refs = 1;
     // What TextLayoutNew reported, kept so TextLayoutSize can answer without
     // measuring again.
@@ -815,6 +832,7 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     }
 
     auto* tl = new TextLayout();
+    tl->generation = PaintResourceGenerationNew();
     tl->attr = attr;
     tl->lines = lines;
     tl->nLines = nLines;
@@ -873,6 +891,10 @@ void TextLayoutRelease(TextLayout* tl) {
         CFRelease(tl->attr);
     }
     delete tl;
+}
+
+uint64_t TextLayoutGeneration(const TextLayout* tl) {
+    return tl ? tl->generation : 0;
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,

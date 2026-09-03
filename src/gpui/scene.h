@@ -271,10 +271,6 @@ const SceneStats& Stats(PaintCtx* ctx);
 //   moved hits; the same icon one pixel down the page misses. Hashing the
 //   geometry relative to its own origin and carrying the offset separately
 //   would fix it, and needs a Paint.h that can draw a path translated.
-// - **A shaped run is identified by its address.** A cached TextLayout keeps
-//   one across frames, so this holds; a run that was dropped and whose
-//   address was reused by another would compare equal. The x, y and colour
-//   hashed beside it make that unlikely rather than impossible.
 // - **Only Windows records.** scene.cpp names no OS and no GPU type, but the
 //   dispatch into it is the one line at the top of each entry point that
 //   paint_win.cpp has, and the other three backends do not have it yet.

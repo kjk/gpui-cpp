@@ -38,6 +38,36 @@ static void FrameComparisonBelongsToOnePaintContext() {
     scene::Free(&second);
 }
 
+static void TextLayoutsHaveStableGenerations() {
+    TestSuite("scene resource generations");
+    PaintApp* app = PaintAppNew();
+    utassert(app);
+    if (!app) {
+        return;
+    }
+    PaintCtx paint = {};
+    paint.pa = app;
+    Size size = {};
+    TextLayout* first =
+        TextLayoutNew(&paint, StrL("same"), 14, 0, false, 0, 0, &size);
+    TextLayout* second =
+        TextLayoutNew(&paint, StrL("same"), 14, 0, false, 0, 0, &size);
+    utassert(first && second);
+    if (first && second) {
+        uint64_t firstGeneration = TextLayoutGeneration(first);
+        utassert(firstGeneration != 0);
+        utassert(TextLayoutGeneration(second) != 0);
+        utassert(TextLayoutGeneration(second) != firstGeneration);
+        TextLayoutAddRef(first);
+        TextLayoutRelease(first);
+        utassert(TextLayoutGeneration(first) == firstGeneration);
+    }
+    TextLayoutRelease(first);
+    TextLayoutRelease(second);
+    PaintAppFree(app);
+}
+
 void TestScene() {
     FrameComparisonBelongsToOnePaintContext();
+    TextLayoutsHaveStableGenerations();
 }
