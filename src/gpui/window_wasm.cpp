@@ -545,7 +545,7 @@ void AppQuit(Window* win) {
 
 bool WindowClientDecorated(Window* win) {
     // A tab has no frame at all, so what the page draws is all there is.
-    return win != nullptr;
+    return win && (win->opts.clientTitleBar || win->opts.borderless);
 }
 
 // A tab cannot raise itself either — only the browser decides which one is
