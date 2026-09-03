@@ -1890,6 +1890,15 @@ static El* Construct(Ctx* cx, ShellRuntime* runtime,
         case shell::ComponentKind::HoverCard:
         case shell::ComponentKind::Popup:
             return Div(cx->a);
+        // MaterializeNode builds these four itself and never reaches here.
+        // They are named rather than left to the fallback so that a kind added
+        // later still fails the exhaustiveness check instead of silently
+        // materializing as an empty box.
+        case shell::ComponentKind::Avatar:
+        case shell::ComponentKind::AccordionItem:
+        case shell::ComponentKind::DockArea:
+        case shell::ComponentKind::DockContent:
+            return Div(cx->a);
     }
     return Div(cx->a);
 }

@@ -47,6 +47,12 @@ static uint64_t OpShape(const SpecOp& op) {
             return StructureMix(3, StructureName(op.name));
         case SpecOpKind::Callback:
             return StructureMix(4, StructureName(op.name));
+        // Shaped like a Callback and distinct from one: the action's name is
+        // what the handler is bound to, so two different actions are two
+        // different structures. Without this the switch fell through to 0 and
+        // every action in a description hashed alike.
+        case SpecOpKind::ActionCallback:
+            return StructureMix(5, StructureName(op.name));
         // The detached node these point at is part of the shape: a hover style
         // and the declarations inside it are one structure.
         case SpecOpKind::StateStyle:
