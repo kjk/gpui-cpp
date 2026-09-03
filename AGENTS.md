@@ -84,10 +84,15 @@ module loader, scheduler and capability-gated system APIs.
 These are the standing exclusions. Everything else in gpui-component is in
 scope, and a module being large or unglamorous is not a reason to skip it.
 
-- Zed's scene graph as a whole, and general-purpose C++ futures/coroutines.
-  Shell's JavaScript promises are the narrow exception: they are implemented
-  over callback jobs, `ExecSpawn`, `WindowPost` and window timers, with no C++
-  async runtime. Two halves of the scene graph are
+- Zed's scene graph as a whole, and a general-purpose C++ async runtime.
+  Coroutines themselves are no longer excluded: `src/sys/task.h` is one
+  `Task`, one awaitable over the executor, and a registry that checks the
+  owner on the single resume path, which is the preamble every `done`
+  callback used to write out. What stays out is everything around it —
+  combinators, `select`, cancellation tokens, an awaitable per operation, a
+  `Task<T>` carrying a value. Shell's JavaScript promises are still
+  implemented over callback jobs, `ExecSpawn`, `WindowPost` and window
+  timers. Two halves of the scene graph are
   here and neither is the whole. `src/gpui/paintgpu.h` is the renderer half —
   one instance buffer a frame, SDF rounded rects and borders, a glyph atlas,
   stencil-and-cover paths, which is what Blade and `directx_renderer.rs` do —
@@ -107,7 +112,9 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   short of, and `__scene=off` is how to take the scene back out. We do have
   `App`/`Window`/`Entity`/`Ctx`, actions and a keymap, `EventEmitter`, window
   subscriptions and an executor — see below — but not refcounted entities,
-  observers, futures, or a `Task<T>` that cancels by being dropped.
+  observers, or a `Task<T>` that cancels by being dropped: an owner here is an
+  entity with a generation rather than a C++ scope, so `TaskCancel` is the
+  drop and `TaskGuard` is the weak handle Rust upgrades on resume.
   `src/sys/executor.h` is GPUI's foreground/background pair written as
   callbacks: a queue the main thread drains and a pool of threads that fills
   it, with integer handles where Rust has a handle whose destructor is the
@@ -146,7 +153,15 @@ rediscover it.
 
 ## Hard rules
 
-1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
+1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed, plus `<coroutine>`. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
+
+   `<coroutine>` is on the list because it is compiler support rather than a
+   library: `std::coroutine_handle` and `std::suspend_never` are how the
+   language spells `co_await`, the compiler will not accept a hand-written
+   substitute, and the header brings no container, no allocator and no
+   exceptions — the same footing as `<new>`. It is allowed for
+   `src/sys/task.h` and what builds on it, not as an opening for the rest of
+   the standard library.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout, and it is `namespace base`. Everything else in `src/` lives in `namespace gpui` (themed widgets in `gpui::component`), which takes the base in with a using-directive, so gpui code writes `Str` unqualified and `gpui::Str` still names it from outside. Examples `#include "gpui.h"` and `using namespace gpui;`.
 
    The ported crates are the reason for the split. `src/taffy`, `src/markdown`, `src/wry` and `src/autocorrect` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/update-dist.ts` fails the build if that stops being true. Keep it that way when adding to any of them — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
@@ -208,8 +223,8 @@ src/gpui/window_linux.cpp  X11 event loop
 src/gpui/window_mac.cpp    Cocoa event loop
         │
         ▼
-src/sys/    process/CPU/memory/disk/battery, per OS; the executor and the
-            fetch table, portable
+src/sys/    process/CPU/memory/disk/battery, per OS; the executor, the
+            coroutine task registry and the fetch table, portable
         │
         ▼
 src/base.h  Str, Vec, Arena, Geom, Color helpers
@@ -491,7 +506,8 @@ The runtime mirrors GPUI's shape. Read this before touching `src/gpui`, adding a
 | `window.use_keyed_state`         | `KeyedState<T>(cx, key)`                                                            |
 | `cx.spawn(...)` with no await    | `WindowPost(win, Listener)` — runs against its entity on the next pass             |
 | `cx.background_spawn(work)`      | `ExecSpawn(work, done)` — `sys/executor.h`; `done` is posted to the main thread     |
-| `Task<T>` dropped                | `ExecCancel(id)`, or the entity going stale, which drops a post the way it does a timer |
+| `cx.background_spawn(w).await`   | `co_await BackgroundSpawn(w)` inside a `Task` — `sys/task.h`; the owner check is the awaitable's, not the call site's |
+| `Task<T>` dropped                | `ExecCancel(id)`, or `TaskCancel(handle)` for a coroutine, or the entity going stale, which drops a post the way it does a timer |
 | `Timer::after(d).await`          | `WindowSetTimeout(win, ms, Listener)`                                               |
 
 A view is a plain struct with state, a static `Render`, and static handlers:
@@ -908,8 +924,9 @@ src/gpui/drawops.h/.cpp  the icon byte code and the machine that draws it
 src/gpui/svg.cpp       .svg -> that byte code, at load time
 src/gpui/asset_icons.cpp  assets/icons as that byte code, generated
 src/gpui/              layout, paint, assets, SVG, element tree
-src/sys/               system metrics, the executor, the fetch table
-                       (portable + one file per OS where the OS differs)
+src/sys/               system metrics, the executor, sys/task.h's coroutine
+                       and its registry, the fetch table (portable + one file
+                       per OS where the OS differs)
 src/base/              crates/base unstyled primitives (Button, …)
 src/ui/                themed crates/ui façade (component::Button, Func0/Func1 callbacks)
 src/fps/               the crates/fps performance HUD (FpsMonitorEl)

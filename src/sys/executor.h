@@ -5,13 +5,18 @@
 
    This is the port of GPUI's `BackgroundExecutor` / `ForegroundExecutor`
    pair, minus the futures. Rust spawns an `async` block and awaits inside it;
-   there are no coroutines in this tree, so the same two halves are spelled as
-   callbacks:
+   here the two halves are spelled as callbacks:
 
      cx.background_spawn(work)          ExecSpawn(work, done)
      cx.spawn(|this, cx| ...)           ExecPost(f) / WindowPost(win, listener)
      Task<T> dropped                    ExecCancel(id)
      Timer::after(d).await              WindowSetTimeout(win, ms, listener)
+
+   `sys/task.h` is the half that does read like the Rust: a coroutine whose
+   `co_await BackgroundSpawn(work)` is this `ExecSpawn` underneath, so a
+   sequence of steps is written as a sequence instead of as a job struct and a
+   pair of callbacks. This file stays the layer under it, and is still the
+   right thing to call directly for a single step that has nothing to await.
 
    The two rules GPUI has, this has:
 

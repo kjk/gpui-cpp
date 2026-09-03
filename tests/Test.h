@@ -61,6 +61,7 @@ void TestCalendar();
 void TestColorPicker();
 void TestToast();
 void TestVirtualList();
+void TestTask();
 void TestTaffy();
 void TestMarkdown();
 void TestGpuiBlockLayout();
