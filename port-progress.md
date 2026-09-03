@@ -11635,3 +11635,22 @@ the text modules left for base. `bun cmd/audit-port.ts` reports 140 modules
 at `0c746dff` — 131 full, 0 partial, 8 adapters, 1 excluded — with no
 errors. MSVC release tests pass 23,277 checks and all 28 examples build
 under `/W4 /WX`, amalgamated and not.
+
+One more thing the sweep turned up, older than this ingest.
+`TestAutocorrectIgnorer` wrote `.gitignore` and `.autocorrectignore` into
+the working directory and removed them afterwards, on the assumption
+recorded in its comment that the suite always runs with cwd in the out
+dir. `bun cmd/test.ts` does; running the binary straight from a checkout
+— `outel	ests.exe`, which is what you do to check whether a failure
+is a flake — overwrote this repository's own `.gitignore` and then
+deleted it. It happened three times during this ingest before the cause
+was found. The fixture now lives in a directory the test makes and
+removes, and `IgnorerInit` is pointed at that directory rather than at
+cwd. A test does not write a dotfile into a directory it does not own.
+
+The markdown benchmark also stopped building: `bench/MarkdownBench.cpp`
+had a file-static `MdRun`, and the TextView move put `gpui::MdRun` into a
+header it includes. The bench helper is `MdParseRun` now. `bun
+cmd/bench.ts` reports no asymptotic change — the 316x316 grid is 285 ms,
+which is the number that matters, since that is the shape a bad sort took
+94 seconds on.
