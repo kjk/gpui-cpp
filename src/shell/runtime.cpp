@@ -274,11 +274,29 @@ struct CallbackArena {
     }
 };
 
+// The template being discovered, and the description it interrupted.
+struct TemplateDiscovery {
+    int arity = 0;
+    Vec<shell::Slot> slots;
+    // The arena the live render was recording into when the body started.
+    // Swapped out rather than recorded around, so a template's ids are dense
+    // and start at zero — which is what makes grafting one addition per id.
+    shell::SpecArena* saved = nullptr;
+};
+
 struct ShellRuntimeImpl {
     ShellRuntime* owner = nullptr;
     JSRuntime* jsRuntime = nullptr;
     JSContext* context = nullptr;
     shell::SpecArena* scratch = nullptr;
+    // Templates the script has defined, indexed by the id its closure keeps.
+    // An entry is emptied when the application that defined it is released — a
+    // hot reload re-evaluates the module and defines its templates again, so
+    // without that this would grow by one arena per call site per save. The
+    // slot itself stays, because the id is the index.
+    Vec<shell::Template*> templates;
+    // The template being discovered, while one is.
+    TemplateDiscovery* discovery = nullptr;
     CallbackArena callbacks;
     shell::RetainedStore retained;
     shell::Metrics metrics;
@@ -1166,7 +1184,9 @@ static const char* const kBaseExports[] = {
     "VirtualListScrollHandle", "Input", "InputState", "NumberInput",
     "Textarea", "TextareaState", "SliderState", "Slider", "SliderTrack",
     "SliderIndicator", "SliderThumb", "OtpState", "OtpInput", "set_theme"};
-static const char* const kFpsExports[] = {"fps_monitor"};
+static const char* const kFpsExports[] = {"fps_monitor", "show_fps_monitor",
+                                          "hide_fps_monitor",
+                                          "fps_monitor_visible"};
 static const char* const kBufferExports[] = {"default", "Buffer"};
 static const char* const kConsoleExports[] = {"default"};
 static const char* const kCryptoExports[] = {
@@ -1873,7 +1893,8 @@ static JSValue NativeSlot(JSContext* ctx, JSValueConst, int argc,
 
 static bool IsCallbackMethod(Str name) {
     static const char names[] =
-        "on_click\0on_mouse_move\0on_hover\0on_item_click\0on_change\0"
+        "on_click\0on_mouse_move\0on_hover\0on_item_click\0"
+        "on_item_secondary_click\0on_change\0"
         "on_open_change\0on_confirm\0on_dismiss\0on_step\0on_resize\0";
     for (const char* at = names; *at; at += strlen(at) + 1) {
         if (StrEq(name, at)) return true;
@@ -1943,6 +1964,385 @@ static bool BridgeValue(JSContext* ctx, JSValueConst value, Arena* arena,
     return false;
 }
 
+// A description recorded once, and filled per call.
+//
+// A snapshot removes the cost of *no* change. It does nothing for a *small*
+// one: when a price moves, the structure around it is identical and the whole
+// view is described again anyway — every div(), every .gap(), every crossing.
+// A template splits that description in two:
+//
+//   first call   body(sentinel, sentinel, ...)  ->  structure + slot list
+//   every call   graft the structure, write the slots      (no script runs)
+//
+// The slots are found by running the body once with a sentinel object in each
+// parameter position; wherever a sentinel comes to rest in the recorded
+// description is a slot, and what is left over is structure. Three positions
+// can hold one, which is the whole of SlotSite: the string a Text node
+// carries, one argument of a recorded param style, and the CallbackId of a
+// recorded handler.
+//
+// Two rules this enforces rather than documents. An argument may be passed
+// through, not computed on: a template literal would consume the sentinel
+// during discovery and bake a constant into the structure, so the sentinel
+// refuses to become a primitive, in the prelude. And a handler must arrive as
+// an argument: a closure written inside a body is created once and would
+// capture that first call's values for as long as the template lived, so a
+// body that registers one is refused at definition.
+//
+// It is deliberately not part of the script surface — asking an author to mark
+// their hot paths is a performance annotation in the source. `globalThis
+// .__template` is how the tests that pin its behavior reach it.
+
+// The property a sentinel carries, and the only thing that identifies one.
+static const char kTemplateSentinel[] = "__slot";
+
+// The CallbackId a handler slot holds until a call fills it. A value no arena
+// ever mints, so a template that reached definition holding a *real* callback
+// is a body that registered an inline handler.
+static const shell::CallbackId kTemplateUnfilled = UINT64_MAX;
+
+// The template parameter a value stands for, if it is a sentinel.
+//
+// Costs one tag check for the values a description is actually made of — a
+// string, a number, a boolean — because only an object can carry the marker.
+static bool SlotIndex(JSContext* ctx, JSValueConst value, uint16_t* out) {
+    if (!JS_IsObject(value) || JS_IsFunction(ctx, value)) return false;
+    JSValue marker = JS_GetPropertyStr(ctx, value, kTemplateSentinel);
+    if (JS_IsException(marker)) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+        return false;
+    }
+    double index = 0;
+    bool ok = JS_IsNumber(marker) && JS_ToFloat64(ctx, &index, marker) == 0 &&
+              index >= 0 && index <= 65535;
+    JS_FreeValue(ctx, marker);
+    if (!ok) return false;
+    *out = (uint16_t)index;
+    return true;
+}
+
+static bool RequireDiscovery(JSContext* ctx, ShellRuntimeImpl* impl) {
+    if (impl && impl->discovery) return true;
+    JS_ThrowTypeError(ctx,
+                      "a template argument escaped the body that declared it. "
+                      "It can be passed to a builder call inside the template, "
+                      "and nowhere else");
+    return false;
+}
+
+static bool NoteSlot(JSContext* ctx, ShellRuntimeImpl* impl,
+                     const shell::Slot& slot) {
+    if (!impl || !impl->discovery) {
+        JS_ThrowTypeError(ctx, "no template is being defined");
+        return false;
+    }
+    VecAppend(impl->discovery->slots, slot);
+    return true;
+}
+
+// The index of the operation just pushed onto `id`.
+static bool LastOpIndex(JSContext* ctx, ShellRuntimeImpl* impl,
+                        shell::SpecId id, uint16_t* out) {
+    const shell::SpecNode* node = impl->scratch->Node(id);
+    if (!node || node->ops.len == 0) {
+        JS_ThrowTypeError(ctx, "no operation to attach a slot to");
+        return false;
+    }
+    if (node->ops.len - 1 > 65535) {
+        JS_ThrowTypeError(ctx,
+                          "one element recorded more operations than a "
+                          "template can address");
+        return false;
+    }
+    *out = (uint16_t)(node->ops.len - 1);
+    return true;
+}
+
+// Records the text node a `.child(argument)` inside a body describes.
+static JSValue NativeTextSlot(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t argument = 0;
+    if (!impl || argc < 1 || JS_ToUint32(ctx, &argument, argv[0]) < 0) {
+        return JS_ThrowTypeError(ctx, "a text slot needs its argument index");
+    }
+    if (!RequireDiscovery(ctx, impl)) return JS_EXCEPTION;
+    shell::Component component = {};
+    component.kind = shell::ComponentKind::Text;
+    shell::SpecId node = impl->scratch->Push(component);
+    shell::Slot slot = {};
+    slot.node = node;
+    slot.site.kind = shell::SlotSiteKind::Text;
+    slot.argument = (uint16_t)argument;
+    if (!NoteSlot(ctx, impl, slot)) return JS_EXCEPTION;
+    return JS_NewUint32(ctx, node);
+}
+
+// Starts recording a template body.
+//
+// Nesting is refused rather than supported: a body that defines or calls
+// another template would have to thread the outer sentinels through the inner
+// template's slots.
+static JSValue NativeTemplateBegin(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t arity = 0;
+    if (!impl || argc < 1 || JS_ToUint32(ctx, &arity, argv[0]) < 0) {
+        return JS_ThrowTypeError(ctx, "template(build) needs an arity");
+    }
+    if (impl->discovery) {
+        return JS_ThrowTypeError(
+            ctx,
+            "a template body cannot define or call another template. Build "
+            "the inner structure inline, or call the inner template where the "
+            "outer one is called");
+    }
+    TemplateDiscovery* discovery = new TemplateDiscovery();
+    discovery->arity = (int)arity;
+    discovery->saved = impl->scratch;
+    impl->scratch = new shell::SpecArena();
+    impl->discovery = discovery;
+    return JS_UNDEFINED;
+}
+
+static void DropDiscovery(ShellRuntimeImpl* impl) {
+    TemplateDiscovery* discovery = impl->discovery;
+    if (!discovery) return;
+    impl->discovery = nullptr;
+    VecReset(discovery->slots);
+    delete discovery;
+}
+
+// Abandons a body that threw, and puts the interrupted description back.
+static JSValue NativeTemplateAbort(JSContext* ctx, JSValueConst, int,
+                                   JSValueConst*) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (impl && impl->discovery) {
+        delete impl->scratch;
+        impl->scratch = impl->discovery->saved;
+        DropDiscovery(impl);
+    }
+    return JS_UNDEFINED;
+}
+
+// The first handler a body registered itself, if it registered one.
+//
+// A slot-filled handler carries kTemplateUnfilled and a matching note;
+// anything else is a closure the body created, which a template cannot hold.
+static Str InlineHandler(const shell::SpecArena* recorded,
+                         const Vec<shell::Slot>& slots) {
+    for (shell::SpecId id = 0; id < (shell::SpecId)recorded->Len(); id++) {
+        const shell::SpecNode* node = recorded->Node(id);
+        if (!node) continue;
+        for (int index = 0; index < node->ops.len; index++) {
+            const shell::SpecOp& op = node->ops[index];
+            if (op.kind != shell::SpecOpKind::Callback) continue;
+            bool filled = false;
+            for (int i = 0; i < slots.len && !filled; i++) {
+                filled = slots[i].node == id &&
+                         slots[i].site.kind == shell::SlotSiteKind::Handler &&
+                         slots[i].site.op == (uint16_t)index;
+            }
+            if (op.callback != kTemplateUnfilled || !filled) return op.name;
+        }
+    }
+    return {};
+}
+
+// The first declared parameter that reached no builder call.
+static int UnusedArgument(int arity, const Vec<shell::Slot>& slots) {
+    for (int argument = 0; argument < arity; argument++) {
+        bool used = false;
+        for (int i = 0; i < slots.len && !used; i++) {
+            used = slots[i].argument == (uint16_t)argument;
+        }
+        if (!used) return argument;
+    }
+    return -1;
+}
+
+// Finishes a body and answers the id its closure will keep.
+static JSValue NativeTemplateEnd(JSContext* ctx, JSValueConst, int argc,
+                                 JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || !impl->discovery) {
+        return JS_ThrowTypeError(ctx, "no template is being defined");
+    }
+    TemplateDiscovery* discovery = impl->discovery;
+    // The interrupted description goes back before any refusal below, or a
+    // rejected template would take the render with it.
+    shell::SpecArena* recorded = impl->scratch;
+    impl->scratch = discovery->saved;
+
+    shell::SpecId root = 0;
+    bool haveRoot = argc >= 1 && JS_IsNumber(argv[0]) &&
+                    JS_ToUint32(ctx, &root, argv[0]) == 0 &&
+                    root < (shell::SpecId)recorded->Len();
+    JSValue failure = JS_UNDEFINED;
+    if (!haveRoot) {
+        failure = JS_ThrowTypeError(
+            ctx, "a template body must return one element built inside it");
+    } else if (recorded->MountsAnEntity()) {
+        failure = JS_ThrowTypeError(
+            ctx,
+            "a template cannot mount a nested view or a dock area: it is "
+            "grafted once per call, and GPUI mounts one entity at one place. "
+            "Put the entity where the template is called");
+    } else if (Str method = InlineHandler(recorded, discovery->slots); method) {
+        failure = JS_ThrowTypeError(
+            ctx,
+            "`%.*s` inside a template body registers one handler for the life "
+            "of the template, which would capture this first call's values "
+            "forever. Take the handler as a parameter and pass it in",
+            method.len, method.s);
+    } else if (int unused = UnusedArgument(discovery->arity, discovery->slots);
+               unused >= 0) {
+        failure = JS_ThrowTypeError(
+            ctx,
+            "template argument %d is never used in the body. A parameter that "
+            "reaches no builder call fills nothing, which is usually a value "
+            "that was formatted or compared instead of passed through",
+            unused);
+    }
+    if (JS_IsException(failure)) {
+        delete recorded;
+        DropDiscovery(impl);
+        return failure;
+    }
+
+    shell::Template* tmpl = new shell::Template();
+    tmpl->arena = recorded;
+    tmpl->root = root;
+    tmpl->slots = discovery->slots;
+    tmpl->arity = discovery->arity;
+    tmpl->application = shell::ScopeCurrentApplication();
+    discovery->slots = Vec<shell::Slot>{};
+    DropDiscovery(impl);
+    VecAppend(impl->templates, tmpl);
+    return JS_NewUint32(ctx, (uint32_t)(impl->templates.len - 1));
+}
+
+// Converts one argument for the position it fills.
+static bool SlotValueOf(JSContext* ctx, ShellRuntimeImpl* impl,
+                        const shell::Slot& slot, JSValueConst argument,
+                        Arena* arena, shell::SlotValue* out) {
+    switch (slot.site.kind) {
+        case shell::SlotSiteKind::Text: {
+            // Validated through the bridge first, so that an object or a
+            // function is refused rather than stringified, and coerced after —
+            // because the ordinary path is `String(value)` in the prelude, and
+            // a number has to read the same whichever path recorded it.
+            shell::Bridged bridged = {};
+            if (!BridgeValue(ctx, argument, arena, &bridged)) return false;
+            if (bridged.kind == shell::BridgedKind::Nil) {
+                JS_ThrowTypeError(ctx,
+                                  "this template argument fills a text child "
+                                  "and must be a string, a number or a "
+                                  "boolean");
+                return false;
+            }
+            out->kind = shell::SlotValueKind::Text;
+            return JsString(ctx, argument, arena, &out->text);
+        }
+        case shell::SlotSiteKind::Argument: {
+            out->kind = shell::SlotValueKind::Value;
+            return BridgeValue(ctx, argument, arena, &out->value);
+        }
+        case shell::SlotSiteKind::Handler: {
+            if (!JS_IsFunction(ctx, argument)) {
+                JS_ThrowTypeError(ctx,
+                                  "this template argument fills a handler and "
+                                  "must be a function");
+                return false;
+            }
+            shell::CallbackId callback = impl->callbacks.Push(
+                ctx, argument, shell::ScopeCurrentView(),
+                shell::ScopeCurrentPolicy(), shell::ScopeCurrentGeneration(),
+                (AppModule*)shell::ScopeCurrentApplication());
+            if (callback == UINT64_MAX) {
+                JS_ThrowInternalError(
+                    ctx, "a callback was registered outside a snapshot build");
+                return false;
+            }
+            out->kind = shell::SlotValueKind::Handler;
+            out->handler = callback;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Grafts a template into the description being recorded and writes this call's
+// arguments into its slots. The whole of an instantiation: no builder method
+// is interpreted, and the structure is copied rather than described.
+static JSValue NativeTemplateInstantiate(JSContext* ctx, JSValueConst, int argc,
+                                         JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t id = 0;
+    if (!impl || argc < 2 || JS_ToUint32(ctx, &id, argv[0]) < 0) {
+        return JS_ThrowTypeError(ctx, "a template call needs its id");
+    }
+    if (impl->discovery) {
+        return JS_ThrowTypeError(
+            ctx,
+            "a template body cannot call another template. Call it where the "
+            "outer template is called");
+    }
+    shell::Template* tmpl =
+        id < (uint32_t)impl->templates.len ? impl->templates[(int)id] : nullptr;
+    if (!tmpl) {
+        return JS_ThrowTypeError(
+            ctx,
+            "this template belongs to an application that has been "
+            "unloaded");
+    }
+    int64_t given = 0;
+    if (JS_GetLength(ctx, argv[1], &given) < 0) return JS_EXCEPTION;
+    if (given != (int64_t)tmpl->arity) {
+        return JS_ThrowTypeError(
+            ctx, "this template takes %d argument(s) and was given %d",
+            tmpl->arity, (int)given);
+    }
+
+    // Every value is converted and checked before the graft, so a bad argument
+    // leaves the description it was being added to untouched rather than
+    // half-grown.
+    Arena* arena = ArenaNew();
+    shell::SlotValue* values = nullptr;
+    if (tmpl->slots.len > 0) {
+        values = (shell::SlotValue*)Alloc(
+            arena, (int)(sizeof(shell::SlotValue) * (size_t)tmpl->slots.len));
+        for (int i = 0; i < tmpl->slots.len; i++) {
+            values[i] = shell::SlotValue{};
+        }
+    }
+    for (int i = 0; i < tmpl->slots.len; i++) {
+        JSValue argument =
+            JS_GetPropertyUint32(ctx, argv[1], tmpl->slots[i].argument);
+        bool ok =
+            !JS_IsException(argument) &&
+            SlotValueOf(ctx, impl, tmpl->slots[i], argument, arena, &values[i]);
+        JS_FreeValue(ctx, argument);
+        if (!ok) {
+            ArenaDelete(arena);
+            return JS_EXCEPTION;
+        }
+    }
+
+    shell::SpecId root = impl->scratch->Graft(*tmpl);
+    shell::SpecId base = root - tmpl->root;
+    for (int i = 0; i < tmpl->slots.len; i++) {
+        shell::SpecError failure = {};
+        if (!impl->scratch
+                 ->WriteSlot(base, tmpl->slots[i], values[i], &failure)) {
+            ArenaDelete(arena);
+            return SpecFailure(ctx, failure);
+        }
+    }
+    ArenaDelete(arena);
+    return JS_NewUint32(ctx, root);
+}
+
 static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
                            JSValueConst* argv) {
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
@@ -1965,31 +2365,61 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
     int argCount = (int)argCount64;
     shell::SpecOp op = {};
     op.name = name;
+    // Where a template's sentinel came to rest in this call, if one did. Only
+    // reachable while a template body is being discovered, because nothing
+    // else hands one out.
+    int slotPosition = -1;
+    uint16_t slotArgument = 0;
+    shell::SlotSiteKind slotSite = shell::SlotSiteKind::Handler;
     if (IsCallbackMethod(name)) {
         if (shell::ScopeCurrentPhase() == ScopePhase::Layout) {
             ArenaDelete(arena);
-            return JS_ThrowTypeError(ctx, "callbacks cannot be registered from a virtual list item renderer");
+            return JS_ThrowTypeError(
+                ctx,
+                "callbacks cannot be registered from a virtual list's item "
+                "renderer: the rows are rebuilt every frame, so a handler "
+                "registered there would pile up for as long as the view "
+                "stood. Use `on_item_click((key, cx) => ...)` or "
+                "`on_item_secondary_click((key, event, cx) => ...)` on the "
+                "list itself, and read the row out of your own data with the "
+                "stable key it gives you");
         }
-        JSValue handler = argCount > 0
-                              ? JS_GetPropertyUint32(ctx, argv[2], 0)
-                              : JS_UNDEFINED;
-        if (!JS_IsFunction(ctx, handler)) {
+        JSValue handler =
+            argCount > 0 ? JS_GetPropertyUint32(ctx, argv[2], 0) : JS_UNDEFINED;
+        // A sentinel in the handler position means this call is being recorded
+        // into a template rather than into a description: the handler is
+        // minted per call, so the op holds a placeholder and the position is
+        // noted. Checked before the function test, which would reject it.
+        if (SlotIndex(ctx, handler, &slotArgument)) {
             JS_FreeValue(ctx, handler);
-            ArenaDelete(arena);
-            return JS_ThrowTypeError(ctx, "%.*s(handler) expects a function",
-                                     name.len, name.s);
+            if (!RequireDiscovery(ctx, impl)) {
+                ArenaDelete(arena);
+                return JS_EXCEPTION;
+            }
+            op.kind = shell::SpecOpKind::Callback;
+            op.callback = kTemplateUnfilled;
+            slotPosition = 0;
+            slotSite = shell::SlotSiteKind::Handler;
+        } else {
+            if (!JS_IsFunction(ctx, handler)) {
+                JS_FreeValue(ctx, handler);
+                ArenaDelete(arena);
+                return JS_ThrowTypeError(
+                    ctx, "%.*s(handler) expects a function", name.len, name.s);
+            }
+            shell::CallbackId callback = impl->callbacks.Push(
+                ctx, handler, shell::ScopeCurrentView(),
+                shell::ScopeCurrentPolicy(), shell::ScopeCurrentGeneration(),
+                (AppModule*)shell::ScopeCurrentApplication());
+            JS_FreeValue(ctx, handler);
+            if (callback == UINT64_MAX) {
+                ArenaDelete(arena);
+                return JS_ThrowInternalError(
+                    ctx, "a callback was registered outside a snapshot build");
+            }
+            op.kind = shell::SpecOpKind::Callback;
+            op.callback = callback;
         }
-        shell::CallbackId callback = impl->callbacks.Push(
-            ctx, handler, shell::ScopeCurrentView(),
-            shell::ScopeCurrentPolicy(), shell::ScopeCurrentGeneration(),
-            (AppModule*)shell::ScopeCurrentApplication());
-        JS_FreeValue(ctx, handler);
-        if (callback == UINT64_MAX) {
-            ArenaDelete(arena);
-            return JS_ThrowInternalError(ctx, "a callback was registered outside a snapshot build");
-        }
-        op.kind = shell::SpecOpKind::Callback;
-        op.callback = callback;
     } else {
         op.kind = IsParamStyle(name) ? shell::SpecOpKind::ParamStyle
                                      : (!IsBehavior(name) && argCount == 0
@@ -2001,13 +2431,47 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
                 arena, (int)(sizeof(shell::Bridged) * (size_t)argCount));
             for (int i = 0; i < argCount; i++) {
                 JSValue value = JS_GetPropertyUint32(ctx, argv[2], (uint32_t)i);
-                bool bridged = !JS_IsException(value) &&
-                               BridgeValue(ctx, value, arena, &op.args[i]);
-                JS_FreeValue(ctx, value);
-                if (!bridged) {
+                if (JS_IsException(value)) {
                     ArenaDelete(arena);
                     return JS_EXCEPTION;
                 }
+                uint16_t argument = 0;
+                if (SlotIndex(ctx, value, &argument)) {
+                    JS_FreeValue(ctx, value);
+                    // The value is not known yet. A placeholder is recorded
+                    // and the position is noted; the call fills it. A style is
+                    // the only argument position a template fills, and one per
+                    // call: everything else is refused where it was written,
+                    // naming what to do instead, rather than baked in as a
+                    // constant that would never change again.
+                    if (op.kind != shell::SpecOpKind::ParamStyle ||
+                        slotPosition >= 0 || i > 255) {
+                        JSValue thrown = JS_ThrowTypeError(
+                            ctx,
+                            "`%.*s` cannot take a template argument: a "
+                            "template fills text children, style arguments "
+                            "and handlers. Compute the value where the "
+                            "template is called and pass the result",
+                            name.len, name.s);
+                        ArenaDelete(arena);
+                        return thrown;
+                    }
+                    if (!RequireDiscovery(ctx, impl)) {
+                        ArenaDelete(arena);
+                        return JS_EXCEPTION;
+                    }
+                    op.args[i] = shell::Bridged::Nil();
+                    slotPosition = i;
+                    slotArgument = argument;
+                    slotSite = shell::SlotSiteKind::Argument;
+                    continue;
+                }
+                if (!BridgeValue(ctx, value, arena, &op.args[i])) {
+                    JS_FreeValue(ctx, value);
+                    ArenaDelete(arena);
+                    return JS_EXCEPTION;
+                }
+                JS_FreeValue(ctx, value);
             }
         }
         if (StrEq(name, "role")) {
@@ -2037,6 +2501,18 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
     if (!impl->scratch->PushOp(id, op, &failure)) {
         ArenaDelete(arena);
         return SpecFailure(ctx, failure);
+    }
+    if (slotPosition >= 0) {
+        shell::Slot slot = {};
+        slot.node = id;
+        slot.site.kind = slotSite;
+        slot.site.argument = (uint8_t)slotPosition;
+        slot.argument = slotArgument;
+        if (!LastOpIndex(ctx, impl, id, &slot.site.op) ||
+            !NoteSlot(ctx, impl, slot)) {
+            ArenaDelete(arena);
+            return JS_EXCEPTION;
+        }
     }
     ArenaDelete(arena);
     return JS_UNDEFINED;
@@ -2574,6 +3050,106 @@ static JSValue NativeHasSheet(JSContext* ctx, JSValueConst, int,
     if (!OverlayHost(ctx, "window.has_active_sheet()", &impl, &native))
         return JS_EXCEPTION;
     return JS_NewBool(ctx, ShellRootHasSheet(&native));
+}
+
+static bool OptionalStringProperty(JSContext* ctx, JSValueConst object,
+                                   const char* name, Arena* arena, Str* out,
+                                   bool* present);
+
+// The performance HUD is the root's, not the script's: the script says whether
+// and where, the host draws it above everything and keeps its history across a
+// hide and a show. Nothing crosses back but a flag.
+static JSValue NativeShowFpsMonitor(JSContext* ctx, JSValueConst, int argc,
+                                    JSValueConst* argv) {
+    const char* kApi = "show_fps_monitor(options)";
+    if (!OverlayMutationAllowed(ctx, kApi)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, kApi, &impl, &native)) return JS_EXCEPTION;
+    FpsHudRequest request = {};
+    if (argc > 0 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+        if (!JS_IsObject(argv[0]) || JS_IsArray(argv[0])) {
+            return JS_ThrowTypeError(
+                ctx,
+                "%s expects an object, such as { anchor: \"bottom_left\" }",
+                kApi);
+        }
+        static const char* const kKeys[] = {"anchor", "continuous",
+                                            "frame_budget"};
+        if (!KnownOptions(ctx, argv[0], kKeys, 3, kApi)) return JS_EXCEPTION;
+        Arena* arena = ArenaNew();
+        Str anchor;
+        bool present = false;
+        bool ok = OptionalStringProperty(ctx, argv[0], "anchor", arena, &anchor,
+                                         &present);
+        if (ok && present && !FpsAnchorFromName(anchor, &request.anchor)) {
+            StrBuilder names;
+            bool first = true;
+            int offset = 0;
+            SeqStrings all = FpsAnchorNames();
+            while (offset >= 0) {
+                Str name = SeqStrAt(all, offset);
+                if (!name) break;
+                if (!first) names.Append(StrL(", "));
+                first = false;
+                names.Append(name);
+                SeqStrAdvance(all, offset);
+            }
+            Str list = names.TakeStr();
+            JSValue thrown = JS_ThrowTypeError(
+                ctx, "%s: unknown anchor `%.*s`; expected one of %.*s", kApi,
+                anchor.len, anchor.s, list.len, list.s);
+            StrFree(list);
+            ArenaDelete(arena);
+            return thrown;
+        }
+        ArenaDelete(arena);
+        if (!ok) return JS_EXCEPTION;
+        if (!OptionalBoolProperty(ctx, argv[0], "continuous",
+                                  &request.continuous)) {
+            return JS_EXCEPTION;
+        }
+        JSValue budget = JS_GetPropertyStr(ctx, argv[0], "frame_budget");
+        if (JS_IsException(budget)) return JS_EXCEPTION;
+        if (!JS_IsUndefined(budget) && !JS_IsNull(budget)) {
+            double millis = 0;
+            bool valid = JS_IsNumber(budget) &&
+                         JS_ToFloat64(ctx, &millis, budget) == 0 &&
+                         isfinite(millis) && millis > 0;
+            JS_FreeValue(ctx, budget);
+            if (!valid) {
+                return JS_ThrowTypeError(ctx,
+                                         "%s: frame_budget must be a positive "
+                                         "number of milliseconds",
+                                         kApi);
+            }
+            request.hasFrameBudget = true;
+            request.frameBudget = (float)(millis / 1000.0);
+        } else {
+            JS_FreeValue(ctx, budget);
+        }
+    }
+    ShellRootShowFpsMonitor(&native, request);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeHideFpsMonitor(JSContext* ctx, JSValueConst, int,
+                                    JSValueConst*) {
+    const char* kApi = "hide_fps_monitor()";
+    if (!OverlayMutationAllowed(ctx, kApi)) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, kApi, &impl, &native)) return JS_EXCEPTION;
+    return JS_NewBool(ctx, ShellRootHideFpsMonitor(&native));
+}
+
+static JSValue NativeFpsMonitorVisible(JSContext* ctx, JSValueConst, int,
+                                       JSValueConst*) {
+    ShellRuntimeImpl* impl = nullptr;
+    Ctx native = {};
+    if (!OverlayHost(ctx, "fps_monitor_visible()", &impl, &native))
+        return JS_EXCEPTION;
+    return JS_NewBool(ctx, ShellRootFpsMonitorVisible(&native));
 }
 
 static bool OptionalStringProperty(JSContext* ctx, JSValueConst object,
@@ -3608,6 +4184,185 @@ static bool ReadThemeScale(JSContext* ctx, JSValueConst object,
     return true;
 }
 
+// The two font families a script may state, owned for the life of the process.
+//
+// `TypographyTokens` carries borrowed `Str`s — its defaults are literals — and
+// the base theme is process-global, so a family a script supplies has to
+// outlive the JavaScript string it arrived in. One owned copy per family, and
+// the previous one is freed when it is replaced.
+static Str gShellThemeSans;
+static Str gShellThemeMono;
+
+// Reads one optional text style. Every field left out keeps the token it would
+// have replaced: that is what lets an application state the one size it has an
+// opinion about — usually `md`, the window's base text size — without
+// restating a line height, a weight, and two font families it does not.
+static bool ReadThemeTextStyle(JSContext* ctx, JSValueConst object,
+                               const char* name, TextStyleToken* token) {
+    JSValue value = JS_GetPropertyStr(ctx, object, name);
+    if (JS_IsException(value)) return false;
+    if (JS_IsUndefined(value) || JS_IsNull(value)) {
+        JS_FreeValue(ctx, value);
+        return true;
+    }
+    if (!JS_IsObject(value) || JS_IsArray(value)) {
+        JS_FreeValue(ctx, value);
+        JS_ThrowTypeError(ctx, "theme typography `%s` must be an object", name);
+        return false;
+    }
+    struct Field {
+        const char* key;
+        float* target;
+        // Above zero, not merely non-negative: a size or a line height of zero
+        // is text that cannot be read, and it would be applied silently. The
+        // spacing and radius scales allow zero because a gap of zero is a real
+        // answer.
+        float low;
+        float high;
+        const char* bounds;
+    };
+    float weight = (float)(uint16_t)token->weight;
+    Field fields[3] = {
+        {"size", &token->size, 0, 0, "must be above zero"},
+        {"line_height", &token->lineHeight, 0, 0, "must be above zero"},
+        // The CSS range, which is what FontWeight's own constants span.
+        {"weight", &weight, 1, 1000, "must be between 1 and 1000"},
+    };
+    for (const Field& field : fields) {
+        JSValue supplied = JS_GetPropertyStr(ctx, value, field.key);
+        if (JS_IsException(supplied)) {
+            JS_FreeValue(ctx, value);
+            return false;
+        }
+        if (JS_IsUndefined(supplied) || JS_IsNull(supplied)) {
+            JS_FreeValue(ctx, supplied);
+            continue;
+        }
+        double number = 0;
+        bool ok = JS_IsNumber(supplied) &&
+                  JS_ToFloat64(ctx, &number, supplied) == 0 && isfinite(number);
+        JS_FreeValue(ctx, supplied);
+        if (ok) {
+            ok = field.high > 0 ? number >= field.low && number <= field.high
+                                : number > 0;
+        }
+        if (!ok) {
+            JS_FreeValue(ctx, value);
+            JS_ThrowTypeError(ctx, "theme typography `%s.%s` %s", name,
+                              field.key, field.bounds);
+            return false;
+        }
+        *field.target = (float)number;
+    }
+    token->weight = (FontWeight)(uint16_t)(weight + 0.5f);
+    JS_FreeValue(ctx, value);
+    return true;
+}
+
+// Font families are taken as written — a family name this platform does not
+// have falls back the way every other missing family does, and refusing one
+// here would mean this module deciding which fonts exist.
+static bool ReadThemeFamily(JSContext* ctx, JSValueConst object,
+                            const char* name, Str* owned, Str* target) {
+    JSValue value = JS_GetPropertyStr(ctx, object, name);
+    if (JS_IsException(value)) return false;
+    if (JS_IsUndefined(value) || JS_IsNull(value)) {
+        JS_FreeValue(ctx, value);
+        return true;
+    }
+    if (!JS_IsString(value)) {
+        JS_FreeValue(ctx, value);
+        JS_ThrowTypeError(ctx, "theme typography `%s` must be a string", name);
+        return false;
+    }
+    size_t len = 0;
+    const char* text = JS_ToCStringLen(ctx, &len, value);
+    if (text) {
+        StrFree(*owned);
+        *owned = StrDup(Str(text, (int)len));
+        *target = *owned;
+        JS_FreeCString(ctx, text);
+    }
+    JS_FreeValue(ctx, value);
+    return text != nullptr;
+}
+
+// The type scale, and the only block a theme may leave out.
+//
+// Colours, spacing and radius are required because a script that names them
+// names all of them: a palette with half its roles missing is a window drawn in
+// two themes. Typography is different — it arrived after themes were already
+// being written, and a theme that says nothing about type is not incomplete, it
+// is one that accepts the scale it was given.
+static bool ReadThemeTypography(JSContext* ctx, JSValueConst tokensValue,
+                                TypographyTokens* typography) {
+    JSValue value = JS_GetPropertyStr(ctx, tokensValue, "typography");
+    if (JS_IsException(value)) return false;
+    if (JS_IsUndefined(value) || JS_IsNull(value)) {
+        JS_FreeValue(ctx, value);
+        return true;
+    }
+    if (!JS_IsObject(value) || JS_IsArray(value)) {
+        JS_FreeValue(ctx, value);
+        JS_ThrowTypeError(ctx, "theme tokens.typography must be an object");
+        return false;
+    }
+    // `mono_md` is not a sixth step of the scale above — it is the size `mono`
+    // is set at, and the two are read together.
+    bool ok = ReadThemeFamily(ctx, value, "sans", &gShellThemeSans,
+                              &typography->sans) &&
+              ReadThemeFamily(ctx, value, "mono", &gShellThemeMono,
+                              &typography->mono) &&
+              ReadThemeTextStyle(ctx, value, "xs", &typography->xs) &&
+              ReadThemeTextStyle(ctx, value, "sm", &typography->sm) &&
+              ReadThemeTextStyle(ctx, value, "md", &typography->md) &&
+              ReadThemeTextStyle(ctx, value, "lg", &typography->lg) &&
+              ReadThemeTextStyle(ctx, value, "xl", &typography->xl) &&
+              ReadThemeTextStyle(ctx, value, "mono_md", &typography->monoMd);
+    JS_FreeValue(ctx, value);
+    return ok;
+}
+
+// A font family name as a JSON string. Families are author-supplied, so the two
+// characters JSON cannot carry raw are escaped rather than assumed absent.
+static void AppendJsonString(StrBuilder* out, Str value) {
+    out->AppendChar('"');
+    for (int i = 0; i < value.len; i++) {
+        char c = value.s[i];
+        if (c == '\\' || c == '"') out->AppendChar('\\');
+        out->AppendChar(c);
+    }
+    out->AppendChar('"');
+}
+
+static void AppendThemeTextStyle(StrBuilder* out, const char* name,
+                                 const TextStyleToken& style) {
+    out->Append(fmt("\"%s\":{\"size\":%g,\"line_height\":%g,\"weight\":%g}",
+                    Str(name), (double)style.size, (double)style.lineHeight,
+                    (double)(uint16_t)style.weight));
+}
+
+static void AppendThemeTypography(StrBuilder* out) {
+    TypographyTokens typography = {};
+    if (!shell::ThemeTypographyTokens(&typography)) return;
+    out->Append(StrL("\"sans\":"));
+    AppendJsonString(out, typography.sans);
+    out->Append(StrL(",\"mono\":"));
+    AppendJsonString(out, typography.mono);
+    out->AppendChar(',');
+    AppendThemeTextStyle(out, "xs", typography.xs);
+    out->AppendChar(',');
+    AppendThemeTextStyle(out, "sm", typography.sm);
+    out->AppendChar(',');
+    AppendThemeTextStyle(out, "md", typography.md);
+    out->AppendChar(',');
+    AppendThemeTextStyle(out, "lg", typography.lg);
+    out->AppendChar(',');
+    AppendThemeTextStyle(out, "xl", typography.xl);
+    out->AppendChar(',');
+    AppendThemeTextStyle(out, "mono_md", typography.monoMd);
+}
+
 static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
                               JSValueConst* argv) {
     if (shell::ScopeHasCurrent() &&
@@ -3658,13 +4413,17 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
     JSValue colorsValue = JS_UNDEFINED;
     JSValue spacingValue = JS_UNDEFINED;
     JSValue radiusValue = JS_UNDEFINED;
-    bool properties =
-        ThemeRequiredProperty(ctx, tokensValue, "colors", &colorsValue,
-                              "theme tokens") &&
-        ThemeRequiredProperty(ctx, tokensValue, "spacing", &spacingValue,
-                              "theme tokens") &&
-        ThemeRequiredProperty(ctx, tokensValue, "radius", &radiusValue,
-                              "theme tokens");
+    bool properties = ThemeRequiredProperty(ctx, tokensValue, "colors",
+                                            &colorsValue, "theme tokens") &&
+                      ThemeRequiredProperty(ctx, tokensValue, "spacing",
+                                            &spacingValue, "theme tokens") &&
+                      ThemeRequiredProperty(ctx, tokensValue, "radius",
+                                            &radiusValue, "theme tokens");
+    BaseTheme base = BaseTheme::Global(host.GetApp());
+    SemanticThemeTokens tokens = base.tokens;
+    if (properties) {
+        properties = ReadThemeTypography(ctx, tokensValue, &tokens.typography);
+    }
     JS_FreeValue(ctx, tokensValue);
     if (!properties) {
         JS_FreeValue(ctx, colorsValue);
@@ -3682,16 +4441,12 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
             ctx, "theme token colors, spacing, and radius must be objects");
     }
 
-    BaseTheme base = BaseTheme::Global(host.GetApp());
-    SemanticThemeTokens tokens = base.tokens;
-    bool ok = ReadThemeColors(ctx, colorsValue, &tokens.colors) &&
-              ReadThemeScale(ctx, spacingValue,
-                             shell::ThemeSpacingTokenNames(),
-                             "theme tokens.spacing", &tokens.spacing,
-                             nullptr) &&
-              ReadThemeScale(ctx, radiusValue,
-                             shell::ThemeRadiusTokenNames(),
-                             "theme tokens.radius", nullptr, &tokens.radius);
+    bool ok =
+        ReadThemeColors(ctx, colorsValue, &tokens.colors) &&
+        ReadThemeScale(ctx, spacingValue, shell::ThemeSpacingTokenNames(),
+                       "theme tokens.spacing", &tokens.spacing, nullptr) &&
+        ReadThemeScale(ctx, radiusValue, shell::ThemeRadiusTokenNames(),
+                       "theme tokens.radius", nullptr, &tokens.radius);
     JS_FreeValue(ctx, colorsValue);
     JS_FreeValue(ctx, spacingValue);
     JS_FreeValue(ctx, radiusValue);
@@ -3706,13 +4461,18 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
     return JS_UNDEFINED;
 }
 
-static JSValue NativeThemeSnapshot(JSContext* ctx, JSValueConst, int argc,
-                                   JSValueConst* argv) {
+// The host a `cx.theme()` or `cx.theme` revision read belongs to.
+//
+// Both entry points take the same optional generation and refuse the same stale
+// `cx`: a snapshot that could be read through a context whose call has ended
+// would be the palette of a frame that is over.
+static shell::ScopeHostContext ThemeHost(JSContext* ctx, int argc,
+                                         JSValueConst* argv) {
     ShellError error = {};
     uint64_t generation = 0;
     bool explicitGeneration = argc > 0 && !JS_IsUndefined(argv[0]);
-    if (explicitGeneration) {
-        if (JS_ToIndex(ctx, &generation, argv[0]) < 0) return JS_EXCEPTION;
+    if (explicitGeneration && JS_ToIndex(ctx, &generation, argv[0]) < 0) {
+        return shell::ScopeHostForGeneration(UINT64_MAX);
     }
     shell::ScopeHostContext host =
         explicitGeneration
@@ -3721,11 +4481,38 @@ static JSValue NativeThemeSnapshot(JSContext* ctx, JSValueConst, int argc,
     if (!host.IsSet()) {
         Str message = error.IsSet() ? error.message
                                     : StrL("cx.theme() needs a live host call");
-        JSValue result = JS_ThrowTypeError(ctx, "%.*s", message.len, message.s);
-        ShellErrorClear(&error);
-        return result;
+        JS_ThrowTypeError(ctx, "%.*s", message.len, message.s);
     }
-    shell::ThemeTokensSync(host.GetApp());
+    ShellErrorClear(&error);
+    return host;
+}
+
+// The palette's revision, which is what a script's theme cache compares.
+//
+// One number rather than the whole snapshot: a description that asks fifty
+// components for a colour crosses fifty times either way, but only the crossing
+// that finds a new revision builds a JSON document and parses it.
+static JSValue NativeThemeRevision(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    shell::ScopeHostContext host = ThemeHost(ctx, argc, argv);
+    if (!host.IsSet()) return JS_EXCEPTION;
+    return JS_NewUint32(ctx, shell::ThemeTokensSync(host.GetApp()));
+}
+
+static JSValue NativeThemeSnapshot(JSContext* ctx, JSValueConst, int argc,
+                                   JSValueConst* argv) {
+    ShellError error = {};
+    shell::ScopeHostContext host = ThemeHost(ctx, argc, argv);
+    if (!host.IsSet()) return JS_EXCEPTION;
+    // One serialized palette per revision. An unchanged theme answers the copy
+    // it answered last time rather than formatting forty tokens again.
+    static Str gThemeSnapshotJson;
+    static uint32_t gThemeSnapshotRevision = 0;
+    uint32_t revision = shell::ThemeTokensSync(host.GetApp());
+    if (gThemeSnapshotJson && revision == gThemeSnapshotRevision) {
+        return JS_NewStringLen(ctx, gThemeSnapshotJson.s,
+                               (size_t)gThemeSnapshotJson.len);
+    }
     StrBuilder json;
     json.AppendChar('{');
     AppendThemeColors(&json);
@@ -3737,13 +4524,17 @@ static JSValue NativeThemeSnapshot(JSContext* ctx, JSValueConst, int argc,
     json.Append(StrL("},\"radius\":{"));
     AppendThemeScale(&json, shell::ThemeRadiusTokenNames(),
                      shell::ThemeTokenRadius);
+    json.Append(StrL("},\"typography\":{"));
+    AppendThemeTypography(&json);
     BaseTheme base = BaseTheme::Global(host.GetApp());
     bool dark = base.appearance == BaseThemeAppearance::Dark;
     json.Append(dark ? StrL("},\"appearance\":\"dark\",\"is_dark\":true}")
                      : StrL("},\"appearance\":\"light\",\"is_dark\":false}"));
-    Str source = json.TakeStr();
-    JSValue result = JS_NewStringLen(ctx, source.s, (size_t)source.len);
-    StrFree(source);
+    StrFree(gThemeSnapshotJson);
+    gThemeSnapshotJson = json.TakeStr();
+    gThemeSnapshotRevision = revision;
+    JSValue result = JS_NewStringLen(ctx, gThemeSnapshotJson.s,
+                                     (size_t)gThemeSnapshotJson.len);
     ShellErrorClear(&error);
     return result;
 }
@@ -5270,6 +6061,10 @@ globalThis.__gpui = (() => {
     if (["string", "number", "boolean"].includes(typeof child)) {
       return __component("text", String(child));
     }
+    // A template's sentinel, reached only while a template body is running.
+    // Checked after elements and strings so the ordinary description pays
+    // nothing for it.
+    if (child?.__slot !== undefined) return __text_slot(child.__slot);
     if (child?.__entity) return __child_view(child.__handle);
     throw new TypeError("child(value) expects an element, primitive text, or an entity from cx.new(Class, props)");
   };
@@ -5487,9 +6282,21 @@ globalThis.__gpui = (() => {
   };
   const localStorage = storage(false);
   const sessionStorage = storage(true);
+  // The theme, cached in JavaScript and refreshed only when the palette's
+  // revision moves. A description that asks fifty components for a colour used
+  // to build and parse the whole snapshot fifty times; now the revision check
+  // is the only thing that runs, and __prepare_theme warms the cache once per
+  // description so the first reader pays nothing the others do not.
   let cachedThemeSource;
   let cachedTheme;
-  const currentTheme = (generation) => {
+  let cachedThemeRevision = -1;
+  globalThis.__theme_dirty = true;
+  const refreshTheme = (generation) => {
+    const revision = __theme_revision(generation);
+    if (!globalThis.__theme_dirty && revision === cachedThemeRevision &&
+        cachedTheme !== undefined) {
+      return;
+    }
     const source = __theme_snapshot(generation);
     if (source !== cachedThemeSource) {
       cachedThemeSource = source;
@@ -5497,8 +6304,20 @@ globalThis.__gpui = (() => {
       Object.freeze(cachedTheme.colors);
       Object.freeze(cachedTheme.spacing);
       Object.freeze(cachedTheme.radius);
+      if (cachedTheme.typography) {
+        for (const style of Object.values(cachedTheme.typography)) {
+          if (style && typeof style === "object") Object.freeze(style);
+        }
+        Object.freeze(cachedTheme.typography);
+      }
       Object.freeze(cachedTheme);
     }
+    cachedThemeRevision = revision;
+    globalThis.__theme_dirty = false;
+  };
+  globalThis.__prepare_theme = () => refreshTheme(undefined);
+  const currentTheme = (generation) => {
+    refreshTheme(generation);
     return cachedTheme;
   };
   const contentView = (build, api) => {
@@ -5953,6 +6772,56 @@ R"JS(
     if (Array.isArray(sizes) && sizes.length !== count) throw new TypeError(name + " needs one size per item");
     return element(build(String(id), count, sizes, getKey, render));
   };
+  // A description recorded once and filled per call.
+  //
+  // **Not part of the script surface**, and deliberately so. Asking an author
+  // to mark their hot paths is a performance annotation in the source: two
+  // ways to write the same interface, restrictions that only report at first
+  // call, and a decision nobody should have to make while describing a panel.
+  // The machinery is kept because the runtime is meant to apply it itself, and
+  // globalThis.__template is how the tests that pin its behaviour reach it.
+  //
+  // The body runs a single time, with a sentinel in each parameter position;
+  // wherever a sentinel comes to rest in what it describes is a slot, and what
+  // is left over is structure. Every call after that grafts the structure and
+  // writes its arguments into the slots, entering no builder method at all.
+  //
+  // The sentinel refuses to become a primitive. A template literal inside a
+  // body would otherwise consume it and bake this first call's value into the
+  // structure, which is a panel that silently stops updating — so it throws
+  // where it was written instead.
+  const templateSlot = (index) => {
+    const refuse = () => {
+      throw new TypeError("a template argument can be passed to a builder call but not computed on. Format or compare the value where the template is called, and pass the result");
+    };
+    return {
+      __slot: index,
+      toString: refuse,
+      valueOf: refuse,
+      [Symbol.toPrimitive]: refuse,
+    };
+  };
+  const template = (build) => {
+    if (typeof build !== "function") throw new TypeError("template(build) expects a function that builds one element");
+    let id = -1;
+    return (...args) => {
+      if (id < 0) {
+        const slots = [];
+        for (let i = 0; i < build.length; i += 1) slots.push(templateSlot(i));
+        __template_begin(build.length);
+        let root;
+        try {
+          root = build(...slots);
+        } catch (error) {
+          __template_abort();
+          throw error;
+        }
+        id = __template_end(root?.__id);
+      }
+      return element(__template_instantiate(id, args));
+    };
+  };
+  globalThis.__template = template;
   const api = {
     View,
     div: () => component("div"),
@@ -6018,7 +6887,13 @@ R"JS(
     SliderThumb: retained("SliderThumb"),
     OtpState: { new: (length, options = {}) => otpState(__otp_state_new(Number(length), options.value ?? null, Boolean(options.masked))) }, OtpInput: retained("OtpInput"),
     fps_monitor: () => component("FpsMonitor"),
-    set_theme: (theme) => __set_theme(theme),
+    show_fps_monitor: (options) => __show_fps_monitor(options),
+    hide_fps_monitor: () => __hide_fps_monitor(),
+    fps_monitor_visible: () => __fps_monitor_visible(),
+    set_theme: (theme) => {
+      __set_theme(theme);
+      globalThis.__theme_dirty = true;
+    },
   };
   return Object.freeze(api);
 })();
@@ -6092,10 +6967,24 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     SetGlobalFunction(impl->context, global, "__state", NativeState, 2);
     SetGlobalFunction(impl->context, global, "__slot", NativeSlot, 3);
     SetGlobalFunction(impl->context, global, "__apply", NativeApply, 3);
+    // Templates. `begin` swaps the description being recorded for a fresh one
+    // so the body's ids start at zero, `end` takes it back out, and `abort`
+    // puts the interrupted one back when the body threw. Three calls rather
+    // than one because the body runs in JavaScript between them.
+    SetGlobalFunction(impl->context, global, "__template_begin",
+                      NativeTemplateBegin, 1);
+    SetGlobalFunction(impl->context, global, "__template_end",
+                      NativeTemplateEnd, 1);
+    SetGlobalFunction(impl->context, global, "__template_abort",
+                      NativeTemplateAbort, 0);
+    SetGlobalFunction(impl->context, global, "__template_instantiate",
+                      NativeTemplateInstantiate, 2);
+    SetGlobalFunction(impl->context, global, "__text_slot", NativeTextSlot, 1);
     SetGlobalFunction(impl->context, global, "__theme_snapshot",
                       NativeThemeSnapshot, 1);
-    SetGlobalFunction(impl->context, global, "__set_theme", NativeSetTheme,
-                      1);
+    SetGlobalFunction(impl->context, global, "__theme_revision",
+                      NativeThemeRevision, 1);
+    SetGlobalFunction(impl->context, global, "__set_theme", NativeSetTheme, 1);
     SetGlobalFunction(impl->context, global, "__open_url", NativeOpenUrl, 2);
     SetGlobalFunction(impl->context, global, "__host_call", NativeHostCall, 3);
     SetGlobalFunction(impl->context, global, "__host_async_call",
@@ -6130,6 +7019,12 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                       NativeRemoveToast, 1);
     SetGlobalFunction(impl->context, global, "__clear_toasts",
                       NativeClearToasts, 0);
+    SetGlobalFunction(impl->context, global, "__show_fps_monitor",
+                      NativeShowFpsMonitor, 1);
+    SetGlobalFunction(impl->context, global, "__hide_fps_monitor",
+                      NativeHideFpsMonitor, 0);
+    SetGlobalFunction(impl->context, global, "__fps_monitor_visible",
+                      NativeFpsMonitorVisible, 0);
     SetGlobalFunction(impl->context, global, "__task_new", NativeTaskNew, 1);
     SetGlobalFunction(impl->context, global, "__task_finish",
                       NativeTaskFinish, 1);
@@ -6331,8 +7226,17 @@ ShellRuntime::~ShellRuntime() {
             VecReset(retired);
             impl->callbacks.Clear(impl->context);
         }
+        if (impl->discovery) {
+            delete impl->scratch;
+            impl->scratch = impl->discovery->saved;
+            VecReset(impl->discovery->slots);
+            delete impl->discovery;
+            impl->discovery = nullptr;
+        }
         delete impl->scratch;
         StrFree(impl->dependencyCacheRoot);
+        for (int i = 0; i < impl->templates.len; i++) delete impl->templates[i];
+        VecReset(impl->templates);
         for (int i = 0; i < impl->modules.len; i++) {
             StrFree(impl->modules[i]->root);
             impl->modules[i]->dependencies.Free();
@@ -6639,6 +7543,10 @@ RenderSnapshot* ShellRuntime::BuildSnapshot(ViewObject* object, Window* window,
         SetError(error, StrL("snapshot build needs a view object from this runtime and a live Window/App"));
         return nullptr;
     }
+    // One theme sync per description makes cx.theme() a JS-only cache read
+    // after the first: the native snapshot is rebuilt only when this revision
+    // changes, rather than once per component asking for the theme.
+    shell::ThemeTokensSync(app);
     impl->scratch->Reset();
     uint64_t callbackGeneration = impl->callbacks.Begin(impl->context);
     double started = TimeNow();
@@ -6652,7 +7560,19 @@ RenderSnapshot* ShellRuntime::BuildSnapshot(ViewObject* object, Window* window,
         JSValue render = JS_GetPropertyStr(impl->context, object->value, "render");
         if (!JS_IsException(render) && JS_IsFunction(impl->context, render)) {
             JSValue global = JS_GetGlobalObject(impl->context);
-            JSValue context = JS_GetPropertyStr(impl->context, global, "__context");
+            // Warms the script's theme cache inside this scope, so the first
+            // cx.theme() in the description costs what every later one does.
+            JSValue prepare =
+                JS_GetPropertyStr(impl->context, global, "__prepare_theme");
+            JSValue warmed =
+                JS_Call(impl->context, prepare, JS_UNDEFINED, 0, nullptr);
+            if (JS_IsException(warmed)) {
+                JS_FreeValue(impl->context, JS_GetException(impl->context));
+            }
+            JS_FreeValue(impl->context, warmed);
+            JS_FreeValue(impl->context, prepare);
+            JSValue context =
+                JS_GetPropertyStr(impl->context, global, "__context");
             JSValue generation =
                 JS_NewInt64(impl->context, (int64_t)scope.Generation());
             JSValue cx =
@@ -6738,7 +7658,13 @@ void ShellRuntime::RecordMaterialize(uint64_t nanos) {
                       nanos);
 }
 
-int ShellRuntime::LiveCallbacks() const { return impl->callbacks.Live(); }
+void ShellRuntime::RecordStructure(bool repeated) {
+    shell::MetricsRecordStructure(&impl->metrics, repeated);
+}
+
+int ShellRuntime::LiveCallbacks() const {
+    return impl->callbacks.Live();
+}
 
 int ShellRuntime::LiveEntities() const { return impl->retained.Len(); }
 
@@ -6746,8 +7672,15 @@ int ShellRuntime::LiveNestedViews() const { return impl->nestedViews.len; }
 
 int ShellRuntime::LiveTasks() const { return impl->tasks.len; }
 
-shell::RetainedEntry* ShellRuntime::Retained(
-    shell::EntityHandle handle) const {
+int ShellRuntime::LiveTemplates() const {
+    int count = 0;
+    for (int i = 0; i < impl->templates.len; i++) {
+        if (impl->templates[i]) count++;
+    }
+    return count;
+}
+
+shell::RetainedEntry* ShellRuntime::Retained(shell::EntityHandle handle) const {
     return impl->retained.Find(handle);
 }
 
@@ -6838,6 +7771,18 @@ void ShellRuntime::ReleaseApplicationState(ViewObject* object) {
     }
     VecReset(callbacks);
     impl->callbacks.RetireApplication(impl->context, application);
+    // A template is defined once and used for the life of the module, so
+    // nothing in a render would ever free one. The slot is emptied rather than
+    // removed, because a template's id is its index and a closure in a
+    // still-loaded module may hold one: a script that reaches a retired id is
+    // told so rather than handed someone else's structure.
+    for (int i = 0; i < impl->templates.len; i++) {
+        if (impl->templates[i] && impl->templates[i]
+                                          ->application == (void*)application) {
+            delete impl->templates[i];
+            impl->templates[i] = nullptr;
+        }
+    }
 }
 
 void ShellRuntime::ResumeTask(uint32_t id, Ctx* cx) {
@@ -6898,16 +7843,34 @@ static JSValue ContextObject(ShellRuntimeImpl* impl, uint64_t generation) {
     return result;
 }
 
-static void Dispatch(ShellRuntime* runtime, shell::CallbackId id,
-                     JSValue payload, Window* window, App* app) {
+// The object every modifier-carrying payload gets, built in one place so a
+// press reported through a row carries the same fields as one reported through
+// the element it landed on.
+static JSValue ModifiersObject(JSContext* ctx, const Modifiers& modifiers) {
+    JSValue object = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, object, "shift", JS_NewBool(ctx, modifiers.shift));
+    JS_SetPropertyStr(ctx, object, "control",
+                      JS_NewBool(ctx, modifiers.control));
+    JS_SetPropertyStr(ctx, object, "alt", JS_NewBool(ctx, modifiers.alt));
+    JS_SetPropertyStr(ctx, object, "platform",
+                      JS_NewBool(ctx, modifiers.platform));
+    JS_SetPropertyStr(ctx, object, "function",
+                      JS_NewBool(ctx, modifiers.function));
+    return object;
+}
+
+// Calls one script handler with the arguments given plus its `cx`, under the
+// scope, budget and job drain every dispatch shares. The arguments are consumed
+// whether or not the call happens.
+static void DispatchArgs(ShellRuntime* runtime, shell::CallbackId id,
+                         JSValue* leading, int count, Window* window,
+                         App* app) {
     ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
     CallbackEntry* entry = impl->callbacks.Get(id);
-    if (!entry || !window || !app) {
-        JS_FreeValue(impl->context, payload);
-        return;
-    }
-    if (entry->view.IsValid() && !EntityGet(app, entry->view)) {
-        JS_FreeValue(impl->context, payload);
+    bool live = entry && window && app &&
+                (!entry->view.IsValid() || EntityGet(app, entry->view));
+    if (!live) {
+        for (int i = 0; i < count; i++) JS_FreeValue(impl->context, leading[i]);
         return;
     }
     shell::CallScopeGuard scope = shell::ScopeEnter(
@@ -6915,11 +7878,13 @@ static void Dispatch(ShellRuntime* runtime, shell::CallbackId id,
         entry->application);
     BeginExecution(impl);
     JSValue cx = ContextObject(impl, scope.Generation());
-    JSValue args[2] = {payload, cx};
+    JSValue args[3] = {JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED};
+    for (int i = 0; i < count; i++) args[i] = leading[i];
+    args[count] = cx;
     JSValue result =
-        JS_Call(impl->context, entry->function, JS_UNDEFINED, 2, args);
+        JS_Call(impl->context, entry->function, JS_UNDEFINED, count + 1, args);
     JS_FreeValue(impl->context, cx);
-    JS_FreeValue(impl->context, payload);
+    for (int i = 0; i < count; i++) JS_FreeValue(impl->context, leading[i]);
     if (JS_IsException(result)) {
         Arena* arena = ArenaNew();
         log(ExceptionText(arena, impl->context));
@@ -6935,21 +7900,56 @@ static void Dispatch(ShellRuntime* runtime, shell::CallbackId id,
     }
 }
 
+static void Dispatch(ShellRuntime* runtime, shell::CallbackId id,
+                     JSValue payload, Window* window, App* app) {
+    DispatchArgs(runtime, id, &payload, 1, window, app);
+}
+
 void ShellRuntime::DispatchClick(shell::CallbackId callback,
                                  const ClickEvent& event, Window* window,
                                  App* app) {
     JSValue payload = JS_NewObject(impl->context);
     JS_SetPropertyStr(impl->context, payload, "click_count",
                       JS_NewInt32(impl->context, event.clickCount));
-    JSValue modifiers = JS_NewObject(impl->context);
-    JS_SetPropertyStr(impl->context, modifiers, "shift",
-                      JS_NewBool(impl->context, event.modifiers.shift));
-    JS_SetPropertyStr(impl->context, modifiers, "control",
-                      JS_NewBool(impl->context, event.modifiers.control));
-    JS_SetPropertyStr(impl->context, modifiers, "alt",
-                      JS_NewBool(impl->context, event.modifiers.alt));
-    JS_SetPropertyStr(impl->context, payload, "modifiers", modifiers);
+    JS_SetPropertyStr(impl->context, payload, "modifiers",
+                      ModifiersObject(impl->context, event.modifiers));
     Dispatch(this, callback, payload, window, app);
+}
+
+// Delivers a secondary press on a virtual list row: the row's key, then the
+// press exactly as a press on the row itself would be reported, with
+// `local_position` measured from the row's own box.
+void ShellRuntime::DispatchItemSecondaryClick(shell::CallbackId callback,
+                                              Str key,
+                                              const MouseDownEvent& event,
+                                              Window* window, App* app) {
+    JSValue payload = JS_NewObject(impl->context);
+    JS_SetPropertyStr(
+        impl->context, payload, "button",
+        JS_NewString(
+            impl->context,
+            event.button == MouseButton::Right
+                ? "right"
+                : (event.button == MouseButton::Middle ? "middle" : "left")));
+    JS_SetPropertyStr(impl->context, payload, "click_count",
+                      JS_NewInt32(impl->context, event.clickCount));
+    JSValue position = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, position, "x",
+                      JS_NewFloat64(impl->context, event.x));
+    JS_SetPropertyStr(impl->context, position, "y",
+                      JS_NewFloat64(impl->context, event.y));
+    JS_SetPropertyStr(impl->context, payload, "position", position);
+    JSValue local = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, local, "x",
+                      JS_NewFloat64(impl->context, event.x - event.el.x));
+    JS_SetPropertyStr(impl->context, local, "y",
+                      JS_NewFloat64(impl->context, event.y - event.el.y));
+    JS_SetPropertyStr(impl->context, payload, "local_position", local);
+    JS_SetPropertyStr(impl->context, payload, "modifiers",
+                      ModifiersObject(impl->context, event.modifiers));
+    JSValue leading[2] = {
+        JS_NewStringLen(impl->context, key.s, (size_t)key.len), payload};
+    DispatchArgs(this, callback, leading, 2, window, app);
 }
 
 void ShellRuntime::DispatchMouseMove(shell::CallbackId callback,
@@ -6984,14 +7984,8 @@ void ShellRuntime::DispatchMouseMove(shell::CallbackId callback,
                       JS_NewFloat64(impl->context, event.y));
     JS_SetPropertyStr(impl->context, payload, "dragging",
                       JS_NewBool(impl->context, event.Dragging()));
-    JSValue modifiers = JS_NewObject(impl->context);
-    JS_SetPropertyStr(impl->context, modifiers, "shift",
-                      JS_NewBool(impl->context, event.modifiers.shift));
-    JS_SetPropertyStr(impl->context, modifiers, "control",
-                      JS_NewBool(impl->context, event.modifiers.control));
-    JS_SetPropertyStr(impl->context, modifiers, "alt",
-                      JS_NewBool(impl->context, event.modifiers.alt));
-    JS_SetPropertyStr(impl->context, payload, "modifiers", modifiers);
+    JS_SetPropertyStr(impl->context, payload, "modifiers",
+                      ModifiersObject(impl->context, event.modifiers));
     Dispatch(this, callback, payload, window, app);
 }
 
@@ -7113,6 +8107,7 @@ void ShellRuntime::DispatchOtpEvent(shell::EntityHandle handle,
 void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                                       shell::CallbackId keyId,
                                       shell::CallbackId onItemClick,
+                                      shell::CallbackId onItemSecondaryClick,
                                       int first, int end, Ctx* cx, El** out) {
     if (!cx || !out || end <= first) return;
     for (int i = 0; i < end - first; i++) out[i] = nullptr;
@@ -7212,21 +8207,37 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                 log(error.message);
                 ShellErrorClear(&error);
             }
-            if (onItemClick && out[i] && i < itemKeys.len) {
-                ShellStringBinding* binding =
-                    ArenaNew<ShellStringBinding>(cx->a);
-                binding->callback = onItemClick;
-                binding->value = itemKeys[i];
+            // The hit box that reports the row's stable domain key, and only
+            // when the script asked for it: a list with no row handler gets its
+            // rows exactly as the renderer built them. A secondary press is
+            // reported with the row's own box, the way a press on any other
+            // element is, so `local_position` means the same thing in both
+            // handlers.
+            if ((onItemClick || onItemSecondaryClick) && out[i] &&
+                i < itemKeys.len) {
                 Str rowId = StrDup(
                     cx->a, fmt("gpui-shell-virtual-item:%s", itemKeys[i]));
-                out[i] = Div(cx->a)
-                             ->PathClick(rowId)
-                             ->SizeFull()
-                             ->Child(out[i])
-                             ->OnClick(ListenTo(
-                                 Entity<ScriptView>{render->view},
-                                 &ScriptView::OnBoundString,
-                                 (intptr_t)binding));
+                El* row =
+                    Div(cx->a)->PathClick(rowId)->SizeFull()->Child(out[i]);
+                if (onItemClick) {
+                    ShellStringBinding* binding =
+                        ArenaNew<ShellStringBinding>(cx->a);
+                    binding->callback = onItemClick;
+                    binding->value = itemKeys[i];
+                    row->OnClick(ListenTo(Entity<ScriptView>{render->view},
+                                          &ScriptView::OnBoundString,
+                                          (intptr_t)binding));
+                }
+                if (onItemSecondaryClick) {
+                    ShellStringBinding* binding =
+                        ArenaNew<ShellStringBinding>(cx->a);
+                    binding->callback = onItemSecondaryClick;
+                    binding->value = itemKeys[i];
+                    row->OnMouseDown(ListenTo(Entity<ScriptView>{render->view},
+                                              &ScriptView::OnItemSecondaryPress,
+                                              (intptr_t)binding));
+                }
+                out[i] = row;
             }
         }
     }

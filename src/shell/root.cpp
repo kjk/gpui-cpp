@@ -33,6 +33,36 @@ const char* ToastLevelName(ToastLevel level) {
     return "info";
 }
 
+static const char kFpsAnchorNames[] =
+    "top_left\0top_right\0bottom_left\0bottom_right\0top_center\0"
+    "bottom_center\0left_center\0right_center\0";
+
+SeqStrings FpsAnchorNames() {
+    return kFpsAnchorNames;
+}
+
+bool FpsAnchorFromName(Str name, FpsAnchor* out) {
+    if (StrEq(name, "top_left"))
+        *out = FpsAnchor::TopLeft;
+    else if (StrEq(name, "top_right"))
+        *out = FpsAnchor::TopRight;
+    else if (StrEq(name, "bottom_left"))
+        *out = FpsAnchor::BottomLeft;
+    else if (StrEq(name, "bottom_right"))
+        *out = FpsAnchor::BottomRight;
+    else if (StrEq(name, "top_center"))
+        *out = FpsAnchor::TopCenter;
+    else if (StrEq(name, "bottom_center"))
+        *out = FpsAnchor::BottomCenter;
+    else if (StrEq(name, "left_center"))
+        *out = FpsAnchor::LeftCenter;
+    else if (StrEq(name, "right_center"))
+        *out = FpsAnchor::RightCenter;
+    else
+        return false;
+    return true;
+}
+
 bool ToastLevelFromName(Str name, ToastLevel* out) {
     if (StrEq(name, "info")) *out = ToastLevel::Info;
     else if (StrEq(name, "success")) *out = ToastLevel::Success;
@@ -40,6 +70,26 @@ bool ToastLevelFromName(Str name, ToastLevel* out) {
     else if (StrEq(name, "error")) *out = ToastLevel::Error;
     else return false;
     return true;
+}
+
+// Rebuilds a script overlay's description before it draws.
+//
+// An overlay's content is a function, and what it closes over is somebody
+// else's state — that is the contract open_dialog and open_sheet document, and
+// the only one they can have: neither answers a view handle, so there is
+// nothing for a script to notify when the state behind the closure moves.
+// Without this, an overlay materializes the description it was built with,
+// once, for as long as it is open: a dialog that looks up what someone typed
+// shows the answer to nothing.
+//
+// So the root rebuilds it whenever the root itself draws, which is what
+// window.refresh() — the call whose whole purpose is "there is no view to
+// notify" — now reaches. Marking it dirty schedules no frame of its own: the
+// overlay is about to render as part of this one, and it renders from the
+// script rather than from the cache. A non-script overlay owns its own state
+// and never reaches here.
+static void RebuildScriptOverlay(Ctx* cx, Entity<ScriptView> content) {
+    if (ScriptView* view = content.Get(cx->app)) view->dirty = true;
 }
 
 ShellRoot::~ShellRoot() {
@@ -62,10 +112,48 @@ El* ShellRoot::Render(ShellRoot* self, Ctx* cx) {
     El* content = self->content.IsValid()
                       ? EntityRender(cx->app, cx->win, cx->a, self->content)
                       : nullptr;
-    return component::Root::New(cx)
-        ->Bordered(false)
-        ->Child(content ? content : Div(cx->a)->SizeFull())
-        ->IntoEl();
+    // The HUD, when a script has asked for one. Above every other layer: it is
+    // a diagnostic, and a dialog over it would hide the reading the dialog's
+    // own frames are producing.
+    El* hud = nullptr;
+    if (self->fpsHudVisible) {
+        // The same keyed slot the `fps_monitor()` element form uses, so the
+        // monitor is one per window and a HUD hidden and shown again keeps its
+        // history.
+        auto* slot = KeyedState<Entity<FpsMonitor>>(
+            cx, (uint32_t)HashClickId(StrL("gpui-fps-monitor")));
+        if (slot) {
+            if (!slot->IsValid()) *slot = EntityNew<FpsMonitor>(cx);
+            // FpsOverlayOpts is what the HUD element takes since the fps
+            // crate's own checkins landed: it puts the anchor, the budget
+            // and the continuous flag on the monitor before it renders,
+            // which is the assignment this did by hand.
+            FpsOverlayOpts opts;
+            opts.anchor = self->fpsHud.anchor;
+            opts.continuous = self->fpsHud.continuous ? 1 : 0;
+            if (self->fpsHud.hasFrameBudget) {
+                opts.frameBudget = self->fpsHud.frameBudget;
+            }
+            hud = FpsOverlayEl(cx, *slot, opts);
+        }
+    }
+    // The window's base text size, from the theme rather than from the
+    // runtime's default rem.
+    //
+    // Everything this root draws itself — toasts, the sheet, the dialog
+    // scrim's chrome — states no size of its own and inherits this one.
+    // Without it that chrome sat at the 16px default while the components an
+    // application builds set their own sizes, so a dense application drawn at
+    // 12px got 16px notifications over it. `md` is the base by the library's
+    // own convention. The default `md` is that same 16px, so a theme that says
+    // nothing about type is drawn exactly as it was before this existed.
+    const BaseTheme* base = BaseThemeGlobal(cx->app);
+    float baseSize =
+        base ? base->tokens.typography.md.size : TypographyTokens{}.md.size;
+    component::Root* root = component::Root::New(cx)->Bordered(false)->Child(
+        content ? content : Div(cx->a)->SizeFull());
+    if (hud) root->Child(hud);
+    return root->IntoEl()->Font(baseSize);
 }
 
 ShellRoot* ShellRootOf(Window* window, App* app) {
@@ -73,6 +161,15 @@ ShellRoot* ShellRootOf(Window* window, App* app) {
     if (!state || !state->root.IsValid() || state->root != window->root)
         return nullptr;
     return Entity<ShellRoot>{state->root}.Get(app);
+}
+
+// Invalidates the root itself, which is what a change to one of its own fields
+// wants: `Notify(cx)` would mark whichever view is calling, and the HUD is not
+// in that view's description.
+static void NotifyRoot(Ctx* cx) {
+    ShellRootWindowState* state = RootWindowState(cx->win);
+    if (state && state->root.IsValid())
+        NotifyEntity(cx->app, state->root, cx->win);
 }
 
 static void RestoreOverlayFocus(Ctx* cx, FocusHandle restore) {
@@ -112,6 +209,7 @@ struct ShellDialogLayer {
     }
 
     static El* Render(ShellDialogLayer* self, Ctx* cx) {
+        RebuildScriptOverlay(cx, self->content);
         const Theme& theme = ThemeNow(cx->app);
         WindowLayers* layers = WindowLayersOf(cx->win);
         bool topmost = layers && layers->dialogs.len > 0 &&
@@ -222,6 +320,7 @@ struct ShellSheetLayer {
     }
 
     static El* Render(ShellSheetLayer* self, Ctx* cx) {
+        RebuildScriptOverlay(cx, self->content);
         const Theme& theme = ThemeNow(cx->app);
         El* child = self->content.IsValid()
                         ? EntityRender(cx->app, cx->win, cx->a,
@@ -314,6 +413,28 @@ static component::NotificationType NotificationTypeFor(ToastLevel level) {
         case ToastLevel::Error: return component::NotificationType::Error;
     }
     return component::NotificationType::Info;
+}
+
+bool ShellRootShowFpsMonitor(Ctx* cx, const FpsHudRequest& request) {
+    ShellRoot* root = cx ? ShellRootOf(cx->win, cx->app) : nullptr;
+    if (!root) return false;
+    root->fpsHud = request;
+    root->fpsHudVisible = true;
+    NotifyRoot(cx);
+    return true;
+}
+
+bool ShellRootHideFpsMonitor(Ctx* cx) {
+    ShellRoot* root = cx ? ShellRootOf(cx->win, cx->app) : nullptr;
+    if (!root || !root->fpsHudVisible) return false;
+    root->fpsHudVisible = false;
+    NotifyRoot(cx);
+    return true;
+}
+
+bool ShellRootFpsMonitorVisible(Ctx* cx) {
+    ShellRoot* root = cx ? ShellRootOf(cx->win, cx->app) : nullptr;
+    return root && root->fpsHudVisible;
 }
 
 bool ShellRootPushToast(Ctx* cx, const ToastRequest& request) {

@@ -100,6 +100,10 @@ struct MaterialBehavior {
     shell::CallbackId onStep = 0;
     shell::CallbackId onResize = 0;
     shell::CallbackId onItemClick = 0;
+    // Reports a secondary press on a virtual list row, with the row's key and
+    // the press itself. Registered on the list for the same reason
+    // on_item_click is: the rows are rebuilt every frame.
+    shell::CallbackId onItemSecondaryClick = 0;
     shell::EntityHandle virtualScroll = 0;
 };
 
@@ -174,6 +178,8 @@ static void ResolveBehavior(const shell::SpecNode* node,
                 out->onResize = op.callback;
             else if (StrEq(op.name, "on_item_click"))
                 out->onItemClick = op.callback;
+            else if (StrEq(op.name, "on_item_secondary_click"))
+                out->onItemSecondaryClick = op.callback;
             continue;
         }
         if (op.kind != shell::SpecOpKind::Method) continue;
@@ -1253,15 +1259,16 @@ struct MaterialVirtualUser {
     shell::CallbackId render = 0;
     shell::CallbackId getKey = 0;
     shell::CallbackId onItemClick = 0;
+    shell::CallbackId onItemSecondaryClick = 0;
 };
 
 static void MaterialVirtualRange(void* user, Ctx* cx, int first, int end,
                                  El** out) {
     MaterialVirtualUser* values = (MaterialVirtualUser*)user;
     if (values && values->runtime) {
-        values->runtime
-            ->RenderVirtualItems(values->render, values->getKey,
-                                 values->onItemClick, first, end, cx, out);
+        values->runtime->RenderVirtualItems(
+            values->render, values->getKey, values->onItemClick,
+            values->onItemSecondaryClick, first, end, cx, out);
     }
 }
 
@@ -1524,6 +1531,7 @@ static El* Construct(Ctx* cx, ShellRuntime* runtime,
             user->render = list->renderItems;
             user->getKey = list->getKey;
             user->onItemClick = behavior.onItemClick;
+            user->onItemSecondaryClick = behavior.onItemSecondaryClick;
             VirtualListOpts opts;
             opts.count = list->sizeCount;
             opts.sizes = sizes;

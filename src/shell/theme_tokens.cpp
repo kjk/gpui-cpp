@@ -9,6 +9,11 @@ struct ShellThemeCache {
     ColorTokens colors = {};
     RadiusTokens radius = {};
     SpacingTokens spacing = {};
+    TypographyTokens typography = {};
+    BaseThemeAppearance appearance = BaseThemeAppearance::Light;
+    // Bumped only when the palette above changes, so a script's theme cache and
+    // a ScriptView's snapshot both know when they are stale with one compare.
+    uint32_t revision = 0;
     bool valid = false;
 };
 
@@ -27,17 +32,57 @@ static const char kColorNames[] =
 static const char kSpacingNames[] = "xxs\0xs\0sm\0md\0lg\0xl\0xxl\0";
 static const char kRadiusNames[] = "none\0sm\0md\0lg\0xl\0full\0";
 
-void ThemeTokensSync(const App* app) {
+// Whether two palettes would produce the same snapshot. The four token blocks
+// are plain numbers except for typography's two font families, which are
+// borrowed strings and are compared by what they say.
+static bool ThemeKeyEqual(const ShellThemeCache& cache,
+                          const SemanticThemeTokens& tokens,
+                          BaseThemeAppearance appearance) {
+    if (!cache.valid || cache.appearance != appearance) return false;
+    if (memcmp(&cache.colors, &tokens.colors, sizeof(ColorTokens)) != 0)
+        return false;
+    if (memcmp(&cache.radius, &tokens.radius, sizeof(RadiusTokens)) != 0)
+        return false;
+    if (memcmp(&cache.spacing, &tokens.spacing, sizeof(SpacingTokens)) != 0)
+        return false;
+    const TypographyTokens& a = cache.typography;
+    const TypographyTokens& b = tokens.typography;
+    if (!StrEq(a.sans, b.sans) || !StrEq(a.mono, b.mono)) return false;
+    const TextStyleToken* left[] = {&a.xs, &a.sm, &a.md,
+                                    &a.lg, &a.xl, &a.monoMd};
+    const TextStyleToken* right[] = {&b.xs, &b.sm, &b.md,
+                                     &b.lg, &b.xl, &b.monoMd};
+    for (int i = 0; i < 6; i++) {
+        if (memcmp(left[i], right[i], sizeof(TextStyleToken)) != 0)
+            return false;
+    }
+    return true;
+}
+
+uint32_t ThemeTokensSync(const App* app) {
     if (!app) {
-        return;
+        return gThemeCache.revision;
     }
     const BaseTheme* base = BaseThemeGlobal(app);
     SemanticThemeTokens tokens =
         base ? base->tokens : ThemeSemanticTokens(ThemeNow(app));
+    BaseThemeAppearance appearance =
+        base ? base->appearance : BaseThemeAppearance::Light;
+    if (ThemeKeyEqual(gThemeCache, tokens, appearance)) {
+        return gThemeCache.revision;
+    }
     gThemeCache.colors = tokens.colors;
     gThemeCache.radius = tokens.radius;
     gThemeCache.spacing = tokens.spacing;
+    gThemeCache.typography = tokens.typography;
+    gThemeCache.appearance = appearance;
     gThemeCache.valid = true;
+    gThemeCache.revision++;
+    return gThemeCache.revision;
+}
+
+uint32_t ThemeTokensRevision() {
+    return gThemeCache.revision;
 }
 
 static bool ColorOf(const ColorTokens& colors, Str name, Rgba* out) {
@@ -136,6 +181,15 @@ bool ThemeTokenRadius(Str name, float* out) {
         *out = gThemeCache.radius.full;
     else
         return false;
+    return true;
+}
+
+bool ThemeTypographyTokens(TypographyTokens* out) {
+    SyncCurrentScope();
+    if (!out || !gThemeCache.valid) {
+        return false;
+    }
+    *out = gThemeCache.typography;
     return true;
 }
 

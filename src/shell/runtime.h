@@ -47,10 +47,12 @@ class ShellRuntime {
     bool DrainJobs(int limit = 1024, ShellError* error = nullptr);
     RuntimeMetrics ReadMetrics() const;
     void RecordMaterialize(uint64_t nanos);
+    void RecordStructure(bool repeated);
     int LiveCallbacks() const;
     int LiveEntities() const;
     int LiveNestedViews() const;
     int LiveTasks() const;
+    int LiveTemplates() const;
     shell::RetainedEntry* Retained(shell::EntityHandle handle) const;
     EntityId NestedView(shell::EntityHandle handle, App* app) const;
 
@@ -77,6 +79,9 @@ class ShellRuntime {
     void DispatchString(shell::CallbackId callback, Str value, Window* window,
                         App* app);
     void DispatchSignal(shell::CallbackId callback, Window* window, App* app);
+    void DispatchItemSecondaryClick(shell::CallbackId callback, Str key,
+                                    const MouseDownEvent& event,
+                                    Window* window, App* app);
     void DispatchInputEvent(shell::EntityHandle handle,
                             const InputEvent& event, Window* window, App* app);
     void DispatchSliderEvent(shell::EntityHandle handle,
@@ -86,7 +91,8 @@ class ShellRuntime {
                           Window* window, App* app);
     void RenderVirtualItems(shell::CallbackId render,
                             shell::CallbackId getKey,
-                            shell::CallbackId onItemClick, int first,
+                            shell::CallbackId onItemClick,
+                            shell::CallbackId onItemSecondaryClick, int first,
                             int end, Ctx* cx, El** out);
 
   private:
