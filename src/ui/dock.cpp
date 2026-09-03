@@ -473,10 +473,12 @@ static El* SkinFrame(Ctx* cx, void*) {
     return Div(cx->a)->Bg(ThemeNow(cx->app).tokens.background);
 }
 
+// content_frame: the fill, the clip and the collapsed-group exception are
+// base's; the padding is this skin's, and is the only reason this hook is
+// implemented.
 static El* SkinTabContent(Ctx* cx, void*, const DockTabGroup* g) {
     El* frame = Div(cx->a)
                     ->Id(StrL("active-panel"))
-                    ->ClipY()
                     ->Bg(ThemeNow(cx->app).tokens.background);
     const DockPanelDef* active = DockGroupPanel(g, DockGroupActiveIx(g));
     if (DockGroupCount(g) > 1 && (!active || active->innerPadding)) {
@@ -498,16 +500,17 @@ static El* SkinSplitHandle(Ctx* cx, void*, const DockHandleCtx* h) {
     return e;
 }
 
-// render_dock: one Dock's box, with the strip on its inner edge. A shut left
-// or right Dock takes no space at all; a shut bottom one keeps its tab bar,
-// so there is still something to click to open it again.
+// render_dock: the strip on one Dock's inner edge, and the rule beside it.
+// No box here any more. A dock's extent is structural, so base's RenderDock
+// applies DockFrame around whatever this returns -- which also means a skin
+// that draws no chrome still gets a dock the right shape. This adds the edge
+// you drag and nothing else; a shut bottom dock keeps its tab bar and loses
+// the strip, and a shut side dock never reaches here.
 static El* SkinDock(Ctx* cx, void*, const DockCtx* d, El* content) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
     if (d->placement == DockPlacement::Bottom) {
-        float h = d->open ? d->size : kDockCollapsedH;
-        El* dock =
-            Div(a)->FlexCol()->Shrink0()->W(kFill)->H(h)->BorderT(1, th.border);
+        El* dock = Div(a)->FlexCol()->SizeFull()->BorderT(1, th.border);
         if (d->open) {
             dock->Child(DockBindResizeStrip(d, Div(a)
                                                    ->W(kFill)
@@ -519,10 +522,10 @@ static El* SkinDock(Ctx* cx, void*, const DockCtx* d, El* content) {
         return dock;
     }
     if (!d->open) {
-        return nullptr;
+        return content;
     }
     bool left = d->placement == DockPlacement::Left;
-    El* dock = Div(a)->FlexRow()->Shrink0()->W(d->size)->H(kFill);
+    El* dock = Div(a)->FlexRow()->SizeFull();
     El* strip = DockBindResizeStrip(
         d, Div(a)->H(kFill)->W(kDockHandleW)->Shrink0()->HoverBg(th.border));
     El* body = Div(a)->FlexCol()->Flex1()->H(kFill)->Child(content);

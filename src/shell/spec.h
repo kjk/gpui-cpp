@@ -8,6 +8,39 @@ namespace gpui::shell {
 using SpecId = uint32_t;
 using CallbackId = uint64_t;
 
+// A hash of a description's *shape*, with the values left out of it.
+//
+// Two renders of one view that differ only in a price, a label or a handler's
+// identity produce the same fingerprint. One that takes a different branch,
+// grows a node, or calls a different style method does not. That distinction
+// is the whole question a template cache turns on, and answering it is the
+// reason this exists: a description that repeats its predecessor's shape is
+// one a template could have filled instead of rebuilt.
+//
+// It is accumulated while the description is recorded rather than walked out
+// of the arena afterwards, because a walk that costs the arena's length is the
+// cost a template cache is trying to remove.
+//
+// Equality here is evidence, not proof. Two different shapes can collide, and
+// the hash deliberately drops payloads a stricter definition might keep. That
+// is the right trade for a counter; it would not be for a cache that skipped
+// work on the strength of it.
+struct StructureFingerprint {
+    uint64_t value = 0;
+
+    bool operator==(const StructureFingerprint& other) const {
+        return value == other.value;
+    }
+    bool operator!=(const StructureFingerprint& other) const {
+        return value != other.value;
+    }
+};
+
+// One step of the fingerprint's mixer: SplitMix64's finalizer with the running
+// state rotated in. Rust uses the same constants; a `DefaultHasher` would do
+// the same job, but this sits on the recording path.
+uint64_t StructureMix(uint64_t state, uint64_t value);
+
 enum class BackgroundKind : uint8_t {
     Solid,
     LinearGradient,
@@ -184,6 +217,85 @@ struct SpecError {
 
 Str SpecErrorMessage(Arena* arena, const SpecError& error);
 
+// Where inside a node a template writes one of a call's arguments.
+//
+// The three positions a value can reach in a recorded description, and the
+// only three a Template fills. A slot is addressed by the operation's index
+// rather than by its name because a node may record the same method twice, and
+// the second one is a different position.
+enum class SlotSiteKind : uint8_t {
+    // The string a Text node carries — what `.child(value)` records.
+    Text,
+    // One argument of a recorded ParamStyle operation.
+    Argument,
+    // The CallbackId of a recorded Callback operation. A handler is a slot
+    // like any other, but the value written into it is minted per call rather
+    // than carried — which is why a template does not make a handler free,
+    // only the structure around it.
+    Handler,
+};
+
+struct SlotSite {
+    SlotSiteKind kind = SlotSiteKind::Text;
+    uint16_t op = 0;
+    uint8_t argument = 0;
+
+    bool operator==(const SlotSite& other) const {
+        return kind == other.kind && op == other.op &&
+               argument == other.argument;
+    }
+};
+
+// One position a template fills, and which of the call's arguments fills it.
+struct Slot {
+    SpecId node = 0;
+    SlotSite site;
+    // The index of the template parameter whose sentinel came to rest here.
+    uint16_t argument = 0;
+};
+
+enum class SlotValueKind : uint8_t {
+    Text,
+    Value,
+    Handler
+};
+
+// What a call writes into one slot.
+struct SlotValue {
+    SlotValueKind kind = SlotValueKind::Text;
+    Str text;
+    Bridged value;
+    CallbackId handler = 0;
+};
+
+class SpecArena;
+
+// A description recorded once, with the positions its values occupy left open.
+//
+// Built by running a script's template body a single time with a sentinel in
+// each parameter position, and used afterwards by grafting it into the live
+// arena and writing that call's arguments into its slots — which is the whole
+// of an instantiation, and runs no script at all.
+//
+// It holds no CallbackId of its own: a handler is a slot, minted per call,
+// because a closure recorded at discovery would capture that first call's
+// values for as long as the template lived.
+struct Template {
+    SpecArena* arena = nullptr;
+    SpecId root = 0;
+    Vec<Slot> slots;
+    int arity = 0;
+    // The application whose script defined it. A template outlives every
+    // render, which is the point of it, so nothing else would ever free one:
+    // the store would grow by one entry per `template(...)` call site per hot
+    // reload, forever. Holding the owner lets the same release that retires an
+    // application's callbacks and tasks drop its templates too. Null only for
+    // a runtime that has no application generation at all, which is a test.
+    void* application = nullptr;
+
+    ~Template();
+};
+
 class SpecArena {
   public:
     SpecArena();
@@ -208,6 +320,36 @@ class SpecArena {
     bool ClaimVirtualItems(uint64_t count, uint64_t limit);
     Str DebugTree(Arena* into, SpecId root) const;
 
+    // The shape of what has been recorded, values excluded. Read from a
+    // published snapshot rather than from the scratch arena: the scratch one
+    // is reset by the next render, and the question is what *this* description
+    // looked like beside the one before it.
+    StructureFingerprint Structure() const { return {structure}; }
+
+    // Copies a template's nodes into this arena and answers where its root
+    // landed. This is an instantiation's whole structural half: no script
+    // runs, no value crosses the bridge, and no builder method is interpreted.
+    // A template arena's ids are dense and start at zero, so remapping is one
+    // addition.
+    //
+    // The grafted nodes arrive carrying the `parented` and `claimed` flags
+    // they were recorded with, which is what makes a grafted subtree obey the
+    // same single-use rule as a described one: its interior is already spoken
+    // for, and only its root is free to be attached.
+    SpecId Graft(const Template& tmpl);
+
+    // Writes one call's value into a grafted slot. `base` is what Graft
+    // returned less the template's own root, so that a slot recorded against
+    // the template's ids reaches the copy.
+    bool WriteSlot(SpecId base, const Slot& slot, const SlotValue& value,
+                   SpecError* error = nullptr);
+
+    // Whether anything in this arena mounts a retained entity. A template is
+    // grafted many times and GPUI cannot mount one entity at two positions in
+    // a tree, so a body that describes one is refused at definition rather
+    // than at the second call.
+    bool MountsAnEntity() const { return mountedViews.len > 0; }
+
   private:
     Arena* arena = nullptr;
     Vec<SpecNode*> nodes;
@@ -215,6 +357,8 @@ class SpecArena {
     Vec<uint8_t> claimed;
     Vec<uint64_t> mountedViews;
     uint64_t virtualItems = 0;
+    // The shape of everything recorded so far. See StructureFingerprint.
+    uint64_t structure = 0;
 
     bool CheckLive(SpecId id, SpecError* error) const;
     Component CopyComponent(const Component& component);

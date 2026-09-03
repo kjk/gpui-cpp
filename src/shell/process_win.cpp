@@ -236,9 +236,53 @@ static bool DrainPipe(HANDLE* pipe, StrBuilder* output, bool* closed,
     }
 }
 
+// A CREATE_UNICODE_ENVIRONMENT block: NUL-separated NAME=VALUE, then one more
+// NUL. `inherit` starts from the host's own block, which is what git needs.
+static WCHAR* BuildEnvironment(const ProcessOptions* options, bool* ok) {
+    *ok = true;
+    int extra = options ? options->environmentCount : 0;
+    bool inherit = options && options->inheritEnvironment;
+    if (!inherit && extra == 0) return nullptr;
+    Vec<WCHAR> block;
+    if (inherit) {
+        WCHAR* host = GetEnvironmentStringsW();
+        if (!host) {
+            *ok = false;
+            return nullptr;
+        }
+        for (const WCHAR* at = host; *at;) {
+            int len = (int)wcslen(at);
+            memcpy(VecAppendBlanks(block, len + 1), at,
+                   (size_t)(len + 1) * sizeof(WCHAR));
+            at += len + 1;
+        }
+        FreeEnvironmentStringsW(host);
+    }
+    for (int i = 0; i < extra; i++) {
+        WCHAR* value = WideDup(options->environment[i]);
+        if (!value) {
+            VecReset(block);
+            *ok = false;
+            return nullptr;
+        }
+        int len = (int)wcslen(value);
+        memcpy(VecAppendBlanks(block, len + 1), value,
+               (size_t)(len + 1) * sizeof(WCHAR));
+        Free(nullptr, value);
+    }
+    VecAppend(block, (WCHAR)0);
+    WCHAR* result = block.els;
+    block.els = nullptr;
+    block.len = 0;
+    block.cap = 0;
+    VecReset(block);
+    return result;
+}
+
 bool ProcessRunBounded(Str command, const Str* args, int count,
                        ProcessCancellation* cancellation,
-                       ProcessOutput* output, Str* error) {
+                       ProcessOutput* output, Str* error,
+                       const ProcessOptions* options) {
     if (output) output->Free();
     if (error) {
         StrFree(*error);
@@ -267,6 +311,9 @@ bool ProcessRunBounded(Str command, const Str* args, int count,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
     STARTUPINFOW startup = {};
     WCHAR emptyEnvironment[2] = {};
+    WCHAR* environment = nullptr;
+    WCHAR* directory = nullptr;
+    bool environmentOk = true;
     if (!CreatePipe(&outRead, &outWrite, &security, 0) ||
         !CreatePipe(&errRead, &errWrite, &security, 0) ||
         !SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0) ||
@@ -297,6 +344,24 @@ bool ProcessRunBounded(Str command, const Str* args, int count,
         goto cleanup;
     }
 
+    environment = BuildEnvironment(options, &environmentOk);
+    if (!environmentOk) {
+        ProcessError(error,
+                     StrL("building the child-process environment failed"));
+        ok = false;
+        goto cleanup;
+    }
+    if (options && options->workingDirectory) {
+        directory = WideDup(options->workingDirectory);
+        if (!directory) {
+            ProcessError(
+                error,
+                StrL("the child-process working directory is not valid UTF-8"));
+            ok = false;
+            goto cleanup;
+        }
+    }
+
     startup.cb = sizeof(startup);
     startup.dwFlags = STARTF_USESTDHANDLES;
     startup.hStdInput = nullInput;
@@ -305,7 +370,8 @@ bool ProcessRunBounded(Str command, const Str* args, int count,
     if (!CreateProcessW(executable, commandLine.els, nullptr, nullptr, TRUE,
                         CREATE_NO_WINDOW | CREATE_SUSPENDED |
                             CREATE_UNICODE_ENVIRONMENT,
-                        emptyEnvironment, nullptr, &startup, &process)) {
+                        environment ? environment : emptyEnvironment, directory,
+                        &startup, &process)) {
         ProcessError(error, fmt("running `%s` failed with Windows error %u", command, GetLastError()));
         ok = false;
         goto cleanup;
@@ -370,6 +436,8 @@ cleanup:
     Close(&nullInput);
     Close(&job);
     Free(nullptr, executable);
+    Free(nullptr, environment);
+    Free(nullptr, directory);
     return ok;
 }
 

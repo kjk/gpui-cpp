@@ -18,10 +18,10 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
                     ->W(36)
                     ->H(20)
                     ->Pad(2)
-                    ->Bg(on ? Rgb(0x17, 0x17, 0x17) : Rgb(0xd4, 0xd4, 0xd4))
+                    ->Bg(on ? ExampleRgb(0x171717) : ExampleRgb(0xd4d4d4))
                     ->ItemsCenter()
                     ->Child(SwitchThumb::New(cx)->W(16)->H(16)->Bg(
-                        Rgb(0xff, 0xff, 0xff)));
+                        ExampleRgb(0xffffff)));
     if (on) {
         track->JustifyEnd();
     } else {
@@ -37,11 +37,11 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
                 ->FlexCol()
                 ->Child(TextEl(a, StrL("Automatic updates"))
                             ->Font(12)
-                            ->Fg(Rgb(0x17, 0x17, 0x17)))
+                            ->Fg(ExampleRgb(0x171717)))
                 ->Child(Div(a)->PadT(4)->Child(
                     TextEl(a, StrL("Install stable releases automatically."))
                         ->Font(12)
-                        ->Fg(Rgb(0x73, 0x73, 0x73)))))
+                        ->Fg(ExampleRgb(0x737373)))))
         ->Child(Switch::New(cx, StrL("example-switch"), on, false,
                             Listen(cx, &OnSwitch))
                     ->Child(track));

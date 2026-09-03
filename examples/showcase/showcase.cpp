@@ -24,16 +24,17 @@ El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size) {
 }
 
 static const char* kSlugs[CompCount] = {
-    "accordion",      "alert-dialog", "avatar",      "button",
-    "calendar",       "checkbox",     "collapsible", "color-picker",
-    "combobox",       "date-picker",  "dialog",      "dock",
-    "editor",         "hover-card",   "input",       "link",
-    "number-input",   "otp-input",    "pagination",  "popover",
-    "popup",          "progress",     "radio",       "radio-group",
-    "resizable",      "scrollbar",    "select",      "sheet",
-    "slider",         "switch",       "table",       "tabs",
-    "text-selection", "textarea",     "toast",       "toggle",
-    "toggle-group",   "tooltip",      "tree",        "virtual-list",
+    "accordion",   "alert-dialog",   "avatar",       "button",
+    "calendar",    "checkbox",       "collapsible",  "color-picker",
+    "combobox",    "date-picker",    "dialog",       "dock",
+    "editor",      "hover-card",     "input",        "link",
+    "nav-stack",   "number-input",   "otp-input",    "pagination",
+    "popover",     "popup",          "progress",     "radio",
+    "radio-group", "resizable",      "scrollbar",    "select",
+    "sheet",       "slider",         "switch",       "table",
+    "tabs",        "text-selection", "text-view",    "textarea",
+    "toast",       "toggle",         "toggle-group", "tooltip",
+    "tree",        "virtual-list",
 };
 
 const char* CompSlug(int i) {
@@ -196,7 +197,16 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     BindInput(app, win);
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
-    El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
+    // activate_palette(window) at the top of the render, so every page below
+    // resolves its light literals against the appearance in force. Rust reads
+    // `window.appearance()`; there is no portable seam for the desktop
+    // setting here, so this is the theme mode the example chose — see
+    // examples/showcase/palette.h.
+    PaletteActivate(ThemeNow(cx->app).mode == ThemeMode::Dark);
+
+    // The canvas is its own token: the dark palette darkens it below the
+    // surfaces that sit on it, where the light one has both white.
+    El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ExampleCanvas());
     if (showBack) {
         root->Child(
             Div(frame)
@@ -323,164 +333,39 @@ void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta) {
     }
 }
 
-// The page's four paragraphs, in document order: the offsets a selection is
-// kept in are byte offsets into them, joined by one newline each.
-static const char* kSelParas[] = {
-    "Text selection across renderers",
-    "Selection should feel like a natural part of reading a product brief. "
-    "Start in this paragraph, continue into the next renderer, and GPUI "
-    "preserves the document order while every frame supplies fresh "
-    "geometry for the same stable selection handle.",
-    "This second paragraph is deliberately long enough to wrap in the "
-    "showcase. Drag across the boundary to see one continuous highlight, "
-    "then use the platform copy shortcut to confirm that the copied result "
-    "follows the visible reading order rather than renderer ownership.",
-    "International text should remain predictable when a line mixes café, "
-    "déjà vu, Kraków, naïve, and résumé. Resize the window or drag across "
-    "several wrapped lines; UTF-8 byte ranges still map back to the "
-    "correct glyphs without splitting a character.",
-};
+// The text-selection page keeps no offsets of its own any more: its runs
+// are SelectableText, so the window owns the gesture and the copy, and the
+// page reads WindowSelectionText when it draws its footer.
 
-// The paragraph under the point, and the byte offset inside it. -1 when the
-// point is nowhere near the page's text.
-static int TextSelParaAt(Window* win, float x, float y, bool nearest,
-                         int* outLocal) {
-    const HitRect* best = nullptr;
-    float bestDist = 1e9f;
-    for (int i = win->paint.hits.len - 1; i >= 0; i--) {
-        const HitRect& h = win->paint.hits[i];
-        if (h.id < 531 || h.id >= 535) {
-            continue;
-        }
-        if (h.bounds.Contains({x, y})) {
-            best = &h;
-            break;
-        }
-        if (!nearest) {
-            continue;
-        }
-        float cy = y;
-        if (y < h.bounds.y) {
-            cy = h.bounds.y;
-        } else if (y > h.bounds.Bottom()) {
-            cy = h.bounds.Bottom();
-        }
-        float d = y - cy;
-        if (d < 0) {
-            d = -d;
-        }
-        if (d < bestDist) {
-            bestDist = d;
-            best = &h;
-        }
+// What the window would copy, read while the frame that painted the runs is
+// still the current one. Rust's page gets the same string from its
+// TextSelectionEvent subscription.
+static void ShowcaseReadSelection(ShowcaseApp* app, Window* win) {
+    if (app->component != CompTextSelection) {
+        return;
     }
-    if (!best) {
-        return -1;
-    }
-    int para = best->id - 531;
-    float font = para == 0 ? 18.f : 14.f;
-    int local = TextIndexAt(&win->paint, Str(kSelParas[para]), font,
-                            best->bounds.w > 0 ? best->bounds.w : 560.f, true,
-                            x - best->bounds.x, y - best->bounds.y);
-    int plen = (int)strlen(kSelParas[para]);
-    if (local < 0) {
-        local = 0;
-    }
-    if (local > plen) {
-        local = plen;
-    }
-    *outLocal = local;
-    return para;
-}
-
-// Where a paragraph starts in the document the four of them make up.
-static int TextSelParaBase(int para) {
-    int off = 0;
-    for (int i = 0; i < para; i++) {
-        off += (int)strlen(kSelParas[i]) + 1;
-    }
-    return off;
-}
-
-static int TextSelOffsetAt(Window* win, float x, float y, bool nearest) {
-    int local = 0;
-    int para = TextSelParaAt(win, x, y, nearest, &local);
-    if (para < 0) {
-        return -1;
-    }
-    return TextSelParaBase(para) + local;
-}
-
-// The word (two clicks) or the paragraph (three or more) under the point, in
-// document offsets — points_for_multi_click, in text_selection.rs.
-static bool TextSelRangeAt(Window* win, float x, float y, int clickCount,
-                           int* outA, int* outB) {
-    if (clickCount < 2) {
-        return false;
-    }
-    int local = 0;
-    int para = TextSelParaAt(win, x, y, false, &local);
-    if (para < 0) {
-        return false;
-    }
-    Str text = Str(kSelParas[para]);
-    int a = 0;
-    int b = 0;
-    if (clickCount == 2) {
-        if (!TextWordRangeAt(text, local, &a, &b)) {
-            return false;
-        }
-    } else {
-        TextLineRangeAt(text, local, &a, &b);
-    }
-    if (a >= b) {
-        return false;
-    }
-    int base = TextSelParaBase(para);
-    *outA = base + a;
-    *outB = base + b;
-    return true;
+    int n = WindowSelectionText(win, app->selText, (int)sizeof(app->selText));
+    app->selActive = n > 0;
+    AppInvalidate(win);
 }
 
 void ShowcaseMouseMove(ShowcaseApp* app, Window* win,
                        const MouseMoveEvent* ev) {
-    float x = ev->x;
-    float y = ev->y;
-    if (app->component == CompTextSelection && win->mouseDown) {
-        int off = TextSelOffsetAt(win, x, y, true);
-        if (off >= 0) {
-            app->selB = off;
-        }
+    (void)ev;
+    if (win->mouseDown) {
+        ShowcaseReadSelection(app, win);
     }
 }
 
 void ShowcaseMouseDown(ShowcaseApp* app, Window* win,
                        const MouseDownEvent* ev) {
-    if (ev->button != MouseButton::Left) {
-        return;
-    }
-    float x = ev->x;
-    float y = ev->y;
-    if (app->component == CompTextSelection) {
-        int wordA = 0;
-        int wordB = 0;
-        if (TextSelRangeAt(win, x, y, ev->clickCount, &wordA, &wordB)) {
-            app->selA = wordA;
-            app->selB = wordB;
-            return;
-        }
-        int off = TextSelOffsetAt(win, x, y, false);
-        if (off >= 0) {
-            app->selA = off;
-            app->selB = off;
-        }
-    }
+    (void)ev;
+    ShowcaseReadSelection(app, win);
 }
 
 void ShowcaseMouseUp(ShowcaseApp* app, Window* win, const MouseUpEvent* ev) {
-    (void)app;
-    (void)win;
     (void)ev;
+    ShowcaseReadSelection(app, win);
 }
 
 // A click no element claimed dismisses whatever is open, the way GPUI closes

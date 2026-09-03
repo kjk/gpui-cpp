@@ -66,6 +66,7 @@ int GpuiMain(int argc, char** argv) {
     TestThemeSettings();
     TestResizable();
     TestTree();
+    TestNavStack();
     TestCalendar();
     TestColorPicker();
     TestToast();
@@ -147,6 +148,7 @@ int GpuiMain(int argc, char** argv) {
     TestForm();
     TestQuickJs();
     TestShellCore();
+    TestShellDependencies();
     TestShellDock();
     // Last because it deliberately changes the process-wide paint options.
     TestRuntimeArgs();

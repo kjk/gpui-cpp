@@ -184,6 +184,76 @@ void ShellTypeDeclarations(StrBuilder* out, const HostModules* modules) {
     }
 }
 
+// What an editor has to be told before `gpui.d.ts` and the linked packages
+// mean anything. `EDITOR_CONFIG` in crates/shell/src/typings.rs, byte for
+// byte, and the same settings examples/js_todolist/jsconfig.json was written
+// against.
+static const char* const kEditorConfig =
+    R"JSON({
+  "// why": [
+    "Written once by gpui-shell, then yours: an existing jsconfig.json or",
+    "tsconfig.json is never replaced, and this file is not rewritten.",
+    "",
+    "`moduleResolution` is how a bare specifier is answered. Left to be",
+    "inferred it can still land on the resolution that never looks in",
+    "node_modules, and a Git dependency the runtime resolves fine is",
+    "underlined as a module the editor cannot find.",
+    "",
+    "`lib` decides which globals exist. The default hands a script the",
+    "browser's — a `console`, a `localStorage`, a `Window` this runtime does",
+    "not have — and their declarations collide with the ones gpui.d.ts makes,",
+    "so the file describing the API is itself reported as the error.",
+    "",
+    "`strictNullChecks` is off, and this one is the runtime's shape rather than",
+    "a preference. A view assigns its state in `init`, which TypeScript cannot",
+    "see as definite assignment the way it sees a constructor, so every field",
+    "would read as possibly-undefined and every use would want a `?.` that",
+    "means nothing at run time. Turning it on would buy noise, not safety."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmit": true
+  }
+}
+)JSON";
+
+// `write_editor_config`: only when the directory has neither configuration
+// file, so the first launch scaffolds one and everything after leaves the
+// author's own settings alone.
+static bool WriteEditorConfig(Str directory, bool* wrote, ShellError* error) {
+    if (wrote) *wrote = false;
+    char path[kMaxPath];
+    char existing[kMaxPath];
+    if (!JoinPath(path, sizeof(path), directory, Str(kShellConfigFile)) ||
+        !JoinPath(existing, sizeof(existing), directory,
+                  Str(kShellTypeScriptConfigFile))) {
+        ShellErrorSet(error, StrL("editor configuration path is too long"));
+        return false;
+    }
+    if (PlatFileExists(path) || PlatDirExists(path) ||
+        PlatFileExists(existing) || PlatDirExists(existing))
+        return true;
+    Str contents(kEditorConfig);
+    FILE* file = fopen(path, "wb");
+    if (!file) {
+        ShellErrorSet(error, fmt("cannot write `%s`", Str(path)));
+        return false;
+    }
+    size_t count = fwrite(contents.s, 1, (size_t)contents.len, file);
+    if (count != (size_t)contents.len || fclose(file) != 0) {
+        ShellErrorSet(error, fmt("cannot write `%s`", Str(path)));
+        return false;
+    }
+    if (wrote) *wrote = true;
+    return true;
+}
+
 static bool HasSymlinkDeclaration(Str directory, DirEntry* entries,
                                   ShellError* error) {
     int count = PlatListDir(directory.s, entries, kTypesMaxEntries);
@@ -261,6 +331,16 @@ bool ShellWriteTypeDeclarations(Str root, const HostModules* modules,
         ShellErrorSet(error, StrL("type declarations exceed the size limit"));
         return false;
     }
+
+    // The application root only: one project, one configuration, and a nested
+    // directory that happens to import `gpui` is part of it rather than a
+    // second project.
+    bool wroteConfig = false;
+    if (!WriteEditorConfig(root, &wroteConfig, error)) {
+        StrFree(text);
+        return false;
+    }
+    if (wroteConfig && written) (*written)++;
 
     Vec<TypesDirectory> pending;
     Vec<TypesDirectory> targets;

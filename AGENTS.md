@@ -179,7 +179,7 @@ examples/system_monitor.cpp   MonitorApp: a view entity with Render(self, cx)
         │
         ▼
 src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root;
-            component::TextView parses through src/markdown
+            TextView (src/base/text.h) parses through src/markdown
         │
         ▼
 src/base/   unstyled primitives the themed layer is built from
@@ -594,13 +594,22 @@ a `TextView`'s source *means*. CommonMark and GFM both, tables, footnotes and
 task lists included. It lives in `namespace markdown`, not `gpui`: `CharKind`,
 `Name`, `Link`, `Point` and `Node` exist in both and mean different things.
 
-`MdParse` in `src/ui/text.cpp` is the seam. It calls
+`MdParse` in `src/base/text.cpp` is the seam. It calls
 `markdown::ToMdast(a, source, ParseOptions::Gfm())` and folds the mdast into
 the `MdNode` tree the renderer walks, which is what
-`crates/ui/src/text/format/markdown.rs` does with `ast_to_node` and
+`crates/base/src/text/format/markdown.rs` does with `ast_to_node` and
 `parse_paragraph`. Raw HTML — a block, an inline tag, or a whole document —
-goes through `src/ui/html.cpp` into the same tree, since there is no
+goes through `src/base/text_format.cpp` into the same tree, since there is no
 html5ever here.
+
+Rich text is gpui-base's, not the themed layer's: `src/base/text.h` owns the
+parser, the renderer, `TextViewState` and the selection, and it reads no
+theme — every colour comes from `TextViewStyle`, and syntax highlighting is
+the opt-in `CodeBlockHighlighter` callback. `src/ui/text.h` is the façade
+`crates/ui/src/text` is now: it re-exports those names under `component::`,
+derives a `TextViewStyle` from the component `Theme`, and installs both that
+style and the `ui/syntax.h` highlighter as `TextViewDefaults` whenever the
+theme is set.
 
 When a parsing question comes up, the answer is in `src/markdown/`, and behind
 that in the Rust crate. Do not add a special case to `MdParse` for something

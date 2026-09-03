@@ -107,8 +107,8 @@ static void SourceTokenDefaultsKeepTypographyAndShadowStructure() {
 #else
     utassert(base::StrEq(tk.typography.mono, "DejaVu Sans Mono"));
 #endif
-    utassert(tk.typography.xs.size == 12.f &&
-             tk.typography.xs.lineHeight == 16.f);
+    utassert(tk.typography.xs.size == 12.f && tk.typography.xs
+                                                      .lineHeight == 16.f);
     utassert(tk.typography.monoMd.size == 13.f &&
              tk.typography.monoMd.weight == FontWeight::Normal);
     utassert(tk.shadow.sm.len == 0 && tk.shadow.md.len == 0 &&
@@ -210,19 +210,17 @@ static void SourceColorAndTokenVocabularyIsTyped() {
 static void TypedSemanticSchemaParsesAndAppliesArrays() {
     Arena* arena = ArenaNew();
     JsonValue* json = JsonParse(
-        arena,
-        StrL("{\"tokens\":{\"colors\":{\"surface\":\"#111827\"},"
-             "\"radius\":{\"lg\":10},\"typography\":{\"sans\":\"Inter\","
-             "\"md\":{\"line_height\":22}},\"shadow\":{\"sm\":[{"
-             "\"x\":1,\"y\":2,\"blur_radius\":3,"
-             "\"spread_radius\":4,\"color\":\"#00000080\","
-             "\"inset\":true}]}}}"));
+        arena, StrL("{\"tokens\":{\"colors\":{\"surface\":\"#111827\"},"
+                    "\"radius\":{\"lg\":10},\"typography\":{\"sans\":\"Inter\","
+                    "\"md\":{\"line_height\":22}},\"shadow\":{\"sm\":[{"
+                    "\"x\":1,\"y\":2,\"blur_radius\":3,"
+                    "\"spread_radius\":4,\"color\":\"#00000080\","
+                    "\"inset\":true}]}}}"));
     SemanticThemeConfigFile file;
     utassert(SemanticThemeConfigFileParse(json, &file));
     utassert(file.tokens.colors.surface.has &&
              StrEqI(file.tokens.colors.surface.value, "#111827"));
-    utassert(file.tokens.radius.lg.has &&
-             file.tokens.radius.lg.value == 10.f);
+    utassert(file.tokens.radius.lg.has && file.tokens.radius.lg.value == 10.f);
     SemanticThemeTokens tokens = ThemeSemanticTokens(ThemeLight());
     utassert(file.tokens.ApplyTo(&tokens));
     utassert(Is(tokens.colors.surface, 0x111827));
@@ -230,18 +228,37 @@ static void TypedSemanticSchemaParsesAndAppliesArrays() {
     utassert(StrEqI(tokens.typography.sans, "Inter") &&
              tokens.typography.md.lineHeight == 22.f);
     utassert(tokens.shadow.sm.len == 1 && tokens.shadow.sm[0].x == 1.f &&
-             tokens.shadow.sm[0].y == 2.f &&
-             tokens.shadow.sm[0].blur == 3.f &&
-             tokens.shadow.sm[0].spread == 4.f &&
-             tokens.shadow.sm[0].inset);
+             tokens.shadow.sm[0].y == 2.f && tokens.shadow.sm[0].blur == 3.f &&
+             tokens.shadow.sm[0].spread == 4.f && tokens.shadow.sm[0].inset);
     VecReset(tokens.shadow.sm);
     VecReset(tokens.shadow.md);
     VecReset(tokens.shadow.lg);
     ArenaDelete(arena);
 }
 
+// theme_tokens.rs default_colors_are_the_light_palette_and_both_palettes_are_
+// readable. The zeroed default was transparent on transparent, which is what
+// a Base application that installs no palette used to render as.
+static void DefaultColorsAreTheLightPaletteAndBothAreReadable() {
+    ColorTokens light = ColorTokens::Light();
+    ColorTokens dark = ColorTokens::Dark();
+
+    utassert(ColorTokens() == light);
+    utassert(light.background.r == 255 && light.background.g == 255 &&
+             light.background.b == 255);
+    utassert(light.foreground.r < light.background.r);
+    utassert(dark.background.r < dark.foreground.r);
+    utassert(light.primary.a == 255);
+    utassert(dark.primary.a == 255);
+    // The selection wash is translucent in both, so glyphs stay legible.
+    utassert(light.selection.a > 0 && light.selection.a < 255);
+    utassert(dark.selection.a > 0 && dark.selection.a < 255);
+    utassert(light != dark);
+}
+
 void TestThemeColor() {
     TestSuite("theme_color");
+    DefaultColorsAreTheLightPaletteAndBothAreReadable();
     TheLightPaletteIsDefaultLight();
     TheDarkPaletteIsDefaultDark();
     TheSemanticTokensAreTheRolesOfThePalette();

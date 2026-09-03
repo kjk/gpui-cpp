@@ -22,11 +22,11 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
                   ->PadX(8)
                   ->ItemsCenter()
                   ->JustifyCenter()
-                  ->Border(1, Rgb(0x17, 0x17, 0x17))
-                  ->Bg(Rgb(0xff, 0xff, 0xff))
+                  ->Border(1, ExampleRgb(0x171717))
+                  ->Bg(ExampleRgb(0xffffff))
                   ->Child(TextEl(a, StrL("Command menu"))
                               ->Font(12)
-                              ->Fg(Rgb(0x17, 0x17, 0x17)));
+                              ->Fg(ExampleRgb(0x171717)));
     El* trigger = Div(a)
                       ->PathClick(StrL("tooltip-trigger"))
                       ->OnHover(Listen(cx, &TooltipHover))
@@ -40,11 +40,11 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
                   ->H(28)
                   ->ItemsCenter()
                   ->JustifyCenter()
-                  ->Border(1, Rgb(0x17, 0x17, 0x17))
-                  ->Bg(Rgb(0x17, 0x17, 0x17))
+                  ->Border(1, ExampleRgb(0x171717))
+                  ->Bg(ExampleRgb(0x171717))
                   ->Child(TextEl(a, StrL("Open command menu · \xE2\x8C\x98K"))
                               ->Font(12)
-                              ->Fg(Rgb(0xff, 0xff, 0xff)));
+                              ->Fg(ExampleRgb(0xffffff)));
     }
     return Popup::New(cx, StrL("example-tooltip-popup"), trigger)
         ->Content(tip)

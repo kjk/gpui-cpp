@@ -4642,7 +4642,15 @@ static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
         return;
     }
     Bounds rects[32] = {};
-    // The washes go under every glyph, so they all go down first.
+    // The washes go under every glyph, so they all go down first. This is
+    // also the editor's decoration-background pass: an editor row hands its
+    // composed spans over here, so a decoration carrying a background paints
+    // under the indent guides, the selection and the text without a pass of
+    // its own. Rust needs `LineLayout::paint_background` and a per-line
+    // `has_background` flag because gpui's `ShapedLine::paint` draws only
+    // glyphs, underlines and strikethroughs; the equivalent early-out here is
+    // the per-span alpha test below, which costs nothing on a line with no
+    // highlight.
     for (int i = 0; i < e->nSpans; i++) {
         const TextSpan& sp = e->spans[i];
         if (sp.bg.a == 0 || sp.hi <= sp.lo) {
@@ -5758,9 +5766,17 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // truncate: a run that does not wrap is the same size whatever width
         // it was measured against, so the shaped run is cached without one and
         // the box it was drawn for cannot do the cutting. This can.
+        //
+        // Horizontally only. GPUI's `truncate()` is `overflow_hidden` *and*
+        // `text_ellipsis`, and the first of those cut the glyphs of "g" and
+        // "y" off at the line box, because a line box of relative 1.0 is the
+        // font size while the ink of a descender runs below it. Upstream
+        // dropped the `overflow_hidden` and kept the ellipsis; the same split
+        // here is a clip that still ends the run at its width but leaves a
+        // line box of slack above and below for the ink to finish in.
         bool clipText = e->style.truncate && e->laidMaxW > 0;
         if (clipText) {
-            CanvasPushClip(ctx, e->x, e->y, e->laidMaxW, e->h);
+            CanvasPushClip(ctx, e->x, e->y - e->h, e->laidMaxW, e->h * 3.f);
         }
         // Under the selection quad as well as under the glyphs: a match the
         // caret happens to be inside still reads as selected.

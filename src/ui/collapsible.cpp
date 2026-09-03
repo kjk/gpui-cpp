@@ -24,6 +24,11 @@ Collapsible* Collapsible::Open(bool v) {
     open = v;
     return this;
 }
+Collapsible* Collapsible::MotionId(Str id) {
+    motionId = id;
+    hasMotion = true;
+    return this;
+}
 Collapsible* Collapsible::Trigger(El* e) {
     trigger = e;
     return this;
@@ -36,12 +41,18 @@ Collapsible* Collapsible::Content(El* e) {
 El* Collapsible::IntoEl() {
     // The unstyled root has no direction of its own, as Rust's plain div()
     // does not; a collapsible stacks its trigger over its content.
-    El* e = gpui::Collapsible::New(cx)
-                ->FlexCol()
-                ->Open(open)
-                ->Child(trigger)
-                ->Content(content)
-                ->IntoEl();
+    gpui::Collapsible* base =
+        gpui::Collapsible::New(cx)->FlexCol()->Open(open)->Child(trigger);
+    if (hasMotion) {
+        // spring_control, the policy every control that answers a click
+        // shares: a trigger clicked twice reverses the reveal from where it
+        // had got to rather than restarting it.
+        float progress = SpringValue(
+            cx, gpui::MotionId(motionId, StrL("reveal")), open ? 1.f : 0.f,
+            ThemeNow(cx->app).motion.springControl);
+        base->Reveal(motionId, progress);
+    }
+    El* e = base->Content(content)->IntoEl();
     if (width != 0) {
         e->W(width);
     }

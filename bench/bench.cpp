@@ -172,6 +172,7 @@ int GpuiMain(int argc, char** argv) {
     BenchFlexbox();
     BenchGrid();
     BenchMarkdown();
+    BenchMotion();
     printf("\nelapsed %.1fs\n", TimeNow() - started);
     return 0;
 }

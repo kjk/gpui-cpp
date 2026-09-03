@@ -5,8 +5,9 @@ namespace gpui {
 
 namespace component {
 
-// accordion.rs: ANIMATION_DURATION, along ease_out_cubic.
-static const float kAccordionMotionMs = 200.f;
+// accordion.rs names no spring of its own now: the panel expands under the
+// theme's `spring_control`. Critically damped, so the panel height never
+// overshoots the measured content height.
 
 // AccordionItem::render's text_size: rems(0.8125) / rems(0.875) / rems(1.).
 // Not UiFontPx — the accordion runs its own scale, and Small shares Medium's.
@@ -222,31 +223,21 @@ El* Accordion::IntoEl() {
         if (item->content) {
             panel->Child(item->content);
         }
-        // AnimatedAccordionPanel: the panel's height is its natural one times
-        // the progress, and the box around it clips what does not fit. The
-        // natural height is what the last frame measured — Rust keeps it in
-        // the element's state from its prepaint; here the panel reports its
-        // own box, into a slot that is asked for whether or not the panel is
-        // mounted so a closed item still knows how tall it will be.
-        // PANEL_SPRING: a header clicked twice retargets the panel while
+        // MotionReveal: the panel's height is its natural one times the
+        // progress, and the box around it clips what does not fit. Upstream
+        // had this as AnimatedAccordionPanel here and now takes the Base
+        // element, which is the same measure-and-clip written once.
+        // spring_control: a header clicked twice retargets the panel while
         // it is still opening, and the spring decelerates into the reversal
         // instead of snapping to a new curve's opening pace.
         float progress =
             SpringValue(cx, MotionName(cx, StrL("accordion")),
-                        item->open ? 1.f : 0.f, SpringNew(kAccordionMotionMs));
-        auto* natural = (Bounds*)MotionSlot(
-            cx, MotionName(cx, StrL("accordion-h")), (int)sizeof(Bounds));
+                        item->open ? 1.f : 0.f, th.motion.springControl);
         if (progress > 0.001f) {
-            El* clip = Div(a)->W(kFill)->ClipY();
-            if (natural && natural->h > 0) {
-                clip->H(natural->h * progress);
-            }
-            if (natural) {
-                panel->BoundsOut(natural);
-            }
             // The item mounts its panel while it is open or on its way shut,
             // which is what keeps a collapse animating rather than vanishing.
-            it->KeepMounted(true)->Panel(clip->Child(panel));
+            it->KeepMounted(true)->Panel(
+                MotionReveal::New(cx, StrL("content"), progress, panel));
         }
         // The separator belongs to the item, so it lands under the panel and
         // not between the trigger and its body.

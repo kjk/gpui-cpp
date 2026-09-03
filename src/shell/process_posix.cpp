@@ -84,7 +84,8 @@ static bool DrainFd(int fd, StrBuilder* out, bool* closed, Str* error,
 
 bool ProcessRunBounded(Str command, const Str* args, int count,
                        ProcessCancellation* cancellation,
-                       ProcessOutput* output, Str* error) {
+                       ProcessOutput* output, Str* error,
+                       const ProcessOptions* options) {
     if (output) output->Free();
     if (error) {
         StrFree(*error);
@@ -104,19 +105,33 @@ bool ProcessRunBounded(Str command, const Str* args, int count,
     argv[0] = executable.s;
     for (int i = 0; i < count; i++) argv[i + 1] = args[i].s;
     argv[count + 1] = nullptr;
+    int extra = options ? options->environmentCount : 0;
+    int inherited = 0;
+    if (options && options->inheritEnvironment) {
+        while (environ[inherited]) inherited++;
+    }
+    char** envp = AllocArray<char*>(inherited + extra + 1);
+    for (int i = 0; i < inherited; i++) envp[i] = environ[i];
+    for (int i = 0; i < extra; i++)
+        envp[inherited + i] = options->environment[i].s;
+    envp[inherited + extra] = nullptr;
     pid_t pid = fork();
     if (pid == 0) {
         setpgid(0, 0);
+        if (options && options->workingDirectory &&
+            chdir(options->workingDirectory.s) != 0) {
+            _exit(127);
+        }
         dup2(outPipe[1], STDOUT_FILENO);
         dup2(errPipe[1], STDERR_FILENO);
         int nullFd = open("/dev/null", O_RDONLY);
         if (nullFd >= 0) dup2(nullFd, STDIN_FILENO);
         close(outPipe[0]); close(outPipe[1]);
         close(errPipe[0]); close(errPipe[1]);
-        char* emptyEnvironment[] = {nullptr};
-        execve(executable.s, argv, emptyEnvironment);
+        execve(executable.s, argv, envp);
         _exit(127);
     }
+    Free(nullptr, envp);
     Free(nullptr, argv);
     StrFree(executable);
     close(outPipe[1]);
@@ -179,7 +194,7 @@ bool ProcessRunBounded(Str command, const Str* args, int count,
 
 namespace gpui::shell {
 bool ProcessRunBounded(Str command, const Str*, int, ProcessCancellation*,
-                       ProcessOutput*, Str* error) {
+                       ProcessOutput*, Str* error, const ProcessOptions*) {
     if (error) *error = StrDup(fmt("running `%s` is unavailable in a browser", command));
     return false;
 }

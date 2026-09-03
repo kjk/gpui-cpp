@@ -1,8 +1,6 @@
-#include "ui/html.h"
+#include "base/text_format.h"
 
 namespace gpui {
-
-namespace component {
 
 // ─── lexer ────────────────────────────────────────────────────────────────
 //
@@ -967,5 +965,4 @@ MdNode* HtmlParse(Arena* a, Str source) {
     return doc;
 }
 
-} // namespace component
 } // namespace gpui

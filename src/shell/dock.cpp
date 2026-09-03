@@ -376,18 +376,10 @@ static El* SkinDock(Ctx* cx, void* data, const DockCtx* dock, El* content) {
             "dock's own panels are drawn after it\n");
         drawn = Div(cx->a)->SizeFull()->Child(drawn)->Child(unplaced);
     }
-    // The dock's own box is base's, applied around whatever the chrome
-    // returned, so a script cannot misplace a dock by not knowing it had a box
-    // to draw. Upstream moved this out of the hook for the same reason: a
-    // script-drawn dock used to come out with no width at all.
-    if (dock) {
-        drawn->FlexNone();
-        if (dock->placement == DockPlacement::Bottom) {
-            drawn->W(kFill)->H(dock->open ? dock->size : 0);
-        } else {
-            drawn->H(kFill)->W(dock->open ? dock->size : 0);
-        }
-    }
+    // Chrome only. The dock's own box — its extent along its own axis and the
+    // `flex_none` that holds it there — is `DockFrame`'s, applied by base
+    // around whatever this returns, so a script cannot misplace a dock by not
+    // knowing it had a box to draw and this must not state it twice.
     return drawn;
 }
 

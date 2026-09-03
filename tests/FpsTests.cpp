@@ -1,16 +1,51 @@
-/* Ported from crates/fps/src/sampler.rs, mod tests.
+/* Ported from crates/fps/src/sampler.rs, monitor.rs and memory.rs, mod tests.
  *
- * `ingests_frames_from_other_windows` has no counterpart: Rust filters a
+ * `ignores_frames_from_other_windows` has no counterpart: Rust filters a
  * process-wide frame trace by window id, while ours is already per-window, so
- * there is nothing to filter. The rest is the same arithmetic on the same
- * rolling window. */
+ * there is nothing to filter. lib.rs' FrameTraceGuard test has none either —
+ * the trace is always on here (see gpui::FrameTiming) — and
+ * `test_fps_monitor_builder` is a #[gpui::test]. The rest is the same
+ * arithmetic on the same rolling windows. */
 
 #include "Test.h"
 
 #include <math.h>
+#include <stdlib.h>
 
-static void Ingest(FrameSampler* s, float drawSecs, double at) {
-    FrameSamplerIngest(s, &drawSecs, 1, at);
+static bool FpsSameRgba(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+// timing(): a frame that answered one request to redraw. Named
+// FpsTiming because gpui::Timing is the motion core's timing block.
+static FrameSample FpsTiming(float drawSecs) {
+    FrameSample s;
+    s.drawSecs = drawSecs;
+    s.invalidations = 1;
+    return s;
+}
+
+// coalesced(): a frame that answered `invalidations` requests at once.
+static FrameSample Coalesced(float drawSecs, uint64_t invalidations) {
+    FrameSample s = FpsTiming(drawSecs);
+    s.invalidations = invalidations;
+    return s;
+}
+
+static void IngestDraw(FrameSampler* s, FrameSample sample) {
+    FrameSamplerIngestDraws(s, &sample, 1);
+}
+
+static void IngestPresent(FrameSampler* s, double presentAt, double now) {
+    FrameSamplerIngestPresents(s, &presentAt, 1, now);
+}
+
+// sampler_of: a sampler holding one frame per entry in `millis`.
+static void SamplerOf(FrameSampler* s, const float* millis, int n) {
+    FrameSamplerSetCapacity(s, kFpsCapacity);
+    for (int i = 0; i < n; i++) {
+        IngestDraw(s, FpsTiming(millis[i] / 1000.f));
+    }
 }
 
 static void DropsOldestSamplesBeyondCapacity() {
@@ -18,22 +53,49 @@ static void DropsOldestSamplesBeyondCapacity() {
     FrameSamplerSetCapacity(&s, 2);
 
     for (int i = 0; i < 3; i++) {
-        Ingest(&s, 0.005f + 0.001f * (float)i, 0);
+        IngestDraw(&s, FpsTiming(0.005f + 0.001f * (float)i));
     }
 
     utassert(s.n == 2);
-    utassertnear(s.draws[0], 0.006f);
-    utassertnear(s.draws[1], 0.007f);
+    utassertnear(s.samples[0].drawSecs, 0.006f);
+    utassertnear(s.samples[1].drawSecs, 0.007f);
 }
 
-// Feeds `count` frames spaced `interval` apart and returns the rate.
+// Feeds `count` presents spaced `interval` apart and returns the rate.
 static float MeasureFps(int count, double interval) {
     FrameSampler s;
     FrameSamplerSetCapacity(&s, 120);
     for (int i = 0; i < count; i++) {
-        Ingest(&s, 0.001f, interval * (double)i);
+        double presented = interval * (double)i;
+        IngestPresent(&s, presented, presented);
     }
     return FrameSamplerFps(&s);
+}
+
+static void FpsIsTakenFromWhenFramesWerePresentedNotWhenTheyWereRead() {
+    FrameSampler s;
+    FrameSamplerSetCapacity(&s, 120);
+    const double interval = 0.010;
+
+    // A whole batch of presents read at once, long after the first of them:
+    // what a HUD that draws only when the window does sees. Stamped with the
+    // time they were read, 61 frames would collapse onto one instant and
+    // report no rate at all; stamped with their own times they cover
+    // 600ms => 100 fps.
+    double presents[61];
+    for (int i = 0; i < 61; i++) {
+        presents[i] = interval * (double)i;
+    }
+    double readAt = 0.600;
+    FrameSamplerIngestPresents(&s, presents, 61, readAt);
+    utassert(fabsf(FrameSamplerFps(&s) - 100.f) < 0.5f);
+    utassert(fabsf(FrameSamplerPresentInterval(&s) * 1000.f - 10.f) < 0.1f);
+
+    // Read again a second later with nothing new: everything has aged out of
+    // the window, and the honest rate is zero.
+    FrameSamplerIngestPresents(&s, nullptr, 0, readAt + 1.100);
+    utassertnear(FrameSamplerFps(&s), 0.f);
+    utassertnear(FrameSamplerPresentInterval(&s), 0.f);
 }
 
 static void FpsIsFramesDividedByTheSpanTheyCover() {
@@ -69,12 +131,83 @@ static void SimultaneousFramesDoNotDivideByZero() {
     FrameSampler s;
     FrameSamplerSetCapacity(&s, 64);
 
-    // A first tick can drain several frames at once, stamping them all with
-    // the same arrival time; the span between them is zero.
-    const float draws[] = {0.004f, 0.004f, 0.004f};
-    FrameSamplerIngest(&s, draws, 3, 0);
+    // Three presents on one instant — what a trace with no clock behind it
+    // would say — span nothing, and nothing is divided by that.
+    const double now = 5.0;
+    const double presents[] = {now, now, now};
+    FrameSamplerIngestPresents(&s, presents, 3, now);
 
     utassertnear(FrameSamplerFps(&s), 0.f);
+}
+
+static void ThePercentileIsTheFrameAtTheNearestRank() {
+    // Twenty frames, so the 95th percentile is rank 0.95 * 19 = 18.05, which
+    // rounds to the second slowest.
+    float draws[20];
+    for (int i = 0; i < 20; i++) {
+        draws[i] = (float)(20 - i);
+    }
+    FrameSampler s;
+    SamplerOf(&s, draws, 20);
+
+    utassertnear(FrameSamplerPercentileDraw(&s, 0.95f), 0.019f);
+    utassertnear(FrameSamplerPercentileDraw(&s, 1.f), 0.020f);
+    utassertnear(FrameSamplerPercentileDraw(&s, 0.f), 0.001f);
+}
+
+static void ThePercentileSeparatesAStutterTheMeanAbsorbs() {
+    // Eighteen quick frames and two that took twenty times as long: the shape
+    // a stutter has. The mean stays inside a 60Hz budget while the tail is
+    // well past it, which is the whole reason the row exists.
+    float draws[20];
+    for (int i = 0; i < 18; i++) {
+        draws[i] = 4.f;
+    }
+    draws[18] = 80.f;
+    draws[19] = 80.f;
+    FrameSampler s;
+    SamplerOf(&s, draws, 20);
+
+    utassert(FrameSamplerMeanDraw(&s) < 0.012f);
+    utassertnear(FrameSamplerPercentileDraw(&s, 0.95f), 0.080f);
+}
+
+static void OneSlowFrameInTwentyDoesNotMoveThePercentile() {
+    // The complement of the test above, and the reason a percentile is worth
+    // having over the peak: a single frame is the top 5% of twenty, so it
+    // stays out of the 95th. The chart still shows it, and the axis is still
+    // scaled to it — the row is for the tail that *persists*, not for every
+    // outlier.
+    float draws[20];
+    for (int i = 0; i < 19; i++) {
+        draws[i] = 4.f;
+    }
+    draws[19] = 80.f;
+    FrameSampler s;
+    SamplerOf(&s, draws, 20);
+
+    utassertnear(FrameSamplerPercentileDraw(&s, 0.95f), 0.004f);
+    utassertnear(FrameSamplerPeakDraw(&s), 0.080f);
+}
+
+static void AnEmptySamplerHasNoPercentileRatherThanAGuess() {
+    FrameSampler s;
+    FrameSamplerSetCapacity(&s, 8);
+    utassertnear(FrameSamplerPercentileDraw(&s, 0.95f), 0.f);
+    utassertnear(FrameSamplerMeanInvalidations(&s), 0.f);
+}
+
+static void InvalidationsAverageOverTheRetainedFrames() {
+    FrameSampler s;
+    FrameSamplerSetCapacity(&s, 8);
+
+    // A window asked to redraw five times for every three frames it drew.
+    const uint64_t invalidations[] = {1, 3, 1};
+    for (int i = 0; i < 3; i++) {
+        IngestDraw(&s, Coalesced(0.004f, invalidations[i]));
+    }
+
+    utassert(fabsf(FrameSamplerMeanInvalidations(&s) - 5.f / 3.f) < 1e-6f);
 }
 
 static void FramesOutsideTheRollingWindowStopCounting() {
@@ -82,18 +215,23 @@ static void FramesOutsideTheRollingWindowStopCounting() {
     FrameSamplerSetCapacity(&s, 64);
 
     for (int i = 0; i < 10; i++) {
-        Ingest(&s, 0.004f, 0.010 * (double)i);
+        double presented = 0.010 * (double)i;
+        IngestDraw(&s, FpsTiming(0.004f));
+        IngestPresent(&s, presented, presented);
     }
     utassert(FrameSamplerFps(&s) > 0.f);
 
     // Two seconds later the window has gone idle: every retained frame is
     // older than the rolling window, so the rate collapses to zero.
-    FrameSamplerIngest(&s, nullptr, 0, 2.0);
+    FrameSamplerIngestPresents(&s, nullptr, 0, 2.0);
     utassertnear(FrameSamplerFps(&s), 0.f);
     // The chart history survives, so the last known shape stays on screen.
     utassert(s.n == 10);
 }
 
+// Ours: the three readings the tick publishes from the retained draws, plus
+// the ingest seam over the window's own frame records, where a frame that was
+// drawn but not presented counts as a draw and not as a present.
 static void MeanAndPeakAndOverBudget() {
     FrameSampler s;
     FrameSamplerSetCapacity(&s, 64);
@@ -101,20 +239,232 @@ static void MeanAndPeakAndOverBudget() {
     utassertnear(FrameSamplerPeakDraw(&s), 0.f);
     utassertnear(FrameSamplerOverBudget(&s, 0.016f), 0.f);
 
+    FrameTiming frames[4] = {};
     const float draws[] = {0.004f, 0.008f, 0.030f, 0.002f};
-    FrameSamplerIngest(&s, draws, 4, 0);
+    for (int i = 0; i < 4; i++) {
+        frames[i].drawSecs = draws[i];
+        frames[i].invalidations = 1;
+        frames[i].presentAt = 0.010 * (double)i;
+    }
+    // The scene found the third frame identical to the one before it: drawn,
+    // never presented.
+    frames[2].presentAt = -1;
+    FrameSamplerIngest(&s, frames, 4, 0.030);
     utassertnear(FrameSamplerMeanDraw(&s), 0.011f);
     utassertnear(FrameSamplerPeakDraw(&s), 0.030f);
     utassertnear(FrameSamplerOverBudget(&s, 0.016f), 0.25f);
+    utassert(s.n == 4);
+    utassert(s.nPresents == 3);
 }
+
+// ─── resource history ─────────────────────────────────────────────────────
+
+static ResourceSample Resources(float cpuPercent, uint64_t memoryBytes,
+                                float gpuPercent) {
+    ResourceSample s;
+    s.cpuPercent = cpuPercent;
+    s.memoryBytes = memoryBytes;
+    s.gpuPercent = gpuPercent;
+    return s;
+}
+
+static const uint64_t kHundredMib = 100ull * 1024 * 1024;
+
+static void ResourceReadingsAverageOverTheWindow() {
+    ResourceHistory history;
+    history.windowSecs = 3.f;
+
+    // Four readings a second apart, all of them still inside a three second
+    // window: the oldest is exactly the window's age, and the window is
+    // inclusive of it.
+    const float cpus[] = {400.f, 100.f, 200.f, 300.f};
+    for (int second = 0; second < 4; second++) {
+        ResourceHistoryPush(
+            &history, Resources(cpus[second], kHundredMib, cpus[second] / 10.f),
+            (double)second);
+    }
+
+    ResourceSample mean;
+    utassert(ResourceHistoryMean(&history, &mean));
+    utassert(fabsf(mean.cpuPercent - 250.f) < 0.01f);
+    utassert(mean.gpuPercent >= 0 && fabsf(mean.gpuPercent - 25.f) < 0.01f);
+    utassert(mean.memoryBytes == kHundredMib);
+
+    // A fifth a second later pushes the first out, so the reading that was
+    // four times the others stops weighing on the mean.
+    ResourceHistoryPush(&history, Resources(100.f, kHundredMib, 10.f), 4.0);
+    utassert(ResourceHistoryMean(&history, &mean));
+    utassert(fabsf(mean.cpuPercent - 175.f) < 0.01f);
+}
+
+// The averaged CPU stays on the single core scale rather than being folded
+// back into 0..=100: a process holding two cores busy reads 200 whether it is
+// averaged or not.
+static void AveragingDoesNotCapTheCpuReading() {
+    ResourceHistory history;
+    const double now = 7.0;
+    ResourceHistoryPush(&history, Resources(150.f, 0, -1.f), now);
+    ResourceHistoryPush(&history, Resources(250.f, 0, -1.f), now);
+
+    ResourceSample mean;
+    utassert(ResourceHistoryMean(&history, &mean));
+    utassert(fabsf(mean.cpuPercent - 200.f) < 0.01f);
+}
+
+static void AGapInTheGpuCounterDoesNotReadAsADip() {
+    ResourceHistory history;
+    const double now = 7.0;
+    // The middle reading missed the counter. Averaging it in as a zero would
+    // report 40%; the honest mean is over the two that carried one.
+    ResourceHistoryPush(&history, Resources(0.f, 0, 60.f), now);
+    ResourceHistoryPush(&history, Resources(0.f, 0, -1.f), now);
+    ResourceHistoryPush(&history, Resources(0.f, 0, 60.f), now);
+
+    ResourceSample mean;
+    utassert(ResourceHistoryMean(&history, &mean));
+    utassertnear(mean.gpuPercent, 60.f);
+}
+
+static void APlatformWithNoGpuCounterStaysWithoutOne() {
+    ResourceHistory history;
+    ResourceSample mean;
+    // Nothing has been sampled yet.
+    utassert(!ResourceHistoryMean(&history, &mean));
+
+    ResourceHistoryPush(&history, Resources(12.f, 0, -1.f), 1.0);
+    utassert(ResourceHistoryMean(&history, &mean));
+    utassert(mean.gpuPercent < 0);
+}
+
+// ─── monitor ──────────────────────────────────────────────────────────────
+
+static void ADisplayKeepingUpIsNeverGradedAsFallingBehind() {
+    const FpsStyle& style = FpsStyleDark();
+    const float budget = 1.f / 60.f;
+
+    // What a healthy 60Hz display actually reports.
+    const float rates[] = {58.f, 59.f, 59.7f, 60.f, 61.f};
+    for (int i = 0; i < 5; i++) {
+        utassert(
+            FpsSameRgba(FpsRateColor(rates[i], budget, style), style.good));
+    }
+
+    utassert(FpsSameRgba(FpsRateColor(45.f, budget, style), style.warn));
+    utassert(FpsSameRgba(FpsRateColor(20.f, budget, style), style.bad));
+    utassert(FpsSameRgba(FpsRateColor(0.f, budget, style), style.muted));
+}
+
+static void FormatsMemoryByMagnitude() {
+    utassert(StrEq(FpsFormatBytes(184ull * 1024 * 1024), "184 MB"));
+    utassert(StrEq(FpsFormatBytes(3ull * 1024 * 1024 * 1024), "3.00 GB"));
+}
+
+// The reading is on the single core scale, so it passes 100 and keeps going —
+// the row must show that rather than round it away or clip it.
+static void FormatsCpuOnTheSingleCoreScale() {
+    // A process spread over a core and a half, which under a scale where 100
+    // is the whole machine would have read 5.8% on a 24 core desktop.
+    utassert(StrEq(FpsFormatCpu(140.f), "140%"));
+    // Saturating every core of a big machine still has somewhere to go.
+    utassert(StrEq(FpsFormatCpu(2400.f), "2400%"));
+    // Small readings keep the tenth that distinguishes them.
+    utassert(StrEq(FpsFormatCpu(0.4f), "0.4%"));
+    utassert(StrEq(FpsFormatCpu(9.9f), "9.9%"));
+    utassert(StrEq(FpsFormatCpu(12.4f), "12%"));
+}
+
+// ─── memory (crates/fps/src/memory.rs) ────────────────────────────────────
+
+// How much anonymous memory the reading has to move by to prove its unit.
+static const size_t kBallast = 64u * 1024 * 1024;
+
+// Whether a probe exists is the platform's answer; what must hold is that one
+// which does exist reports *bytes*, since the counters behind it are published
+// in different units — kibibytes on Linux, bytes through the other two — and
+// the conversion is the one thing every backend has to get right.
+//
+// Asserted as growth rather than as an absolute floor: what a process happens
+// to own says nothing. Allocating a known amount and watching the reading
+// follow is what separates the units — a backend reporting unconverted
+// kibibytes would move by a thousandth of the ballast, and one reporting pages
+// by a four-thousandth.
+static void AReadingFollowsWhatTheProcessAllocatesInBytes() {
+    uint64_t before = 0;
+    if (!SysSelfPrivateMemory(&before)) {
+        return;
+    }
+
+    // Touched a page at a time, because two of the three counters move only
+    // once the pages are faulted in rather than when they are reserved.
+    auto* ballast = (volatile uint8_t*)malloc(kBallast);
+    utassert(ballast != nullptr);
+    if (!ballast) {
+        return;
+    }
+    for (size_t off = 0; off < kBallast; off += 4096) {
+        ballast[off] = 1;
+    }
+
+    uint64_t after = 0;
+    utassert(SysSelfPrivateMemory(&after));
+    // Half the ballast, not all of it: this only has to be the right order of
+    // magnitude to settle the unit, and the process is free to release other
+    // memory between the two readings.
+    utassert(after > before && after - before > (uint64_t)kBallast / 2);
+    // Read back across the reading, so nothing can free or elide it first.
+    utassert(ballast[0] == 1);
+    free((void*)ballast);
+}
+
+#if GPUI_OS_LINUX
+// The whole point of the counter: it leaves out the file pages that make the
+// resident set say more about the machine's graphics stack than about the
+// application. On Linux this is an identity — RssAnon is one of the two halves
+// VmRSS is the sum of — so it can be asserted rather than merely expected.
+// PlatSelfUsage's memory is that resident set, out of /proc/self/statm.
+static void AnonymousMemoryIsAPartOfTheResidentSet() {
+    uint64_t anonymous = 0;
+    if (!SysSelfPrivateMemory(&anonymous)) {
+        return;
+    }
+    uint64_t cpu = 0;
+    uint64_t resident = 0;
+    utassert(PlatSelfUsage(&cpu, &resident));
+    utassert(anonymous > 0);
+    utassert(anonymous <= resident);
+}
+#endif
 
 void TestFrameSampler() {
     TestSuite("fps/sampler");
     DropsOldestSamplesBeyondCapacity();
+    FpsIsTakenFromWhenFramesWerePresentedNotWhenTheyWereRead();
     FpsIsFramesDividedByTheSpanTheyCover();
     FpsMatchesTheCommonRefreshRates();
     FpsNeedsTwoFramesToHaveARateAtAll();
     SimultaneousFramesDoNotDivideByZero();
+    ThePercentileIsTheFrameAtTheNearestRank();
+    ThePercentileSeparatesAStutterTheMeanAbsorbs();
+    OneSlowFrameInTwentyDoesNotMoveThePercentile();
+    AnEmptySamplerHasNoPercentileRatherThanAGuess();
+    InvalidationsAverageOverTheRetainedFrames();
     FramesOutsideTheRollingWindowStopCounting();
     MeanAndPeakAndOverBudget();
+
+    TestSuite("fps/sampler/resource_history");
+    ResourceReadingsAverageOverTheWindow();
+    AveragingDoesNotCapTheCpuReading();
+    AGapInTheGpuCounterDoesNotReadAsADip();
+    APlatformWithNoGpuCounterStaysWithoutOne();
+
+    TestSuite("fps/monitor");
+    ADisplayKeepingUpIsNeverGradedAsFallingBehind();
+    FormatsMemoryByMagnitude();
+    FormatsCpuOnTheSingleCoreScale();
+
+    TestSuite("fps/memory");
+    AReadingFollowsWhatTheProcessAllocatesInBytes();
+#if GPUI_OS_LINUX
+    AnonymousMemoryIsAPartOfTheResidentSet();
+#endif
 }

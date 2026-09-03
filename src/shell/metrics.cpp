@@ -11,6 +11,13 @@ static uint64_t MeanNanos(uint64_t total, uint64_t count) {
     return total / count;
 }
 
+bool RuntimeMetrics::StructureRepeatRate(double* out) const {
+    uint64_t compared = structureRepeats + structureChanges;
+    if (compared == 0) return false;
+    if (out) *out = (double)structureRepeats / (double)compared;
+    return true;
+}
+
 uint64_t RuntimeMetrics::MeanScriptOnlyNanos() const {
     uint64_t scriptOnly =
         scriptRenderNanos > nativeNanos ? scriptRenderNanos - nativeNanos : 0;
@@ -44,6 +51,10 @@ RuntimeMetrics RuntimeMetrics::Since(const RuntimeMetrics& earlier) const {
         SaturatingSub(materializations, earlier.materializations);
     out.materializeNanos =
         SaturatingSub(materializeNanos, earlier.materializeNanos);
+    out.structureRepeats =
+        SaturatingSub(structureRepeats, earlier.structureRepeats);
+    out.structureChanges =
+        SaturatingSub(structureChanges, earlier.structureChanges);
     return out;
 }
 
@@ -97,6 +108,13 @@ void MetricsEnd(MetricsTimer* timer) {
                          : (uint64_t)(elapsed * 1e9);
     MetricsAdd(timer->metrics, timer->kind, nanos);
     timer->metrics = nullptr;
+}
+
+void MetricsRecordStructure(Metrics* metrics, bool repeated) {
+    if (!metrics) return;
+    uint64_t& counter = repeated ? metrics->value.structureRepeats
+                                 : metrics->value.structureChanges;
+    counter = SaturatingAdd(counter, 1);
 }
 
 RuntimeMetrics MetricsRead(const Metrics* metrics) {

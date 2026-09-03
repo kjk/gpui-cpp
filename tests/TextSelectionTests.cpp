@@ -313,8 +313,8 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
     TextSelectionSnapshot built =
         TextSelectionSnapshot::New(endpoint, TextSelectionEndpoint::At({8, 9}))
             .WithSelecting(true)
-            .WithWindowPoints(TextSelectionWindowPoints::New({10, 11},
-                                                              {12, 13}))
+            .WithWindowPoints(
+                TextSelectionWindowPoints::New({10, 11}, {12, 13}))
             .WithCoverage(TextSelectionCoverage::ToEnd);
     utassert(endpoint.hasEntity && endpoint.hasContentKey &&
              endpoint.contentKey.Value() == 77);
@@ -323,13 +323,11 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
 
     Bounds firstText[] = {{20, 0, 100, 20}};
     TextSelectionRegistration firstRegistration =
-        TextSelectionRegistration::New({20, 0, 100, 20},
-                                       {20, 0, 100, 20})
+        TextSelectionRegistration::New({20, 0, 100, 20}, {20, 0, 100, 20})
             .WithDocumentOrder(10)
             .WithTextBounds(firstText, 1);
     TextSelectionRegistration secondRegistration =
-        TextSelectionRegistration::New({20, 40, 100, 20},
-                                       {20, 40, 100, 20})
+        TextSelectionRegistration::New({20, 40, 100, 20}, {20, 40, 100, 20})
             .WithDocumentOrder(20)
             .WithScrollOffset({0, 2});
     utassert(firstRegistration.documentOrder == 10 &&
@@ -337,8 +335,7 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
     utassert(secondRegistration.scrollOffset.y == 2);
 
     TextSelectionHandle first = TextSelectionHandle::New(StrL("first"), &app);
-    TextSelectionHandle second =
-        TextSelectionHandle::New(StrL("second"), &app);
+    TextSelectionHandle second = TextSelectionHandle::New(StrL("second"), &app);
     TextSelectionHandle outside =
         TextSelectionHandle::New(StrL("outside"), &app);
     first.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
@@ -355,8 +352,7 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
     first.Register(firstRegistration, &win, &app);
     second.Register(secondRegistration, &win, &app);
     outside.Register(
-        TextSelectionRegistration::New({20, 80, 100, 20},
-                                       {20, 80, 100, 20})
+        TextSelectionRegistration::New({20, 80, 100, 20}, {20, 80, 100, 20})
             .WithDocumentOrder(30),
         &win, &app);
 
@@ -371,22 +367,22 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
     utassert(secondSnapshot.Coverage() == TextSelectionCoverage::FromStart);
     utassert(firstSnapshot.Anchor().entity == first.Entity());
     utassert(firstSnapshot.Cursor().entity == second.Entity());
-    utassert(firstSnapshot.Anchor().hasContentKey &&
-             firstSnapshot.Cursor().hasContentKey);
+    utassert(firstSnapshot.Anchor().hasContentKey && firstSnapshot.Cursor()
+                                                         .hasContentKey);
     utassert(observed->focused == 1 && observed->autoScroll > 0);
 
     char selected[64];
-    int selectedLen =
-        TextSelection::SelectedText(&win, &app, selected, (int)sizeof(selected));
+    int selectedLen = TextSelection::SelectedText(&win, &app, selected,
+                                                  (int)sizeof(selected));
     utassert(StrEq(Str(selected, selectedLen), "first\nsecond"));
     utassert(TextSelection::HasSelection(&win, &app));
     WindowSelectionRelease(&win);
-    utassert(first.Snapshot(&app, &firstSnapshot) &&
-             !firstSnapshot.IsSelecting());
+    utassert(first.Snapshot(&app, &firstSnapshot) && !firstSnapshot
+                                                          .IsSelecting());
     outside.CopyWith(&ParticipantCopy, nullptr, &app);
     outside.SetLocalSelection(true, &app);
-    selectedLen =
-        TextSelection::SelectedText(&win, &app, selected, (int)sizeof(selected));
+    selectedLen = TextSelection::SelectedText(&win, &app, selected,
+                                              (int)sizeof(selected));
     utassert(StrEq(Str(selected, selectedLen), "first\nsecond\ncustom"));
     outside.SetLocalSelection(false, &app);
 
@@ -423,14 +419,12 @@ static void FrameSweepDropsOnlyRegistrationsNotRenewed() {
 
     TextSelectionHandle current =
         TextSelectionHandle::New(StrL("current"), &app);
-    TextSelectionHandle stale =
-        TextSelectionHandle::New(StrL("stale"), &app);
+    TextSelectionHandle stale = TextSelectionHandle::New(StrL("stale"), &app);
     current.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
     stale.Subscribe(&cx, &SelectionParticipantHarness::OnEvent);
     stale.ClearWith(&ParticipantClear, observed, &app);
     TextSelectionRegistration registration =
-        TextSelectionRegistration::New({0, 0, 100, 20},
-                                       {0, 0, 100, 20});
+        TextSelectionRegistration::New({0, 0, 100, 20}, {0, 0, 100, 20});
     current.Register(registration.WithDocumentOrder(1), &win, &app);
     stale.Register(registration.WithDocumentOrder(2), &win, &app);
     stale.SetLocalSelection(true, &app);
@@ -452,8 +446,127 @@ static void FrameSweepDropsOnlyRegistrationsNotRenewed() {
     EntityDropAll(&app);
 }
 
+// selectable_text.rs wrapped_selection_paints_full_width_middle_lines: a
+// selection that spans lines is the tail of the first, the whole of the ones
+// between and the head of the last.
+static bool SameSelectionBounds(Bounds a, Bounds b) {
+    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+}
+
+static void WrappedSelectionPaintsFullWidthMiddleLines() {
+    Bounds bounds = {10, 20, 100, 100};
+    Bounds quads[3] = {};
+    int n = SelectionQuadBounds({40, 20}, {30, 80}, bounds, 20, quads);
+    utassert(n == 3);
+    utassert(SameSelectionBounds(quads[0], {40, 20, 70, 20}));
+    utassert(SameSelectionBounds(quads[1], {10, 40, 100, 40}));
+    utassert(SameSelectionBounds(quads[2], {10, 80, 20, 20}));
+
+    // One line is one quad, from the start to the end of the run.
+    n = SelectionQuadBounds({40, 20}, {90, 20}, bounds, 20, quads);
+    utassert(n == 1);
+    utassert(SameSelectionBounds(quads[0], {40, 20, 50, 20}));
+
+    // Two adjacent lines have no middle band between them.
+    n = SelectionQuadBounds({40, 20}, {30, 40}, bounds, 20, quads);
+    utassert(n == 2);
+    utassert(SameSelectionBounds(quads[0], {40, 20, 70, 20}));
+    utassert(SameSelectionBounds(quads[1], {10, 40, 20, 20}));
+}
+
+// selectable_text.rs explicit_handle_constructor_preserves_document_contract:
+// a run built on a shared handle joins that document in the order it names,
+// and a local one owns its own selection.
+static void SelectableTextJoinsTheDocumentItsHandleOwns() {
+    App app;
+    Window win;
+    win.app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, &win, arena, {}};
+
+    TextSelectionHandle handle =
+        TextSelectionHandle::New(StrL("alpha beta"), &app);
+    SelectableText* shared = SelectableText::WithHandle(
+        &cx, StrL("plain"), handle, StrL("alpha beta"));
+    utassert(shared->hasHandle && shared->DocumentOrder(42)
+                                          ->documentOrder == 42);
+    El* joined = shared->IntoEl();
+    utassert(joined && joined->selectable);
+    utassert(joined && joined->selectionOwner == handle.Entity());
+
+    SelectableText* local =
+        SelectableText::New(&cx, StrL("local"), StrL("alpha beta"));
+    utassert(!local->hasHandle);
+    El* own = local->TextStyle(14, RgbaHex(0x171717))->IntoEl();
+    utassert(own && own->selectable && !own->selectionOwner.IsValid());
+    utassert(own && own->style.fontSize == 14);
+
+    ArenaDelete(arena);
+    WindowSelectionFree(&win);
+    EntityDropAll(&app);
+}
+
+// text_selection.rs drag_auto_scroll_stops_when_the_content_mask_collapses:
+// a scrollable ancestor clipped away mid-drag leaves an empty clamp range, so
+// the drag must stop scrolling rather than run on the last delta.
+struct AutoScrollObserver {
+    int running = 0;
+    int stopped = 0;
+
+    static void OnEvent(AutoScrollObserver* self, Ctx*,
+                        const TextSelectionEvent* event) {
+        if (event->kind != TextSelectionEventKind::AutoScroll) {
+            return;
+        }
+        if (event->hasAutoScroll) {
+            self->running++;
+        } else {
+            self->stopped++;
+        }
+    }
+};
+
+static void DragAutoScrollStopsWhenTheContentMaskCollapses() {
+    App app;
+    Window win;
+    win.app = &app;
+    Arena* arena = ArenaNew();
+
+    Entity<AutoScrollObserver> viewer =
+        EntityNewState<AutoScrollObserver>(&app);
+    AutoScrollObserver* observed = viewer.Get(&app);
+    TextSelectionHandle handle = TextSelectionHandle::New(StrL("text"), &app);
+    Ctx cx = {&app, &win, arena, viewer.id};
+    Subscription sub = handle.Subscribe(&cx, &AutoScrollObserver::OnEvent);
+    (void)sub;
+
+    AddRun(&win, 0, "alpha beta", 0);
+    Bounds visible = {0, 0, 100, 40};
+    handle
+        .Register(TextSelectionRegistration::New(visible, visible), &win, &app);
+    WindowSelectionPress(&win, 1, 1, 1, false);
+    WindowSelectionDrag(&win, 1, 60);
+    utassert(observed->running > 0);
+
+    // The ancestor collapsed: the refreshed registration carries an empty
+    // content mask, and the next drag stops the auto scroll.
+    int before = observed->stopped;
+    Bounds collapsed = {0, 0, 100, 0};
+    handle.Register(TextSelectionRegistration::New(collapsed, collapsed), &win,
+                    &app);
+    WindowSelectionDrag(&win, 1, 60);
+    utassert(observed->stopped > before);
+
+    WindowSelectionFree(&win);
+    ArenaDelete(arena);
+    EntityDropAll(&app);
+}
+
 void TestTextSelection() {
     TestSuite("text_selection");
+    WrappedSelectionPaintsFullWidthMiddleLines();
+    SelectableTextJoinsTheDocumentItsHandleOwns();
+    DragAutoScrollStopsWhenTheContentMaskCollapses();
     ADragThatNeverTouchesTextPublishesNothing();
     StartingInTheMarginAndDraggingOntoTextSelects();
     OnceItHasTouchedTextItStays();

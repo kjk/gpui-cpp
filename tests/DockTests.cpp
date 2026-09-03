@@ -9,6 +9,18 @@
 
 #include "Test.h"
 
+// What `window.subscribe(&area, ..)` is here: an entity the state's one event
+// listener reports LayoutChanged to.
+struct DockEventCounter {
+    int layoutChanges = 0;
+
+    static void OnEvent(DockEventCounter* self, Ctx*, const DockEvent* ev) {
+        if (ev && ev->kind == DockEventKind::LayoutChanged) {
+            self->layoutChanges++;
+        }
+    }
+};
+
 static void TheFiveDropZones() {
     Bounds b = {0, 0, 200, 100};
     // Left of 35%, right of 65%, then the same two thresholds vertically —
@@ -273,8 +285,7 @@ static void ALayoutSurvivesDumpAndLoad() {
         state.nodes[state.nodes[state.center].children[0]];
     utassert(first.kind == PanelInfoKind::Tabs);
     utassert(first.activeIndex == 1);
-    utassert(
-        StrEqI(state.nodes[first.children[0]].panelName, "AlphaPanel"));
+    utassert(StrEqI(state.nodes[first.children[0]].panelName, "AlphaPanel"));
     utassert(state.left.present && !state.left.open);
     utassertnear(state.left.size, 210.f);
 
@@ -332,8 +343,7 @@ static void APanelNothingAnswersToBecomesInvalid() {
     DockAreaState again;
     DockDump(&s, &again);
     const PanelStateNode& group = again.nodes[again.center];
-    utassert(StrEqI(again.nodes[group.children[1]].panelName,
-                    "GitGraphPanel"));
+    utassert(StrEqI(again.nodes[group.children[1]].panelName, "GitGraphPanel"));
     ArenaDelete(arena);
 }
 
@@ -856,7 +866,107 @@ static void TwoAreasHaveTwoSplitHandles() {
     EntityDropAll(&app);
 }
 
+// a_dock_is_its_own_width_under_a_renderer_that_draws_no_chrome.
+//
+// A dock's box is base's, not its renderer's. The extent used to live in the
+// themed skin's `dock` hook, so it was reachable only through that one
+// renderer, and a null hook hands the content straight back. A dock that
+// never states its extent is not a column beside the centre: it takes
+// whatever the row gives it and the panes inside shrink to their content.
+// Nothing failed, and nothing said why.
+static void ADockIsItsOwnWidthUnderARendererThatDrawsNoChrome() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    win->paint.app = &app;
+    win->paint.window = win;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+
+    Entity<DockState> state = EntityNewState<DockState>(&app);
+    DockState* s = state.Get(&cx);
+    int a = 0, b = 0;
+    Seed(s, &a, &b);
+    // The right dock holds its own group, at a width of its own.
+    int dockNode = DockNewTabs(s);
+    DockTabsAdd(s, dockNode, 0);
+    s->right.node = dockNode;
+    s->right.open = true;
+    s->right.SetSize(200);
+
+    // The bare renderer: every hook null, which is the position every
+    // renderer that is not the themed skin starts from.
+    El* area = DockArea::New(&cx, StrL("area"), state, nullptr);
+    const RuntimeStyle& th = RuntimeStyleNow(&app);
+    LayoutEl(&win->paint, area, 0, 0, 800, 600, th.fontSize, th.foreground);
+
+    // The right dock has to be its own width, not the area's, and the centre
+    // has to be what the docks leave.
+    utassertnear(s->right.GetSize(), 200.f);
+    El* dock = area->first;
+    utassert(dock != nullptr);
+    // The area is a row: centre first, then the right dock beside it.
+    El* right = area->first;
+    while (right && right->next) {
+        right = right->next;
+    }
+    utassert(right != nullptr);
+    utassertnear(right->w, 200.f);
+    utassertnear(right->h, 600.f);
+    utassertnear(area->first->w, 600.f);
+    // A group has to fill its slot, or its panel gets no height.
+    utassertnear(area->first->h, 600.f);
+
+    WindowKeyedFree(win);
+    ArenaDelete(arena);
+    delete win;
+    EntityDropAll(&app);
+}
+
+// dock_size_change_emits_one_layout_event: only an effective size change is
+// persisted, so setting a dock to the width it already has neither redraws
+// nor announces.
+static void ADockSizeChangeEmitsOneLayoutEvent() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+
+    Entity<DockState> state = EntityNewState<DockState>(&app);
+    DockState* s = state.Get(&cx);
+    int a = 0, b = 0;
+    Seed(s, &a, &b);
+    int dockNode = DockNewTabs(s);
+    DockTabsAdd(s, dockNode, 0);
+    s->left.node = dockNode;
+    s->left.SetSize(200);
+
+    Entity<DockEventCounter> counter = EntityNewState<DockEventCounter>(&app);
+    s->onEvent = ListenTo(counter, &DockEventCounter::OnEvent);
+
+    DockSetDockSize(s, &cx, DockPlacement::Left, 320);
+    DockSetDockSize(s, &cx, DockPlacement::Left, 320);
+    utassertnear(s->left.GetSize(), 320.f);
+    utassert(counter.Get(&app)->layoutChanges == 1);
+
+    // A size the Dock clamps back to where it already was is not a change
+    // either: the minimum is what it lands on both times.
+    DockSetDockSize(s, &cx, DockPlacement::Left, 1);
+    utassertnear(s->left.GetSize(), kDockPanelMinSize);
+    utassert(counter.Get(&app)->layoutChanges == 2);
+    DockSetDockSize(s, &cx, DockPlacement::Left, 2);
+    utassert(counter.Get(&app)->layoutChanges == 2);
+
+    WindowKeyedFree(win);
+    ArenaDelete(arena);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestDock() {
+    ADockIsItsOwnWidthUnderARendererThatDrawsNoChrome();
+    ADockSizeChangeEmitsOneLayoutEvent();
     TheFiveDropZones();
     ThePlaceholderCoversEachZone();
     ADropInTheMiddleMerges();

@@ -1595,8 +1595,13 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
         }
         ellipsized = true;
     }
-    D2D1_DRAW_TEXT_OPTIONS opt =
-        clip ? D2D1_DRAW_TEXT_OPTIONS_CLIP : D2D1_DRAW_TEXT_OPTIONS_NONE;
+    // Not D2D1_DRAW_TEXT_OPTIONS_CLIP: it cuts to the layout box, whose
+    // height is the line box, and a descender's ink runs below a line box of
+    // relative 1.0 — which is what hid the tails of "g" and "y". The trimming
+    // sign above already ends the run at its width, and the element-level
+    // clip still bounds it horizontally, so the ellipsis survives without the
+    // `overflow_hidden` upstream dropped.
+    D2D1_DRAW_TEXT_OPTIONS opt = D2D1_DRAW_TEXT_OPTIONS_NONE;
     ctx->rt->rt->DrawTextLayout(D2D1::Point2F(x, y), layout, b, opt);
     if (ellipsized) {
         DWRITE_TRIMMING none = {DWRITE_TRIMMING_GRANULARITY_NONE, 0, 0};

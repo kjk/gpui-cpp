@@ -9,6 +9,8 @@ namespace gpui::shell {
 constexpr const char* kShellVersion = "0.1.0";
 constexpr const char* kShellManifestFile = "gpui-shell.json";
 constexpr int kShellMaxManifestBytes = 1024 * 1024;
+// `default_dependency_entry` in crates/shell/src/plugin.rs.
+constexpr const char* kGitDependencyDefaultEntry = "index.js";
 
 struct PluginHttpGrant {
     Str scheme;
@@ -20,6 +22,17 @@ struct PluginHttpGrant {
     Vec<Str> pathPrefixes;
 };
 
+// One JavaScript package fetched from Git before an application starts.
+struct GitDependency {
+    Str name;
+    Str git;
+    Str branch;
+    Str tag;
+    Str entry;
+    Str reference;
+    bool packageEntry = false;
+};
+
 struct PluginManifest {
     Arena* arena = nullptr;
     Str id;
@@ -27,6 +40,8 @@ struct PluginManifest {
     Str version;
     Str shellVersion;
     Str entry;
+    // Sorted by name, the order Rust's BTreeMap iterates.
+    Vec<GitDependency> dependencies;
     Vec<Str> readRoots;
     Vec<Str> writeRoots;
     Vec<Str> execute;
@@ -56,8 +71,7 @@ void PluginManifestSchema(StrBuilder* out);
 // <data-home>/gpui-shell/apps/<path identity>.
 Str ShellDataHome();
 Str ShellBundleIdForPath(Str root);
-Str ShellAppDataDirectory(Str id, Arena* arena,
-                          ShellError* error = nullptr);
+Str ShellAppDataDirectory(Str id, Arena* arena, ShellError* error = nullptr);
 
 struct PluginDiscovery {
     PluginManifest* manifest = nullptr;

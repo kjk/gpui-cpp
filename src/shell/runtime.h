@@ -28,6 +28,9 @@ class ShellRuntime {
                       ShellError* error = nullptr);
     ViewType* LoadApp(Str directory, Str entry, Policy* policy,
                       ShellError* error = nullptr);
+    // Rust's `new_isolated_with_dependency_store`: an empty root is the
+    // per-user Git dependency cache, and a test points this at its own.
+    void SetDependencyCacheRoot(Str root);
     ViewObject* Instantiate(ViewType* type, Window* window, App* app,
                             Policy* policy = nullptr,
                             ShellError* error = nullptr, EntityId view = {});
@@ -43,10 +46,12 @@ class ShellRuntime {
     bool DrainJobs(int limit = 1024, ShellError* error = nullptr);
     RuntimeMetrics ReadMetrics() const;
     void RecordMaterialize(uint64_t nanos);
+    void RecordStructure(bool repeated);
     int LiveCallbacks() const;
     int LiveEntities() const;
     int LiveNestedViews() const;
     int LiveTasks() const;
+    int LiveTemplates() const;
     shell::RetainedEntry* Retained(shell::EntityHandle handle) const;
     EntityId NestedView(shell::EntityHandle handle, App* app) const;
 
@@ -101,6 +106,9 @@ class ShellRuntime {
     El* DescribeDockChrome(Ctx* cx, shell::EntityHandle dock,
                            shell::DockChromeSlot slot, uint64_t key,
                            shell::CallbackId handler, Str payload);
+    void DispatchItemSecondaryClick(shell::CallbackId callback, Str key,
+                                    const MouseDownEvent& event,
+                                    Window* window, App* app);
     void DispatchInputEvent(shell::EntityHandle handle, const InputEvent& event,
                             Window* window, App* app);
     void DispatchSliderEvent(shell::EntityHandle handle,
@@ -108,9 +116,11 @@ class ShellRuntime {
                              App* app);
     void DispatchOtpEvent(shell::EntityHandle handle, const OtpEvent& event,
                           Window* window, App* app);
-    void RenderVirtualItems(shell::CallbackId render, shell::CallbackId getKey,
-                            shell::CallbackId onItemClick, int first, int end,
-                            Ctx* cx, El** out);
+    void RenderVirtualItems(shell::CallbackId render,
+                            shell::CallbackId getKey,
+                            shell::CallbackId onItemClick,
+                            shell::CallbackId onItemSecondaryClick, int first,
+                            int end, Ctx* cx, El** out);
 
   private:
     friend struct ShellRuntimeAccess;

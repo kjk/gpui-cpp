@@ -100,8 +100,10 @@ need the clone above. `bench/` is the port of `benches/benches/flexbox.rs`,
 [markdown-rs](https://github.com/wooorm/markdown-rs) at the version
 `crates/ui/Cargo.toml` asks for — currently `markdown = { version = "1.0.0",
 features = ["serde"] }`. It is the parser, not a reference: every
-`component::TextView` in this tree reads its mdast, the way
-`crates/ui/src/text/format/markdown.rs` reads the crate's.
+`TextView` in this tree reads its mdast, the way
+`crates/base/src/text/format/markdown.rs` reads the crate's. The renderer
+moved to `src/base/text.cpp` with the Rust module; `src/ui/text.h` is the
+façade that keeps `component::TextView` naming it.
 
 `src/markdown-mini/` is the size-oriented alternative selected by
 `GPUI_MARKDOWN=mini`. It shares `markdown.h` and `mdast.*` with the port but is

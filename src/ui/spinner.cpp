@@ -55,8 +55,17 @@ El* Spinner::IntoEl() {
     float dim = px > 0 ? px : UiIconPx(size);
     // Animation::new(speed).repeat(), whose delta is a whole turn:
     // `Transformation::rotate(percentage(delta))`.
-    float turn = MotionRepeat(cx, MotionId(StrL("spinner"), id),
-                              speed > 0 ? speed : kSpinnerPeriodMs, ease);
+    //
+    // Under reduced motion the spinner stands still and asks for no frame,
+    // which is what `reduced_motion_spinner_is_static_and_requests_no_frame`
+    // pins upstream. The check is here rather than in MotionRepeat because a
+    // repeat is not otherwise gated: the indeterminate progress bar decides
+    // for itself too, and a `with_animation` entrance still plays.
+    float turn = 0;
+    if (!MotionReduced()) {
+        turn = MotionRepeat(cx, MotionId(StrL("spinner"), id),
+                            speed > 0 ? speed : kSpinnerPeriodMs, ease);
+    }
     El* ic = IconEl(a, icon, dim)->Rotate(turn);
     if (hasColor) {
         ic->Fg(color);

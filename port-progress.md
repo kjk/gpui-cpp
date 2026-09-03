@@ -10370,6 +10370,950 @@ each pair with crate versions filled from the cmd/run.ts pins
 (<taffy-version>, <markdown-version>, <wry-version> beside
 <autocorrect-version>).
 
+## Upstream ingest after `6d07863f`: fps
+
+`e8f54ebf` reports CPU per core and memory as private, and adds the frame
+tail. Four things landed. **CPU** was divided by the core count here too, so
+100 meant the whole machine; the division is gone and
+`ResourceSample::cpuPercent` is on the single core scale `top`, Activity
+Monitor and Task Manager use, with `FpsFormatCpu` showing a tenth below ten and
+whole percent above — a UI thread pinning a core now reads 100%, not 4%.
+**Memory** was `PlatSelfUsage`'s resident set, which counts the read-only pages
+of every DLL the process maps. `SysSelfPrivateMemory` is the new seam in
+`src/sys/sysinfo.h`, one implementation per platform, each reading the counter
+its own activity monitor attributes per process:
+`PROCESS_MEMORY_COUNTERS_EX::PrivateUsage` through `GetProcessMemoryInfo` on
+Windows, `RssAnon` out of `/proc/self/status` on Linux (not `smaps_rollup`'s
+`Private_Dirty`, for the ~425us against ~5us reason the Rust gives),
+`ri_phys_footprint` through `proc_pid_rusage` with `RUSAGE_INFO_V2` on macOS,
+and a plain false on wasm, where a page publishes no such counter and the HUD
+stays on the linear heap. The fallback is Rust's: a platform that answers false
+leaves the reading on the resident set. **P95** and **INV** are the two new
+rows, and INV needed the runtime first — `FrameTiming` gained `invalidations`,
+counted by `AppInvalidate` on all four platform windows and taken by the next
+recorded frame, which is what GPUI's profiler counts under the same name.
+`FrameSample` replaces the bare float the sampler kept, so a retained frame now
+carries its draw time and its invalidation count. `FrameSamplerPercentileDraw`
+is `percentile_draw` at the nearest rank over a sorted copy,
+`FrameSamplerMeanInvalidations` is `mean_invalidations`, and INV is the one
+reading left ungraded, for the reason the Rust comment gives. Finally
+`ResourceHistory` averages the three resource readings over a trailing three
+second window (`RESOURCE_WINDOW`), on the worker side of the thread boundary
+where `ResourceProbeSample` already runs, with the GPU share averaged only over
+the readings that carried one so a gap in the counter does not read as a dip.
+
+`09333c32`'s one line is a `#[cfg(not(target_family = "wasm"))]` on
+`RESOURCE_WINDOW`, keeping the wasm build from warning on a constant it does
+not use. Nothing to port: `ResourceHistory` is compiled on every platform here
+and the wasm build reaches it through the same `ResourceProbe`, whose readings
+come from `PlatSelfUsage`'s tab-shaped answers rather than being cfg'd away.
+
+`d6c10c21`'s fps half exposes `continuous` and `frame_budget` through
+`fps_monitor()`, so an application can make its HUD passive rather than have it
+create the whole-window redraw loop it measures. `FpsOverlayOpts` is the
+overlay's builder as a POD — anchor, `frameBudget` (0 leaves the monitor's
+alone) and `continuous` (-1 leaves it) — and `FpsOverlayEl` applies the two to
+the entity before rendering it, which is what `FpsOverlay::render`'s
+`monitor.update` does. `FpsMonitorSetFrameBudget` and `FpsMonitorSetContinuous`
+are the setters, the budget resetting the chart's axis floor with it. Both
+`FpsOverlayEl` and `FpsMonitorEl` take the options with a default, so every
+existing caller — the story's HUD toggle, the editor's, `fps_monitor.cpp` — is
+unchanged. The shell half of that checkin is another package's.
+
+`598d85a2` grades a window that draws on demand by frame cost rather than by
+rate, adding `passive_fps_color` and a `dropped_ratio` that counts an overrun
+only when another redraw had already been coalesced into it; `ed76af28` reverts
+it whole the same day. Net zero, and neither is in the tree: the port carries
+the reverted-to shape, which is what `30ca3087` then builds on.
+
+`30ca3087` counts presented frames, stamped with their own present time. The
+rate was derived from drawn frames stamped with the moment the sampler read the
+trace, so a batch read late collapsed onto one instant and measured how often
+the HUD looked rather than how often the window presented. `FrameTiming` gained
+`presentAt` and the sampler keeps `presents[]` where it kept `arrivals[]`:
+`FrameSamplerIngest` splits a batch into draws and presents, `FrameSamplerFps`
+divides `n - 1` present intervals by the span they really cover, and
+`FrameSamplerPresentInterval` is the reciprocal behind the new **INTERVAL**
+row. The headline is graded against the target rate only in continuous mode;
+drawing on demand it is printed plain in the foreground colour, as the platform
+overlay prints it. **Where the runtime has no seam Rust does:** GPUI stamps
+`present_end` from inside its renderer, and nothing here sits under the swap
+chain, so `presentAt` is taken in `window_common.cpp` as `PaintTargetEnd`
+returns — after `paint_win.cpp`'s `Present`, the X11 flush, the CGContext
+flush, or the canvas draw of the `requestAnimationFrame` callback. It is the
+same clock and the same side of the present; what it cannot see is the
+compositor's own latency. A frame the scene found identical to the last one is
+not presented at all and carries `presentAt` negative, so it costs a draw time
+and delimits no interval — which is exactly what "presented, not drawn" means
+here.
+
+`0c746dff`'s fps bits swap `instant` for `web-time` in `Cargo.toml` and in four
+files' `use` lines, because GPUI stamps frames with `web_time::Instant` and the
+website's wasm build had been failing since #2919. Nothing to port: `TimeNow()`
+is one monotonic clock on all four platforms, and on wasm it is already the
+page's own — the crate split this port never had.
+
+The sampler tests came over into `tests/FpsTests.cpp` against the
+`FrameSamplerIngestDraws` / `FrameSamplerIngestPresents` seams, the two halves
+`FrameSamplerTick` drains into: the rate tests feed presents and the cost tests
+feed draws, the way the Rust tests do after `30ca3087`. New there: the
+present-time test (61 presents 10 ms apart, read in one batch 600 ms late,
+measure 100 fps and a 10 ms interval, then age out to zero), the four
+percentile tests, `invalidations_average_over_the_retained_frames`, the four
+`ResourceHistory` tests, `format_cpu` and `fps_color` from monitor.rs, and
+memory.rs' unit test — 64 MB of ballast touched a page at a time, the reading
+having to follow it by at least half, which is what separates bytes from
+kibibytes and from pages. Linux additionally asserts the identity `RssAnon <=
+VmRSS`. `ignores_frames_from_other_windows` still has no counterpart (ours is
+already per-window) and neither does lib.rs' `FrameTraceGuard` test, since the
+trace is always on here. 22155 checks pass, and the HUD shot shows the seven
+rows: the headline, INTERVAL, FRAME, P95, DROP/INV, GPU, CPU/MEM.
+## Upstream ingest after `6d07863f`: UI fixes
+
+`aa7def67` stops the table header lagging a frame behind arrow-key column
+navigation. Rust's `scroll_to_col` only recorded a deferred `scroll_to_item`
+on the horizontal handle the header and the rows share, and only the rows are
+a `VirtualList` that resolves it — the header prepainted first and read the
+stale offset. It now resolves the offset up front from the column widths and
+the viewport, keeping the deferred path as a pre-layout fallback. The C++
+already had that behavior structurally: `TableScrollToCol` writes
+`TableState::scrollX` at the call, through `VirtualListScrollToItem` on the
+scrollable columns' widths, and both the header row and the body read that one
+settled field while the frame is built. No C++ logic changed for this checkin.
+
+`a42a20de` exposes an accessibility label on the eight styled wrappers whose
+Base primitives already accepted an accessible name. Checkbox, ColorPicker,
+Radio and Switch fall back to their visible label and the explicit name
+replaces it; Progress, ProgressCircle, Select and Table name explicitly only,
+since a progress value, a caption, a placeholder and a selected value each
+describe the current value rather than the control. Nothing about what is
+drawn changes: the label field is untouched and only the announced name moves.
+The ported tests are in `tests/AccessibilityTests.cpp`, which collects each
+built element and reads the name off the semantic node rather than off the
+builder alone — `AccessibilityCollect` replaces what the previous call
+gathered, so each control is asserted against its own collection.
+
+`52693f2e` stops ticking the toast clock while nothing is mounted. The list
+armed its 50 ms interval when it was created, so every window paid twenty
+wakeups a second for the whole process whether or not a notification was ever
+shown, and `advance` had nothing to do in that state. `NotificationListState`
+now owns the clock — `isAdvancing`, the timer id and the window it is armed
+on — `NotificationPush` starts it and the tick that empties the manager stops
+it. `WindowNotifications` no longer arms anything, and
+`WindowLayers::notifyTimer` stays only for source compatibility. `push` is the
+only insertion point and the loop only ends at an instant when nothing is
+mounted, so a mounted toast always has a running clock; timing, interval and
+ordering are untouched.
+
+`ed6cd349` and `c6a68e0c` deduplicate the `ScaleBand` domain and then index it
+by value: Rust kept repeated domain entries, which halved the bands of a
+grouped bar chart and left the duplicate slots unaddressable, and the
+follow-up replaced the `Vec<T>` with a value-to-index map so the dedupe falls
+out of building it and `tick()` stops being a linear `position()` scan. This
+port's domain is a count, not a vector of values — a band is picked by index,
+which is what a caller walking its data already has — so there is nothing to
+deduplicate and nothing to look up, and the band arithmetic the two checkins
+deliberately left alone is the whole of what we have. `plot.h` says so at the
+type, and `test_scale_band_dedup` is ported in `tests/ScaleTests.cpp` against
+the three distinct values the dedupe leaves Rust with: the same ticks at 0, 30
+and 60, the same band width, and no index past the domain that answers.
+
+`d9c6a69e` fades the disabled switch's track instead of its thumb. Element
+opacity multiplies each primitive's alpha rather than compositing the subtree
+as one group, so fading the whole control lets the track show through the
+thumb; fading the track alone lands on the pixels a grouped fade would,
+because the thumb is the background colour. Both track fills now dim, not just
+the checked one, the thumb keeps its colour in every state, and the disabled
+switch mutes its label. The other half of upstream's disabled style,
+`cursor_not_allowed()`, has no seam here — `StateStyle` carries fills, borders
+and radii, not a cursor — so a disabled switch keeps the arrow; the comment at
+the spot says so.
+
+`19c21d7d` makes the column resize handle symmetric and big enough to catch.
+The handle was two pixels wide and sat entirely inside the column. Each
+boundary is now covered by two four-pixel bands, one in the head on either
+side, each built after that head's own cell so it sits above everything it
+overlaps — paint order decides which element is offered a drag, and a single
+straddling band would lose its outer half to the next column's cell, which
+starts a reorder. The trailing band keeps the negative margin that makes its
+net contribution to the header row zero and pins the hairline to the column
+edge; the leading one is absolute, so reaching back over the boundary costs
+the row no width. `OnResizeDrag` reads which of its edges is the boundary off
+the drag payload, since the two bands meet there from opposite sides.
+
+`f1539a3b` stops a column header drag crossing the fixed-columns boundary.
+`move_column` reorders `col_groups` without touching `fixed`, while rendering
+pins the first `fixed_left_cols_count()` columns as a prefix, so a
+cross-region drag left an unrelated column pinned and the dragged one carrying
+a stale flag. `TableDragGapAt` now takes the pinned count, resolves the
+dragged column's region from its index and the drop region from the pointer,
+and answers no gap when they differ; within a region the candidates are that
+region's columns alone. The ported regression is in
+`tests/DataTableTests.cpp`.
+
+`466e6da8` stops hover selection from scrolling the command list. Hover reused
+the keyboard path's `select`, which always revealed the selected row, and
+reinstalling the model scrolled to the preserved selection on every host
+re-render — so hovering a half-clipped edge row revealed it, slid the next row
+under the resting cursor, and scrolled in a loop. `SelectMatch` no longer
+records a pending scroll and neither does the preserved-selection branch of
+`CommandInstall`; `CommandSelectBy` asks for it on a real move, and
+`CommandSetSelectedIndex` still does. The ported regression in
+`tests/CommandTests.cpp` drives a pointer-style selection, reinstalls the
+model, and checks that nothing was queued while keyboard navigation still
+queues.
+
+`f001d800` keeps the autohide countdown running while the window is inactive.
+Activation says nothing about visibility — a toast raised on a side-by-side or
+second-monitor window stayed up until the window was clicked — and there is no
+occlusion state to ask instead; a message that must not be missed already asks
+for no autohide. Only stack expansion, hover or focus, pauses now. The test
+that locked the pause is replaced by one asserting an inactive window retires
+the toast, with the expansion pause kept on its own.
+
+`731e33c7` and `8be1a3b9` surface the whole ghost DropdownButton when either
+half is hovered and keep it surfaced while its menu is open. The two halves
+are now joined for every variant rather than rendering as two rounded buttons
+when a ghost split is unselected, and a crate-private hover group carries the
+rest: while any member is hovered an idle member shows its hover surface at
+half strength, and `hoverGroupHeld` holds that surface without a pointer.
+Rust names its groups; the group here is the nearest ancestor that asked to be
+one, which is the DropdownButton's own row, and the paint already consults a
+group only where the element's own hover and active have nothing to say —
+which is the order the two refinements are applied in, so it yields to
+selected, disabled and loading. A ghost button also now selects with its
+active surface instead of `secondary_active`, which sat too close to its hover
+to read as pressed. Rust reaches the menu's open state through new keyed state
+and a new `DropdownMenuPopover::on_open_change`; the C++ dropdown already owns
+that state in its `PopupMenuState`, so the split reads it directly and the
+callback has no counterpart here.
+
+`a75ba7d2` fixes sheet alignment against a client-decorated frame. A sheet was
+offset by the shadow padding alone, so it hung into the shadow on one side and
+left a border's gap on the other. `WindowContentInsets` is the new seam —
+`WindowPaddings` plus the frame's own border on every side it is not tiled
+against — and the sheet offsets and sizes itself to that instead. The C++
+sheet already placed itself with explicit `Top`/`Left` rather than the
+`anchored()` wrapper the checkin removes, so only the insets changed. The
+inset regression is in `tests/WindowBorderTests.cpp`.
+
+`29fbc4f5` aligns a settings field with its label: a horizontal item centers
+its two columns instead of starting them, and the text column drops the gap
+that pushed the description away from the title.
+
+`20f8a450` stops descenders being hidden on button and tab labels. GPUI's
+`truncate()` is `overflow_hidden` *and* `text_ellipsis`, and the first cut the
+ink of "g" and "y" at the line box, because a line box of relative 1.0 is the
+font size while a descender runs below it; upstream dropped the
+`overflow_hidden` and kept the ellipsis. Here the two were one flag:
+`Truncate` drives both the ellipsis and a paint-time clip, in the element
+paint and again inside each backend's `TextLayoutDraw`. All four now cut
+horizontally only — the width still ends the run, with a line box of slack
+above and below for the ink to finish in, and Direct2D drops
+`DRAW_TEXT_OPTIONS_CLIP` in favour of the trimming sign it already sets. Both
+the button label and the tab label go through that one path, so neither needed
+a change of its own.
+
+MSVC release tests pass 22,159 checks, and the release story and showcase
+targets build with `/W4 /WX`.
+## Upstream ingest after `6d07863f`: Base fixes, dock and scroll
+
+`2126cedc` adds `EditorState::unfold_at`, the public way to reveal a position
+before acting on it. `InputUnfoldAt` opens exactly the folded ranges that hide
+the given row and only those: a fold keeps its own first and last line
+visible, so a position on either opens nothing, nested folds all open because
+opening only the outermost would leave the position hidden, sibling folds stay
+shut, and the candidates stay so the gutter can fold the ranges again. The
+covering start lines are gathered before any of them is opened, since opening
+one takes it out of the list being walked. Rust takes an lsp `Position`; the
+row and byte column this tree spells a document position as are what the C++
+signature carries, clipped through the same offset round trip. The ported
+`test_unfold_at` pins all four cases plus the no-op on a field that is not a
+folding code editor.
+
+`67b7a22c` blocks the mouse behind an anchored popup. `Positioner` grows the
+opt-in `Occlude()`, off by default because `TooltipPositioner` shares it and a
+tooltip that swallowed the pointer would un-hover the very trigger keeping it
+open, and `Popup` turns it on so no caller has to remember — which covers
+Popover, the dropdown menu over it and HoverCard in one place. Rust inserts a
+`BlockMouse` hitbox at the resolved bounds during prepaint, ahead of the
+children; the equivalent here is `StopMouseDown` on the surface, because a box
+that stops the press records its hit rect before its children record theirs,
+so the popup's own content still hears the pointer and the panel underneath
+does not. `the_popup_surface_blocks_the_panel_it_covers` asserts both halves
+and that a bare positioner still does not occlude.
+
+`df1d07b2` restores the overlay behind an open dialog. Rust's `Dialog` hands
+its backdrop to a wrapper `div()` that exists only to carry
+`on_any_mouse_down`, and that wrapper collapsed to zero height, taking the
+backdrop's `size_full()` and its hitbox with it; the fix gives the wrapper
+`absolute().inset_0()`. The C++ dialog has no such wrapper — the backdrop is a
+direct child of the full-window host, and the themed layer hands it the
+viewport box outright — so the fault cannot occur here and no logic changed.
+`the_backdrop_fills_the_host` pins the property the Rust fix restores: the
+host covers the window, and a backdrop that asks to fill measures the whole
+viewport.
+
+`c5ade488` paints decoration backgrounds in the editor. The C++ element
+already did: an editor row hands its composed spans to the text element, and
+the wash pass under the glyphs fills every span carrying a background, ahead
+of the indent guides, the selection and the text. Rust needs a new
+`LineLayout::paint_background` and a per-line `has_background` flag only
+because gpui's `ShapedLine::paint` draws glyphs, underlines and strikethroughs
+and nothing else; the equivalent skip here is the per-span alpha test, which
+costs nothing on a line with no highlight. No logic changed, and the
+equivalence is now stated beside that loop.
+
+`a3f7bb26` keeps the resize handle's divider line from being crushed to zero.
+Rust's handle combines a fixed main-axis size with padding on the same axis,
+so its content area resolves to zero and the shrinkable 1px line disappears;
+`flex_none()` is the fix. The C++ handle centres its line with `justify`
+rather than with padding, so the crush never happened, but the line now says
+`FlexNone()` outright so that stays true whatever the handle's box becomes.
+
+`5cb09462` resolves a tiles resize by pointer travel and keeps the handles
+hittable. The travel half was already right here: `TilesUpdateResize` has
+always derived the moving edge from the pointer's distance from
+`resizeInitialMouse` applied to `resizeInitialBounds`, never from the
+pointer's position, which is the fault Rust fixes by replacing `last_position`
+with `start_position`. `ResizeDrag` is renamed to match and grows the source's
+accessors, dropping `WithLastPosition`. The skin's two visual halves are
+ported: the tile frame drops its clip, because the resize handles hang past
+the tile's edge and a content mask cut their hit areas down to the sliver
+inside it, and a painted title bar now rounds its own top corners since the
+frame no longer clips it. The extra pixel each non-zoomed tile grows by rides
+on the size here rather than on a minimum, because this skin sizes the frame
+itself instead of having base pin it afterwards.
+`a_resize_tracks_the_pointer_travel_not_its_window_position` drives a resize
+with the pointer far from the tile's canvas bounds; its second assertion is
+the same arithmetic as upstream's against this port's `GRID_SIZE` of eight
+rather than the ten its story uses.
+
+`27b08eca`'s base and UI half moves the dock's structure out of the skin and
+into base, which is the whole point of it. `CLOSED_BOTTOM_STRIP`,
+`dock_extent` and `dock_frame` are now `kClosedBottomStrip`, `DockExtent` and
+`DockFrame`; base asks for a dock's extent itself, draws nothing for one with
+no extent, and wraps whatever the skin's chrome hook returns in the box that
+makes a dock a column beside the centre rather than a block in the flow below
+it. The area frame is a row and the centre frame a flex column with the bottom
+dock stacked under it, both applied around the hooks rather than inside them,
+so a renderer with every hook null now gets a dock area the right shape. A tab
+group is a column that fills its slot and floors its content region at zero,
+which is what stops a virtualized list measuring itself against every row.
+`DockSetDockSize` persists only an effective change and emits one
+`LayoutChanged` for it. The themed skin loses the boxes it used to carry and
+keeps its backgrounds, its padding, the resize strip and the border. Two tests
+come over: `a_dock_is_its_own_width_under_a_renderer_that_draws_no_chrome`
+lays out an area through the bare renderer and checks the dock is its own
+width and the centre what the docks leave, and
+`dock_size_change_emits_one_layout_event` covers the repeat and the clamped
+repeat. The three one-line button/tabs/toggle changes are Rust borrow-checker
+noise in test code with no C++ counterpart.
+
+`39c2c86d`'s base and UI half is the `h_flex` cross-axis rule and the scroll
+region's minimum. `HFlex` and `VFlex` carry the source's new doc comments,
+including the one case where a row of full-height columns has to say so
+itself. `h_flex_centers_and_v_flex_stretches_on_the_cross_axis` is ported to
+tests/SizingTests.cpp with the module added to the audit's `testTargets` as
+`base/styled`: a shorter child of a hundred-pixel row sits at thirty, a taller
+one at minus twenty with its header off the top edge, a height-less one keeps
+its content height, and a width-less child of a column does fill. The
+scrollable's own fix does not apply — Rust wraps the caller's element and so
+had to declare the scrolled axis clipped on the wrapper, while here
+`Scrollbar::Apply` puts the overflow on the caller's element itself, which is
+already a scroll container whose automatic minimum CSS puts at zero — and
+`a_scrollable_flex_item_shrinks_below_its_content` ports all three upstream
+cases (vertical, horizontal, and an explicit minimum surviving) to prove it.
+The accordion's `Arc` to `Rc` change is a Rust thread-safety detail with no
+counterpart in a `Listener`, and `Root`'s new `debug_selector` on the dialog
+layer is a Rust test affordance this tree has no seam for; RootTests already
+covers the layer's behaviour directly.
+
+`ba3433f0` is documentation only, and its `h_flex` clarification is mirrored
+in the same doc comments above.
+
+Verification: MSVC release story, showcase, dock and editor all build with
+`/W4 /WX`, and the release suite passes 22,164 checks.
+## Upstream ingest after `6d07863f`: NavStack
+
+`0c746dff` adds `crates/base/src/nav_stack.rs` — a stack of views, one visible
+at a time, built on `History`. It is ported whole as `src/base/nav_stack.h` and
+`nav_stack.cpp`, with the showcase page beside it and the crate's own tests in
+`tests/NavStackTests.cpp`.
+
+`History` moved first, because the checkin gives it what a navigation history
+needs. `Push` now clears the redo side — a push after an undo starts a new
+branch, as a browser drops its forward pages — and no longer retains against
+the redos under `unique`; `Current`, `ReplaceCurrent` and `Retain` are new.
+`Retain` takes a function pointer plus the user pointer Rust's `impl
+FnMut(&I) -> bool` would have captured. The three new upstream tests are
+ported, and the two existing ones follow the branch-dropping rewrite: the old
+C++ test that pinned "push does not clear redos" is gone with the behavior it
+pinned.
+
+`AnyView` is an `EntityId` here — `EntityRender` is the whole of what the stack
+needs a view for — so `NavEntry` is `{EntityId view; uint64_t version;}` with
+identity equality, which is the Rust struct exactly. `NavStackState` is a state
+entity (`NavStackStateNew` stamps its own handle on it so it can emit before
+anything has rendered it); `NavStackPush` / `Pop` / `PopToRoot` / `Forward` /
+`Replace` / `Clear` take `Ctx*` first and emit `NavStackEvent` to the stack's
+subscribers, notifying the stack rather than the view that called in, which is
+what `stack.update(cx, ..)` does over there. Rust's `Option<AnyView>` returns
+are an invalid `EntityId`; `Option<(AnyView, usize)>` is the `bool` plus
+out-params pair; `Vec<AnyView>` from `pop_to_root` is a `Vec<EntityId>`,
+reversed the same way.
+
+The element is `NavStack::New(cx, state)->Transition(..)->Item(fn, user)
+->IntoEl()`, and what `IntoEl` answers is the El the caller styles — size,
+clipping and border are the application's, as in Rust. A `NavPage` carries its
+view, index, phase, operation and eased progress plus the El the stack already
+built for it (absolute, filling the container, the view as its child); the item
+function refines that El and hands it back, which is `page.left(relative(..))`
+in the Rust showcase. Paint order is upstream's — a pushed or replacing page
+covers, a popped page reveals — and the item function is called in that order,
+not construction order. While a change runs an occluding box (`StopMouseDown`,
+which is gpui's `occlude()`) sits over both pages.
+
+**What had to be stubbed.** `nav_stack.rs` samples `motion::Presence`, which
+belongs to upstream's new layered motion core; `src/base/motion.*` is being
+rewritten from it in parallel and does not carry `Presence` or `PresencePhase`
+yet. So `PresencePhase` sits in `nav_stack.h` behind
+`#ifndef GPUI_MOTION_PRESENCE_PHASE_` — the guard lets the real one land in
+`motion.h` in either order — and `presence.rs`'s sampler is written out as a
+file-static `NavSamplePresence` in `nav_stack.cpp` over the existing
+`MotionSlot` / `MotionNow` / `MotionWantsFrame` seams. It is the Rust algorithm
+line for line, reversing factor included: a sample reports the presence *value*
+(1 present, 0 absent), an interrupted change reverses over a duration shortened
+by however far it had got, and a zero duration is finished on the frame that
+starts it — which is what makes an immediate change gone after the frame that
+draws it. The comment at the top of that block names what it should call once
+the motion rewrite lands, and nothing outside the file reads it.
+
+The showcase page is `examples/showcase/nav_stack.cpp`, a `SHOWCASE_PAGE`
+translation unit like its neighbours: `ScNavPage` is an entity per page holding
+its depth and the stack, so its own Push / Replace / Pop / Forward buttons act
+on the stack it lives in, and the trail is `Depth()` plus `ForwardCount()` with
+the pages ahead greyed. `ScNavSlide` is upstream's `slide` — a pushed page in
+from the right, the page underneath drifting `-0.3`. `nav-stack` is in the
+component enum and slug table, alphabetically after `link` as upstream orders
+it.
+
+**Deliberately not ported.** `crates/base/examples/showcase/mod.rs`'s shell
+rewrite — the checkin also rebuilds the showcase's own overview/component
+navigation on a second `NavStackState`, with a Back/Forward bar and a
+`ComponentPage` view per component. That is a restructure of the whole
+`showcase.cpp` render, and two other packages are editing the same file in this
+round; it is left for the integrator, and this hunk is only the page and its
+registration. `crates/base/src/styled.rs`'s one line is a Rust compile fix (a
+stray `centred` token) with no C++ counterpart, and `crates/fps`'s
+`instant` → `web-time` swap is another package's.
+
+Verification: MSVC release showcase and story build under `/W4 /WX`, the
+release suite passes 22,199 checks, and the page was shot at each of push, pop
+and forward — the trail, the alternating page fill and the conditional Pop and
+Forward buttons match the Rust page.
+## Upstream ingest after `6d07863f`: motion core
+
+`09333c32` replaces the small keyed-transition module with a layered motion
+core, and moves the styled components off the per-component constants they
+each carried onto one semantic scale. All of it is here.
+
+`crates/base/src/motion.rs` and its six submodules are one C++ file per Rust
+module directory, as the map says: `src/base/motion.h` and `.cpp` now carry
+`Easing` (the CSS keyword curves, `cubic_bezier`, `steps` with all four jump
+positions, and `linear()` stops with their omitted inputs filled in),
+`Timing` (a signed delay, a duration, finite or infinite iterations, the four
+playback directions and an easing, sampled into a `TimingSample`),
+`Keyframes` and `Discrete`, `Stagger`, `Presence`, `MotionReveal`, the
+`MotionStatus` a transition reports, `MotionTransform`, and
+`animate_keyframes`. Rust's `Result` is a `MotionResult<T, E>` the caller
+asks rather than unwraps, since a checked builder cannot throw here;
+`Spring::with_damping` and `with_epsilon` keep the spring they had where Rust
+panics, and `try_with_*` is the form for a value that is not a constant.
+`Keyframes` borrows the array it was validated against instead of owning an
+`Arc<[Keyframe<T>]>`, so a track built on the frame arena costs nothing to
+sample and the steady paths allocate as little as Rust's do.
+
+The transition rule itself gained the part it was missing: a *direct*
+reversal now shortens the return to the fraction of the curve it had actually
+travelled, through the `reversing_factor` and the per-run duration upstream
+keeps beside `from` and `target`. A reversal halfway through a 100 ms open
+closes in 50 ms rather than in 100, which is what
+`a_direct_reversal_shortens_the_return_transition` pins. `MotionProgress`
+also answers a `MotionStatus` now — Idle, Delayed, Running, Finished — and a
+frame is requested for exactly the two middle ones, which is what lets
+`Presence` keep a surface mounted through its exit and drop it on the first
+Finished.
+
+`MotionReveal` is the measured, clipped vertical reveal, and it is the
+element `AnimatedAccordionPanel` used to be: the themed accordion hands its
+panel to it now, and the base `Collapsible` grows a `Reveal(id, progress)`
+that keeps closed content mounted, which is what the themed `Collapsible`'s
+new `MotionId(id)` drives through `spring_control`. The one difference from
+Rust is where the measurement lands: `with_element_state` reads the child's
+height inside prepaint, while an `El` reports its own box after layout, so
+the frame that notices a new natural height is the next one — and it is asked
+for, exactly as Rust's prepaint asks. `MotionRevealStateOf` is the seam that
+makes the rule testable without a real layout pass.
+
+`crates/ui/src/theme/motion.rs` is `MotionTokens` on `Theme`, with the
+durations, three cubic-Bézier curves and two springs written out. Rust's two
+`Rems` distances are the DIPs a 16 px root resolves them to. Every component
+the checkin migrated reads them now: the accordion panel, the checkbox tick
+and the slider's thumb ring take `spring_control`; the switch thumb and the
+tab indicator take `spring_move`; both progress indicators take
+`duration_normal` along `easing_move`. Three of those changed numbers, which
+is the point of a shared scale — the switch thumb travels over a 280 ms
+response at damping 0.85 where it used to be 180 ms critically damped, and
+the accordion panel and the slider ring both land on 180 ms. The dock drop
+placeholder is the one that reads its policy from neither: this port put the
+indicator in the Base dock area, and `spring_move.with_epsilon(0.5)` is
+written out there rather than reaching from `crates/base` into a `crates/ui`
+token.
+
+`spinner.rs` gained only a test upstream, and it is the one place where the
+behaviour had to move: a reduced-motion spinner is static now and asks for no
+frame. The check is at the spinner rather than inside `MotionRepeat`, because
+a repeat is not otherwise gated here — the indeterminate progress bar already
+decided for itself, and a `with_animation` entrance still plays. Everything
+else about `MotionRepeat` and `MotionAppear` is unchanged.
+
+`crates/base/examples/shared/palette.rs` is `examples/showcase/palette.h`,
+header-only so the two example binaries each compile their own copy the way
+Rust's `#[path]` module does. Both palettes and the whole `resolve` table are
+value for value from upstream, and the showcase's existing `Sc*` helpers go
+through it now, so all 226 colour literals across the pages resolve through
+one table instead of being written twice. What has no counterpart is
+`Window::appearance()` and `observe_window_appearance`: this tree reads the
+desktop's light/dark setting only in `window_win.cpp`, for the DWM frame, and
+there is no portable seam for it — so the palette is activated from the theme
+mode the example sets, which is what chooses light or dark for the rest of
+the window anyway. `refresh_editor_styles` has nothing to refresh here: the
+C++ showcase never set `InputEditorStyle` colours of its own.
+
+`crates/base/examples/motion.rs` is `examples/motion.cpp`, with all five
+demos and their constants: the 620 ms per-digit transitions of the rolling
+clock, the 420 ms spring at damping 0.68 behind the two-option selector, the
+seven bars on one infinite 1200 ms track staggered 80 ms apart, three rows
+entering on a 90 ms stagger, and a notice that stays mounted through a 360 ms
+exit. The playback task is a 500 ms window interval rather than a spawned
+`Task`. Worth knowing when reading a screenshot of it: this machine has
+SPI_GETCLIENTAREAANIMATION off, so `MotionReduced()` is true and every demo
+shows its resolved end state — the keyframe bars sit at the track's final
+value of 0, the stagger rows are fully in. That is upstream's reduced-motion
+policy, not a stalled animation.
+
+`crates/base/benches/motion.rs` is `bench/MotionBench.cpp`, the same four
+workloads at the same iteration counts. Two halves of the Rust bench do not
+come over, for one reason: it installs a counting global allocator to prove
+that the steady sampling loops allocate nothing, and here they cannot — every
+type is a POD copied by value and `Keyframes` borrows its frames — and its
+100 µs budget is a wall clock on a machine we do not control, where
+`bench/bench.cpp` reports a median and a minimum instead of failing a run.
+
+`crates/story/src/lib.rs` stops advertising an alpha surface on Linux. There
+is nothing to change: `window_linux.cpp` asks X11 for an ordinary opaque
+visual and never sets an ARGB one, and a comment beside the story's `WinOpts`
+now says so. `crates/fps/src/monitor.rs` is one `cfg` attribute for a wasm
+build and belongs to the fps package. `crates/base/examples/wasm/*` is not
+ported: there is no embedding host here, and the two examples it wraps are
+two binaries.
+
+Verification: MSVC release tests pass 22,277 checks; the release `story`,
+`showcase` and `motion` targets build with `/W4 /WX`; `bun cmd/bench.ts
+motion` reports its six rows; and the port audit's motion, spinner,
+collapsible and MotionTokens lines are gone.
+## Upstream ingest after `6d07863f`: TextView moves to Base
+
+`346f7035` moves rich text out of the themed layer. `src/ui/text.*` and
+`src/ui/html.*` are now `src/base/text.*` and `src/base/text_format.*`, in
+`namespace gpui` rather than `gpui::component`, and everything they hold —
+the mdast fold, the MdNode tree, the inline flow, `TextViewState`, the
+selection reconstruction, the HTML tokenizer and the minifier — belongs to
+gpui-base. What made the move possible is that the renderer no longer reads a
+theme: `TextViewStyle` carries the six colours it used to look up
+(foreground, muted foreground, link, selection, code background, border),
+`TextViewStyle::Default()` is the light `ColorTokens` palette rather than an
+empty customization bag, and syntax highlighting became the opt-in
+`CodeBlockHighlighter` callback so Base keeps no language support of its own.
+`ColorTokens` grew `selection` and both palettes — `Light()` and `Dark()`,
+with the default now Light, since every field zeroed was transparent on
+transparent. `src/ui/text.h` is the façade `crates/ui/src/text` became: it
+re-exports the Base names under `component::` so every call site in the tree
+still compiles unchanged, derives a `TextViewStyle` from the component
+`Theme` (`base_text_view_style`), and installs that style plus the
+`ui/syntax.h` highlighter as `TextViewDefaults` from `ThemeSyncBase`, which
+is where Rust's `install_text_view_defaults` runs. Two C++-only collapses are
+deliberate: Rust keeps a second, component-level `TextViewStyle` carrying a
+`HighlightTheme` and folds it onto the Base one, but this tree's style never
+carried a highlight theme — `ui/syntax.h` keys its colours off `ThemeMode` —
+so there is nothing to fold and `resolve_component_style` has no work; and
+the compatibility element's `TextViewLayoutState` / `TextViewPrepaintState`
+are Base's, re-exported, because the façade is a set of `using` declarations
+rather than a wrapper element. `TextViewState`'s stack and the selection's
+document order moved from `UiGlobalState` into `BaseGlobalState` with the
+text that reads them, and `src/ui/global_state.h` is the forwarding
+re-export Rust left behind. `ScrollableMask` moved to
+`src/base/scrollable_mask.*` (`ui/scroll.h` re-exports it) and the new
+`src/base/selectable_text.*` is plain text that joins the window's selection:
+`SelectionQuadBounds` is ported outright, while the element half is a builder
+over one selectable text element, because the runtime already collects,
+projects and paints a frame's selectable runs. Constructors are selectable by
+default now, the task-list checkbox takes the style's foreground and is
+centred on the line box instead of nudged down by a fixed rem, and both table
+layouts paint their frame from the Base theme's surface with rules and header
+text from the style — the themed header pair arrives as the `table_head`
+refinement the façade fills in, which is what keeps the themed look identical.
+Base cannot express one thing Rust does: `SelectableText::selection_color`
+has no seam, since this runtime paints the window's selection in one pass, so
+the override is carried and reported rather than honoured, and the comment at
+the field says so.
+
+`30081a3d` restores the Markdown table's wheel axis lock. The C++ table never
+lost it — `ScrollTable` has applied a horizontal mask to its viewport since
+the scrolling layout landed — so no behaviour changed here; what this checkin
+brings is the structure: the mask now lives in gpui-base beside the table
+that wants it, and the table goes through `HorizontalScrollArea`, the C++
+shape of `horizontal_scroll_area`, rather than marking the axis itself. The
+16 mask tests upstream carries are the ones `tests/ScrollbarTests.cpp`
+already holds as `ScrollableMasksChainAndTrapLikeTheSource`, now pointed at
+`base/scrollable_mask` in the audit ledger.
+
+`5a564d4e` stops a Markdown render loop. A view that rebuilds equivalent
+plugin closures every frame handed the parse cache a fresh extension revision
+each time, so the document was reparsed, the reparse notified, and the notify
+rendered again forever. `MarkdownExtensions` gained
+`HasSameParserConfiguration` and `ParserFingerprint` — the parser's shape
+(MDX, the parser and renderer counts, the renderer names, order-independent)
+rather than the globally unique revision — and the per-window parse cache is
+keyed on the fingerprint, so refreshed render handles reuse the parsed tree.
+The regression drives two frames of a view that registers its plugins again
+in each and asserts both got the same document. The two story examples take
+the same one-line change as upstream: the Markdown and HTML preview panes are
+`px_5` rather than `p_5`.
+
+`12054f59` stops the drag auto-scroll when the content mask collapses. The
+region a selection drag scrolls is the nearest clipping viewport, not the
+participant's own box, and a scrollable ancestor clipped away mid-drag used to
+leave an empty clamp range that kept the last delta running. The registration's
+hitbox is that viewport here — the runtime intersects every hit rectangle with
+the content mask on the way down the paint tree — so the auto-scroll now
+computes its delta against it and stops outright when it is thinner than the
+two-pixel hit-test inset Rust uses. The ported regression registers a
+collapsed mask mid-gesture and asserts the next drag publishes a stop.
+
+The showcase gains the `text-view` page: a Base `TextViewState` rendered with
+a `TextViewStyle` derived from the example palette, scrolling inside a fixed
+560-high viewport — the page that demonstrates rich text with no themed layer
+above it. `examples/showcase/palette.h` is a minimal `ExamplePalette` holding
+the roles that page reads; the full `crates/base/examples/shared/palette.rs`
+port belongs to another package and is what should replace it. The
+text-selection page is rewritten onto `SelectableText`: its four paragraphs
+are runs sharing one reading order, and the bespoke paragraph-offset,
+word-and-line hit-testing that `showcase.cpp` carried for it is gone, since
+the window owns the gesture and the copy. Its footer reads the selection from
+the mouse seams rather than while building its tree, because the C++ copy
+walks the runs the last frame painted; Rust reads the same string from a
+`TextSelectionEvent` subscription. The story fixture loses the CI badge line
+and the CJK paragraph, as upstream's does. MSVC release passes 22,180 checks
+and every example builds with `/W4 /WX`.
+## Upstream ingest after `6d07863f`: shell dependencies and fetch methods
+
+`3b6890aa` gives a manifest Git-backed JavaScript packages, and this is the
+first thing in `src/shell` that runs a program the host already has rather than
+one this tree wrote. It is `git`, through the existing capability-gated process
+runner: `src/shell/dependencies.cpp` is the port of
+`crates/shell/src/dependencies.rs`, and every command it issues goes through
+`ProcessRunBounded`, which already clears the environment, isolates the child in
+a POSIX process group or a kill-on-close Job Object, caps each stream at 8 MiB
+and kills the tree after 30 seconds — the same 30 seconds upstream spells
+`GIT_TIMEOUT`. No network client is involved and `src/sys/http.h` is untouched;
+a dependency fetch is a subprocess, and the bytes come down git's own transport.
+
+The runner grew exactly what git needs and nothing more. `ProcessOptions` adds
+a working directory, extra `NAME=VALUE` pairs, and an `inheritEnvironment` flag
+that is false everywhere except here — `process.run`'s empty-environment
+contract is unchanged, and the dependency fetcher inherits the host environment
+the way Rust's `Command` does, plus `GIT_TERMINAL_PROMPT=0` and
+`GCM_INTERACTIVE=Never` so a credential prompt cannot block a background fetch.
+
+The store follows upstream's shape exactly. `<home>/.gpui-shell/cache/dependencies`
+from `HOME` or `USERPROFILE`, each of which must be absolute; per-remote mirrors
+keyed by the SHA-256 of `("git", url)` written the way `digest` writes it (an
+8-byte little-endian length before each field); `clone --mirror` into a
+`.tmp-<pid>-<n>` directory published by a rename that fails when another process
+got there first; the configured `remote.origin.url` read back with `--null` and
+compared to the manifest's, so a cache cannot silently change repository
+identity; `fetch --force --depth 1` of `refs/heads/<branch>`, `refs/tags/<tag>`,
+the shorthand's `#ref`, or `HEAD`; `rev-parse FETCH_HEAD` validated as 40 or 64
+hex digits; and an immutable commit-addressed checkout published the same way,
+so a branch that moves gives the next load a new directory and leaves the one an
+older module generation is still executing alone. `CacheLock` is a real
+cross-process advisory lock — `LockFileEx` with `LOCKFILE_FAIL_IMMEDIATELY` on
+Windows, `flock` on POSIX — polled at 25 ms up to the two-minute `LOCK_TIMEOUT`.
+The four things std::fs and fs2 answer that one expression cannot are the new
+platform seam, `dependencies_win.cpp` and `dependencies_posix.cpp`: a whole-file
+lock, a directory symlink, its removal, and reading it back (Windows reads the
+reparse point itself, since `GetFinalPathNameByHandle` would answer for a link
+this store does not own).
+
+Manifest validation is `plugin.rs`'s and lands in `plugin.cpp` beside the
+capability block: `dependencies` is the seventh recognized field, a value is
+either the string shorthand — a Git URL or an scp-style remote with at most one
+`#ref`, or a strict GitHub `owner/repository` that expands to
+`https://github.com/owner/repository` and defaults to `main` — or the object
+form with a Git URL, exactly one non-empty `branch` or `tag`, and an optional
+repository-relative `entry`. `valid_git_ref_name` is ported whole, so
+`"branch": "main:refs/heads/injected"` is refused as a refspec rather than
+passed to git; a name that is not a bare module name, or one
+`HostIsReservedSpecifier` already claims, is refused before anything runs; and
+the vector is kept sorted by name because Rust's `BTreeMap` order is what the
+store, the resolver and the editor links all walk. The entry a package
+dependency uses comes from its own `package.json` `main`, canonicalized and
+confined to the checkout, or `index.js`.
+
+Module resolution is the `AppModules::candidate` rewrite. An `AppModule` now
+carries its materialized dependencies; a relative specifier stays inside
+whichever tree the importing module lives in — the application, or the
+dependency checkout — a bare specifier matches the longest declared dependency
+name and resolves to its entry or to a subpath under its root, a module imported
+from inside a dependency may reach nothing else, and the "resolves outside"
+check is against that boundary rather than always the application root.
+`LoadApp` materializes the manifest's dependencies before the entry module
+compiles, so a fetch failure is a load failure and not a missing import later.
+`ShellRuntime::SetDependencyCacheRoot` is Rust's
+`new_isolated_with_dependency_store`, and it is how the tests point the store at
+a scratch cache instead of the user's.
+
+`ad216356` is the editor half. `link_for_editor` writes
+`<app>/node_modules/<name>` pointing at the checkout the runtime is about to
+execute, so an editor resolves `import { style } from "omarchy-ui"` from the
+same files and its JSDoc cannot drift from what runs; only entries this store
+owns — a symlink into its own cache, or a directory carrying `.gpui-shell-link`
+— are ever replaced or removed, an installed package of the same name is left
+alone, and pruning is bounded at the one level a scoped name needs. Where
+Windows refuses a symlink to an unprivileged process, the re-export package is
+written instead, exactly as upstream does; the visible consequence is that a
+stub is rewritten on every load, because a marker file says who wrote a
+directory and not what it currently names. Every load links best effort — a
+read-only directory is not a reason to refuse to run — while `gpui-shell types`
+reports the failure, through `ShellWriteDependencyLinks` (Rust's
+`write_dependency_links`). `write_editor_config` scaffolds a `jsconfig.json` at
+the application root when there is neither that nor a `tsconfig.json`, byte for
+byte upstream's, so an inferred `moduleResolution` cannot land on the one that
+never looks in `node_modules` and the browser's default `lib` cannot collide
+with `gpui.d.ts`. The `crates/story/js/motion/jsconfig.json` the checkin also
+adds is the file this tree already carries as
+`examples/js_todolist/jsconfig.json`, unchanged, so there was nothing to copy.
+The `Placement` import this checkin drops from `declare module "gpui-base"` is
+inside the generated declaration payload, which is already at the new pin.
+
+`9a64d865` makes `fetch(url, { method })` a token check rather than a two-name
+list, and this is where the standing boundary bites. `parse_method` is ported as
+`FetchIsHttpMethod`, RFC 7230's `token` — which is what
+`reqwest::Method::from_bytes` judges — and a string that is not a method at all
+is refused with upstream's message, before the policy and before anything
+reaches the network. What is **not** ported is the point of the checkin: this
+repository's network surface is one bounded system GET, and POST, sockets and
+WebSockets are excluded, so a method that is a method but is not GET is refused
+too, by its own message naming the boundary rather than by pretending the grant
+does not exist. Upstream's argument — that a second list here is a second policy
+to keep in step with `Capabilities::may_request` — is answered by keeping the
+refusal one step later than the token check, so the shape of the error tells an
+author which of the two stopped them. Method validation moved from the
+JavaScript wrapper into `NativeFetch`, where Rust's `parse_method` lives, and
+`__fetch_get` now takes the method as its second argument.
+`tests/http_request.rs` is upstream's pair of tests: the refusal of a non-method
+is ported as written, and `fetch_sends_any_http_method` is ported as the refusal
+it becomes here.
+
+`a8d1d265` fixes a race in
+`tests::network::websocket_reads_and_writes_text_and_binary_messages`, where the
+fixture server closed the socket before the client had drained its two messages.
+WebSockets are not ported — no `src/shell` file implements one, and the only
+occurrence of the word is `"websocket"` in the reserved-specifier list — and the
+C++ suite has no test that waits on a fixture server, so there is no equivalent
+race here. Nothing changed for this checkin.
+
+Two things a reader should know. A cache path carries a 64-character remote key
+and a 40-character commit, and git then writes its own tree below that, so on
+Windows the whole path can approach `MAX_PATH`; the user cache under a home
+directory has room, but the tests keep their fixtures in the system temp
+directory rather than the working directory because a deep checkout does not.
+And the new suite reaches no network: it creates a repository in a scratch
+directory and clones it through the same `git` the runtime uses, the editor-link
+tests fabricate checkouts under the store's own cache without running git at
+all, and every git-backed test is skipped rather than failed where
+`git --version` does not answer. `tests/ShellDependencyTests.cpp` is registered
+beside the other suites; MSVC release passes 22,326 checks and `gpui_shell`
+builds with `/W4 /WX`.
+
+One note for whoever merges this. The four new files are clang-format output,
+but `runtime.cpp`, `plugin.cpp`, `typings.cpp`, `runtime.h`, `fetch.cpp`, the
+two `process_*.cpp` and `ShellCoreTests.cpp` are not reformatted: this
+machine's clang-format disagrees with what is checked in by several hundred
+lines in `runtime.cpp` alone, and reflowing files that other Shell work also
+edits would turn every one of those lines into a conflict. The hunks here are
+the ones this ingest actually needed.
+## Upstream ingest after `6d07863f`: shell template cache and theme fast path
+
+`14ba7869` changes a README URL and nothing else; there is no C++ equivalent
+to move.
+
+`0e2fb7ac` is the template cache, and the whole mechanism is here.
+`StructureFingerprint` is accumulated on the recording path — one SplitMix64
+mix per component, per operation, per claim and per parent/child edge — rather
+than walked out of the arena afterwards, because a walk that costs the arena's
+length is exactly the cost a template cache exists to remove. `ScriptView`
+compares a new snapshot's fingerprint against the one it replaces and reports
+the answer through `RuntimeMetrics::structureRepeats`, `structureChanges` and
+`StructureRepeatRate`; nothing acts on it, which is upstream's own position.
+One deliberate difference: Rust identifies a builder method by its
+`&'static str` pointer, because its reflection table hands the same pointer to
+every call. Here a method name arrives copied into a per-call arena, so
+`StructureName` hashes the bytes instead. A fingerprint is only ever compared
+against another taken in the same process, from the same view, one render
+apart, so the substitution is invisible.
+
+The cache itself is `Template`, `Slot`, `SlotSite`, `SlotValue` and
+`SpecArena::Graft` / `WriteSlot` / `MountsAnEntity`, plus the discovery half in
+`runtime.cpp`. A body runs once with a sentinel object in each parameter
+position; wherever a sentinel comes to rest is a slot, and what is left over is
+structure. `__template_begin` swaps the description being recorded for a fresh
+arena so a template's ids are dense and start at zero, which makes grafting one
+addition per id; `__template_end` takes it back out and refuses the four things
+a template cannot hold — a body that mounts a retained entity, a body that
+registers its own handler, a parameter that reaches no builder call, and a
+nested template — while `__template_abort` puts the interrupted description
+back when the body threw. A sentinel refuses to become a primitive, so a
+template literal over an argument is a diagnostic where it was written rather
+than a panel that silently stops updating. It stays off the script surface, as
+upstream decided: `globalThis.__template` is how the tests reach it.
+
+Two smaller differences. This tree validates a param style at materialization
+rather than while recording, so upstream's re-run of `style::apply_param` at
+instantiation has nothing to re-run and the equivalent test is not ported; a
+bad colour still reports, one phase later. And one sentinel per builder call is
+supported rather than an arbitrary number, which is all upstream's
+single-value style path can produce anyway; a second in the same call is
+refused with the message that names the three positions a template does fill.
+
+`6761b4ec` makes a script overlay rebuild from the state it closes over. An
+overlay's content is a function over somebody else's state and neither
+`open_dialog` nor `open_sheet` answers a view handle, so nothing can notify it.
+Both shell overlay layers now mark their `ScriptView` dirty as they render,
+which costs no frame of its own — the overlay is about to render as part of
+this one.
+
+`b4393e22` is ported in the half this tree has. `ModifiersObject` is now the
+one place a modifier payload is built, so a press reported through a row
+carries the same fields as one reported through the element it landed on, and
+it gained `platform` and `function` beside the three that were there. The
+`on_modifiers_changed` element method is **not** ported: this runtime has no
+`ModifiersChangedEvent` and no element-level seam for one — `El` has
+`OnKeyDown` and no modifier-change counterpart, and the platform windows
+synthesize nothing of the kind. Adding it is a `src/gpui` change well outside
+`src/shell`, and the element event surface that would carry it (`on_key_down`,
+`on_key_up`, `on_mouse_down`, `on_mouse_up`, `on_mouse_down_out`,
+`on_scroll_wheel`) arrives with `27b08eca`, which is not in this package.
+
+`08d2c8d2` lets a script state its type scale. `set_theme` now reads an
+optional `typography` block — the only block a theme may leave out, because
+colours, spacing and radius are a palette that is either whole or wrong while
+typography arrived after themes were already being written. Every field inside
+it is an override: `{ md: { size: 12 } }` moves the base text size and keeps
+the line height, the weight and both families. A size or a line height of zero
+is refused, a weight outside 1..1000 is refused, and a family is taken as
+written because refusing one would mean this module deciding which fonts exist.
+`cx.theme()` reports the whole scale back, deeply frozen, and `ShellRoot` now
+sets the window's base text size from `typography.md.size` so the chrome it
+draws itself — toasts, the sheet, the dialog scrim — is drawn at the
+application's size rather than at the runtime's default. The two families are
+owned for the life of the process, because `TypographyTokens` carries borrowed
+`Str`s and the base theme is process-global.
+
+`d6c10c21` is ported in its shell half, minus the two pieces that belong to
+other packages. The theme snapshot is now built once per palette rather than
+once per reader: `ThemeTokensSync` bumps a revision only when the tokens or the
+appearance actually change, and `__theme_snapshot` answers the string it
+answered last time while that revision holds. What is **not** ported is the
+root's `.cached(StyleRefinement)` around the script content: this tree rebuilds
+the whole element tree every frame by design (`AGENTS.md`, "App, Window,
+Entity, Ctx", rule 8) and has no per-view subtree cache to reach for —
+`src/gpui/scene.h` caches a frame's *primitives*, not a view's elements. The
+`continuous` and `frame_budget` element methods on `fps_monitor()` are not
+ported either: they are the `crates/fps` half of the same checkin, and
+`FpsOverlayEl` takes only an anchor here until that half lands.
+
+`0ed8a146` keeps theme reads on the JS fast path.
+`__theme_revision(generation)` is a new binding that validates the calling `cx`
+exactly as `__theme_snapshot(generation)` does and answers one number, and the
+prelude's theme cache refreshes only when that number moves or `__theme_dirty`
+is set. `__prepare_theme` warms the cache inside the render scope before
+`render` runs, so the first `cx.theme()` in a description costs what every
+later one does. Upstream dropped the generation from both bindings; this tree
+keeps it, because the stale-`cx` refusal is pinned by an existing test and a
+`cx.theme` that outlived its call must not answer a palette from a frame that
+is over. `ScriptView` now carries the palette revision its snapshot resolved
+against and rebuilds when it moves, which is what makes a theme change reach a
+view nothing notified.
+
+`5bc60f2d` reports a secondary press on a virtual list row. `598d85a2` and its
+revert `ed76af28` touch the same lines and cancel out; only `5bc60f2d`'s final
+state is ported. A list may now register `on_item_secondary_click`, and the row
+wrapper the list already builds for `on_item_click` takes an `OnMouseDown`
+beside the click. The handler filters to the right button, and the payload
+carries `button`, `click_count`, `position`, `local_position` and `modifiers`.
+Upstream captures the row's box with a `canvas` element because a GPUI
+`MouseDownEvent` does not carry one; here `MouseDownEvent::el` is the box of
+the element the press landed on, so `local_position` is a subtraction and the
+extra absolutely-positioned child is not needed. The refusal a handler
+registered inside an item renderer gets now names both list-level handlers.
+
+`cf50074b` lets a script switch on a root-owned performance HUD.
+`show_fps_monitor(options)`, `hide_fps_monitor()` and `fps_monitor_visible()`
+are exported from `gpui-fps`; the root owns the HUD, so what a script renders
+can neither move it nor rebuild it, and the monitor behind it is the window's
+own — the same keyed slot `fps_monitor()` uses — so a HUD hidden and shown
+again keeps its history. `anchor`, `continuous` and `frame_budget` are all
+honoured, because `FpsMonitor` here already carries `continuous` and
+`frameBudget`; an unknown anchor is refused with the eight valid names rather
+than falling back to a corner. The HUD draws above every other layer: it is a
+diagnostic, and a dialog over it would hide the reading the dialog's own frames
+are producing.
+
+`346f7035`'s shell half is a no-op here. `gpui_shell/main.cpp` never shipped a
+palette, so there is no `install_palette` to remove and no
+`bin/default-tokens.json` to move; the checkin's two additions — the
+`colors.selection` token and `ColorTokens::default()` becoming the light
+palette — are `crates/base` changes that belong to the TextView-into-Base
+package, and `src/shell` picks them up for free when `ColorTokens` grows the
+field.
+
+Two upstream halves have no host in this tree.
+`crates/story/src/stories/shell_story.rs` and `crates/story/js/quotes/` are not
+ported — the Shell story page arrives with `39c2c86d`, which is not in this
+package — so `0e2fb7ac`'s shape-repeat readout and `cf50074b`'s story wiring
+have nothing to attach to; the counters they display are on `RuntimeMetrics`
+and ready for the page when it lands. `src/shell/typings_data.cpp` is generated
+from the pinned crate and is never hand-edited: the declarations for
+`typography`, `on_modifiers_changed`, `on_item_secondary_click` and the three
+HUD functions arrive with its next regeneration at the new pin.
+
+The HUD test found one hazard worth recording. `FpsMonitor` samples resources
+on the executor and its completion reaches back for the `App` that spawned it,
+so a monitor left live when its `App` dies hands a later `ExecDrain` a dangling
+pointer — the first suite to render the overlay and then let its stack `App` go
+crashed a completely unrelated test three suites later. The test drains the
+executor and drops the monitor while both are still alive; the underlying
+lifetime is `src/fps`'s and is left to the package that owns it.
+
+Verification: MSVC release tests pass 22,205 checks, and the release
+`gpui_shell` and `story` targets build with `/W4 /WX`. Note for anyone building
+incrementally after these changes — `ScriptView` and `ShellRoot` grew fields,
+and `cmd/test.ts` will relink a stale `tests/` object against the new amalgam;
+delete `out/rel/obj/tests` if a suite that passed starts crashing.
+
 ## Upstream ingest after `6d07863f`: shell script API
 
 `27b08eca` opens the keyboard, the pointer, actions, the window and five base
@@ -10444,12 +11388,14 @@ narrowest version of what the checkin assumes:
   and a keyboard handler on an element that never took focus heard nothing —
   which is exactly the shape of gap the checkin's own review found.
 
-The dock's own box is applied by the shell skin around whatever the `dock`
-hook returned, which is where upstream moved it in base: a script-drawn dock
-used to come out with no width at all because the hook replaced the extent
-along with the chrome. `NativeApply` also stopped naming arena strings in five
-exceptions it threw after deleting the arena; two of those five were already
-there.
+The dock's own box is base's — `DockFrame`, applied around whatever the `dock`
+hook returns — and the shell skin therefore states nothing about it. This
+package first applied the extent itself, because a script-drawn dock came out
+with no width at all when the hook replaced the box along with the chrome; the
+base package landed `DockExtent`/`DockFrame` for the same checkin, so the two
+were reconciled to base's when this merged and the skin is chrome only.
+`NativeApply` also stopped naming arena strings in five exceptions it threw
+after deleting the arena; two of those five were already there.
 
 Deliberately not ported, with the reason:
 
@@ -10475,12 +11421,11 @@ Deliberately not ported, with the reason:
   a key event travels the focus path, so an element with no focus handle hears
   presses and never hears keys.
 
-One thing the integrator has to do: `src/shell/typings_data.cpp` on this
-branch is still the payload generated at the old pin, so `gpui.d.ts` does not
-yet declare `dock_area`, `pagination_items`, `CalendarState`, `on_key_down` or
-the rest. It is a generated file and this branch does not touch it;
-regenerating it at `0c746dff` with `cmd/update-shell-types.ts` is what closes
-the gap, and nothing at run time depends on it.
+`src/shell/typings_data.cpp` is the generated payload and this package does not
+touch it. The declarations for everything here — `dock_area`,
+`pagination_items`, `CalendarState`, `on_key_down` and the rest — arrive with
+the regeneration at `0c746dff` that landed separately, which is what
+`gpui.d.ts` is written from; nothing at run time depends on it.
 
 `tests/ShellDockTests.cpp` ports the checkin's suite. Ten of its eleven run
 through a real window, a real focus path and real input upstream, which needs
@@ -10488,5 +11433,5 @@ GPUI's `TestAppContext`; what stands in here is the split every other shell
 suite uses — the description tree for what a script said, the materialized
 element tree for what base was asked to build — plus the breadth test as it
 stands, which touches every name in the checkin's tables under the name the
-documentation gives it. MSVC release passes 22,185 checks, and the release
-`story` and `gpui_shell` targets build with `/W4 /WX`.
+documentation gives it. MSVC release passes 22,994 checks with the rest of the
+`0c746dff` ingest merged in, and every release target builds with `/W4 /WX`.

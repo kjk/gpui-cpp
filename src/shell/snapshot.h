@@ -24,6 +24,10 @@ class RenderSnapshot {
     shell::SpecId Root() const { return root; }
     const shell::SpecArena* Specs() const { return arena; }
     int Len() const;
+    // The shape of this description, with its values left out. Compared
+    // against its predecessor's by ScriptView to count how often a rebuild
+    // produced the structure it replaced.
+    shell::StructureFingerprint Structure() const;
     bool IsEmpty() const;
     Str DebugTree(Arena* into) const;
 

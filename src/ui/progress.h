@@ -19,6 +19,9 @@ struct Progress {
     bool loading = false;
     // The bar's own name, so two of them on a page transition apart.
     Str id = {};
+    // The accessible name. Explicit only: a progress value is not inferred
+    // as one.
+    Str accessibilityLabel = {};
 
     static Progress* New(Ctx* cx);
     Progress* Value(float v);
@@ -26,6 +29,8 @@ struct Progress {
     Progress* H(float v);
     Progress* Loading(bool v);
     Progress* Id(Str v);
+    // Set the accessible name exposed by the progress indicator.
+    Progress* AccessibilityLabel(Str s);
     El* IntoEl();
 };
 
@@ -41,10 +46,14 @@ struct ProgressCircle {
     bool showLabel = true;
     bool loading = false;
     Str id = {};
+    // The accessible name. Explicit only, as the bar's is.
+    Str accessibilityLabel = {};
 
     static ProgressCircle* New(Ctx* cx);
     ProgressCircle* Loading(bool v);
     ProgressCircle* Id(Str v);
+    // Set the accessible name exposed by the progress indicator.
+    ProgressCircle* AccessibilityLabel(Str s);
     ProgressCircle* Value(float v);
     ProgressCircle* Size(float v);
     ProgressCircle* Color(Rgba c);

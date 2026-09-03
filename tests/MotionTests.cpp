@@ -85,11 +85,11 @@ static void TheBezierMatchesWhatAnEngineSays() {
         float t;
         float y;
     };
-    const Sample ease[] = {{0.f, 0.f},   {0.2f, 0.295f}, {0.5f, 0.802f},
-                           {0.8f, 0.976f}, {1.f, 1.f}};
+    const Sample ease[] = {
+        {0.f, 0.f}, {0.2f, 0.295f}, {0.5f, 0.802f}, {0.8f, 0.976f}, {1.f, 1.f}};
     for (const Sample& s : ease) {
-        utassert(BezierNear(CubicBezier(0.25f, 0.1f, 0.25f, 1.f, s.t), s.y,
-                            1e-3f));
+        utassert(
+            BezierNear(CubicBezier(0.25f, 0.1f, 0.25f, 1.f, s.t), s.y, 1e-3f));
     }
 
     const Sample chromium[] = {
@@ -101,8 +101,8 @@ static void TheBezierMatchesWhatAnEngineSays() {
         {0.85f, 0.92021f}, {0.9f, 0.96021f},  {0.95f, 0.98863f},
     };
     for (const Sample& s : chromium) {
-        utassert(BezierNear(CubicBezier(0.25f, 0.f, 0.75f, 1.f, s.t), s.y,
-                            3e-4f));
+        utassert(
+            BezierNear(CubicBezier(0.25f, 0.f, 0.75f, 1.f, s.t), s.y, 3e-4f));
     }
 }
 
@@ -113,11 +113,10 @@ static void ThirdsMapTimeIdentically() {
     for (int step = 0; step <= 100; step++) {
         float t = (float)step / 100.f;
         float oneT = 1.f - t;
-        float want = 3.f * 0.72f * oneT * oneT * t + 3.f * oneT * t * t +
-                     t * t * t;
-        utassert(
-            BezierNear(CubicBezier(1.f / 3, 0.72f, 2.f / 3, 1.f, t), want,
-                       1e-4f));
+        float want =
+            3.f * 0.72f * oneT * oneT * t + 3.f * oneT * t * t + t * t * t;
+        utassert(BezierNear(CubicBezier(1.f / 3, 0.72f, 2.f / 3, 1.f, t), want,
+                            1e-4f));
     }
 }
 
@@ -209,18 +208,18 @@ static void ProgressWaitsOutTheDelayAndStopsAtTheEnd() {
     utassertnear(MotionProgress(m, 100), 0.5f);
     utassertnear(MotionProgress(m, 150), 1.f);
 
-    // A duration of zero is over as soon as any time has passed. At exactly
-    // zero it answers 0, because the delay is checked first and `elapsed <=
-    // delay` is true of two zeros — Rust's order, and it costs nothing there
-    // or here: a zero-duration transition never reaches this, since the value
-    // is adopted outright before progress is worked out.
-    utassertnear(MotionProgress(MotionNew(0), 0), 0.f);
+    // A duration of zero is over before it starts: the delay resolves to an
+    // active elapsed of zero and `duration.is_zero()` is checked next, so
+    // the answer is 1 at any elapsed at all. Nothing reaches it in practice —
+    // a zero-duration transition adopts its target outright — but this is
+    // where Rust's order shows.
+    utassertnear(MotionProgress(MotionNew(0), 0), 1.f);
     utassertnear(MotionProgress(MotionNew(0), 1), 1.f);
 
     m = MotionNew(100);
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     utassertnear(MotionSample(m, 0.25f), 0.25f);
-    m.ease = EaseOutCubic;
+    m.easing = Easing::Custom(EaseOutCubic);
     utassertnear(MotionSample(m, 0.5f), 0.875f);
 }
 
@@ -239,7 +238,7 @@ static void AZeroDurationTargetChangeIsImmediate() {
 static void AChangedTargetTransitionsOverTime() {
     MotionState<float> st;
     Motion m = MotionNew(100);
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     // The first value is adopted rather than transitioned to.
     utassertnear(MotionAdvance(&st, 0.f, m, 0, false).value, 0.f);
     // The change itself reports the value it is leaving.
@@ -256,13 +255,16 @@ static void AChangedTargetTransitionsOverTime() {
 static void ReversingCarriesOnFromWhereItGotTo() {
     MotionState<float> st;
     Motion m = MotionNew(100);
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     MotionAdvance(&st, 0.f, m, 0, false);
     MotionAdvance(&st, 10.f, m, 0, false);
     // Halfway there, and told to go back: it leaves from 5, not from 10.
     utassertnear(MotionAdvance(&st, 0.f, m, 0.05, false).value, 5.f);
-    // A quarter of the duration into the way back, a quarter of the way down.
-    utassertnear(MotionAdvance(&st, 0.f, m, 0.075, false).value, 3.75f);
+    // And the return is *shortened* to the half of the curve it had actually
+    // travelled — the reversing factor — so 25 ms later it is halfway back
+    // rather than a quarter of the way. That is
+    // reversing_uses_the_current_sample_and_shortens_the_return upstream.
+    utassertnear(MotionAdvance(&st, 0.f, m, 0.075, false).value, 2.5f);
 }
 
 // delay_holds_the_previous_value_before_interpolation.
@@ -270,7 +272,7 @@ static void ADelayHoldsThePreviousValue() {
     MotionState<float> st;
     Motion m = MotionNew(100);
     m.delayMs = 50;
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     MotionAdvance(&st, 0.f, m, 0, false);
     utassertnear(MotionAdvance(&st, 10.f, m, 0, false).value, 0.f);
     // Still inside the delay.
@@ -283,7 +285,7 @@ static void ADelayHoldsThePreviousValue() {
 static void AFinishedTransitionStopsAskingForFrames() {
     MotionState<float> st;
     Motion m = MotionNew(100);
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     MotionAdvance(&st, 0.f, m, 0, false);
     utassert(MotionAdvance(&st, 1.f, m, 0, false).running);
     MotionStep<float> done = MotionAdvance(&st, 1.f, m, 0.1, false);
@@ -301,7 +303,7 @@ static void AFinishedTransitionStopsAskingForFrames() {
 static void ReducedMotionTakesTheTargetOutright() {
     MotionState<float> st;
     Motion m = MotionNew(100);
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     MotionAdvance(&st, 0.f, m, 0, true);
     MotionStep<float> step = MotionAdvance(&st, 1.f, m, 0, true);
     utassertnear(step.value, 1.f);
@@ -319,7 +321,7 @@ static void ReducedMotionTakesTheTargetOutright() {
 static void TheSameRuleCarriesAPointAndAColor() {
     MotionState<Point> pt;
     Motion m = MotionNew(100);
-    m.ease = EaseLinear;
+    m.easing = Easing::Linear();
     MotionAdvance(&pt, Point{0, 0}, m, 0, false);
     MotionAdvance(&pt, Point{100, 40}, m, 0, false);
     MotionStep<Point> half = MotionAdvance(&pt, Point{100, 40}, m, 0.05, false);
@@ -329,7 +331,8 @@ static void TheSameRuleCarriesAPointAndAColor() {
     MotionState<Rgba> col;
     MotionAdvance(&col, Rgb(0, 0, 0), m, 0, false);
     MotionAdvance(&col, Rgb(100, 100, 100), m, 0, false);
-    MotionStep<Rgba> mid = MotionAdvance(&col, Rgb(100, 100, 100), m, 0.05, false);
+    MotionStep<Rgba> mid =
+        MotionAdvance(&col, Rgb(100, 100, 100), m, 0.05, false);
     utassert(mid.value.r == 50);
     utassert(mid.running);
 }
@@ -359,8 +362,7 @@ static void SourceNamedValueTransitionContractIsAvailable() {
     utassert(fill != mark);
     utassert(fill == motion::TransitionId(StrL("terms"), StrL("fill")));
 
-    utassertnear(motion::Interpolate<float>::Between(2.f, 10.f, 0.25f),
-                 4.f);
+    utassertnear(motion::Interpolate<float>::Between(2.f, 10.f, 0.25f), 4.f);
 
     App app;
     Window* win = new Window();
@@ -555,6 +557,561 @@ static void ACoarseEpsilonSettlesSooner() {
     utassert(coarseFrames < fineFrames);
 }
 
+// ─── motion/easing.rs ─────────────────────────────────────────────────────
+
+// css_keyword_easing_matches_published_reference_samples: the four CSS
+// keyword curves, against the numbers the specification's examples give.
+static void TheCssKeywordEasingsMatchTheirPublishedSamples() {
+    struct Case {
+        Easing easing;
+        float progress;
+        float expected;
+    };
+    const Case cases[] = {
+        {Easing::Ease(), 0.2f, 0.295f},    {Easing::Ease(), 0.5f, 0.802f},
+        {Easing::Ease(), 0.8f, 0.976f},    {Easing::EaseIn(), 0.2f, 0.062f},
+        {Easing::EaseIn(), 0.5f, 0.315f},  {Easing::EaseIn(), 0.8f, 0.692f},
+        {Easing::EaseOut(), 0.2f, 0.308f}, {Easing::EaseOut(), 0.5f, 0.685f},
+        {Easing::EaseOut(), 0.8f, 0.938f}, {Easing::EaseInOut(), 0.2f, 0.082f},
+        {Easing::EaseInOut(), 0.5f, 0.5f}, {Easing::EaseInOut(), 0.8f, 0.918f},
+    };
+    for (const Case& c : cases) {
+        utassert(BezierNear(c.easing.Sample(c.progress), c.expected, 0.002f));
+    }
+    // Linear is the identity, and a custom curve is whatever it says.
+    utassertnear(Easing::Linear().Sample(0.25f), 0.25f);
+    utassertnear(Easing::Custom(EaseOutCubic).Sample(0.5f), 0.875f);
+    // Every one of them clamps its input rather than running off the curve.
+    utassertnear(Easing::Linear().Sample(2.f), 1.f);
+    utassertnear(Easing::EaseInOut().Sample(-1.f), 0.f);
+}
+
+// step_easing_observes_css_jump_positions.
+static void StepEasingObservesTheCssJumpPositions() {
+    Easing start = Easing::Steps(4, StepPosition::JumpStart).Unwrap();
+    Easing end = Easing::Steps(4, StepPosition::JumpEnd).Unwrap();
+
+    utassertnear(start.Sample(0.f), 0.25f);
+    utassertnear(start.Sample(0.24f), 0.25f);
+    utassertnear(start.Sample(0.25f), 0.5f);
+    utassertnear(end.Sample(0.f), 0.f);
+    utassertnear(end.Sample(0.24f), 0.f);
+    utassertnear(end.Sample(0.25f), 0.25f);
+    utassert(Easing::Steps(0, StepPosition::JumpEnd).IsErr());
+
+    Easing none = Easing::Steps(4, StepPosition::JumpNone).Unwrap();
+    Easing both = Easing::Steps(4, StepPosition::JumpBoth).Unwrap();
+    utassertnear(none.Sample(0.f), 0.f);
+    utassertnear(none.Sample(0.5f), 2.f / 3.f);
+    utassertnear(none.Sample(1.f), 1.f);
+    utassertnear(both.Sample(0.f), 0.2f);
+    utassertnear(both.Sample(1.f), 1.f);
+    // One step with nowhere to jump is not a curve.
+    utassert(Easing::Steps(1, StepPosition::JumpNone).IsErr());
+    utassert(Easing::Steps(1, StepPosition::JumpNone)
+                 .UnwrapErr() == EasingError::InvalidStepCount);
+}
+
+static float TestNaN() {
+    volatile float zero = 0.f;
+    return zero / zero;
+}
+
+static float TestInf() {
+    volatile float zero = 0.f;
+    return 1.f / zero;
+}
+
+// linear_stops_fill_omitted_positions_before_sampling, and
+// bezier_errors_name_the_invalid_control_point.
+static void LinearStopsFillTheirOmittedPositions() {
+    Arena* a = ArenaNew();
+    const LinearStop stops[] = {
+        LinearStop::At(0.f, 0.f),
+        LinearStop::New(0.2f),
+        LinearStop::New(0.8f),
+        LinearStop::At(1.f, 1.f),
+    };
+    Easing easing = Easing::LinearStops(a, stops, 4).Unwrap();
+    // The two omitted inputs land a third and two thirds of the way along.
+    utassert(BezierNear(easing.Sample(1.f / 3.f), 0.2f, 1e-5f));
+    utassert(BezierNear(easing.Sample(0.5f), 0.5f, 1e-5f));
+
+    // Two stops is the minimum.
+    const LinearStop tooFew[] = {LinearStop::At(0.f, 0.8f)};
+    utassert(Easing::LinearStops(a, tooFew, 1).IsErr());
+    // And their input positions have to run forwards: Rust rejects this pair
+    // because its inputs are 0.8 then 0.2.
+    const LinearStop backwards[] = {LinearStop::At(0.f, 0.8f),
+                                    LinearStop::At(1.f, 0.2f)};
+    utassert(Easing::LinearStops(a, backwards, 2).IsErr());
+    utassert(Easing::LinearStops(a, backwards, 2)
+                 .UnwrapErr() == EasingError::InvalidLinearStops);
+
+    // A control point that is not a number names itself.
+    EasingResult bad = Easing::CubicBezier(0.2f, TestNaN(), 0.8f, 1.f);
+    utassert(bad.IsErr());
+    utassert(bad.UnwrapErr() == EasingError::InvalidBezierControlPoint);
+    utassert(base::StrEq(Str(EasingErrorMessage(bad.UnwrapErr())),
+                         Str("cubic Bézier control points must be finite and "
+                             "x must be within 0..=1")));
+    // x outside 0..=1 is out too; y is free to overshoot.
+    utassert(Easing::CubicBezier(1.2f, 0.f, 0.8f, 1.f).IsErr());
+    utassert(Easing::CubicBezier(0.2f, -2.f, 0.8f, 3.f).IsOk());
+    ArenaDelete(a);
+}
+
+// ─── motion/timing.rs ─────────────────────────────────────────────────────
+
+// negative_delay_starts_inside_the_active_interval.
+static void ANegativeDelayStartsInsideTheActiveInterval() {
+    Timing timing = Timing::New(100).Delay(SignedDuration::Negative(25));
+    TimingSample sample = timing.Sample(0);
+
+    utassert(sample.phase == MotionPhase::Active);
+    utassertnear(sample.directedProgress, 0.25f);
+    utassert(sample.active);
+    utassert(!sample.finished);
+
+    // A positive one holds everything back until it has run out.
+    Timing later = Timing::New(100).Delay(50.f);
+    utassert(later.Sample(20).phase == MotionPhase::Before);
+    utassert(!later.Sample(20).active);
+    utassertnear(later.Sample(75).directedProgress, 0.25f);
+}
+
+// alternate_direction_reverses_odd_iterations.
+static void AlternateDirectionReversesTheOddIterations() {
+    Timing timing = Timing::New(100)
+                        .Iterations(IterationCount::Finite(2))
+                        .Direction(PlaybackDirection::Alternate)
+                        .Ease(Easing::Linear());
+
+    TimingSample first = timing.Sample(25);
+    TimingSample second = timing.Sample(125);
+    TimingSample finished = timing.Sample(200);
+
+    utassert(first.iteration == 0);
+    utassertnear(first.directedProgress, 0.25f);
+    utassert(second.iteration == 1);
+    utassertnear(second.directedProgress, 0.75f);
+    utassert(finished.phase == MotionPhase::After);
+    utassertnear(finished.directedProgress, 0.f);
+    utassert(finished.finished);
+
+    // Infinite playback never finishes and keeps counting its iterations.
+    Timing forever = Timing::New(100).Iterations(IterationCount::Infinite());
+    TimingSample late = forever.Sample(1050);
+    utassert(late.phase == MotionPhase::Active);
+    utassert(late.iteration == 10);
+    utassertnear(late.directedProgress, 0.5f);
+    // Reverse runs the curve the other way from the first frame.
+    Timing back = Timing::New(100).Direction(PlaybackDirection::Reverse);
+    utassertnear(back.Sample(25).directedProgress, 0.75f);
+    // A zero duration is over before it starts, and so are zero iterations
+    // of a real one.
+    utassert(Timing::New(0).Sample(0).phase == MotionPhase::After);
+    utassert(Timing::New(100)
+                 .Iterations(IterationCount::Finite(0))
+                 .Sample(0)
+                 .phase == MotionPhase::After);
+}
+
+// ─── motion/keyframes.rs ──────────────────────────────────────────────────
+
+// keyframes_validate_offsets_and_sample_each_segments_easing.
+static void KeyframesValidateOffsetsAndSampleTheirSegments() {
+    const Keyframe<float> noStart[] = {Keyframe<float>::New(0.2f, 0.f),
+                                       Keyframe<float>::New(1.f, 1.f)};
+    utassert(Keyframes<float>::TryNew(noStart, 2)
+                 .UnwrapErr() == KeyframeError::MissingEndpoint);
+
+    const Keyframe<float> unordered[] = {
+        Keyframe<float>::New(0.f, 0.f), Keyframe<float>::New(0.8f, 1.f),
+        Keyframe<float>::New(0.7f, 2.f), Keyframe<float>::New(1.f, 3.f)};
+    utassert(Keyframes<float>::TryNew(unordered, 4)
+                 .UnwrapErr() == KeyframeError::OffsetsNotMonotonic);
+
+    const Keyframe<float> one[] = {Keyframe<float>::New(0.f, 0.f)};
+    utassert(Keyframes<float>::TryNew(one, 1)
+                 .UnwrapErr() == KeyframeError::TooFewFrames);
+    const Keyframe<float> outside[] = {Keyframe<float>::New(0.f, 0.f),
+                                       Keyframe<float>::New(1.5f, 1.f)};
+    utassert(Keyframes<float>::TryNew(outside, 2)
+                 .UnwrapErr() == KeyframeError::OffsetOutOfRange);
+    const Keyframe<float> notFinite[] = {Keyframe<float>::New(0.f, 0.f),
+                                         Keyframe<float>::New(TestNaN(), 1.f)};
+    utassert(Keyframes<float>::TryNew(notFinite, 2)
+                 .UnwrapErr() == KeyframeError::OffsetNotFinite);
+
+    // Each segment carries the easing of the frame it starts at.
+    const Keyframe<float> frames[] = {
+        Keyframe<float>::New(0.f, 0.f)
+            .Ease(Easing::Steps(2, StepPosition::JumpEnd).Unwrap()),
+        Keyframe<float>::New(0.5f, 10.f).Ease(Easing::Linear()),
+        Keyframe<float>::New(1.f, 20.f),
+    };
+    Keyframes<float> track = Keyframes<float>::TryNew(frames, 3).Unwrap();
+    utassertnear(track.Sample(0.2f), 0.f);
+    utassertnear(track.Sample(0.3f), 5.f);
+    utassertnear(track.Sample(0.75f), 15.f);
+    utassertnear(track.Sample(1.f), 20.f);
+    utassert(track.Len() == 3);
+    utassert(!track.IsEmpty());
+}
+
+// discrete_values_switch_only_at_the_requested_progress.
+static void DiscreteValuesSwitchOnlyAtTheirSwitchPoint() {
+    Discrete<Str> value =
+        Discrete<Str>::New(StrL("old"), StrL("new")).SwitchAt(0.75f).Unwrap();
+    utassert(base::StrEq(value.Sample(0.749f), Str("old")));
+    utassert(base::StrEq(value.Sample(0.75f), Str("new")));
+    // Halfway is the default.
+    Discrete<int> half = Discrete<int>::New(0, 1);
+    utassert(half.Sample(0.49f) == 0);
+    utassert(half.Sample(0.5f) == 1);
+    utassert(Discrete<int>::New(0, 1).SwitchAt(TestNaN()).IsErr());
+    utassert(Discrete<int>::New(0, 1).SwitchAt(1.5f).UnwrapErr() ==
+             DiscreteError::InvalidSwitchPoint);
+}
+
+// ─── motion/stagger.rs ────────────────────────────────────────────────────
+
+// stagger_origins_produce_stable_delays_without_allocating_a_schedule.
+static void StaggerOriginsProduceStableDelays() {
+    const float interval = 20.f;
+    Stagger first = Stagger::New(interval, StaggerOrigin::FirstOrigin());
+    Stagger last = Stagger::New(interval, StaggerOrigin::LastOrigin());
+    Stagger center = Stagger::New(interval, StaggerOrigin::CenterOrigin());
+
+    utassertnear(first.Delay(3, 5), 60.f);
+    utassertnear(last.Delay(3, 5), 20.f);
+    utassertnear(center.Delay(2, 5), 0.f);
+    utassertnear(center.Delay(0, 5), 40.f);
+    // An empty list has nothing to stagger, and an index past the end is the
+    // last one.
+    utassertnear(first.Delay(7, 0), 0.f);
+    utassertnear(first.Delay(7, 3), 40.f);
+    // An explicit origin is where the wave starts, clamped into the list.
+    Stagger third = Stagger::New(interval, StaggerOrigin::IndexOrigin(2));
+    utassertnear(third.Delay(0, 5), 40.f);
+    utassertnear(third.Delay(4, 5), 40.f);
+    utassertnear(third.Delay(2, 5), 0.f);
+}
+
+// ─── composite interpolation ──────────────────────────────────────────────
+
+// common_gpui_geometry_interpolates_channel_by_channel.
+static void GeometryInterpolatesChannelByChannel() {
+    Size fromSize = {10, 20};
+    Size toSize = {30, 60};
+    Size quarter = motion::Interpolate<Size>::Between(fromSize, toSize, 0.25f);
+    utassertnear(quarter.w, 15.f);
+    utassertnear(quarter.h, 30.f);
+
+    Bounds from = {0, 10, 10, 20};
+    Bounds to = {40, 50, 30, 60};
+    Bounds mid = motion::Interpolate<Bounds>::Between(from, to, 0.5f);
+    utassertnear(mid.x, 20.f);
+    utassertnear(mid.y, 30.f);
+    utassertnear(mid.w, 20.f);
+    utassertnear(mid.h, 40.f);
+
+    MotionTransform target;
+    target.translation = {20, 40};
+    target.scale = {2.f, 0.5f};
+    target.rotationRadians = 3.14159265f;
+    target.opacity = 0.f;
+    MotionTransform half = motion::Interpolate<MotionTransform>::Between(
+        MotionTransform::Identity(), target, 0.5f);
+    utassertnear(half.translation.x, 10.f);
+    utassertnear(half.translation.y, 20.f);
+    utassertnear(half.scale.x, 1.5f);
+    utassertnear(half.scale.y, 0.75f);
+    utassertnear(half.rotationRadians, 3.14159265f / 2.f);
+    utassertnear(half.opacity, 0.5f);
+    // The identity is what a default transform is, and equality is by every
+    // channel.
+    utassert(MotionEq(MotionTransform::Identity(), MotionTransform()));
+    utassert(!MotionEq(MotionTransform::Identity(), target));
+}
+
+// ─── transition status ────────────────────────────────────────────────────
+
+// status_transition_reports_delay_running_and_finished, and
+// negative_delay_samples_a_target_change_inside_its_interval.
+static void ATransitionReportsWhereItIs() {
+    MotionState<float> st;
+    Motion m = MotionNew(100).Delay(20.f);
+    MotionAdvance(&st, 0.f, m, 0, false);
+    utassert(MotionAdvance(&st, 1.f, m, 0, false)
+                 .status == MotionStatus::Delayed);
+    utassert(MotionAdvance(&st, 1.f, m, 0.021, false)
+                 .status == MotionStatus::Running);
+    utassert(MotionAdvance(&st, 1.f, m, 0.121, false)
+                 .status == MotionStatus::Finished);
+    // A value nothing has moved is Idle rather than Running: there is
+    // nothing between its from and its target to be on the way through.
+    MotionState<float> still;
+    MotionAdvance(&still, 3.f, m, 0, false);
+    utassert(MotionAdvance(&still, 3.f, m, 0.001, false)
+                 .status == MotionStatus::Idle);
+
+    // A negative delay starts the run partway in, so the very first frame of
+    // a target change already shows a quarter of it.
+    MotionState<float> early;
+    Motion back =
+        MotionNew(100).Delay(SignedDuration::Negative(25)).Ease(EaseLinear);
+    MotionAdvance(&early, 0.f, back, 0, false);
+    MotionStep<float> step = MotionAdvance(&early, 1.f, back, 0, false);
+    utassert(step.status == MotionStatus::Running);
+    utassertnear(step.value, 0.25f);
+
+    // Reduced motion and a zero duration are both Finished on the spot.
+    MotionState<float> instant;
+    utassert(MotionAdvance(&instant, 1.f, MotionNew(0), 0, false)
+                 .status == MotionStatus::Finished);
+    MotionState<float> off;
+    utassert(MotionAdvance(&off, 1.f, m, 0, true)
+                 .status == MotionStatus::Finished);
+}
+
+// ─── motion/presence.rs ───────────────────────────────────────────────────
+
+// presence_enters_exits_and_only_unmounts_after_exit, and
+// presence_reentry_reverses_from_the_exit_sample.
+static void PresenceEntersExitsAndUnmountsOnlyAfterItsExit() {
+    PresenceState st;
+    motion::Transition policy = motion::Transition::New(100).Ease(EaseLinear);
+
+    // A surface that is present on its first frame still enters, from 0.
+    PresenceSample entering = PresenceAdvance(&st, true, policy, 0, false);
+    utassert(entering.phase == PresencePhase::Entering);
+    utassertnear(entering.progress, 0.f);
+    utassert(entering.ShouldRender());
+
+    PresenceSample present = PresenceAdvance(&st, true, policy, 0.1, false);
+    utassert(present.phase == PresencePhase::Present);
+    utassertnear(present.progress, 1.f);
+    utassert(present.status == MotionStatus::Finished);
+
+    // Removed: it is still rendered, at full opacity, on its way out.
+    PresenceSample exiting = PresenceAdvance(&st, false, policy, 0.1, false);
+    utassert(exiting.phase == PresencePhase::Exiting);
+    utassertnear(exiting.progress, 1.f);
+    utassert(exiting.ShouldRender());
+
+    PresenceSample absent = PresenceAdvance(&st, false, policy, 0.2, false);
+    utassert(absent.phase == PresencePhase::Absent);
+    utassertnear(absent.progress, 0.f);
+    utassert(!absent.ShouldRender());
+
+    // Re-entering partway through the exit reverses from the sample it was
+    // showing rather than starting over from nothing.
+    PresenceState re;
+    PresenceAdvance(&re, true, policy, 0, false);
+    PresenceAdvance(&re, true, policy, 0.1, false);
+    PresenceAdvance(&re, false, policy, 0.1, false);
+    PresenceSample reentering = PresenceAdvance(&re, true, policy, 0.14, false);
+    utassert(reentering.phase == PresencePhase::Entering);
+    utassertnear(reentering.progress, 0.6f);
+
+    // Reduced motion resolves it outright, in both directions, and so does a
+    // zero-duration policy.
+    PresenceState quick;
+    utassert(PresenceAdvance(&quick, true, policy, 0, true)
+                 .phase == PresencePhase::Present);
+    utassert(PresenceAdvance(&quick, false, policy, 0, true)
+                 .phase == PresencePhase::Absent);
+    PresenceState none;
+    utassert(PresenceAdvance(&none, true, motion::Transition::New(0), 0, false)
+                 .phase == PresencePhase::Present);
+}
+
+// ─── animate_keyframes and MotionReveal, through a window ─────────────────
+
+// keyed_keyframes_follow_timing_and_stop_after_completion.
+static void KeyedKeyframesFollowTheirTimingAndThenStop() {
+    App app;
+    Window* win = new Window();
+    Arena* arena = ArenaNew();
+    win->app = &app;
+    Ctx cx = {&app, win, arena, {}};
+    MotionSetReduced(false);
+
+    const Keyframe<float> frames[] = {Keyframe<float>::New(0.f, 0.f),
+                                      Keyframe<float>::New(1.f, 10.f)};
+    Keyframes<float> track = Keyframes<float>::TryNew(frames, 2).Unwrap();
+    Timing timing = Timing::New(100);
+    uint32_t key = MotionId(StrL("keyframe-test"));
+
+    win->frameNow = 1.0;
+    MotionStep<float> first = AnimateKeyframes(&cx, key, track, timing);
+    utassertnear(first.value, 0.f);
+    utassert(first.status == MotionStatus::Running);
+    // Running asks for another frame, which is what keeps a playback going
+    // without anything else touching the view.
+    utassert(win->animFrame);
+
+    // Halfway through, and it is the same playback: rebuilding the track and
+    // the timing does not restart it.
+    win->animFrame = false;
+    win->frameNow = 1.05;
+    utassertnear(AnimateKeyframes(&cx, key, track, timing).value, 5.f);
+    utassert(win->animFrame);
+
+    win->animFrame = false;
+    win->frameNow = 1.1;
+    MotionStep<float> done = AnimateKeyframes(&cx, key, track, timing);
+    utassertnear(done.value, 10.f);
+    utassert(done.status == MotionStatus::Finished);
+    // A finished playback asks for nothing more.
+    utassert(!win->animFrame);
+
+    // Reduced motion shows the end state and never asks for a frame.
+    MotionSetReduced(true);
+    win->frameNow = 1.2;
+    MotionStep<float> reduced = AnimateKeyframes(
+        &cx, MotionId(StrL("reduced-keyframes")), track, timing);
+    utassertnear(reduced.value, 10.f);
+    utassert(reduced.status == MotionStatus::Finished);
+    utassert(!win->animFrame);
+    MotionSetReduced(false);
+
+    delete win;
+    ArenaDelete(arena);
+}
+
+// MotionReveal: the measured, clipped vertical reveal an accordion panel and
+// a collapsible with a motion id are both made of.
+static void AMeasuredRevealClipsToItsProgress() {
+    App app;
+    Window* win = new Window();
+    Arena* arena = ArenaNew();
+    win->app = &app;
+    Ctx cx = {&app, win, arena, {}};
+    win->frameNow = 1.0;
+
+    // Nothing measured yet and nothing to show: zero height, so a closed
+    // reveal does not flash its content on its first frame.
+    El* closed = MotionReveal::New(&cx, StrL("panel"), 0.f, Div(arena)->H(40));
+    utassertnear(closed->style.height, 0.f);
+    utassertnear(closed->style.width, kFill);
+
+    // Layout writes the child's box back through the slot the element handed
+    // it; the next frame reveals that height and asks for one more, because
+    // the height it was built with has changed.
+    MotionRevealState* st = MotionRevealStateOf(&cx, StrL("panel"));
+    utassert(st != nullptr);
+    st->measured.h = 40.f;
+    win->animFrame = false;
+    El* half = MotionReveal::New(&cx, StrL("panel"), 0.5f, Div(arena)->H(40));
+    utassertnear(half->style.height, 20.f);
+    utassert(win->animFrame);
+    // Once the measurement has settled it stops asking.
+    win->animFrame = false;
+    El* full = MotionReveal::New(&cx, StrL("panel"), 1.f, Div(arena)->H(40));
+    utassertnear(full->style.height, 40.f);
+    utassert(!win->animFrame);
+    // Progress is clamped, so an overshooting spring cannot open a panel
+    // past its own content.
+    El* over = MotionReveal::New(&cx, StrL("panel"), 1.4f, Div(arena)->H(40));
+    utassertnear(over->style.height, 40.f);
+
+    delete win;
+    ArenaDelete(arena);
+}
+
+// crates/ui/tests/base_compat.rs
+// motion_core_types_are_available_from_the_base_facade.
+static void TheMotionCoreIsReachableFromTheBaseFacade() {
+    Timing timing = Timing::New(100).Ease(Easing::Linear());
+    utassertnear(timing.Sample(50).directedProgress, 0.5f);
+}
+
+// spring_rejects_non_finite_or_negative_physical_parameters, and
+// spring_reports_its_unit_specific_settling_tolerance.
+static void ASpringChecksItsPhysicalParameters() {
+    Spring spring = SpringNew(300);
+
+    utassert(spring.TryWithDamping(TestNaN())
+                 .UnwrapErr() == SpringError::InvalidDamping);
+    utassert(spring.TryWithDamping(-0.1f)
+                 .UnwrapErr() == SpringError::InvalidDamping);
+    utassert(spring.TryWithEpsilon(TestInf())
+                 .UnwrapErr() == SpringError::InvalidEpsilon);
+    utassert(spring.TryWithEpsilon(-0.1f)
+                 .UnwrapErr() == SpringError::InvalidEpsilon);
+    utassert(base::StrEq(Str(SpringErrorMessage(SpringError::InvalidDamping)),
+                         Str("spring damping must be finite and "
+                             "non-negative")));
+    // Rust panics in the unchecked form; there are no exceptions here, so it
+    // keeps the spring it had rather than taking the process down.
+    utassertnear(spring.WithDamping(-1.f).damping, 1.f);
+    utassertnear(spring.WithDamping(0.7f).damping, 0.7f);
+
+    // The tolerance a spring settles at is in the target's own units.
+    Spring normalized = SpringNew(180);
+    Spring pixels = SpringNew(180).WithEpsilon(0.1f);
+    utassert(normalized.Epsilon() < 0.01f);
+    utassertnear(pixels.Epsilon(), 0.1f);
+}
+
+// theme/motion.rs: the semantic scale the styled components now read instead
+// of each naming a spring of its own.
+static void TheThemeCarriesOneSemanticMotionScale() {
+    App app;
+    const Theme& th = ThemeNow(&app);
+    const MotionTokens& m = th.motion;
+
+    utassertnear(m.durationInstantMs, 0.f);
+    utassert(m.durationFastMs < m.durationNormalMs);
+    utassert(m.durationNormalMs < m.durationSlowMs);
+    utassert(m.distanceShort < m.distanceMedium);
+    utassertnear(m.easingEnter.Sample(0.f), 0.f);
+    utassertnear(m.easingEnter.Sample(1.f), 1.f);
+    // normalized_and_pixel_springs_use_unit_appropriate_tolerances.
+    utassert(m.springControl.Epsilon() < 0.01f);
+    utassertnear(m.springMove.Epsilon(), 0.1f);
+    // The two springs differ in what they are for: a control settles fast and
+    // never overshoots, something travelling arrives with a little weight.
+    utassertnear(m.springControl.damping, 1.f);
+    utassertnear(m.springMove.damping, 0.85f);
+    utassert(m.springControl.responseMs < m.springMove.responseMs);
+}
+
+// reduced_motion_spinner_is_static_and_requests_no_frame — crates/ui's own
+// test, which is about motion rather than about the spinner's look.
+static void AReducedMotionSpinnerIsStaticAndAsksForNoFrame() {
+    App app;
+    Window* win = new Window();
+    Arena* arena = ArenaNew();
+    win->app = &app;
+    Ctx cx = {&app, win, arena, {}};
+    win->frameNow = 1.0;
+
+    MotionSetReduced(true);
+    win->animFrame = false;
+    El* still = component::Spinner::New(&cx)->Id(StrL("a"))->IntoEl();
+    utassert(still->first != nullptr);
+    utassertnear(still->first->style.rotate, 0.f);
+    utassert(!win->animFrame);
+
+    // With motion on it turns, and keeps asking for the frames to turn with.
+    // The first frame is where the loop starts, so it is the one after that
+    // has anything to show for it.
+    MotionSetReduced(false);
+    win->frameNow = 1.2;
+    component::Spinner::New(&cx)->Id(StrL("a"))->IntoEl();
+    win->frameNow = 1.4;
+    El* turning = component::Spinner::New(&cx)->Id(StrL("a"))->IntoEl();
+    utassert(turning->first->style.rotate > 0.f);
+    utassert(win->animFrame);
+
+    delete win;
+    ArenaDelete(arena);
+}
+
 void TestMotion() {
     TestSuite("motion");
     TheEasingsAreTheCurvesRustNames();
@@ -580,4 +1137,21 @@ void TestMotion() {
     ASpringUnderOneOvershoots();
     ASuspendedSpringPinsItselfToTheTarget();
     ACoarseEpsilonSettlesSooner();
+    ASpringChecksItsPhysicalParameters();
+    TheCssKeywordEasingsMatchTheirPublishedSamples();
+    StepEasingObservesTheCssJumpPositions();
+    LinearStopsFillTheirOmittedPositions();
+    ANegativeDelayStartsInsideTheActiveInterval();
+    AlternateDirectionReversesTheOddIterations();
+    KeyframesValidateOffsetsAndSampleTheirSegments();
+    DiscreteValuesSwitchOnlyAtTheirSwitchPoint();
+    StaggerOriginsProduceStableDelays();
+    GeometryInterpolatesChannelByChannel();
+    ATransitionReportsWhereItIs();
+    PresenceEntersExitsAndUnmountsOnlyAfterItsExit();
+    KeyedKeyframesFollowTheirTimingAndThenStop();
+    AMeasuredRevealClipsToItsProgress();
+    TheMotionCoreIsReachableFromTheBaseFacade();
+    TheThemeCarriesOneSemanticMotionScale();
+    AReducedMotionSpinnerIsStaticAndAsksForNoFrame();
 }

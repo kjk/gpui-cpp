@@ -580,8 +580,16 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
 
     // Record the frame for the trace. GPUI times Window::draw, which is this
     // whole function: build the element tree, lay it out, paint it.
+    double drawEnd = TimeNow();
     FrameTiming timing;
-    timing.drawSecs = (float)(TimeNow() - drawStart);
+    timing.drawSecs = (float)(drawEnd - drawStart);
+    timing.invalidations = win->invalidations;
+    win->invalidations = 0;
+    // The present happened inside PaintTargetEnd above, so this is the closest
+    // thing to GPUI's `present_end` the runtime has; a frame the scene did not
+    // present carries no present time at all.
+    bool presented = !(SceneOn() && scene::SkipPresent());
+    timing.presentAt = presented ? drawEnd : -1;
     win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
     win->frameSeq++;
     FrameBenchTick(win, timing.drawSecs);

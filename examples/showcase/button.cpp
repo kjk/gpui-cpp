@@ -17,7 +17,7 @@ static void CancelClicked(ShowcaseApp*, Ctx*, const ClickEvent*) {
 // layout, so they win over the colours chained on below.
 static const ButtonStyles kButtonStyles = [] {
     ButtonStyles s;
-    s.selected.Bg(Rgb(0x40, 0x40, 0x40)).HoverBg(Rgb(0x40, 0x40, 0x40));
+    s.selected.Bg(ExampleRgb(0x404040)).HoverBg(ExampleRgb(0x404040));
     s.disabled.Opacity(0.5f);
     return s;
 }();
@@ -35,24 +35,24 @@ El* ShowcaseButton(ShowcaseApp* app, Ctx* cx) {
                     ->H(28)
                     ->ItemsCenter()
                     ->Font(12)
-                    ->Border(1, Rgb(0x17, 0x17, 0x17))
-                    ->Bg(Rgb(0x17, 0x17, 0x17))
-                    ->HoverBg(Rgb(0x40, 0x40, 0x40))
+                    ->Border(1, ExampleRgb(0x171717))
+                    ->Bg(ExampleRgb(0x171717))
+                    ->HoverBg(ExampleRgb(0x404040))
                     ->Child(TextEl(a, StrL("Save changes"))
                                 ->Font(12)
-                                ->Fg(Rgb(0xff, 0xff, 0xff))))
+                                ->Fg(ExampleRgb(0xffffff))))
         ->Child(ScButton(cx, StrL("secondary-button"))
                     ->OnClick(Listen(cx, &CancelClicked))
                     ->PadX(12)
                     ->H(28)
                     ->ItemsCenter()
                     ->Font(12)
-                    ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                    ->Bg(Rgb(0xff, 0xff, 0xff))
-                    ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                    ->Border(1, ExampleRgb(0xd4d4d4))
+                    ->Bg(ExampleRgb(0xffffff))
+                    ->HoverBg(ExampleRgb(0xf5f5f5))
                     ->Child(TextEl(a, StrL("Cancel"))
                                 ->Font(12)
-                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                ->Fg(ExampleRgb(0x171717))))
         // The same chain three times over; what tells the three apart is the
         // state the primitive resolves, not a second set of colours here.
         ->Child(
@@ -61,23 +61,23 @@ El* ShowcaseButton(ShowcaseApp* app, Ctx* cx) {
                 ->H(28)
                 ->ItemsCenter()
                 ->Font(12)
-                ->Border(1, Rgb(0x17, 0x17, 0x17))
-                ->Bg(Rgb(0x17, 0x17, 0x17))
-                ->HoverBg(Rgb(0x40, 0x40, 0x40))
+                ->Border(1, ExampleRgb(0x171717))
+                ->Bg(ExampleRgb(0x171717))
+                ->HoverBg(ExampleRgb(0x404040))
                 ->Child(TextEl(a, StrL("Selected"))
                             ->Font(12)
-                            ->Fg(Rgb(0xff, 0xff, 0xff))))
+                            ->Fg(ExampleRgb(0xffffff))))
         ->Child(ScButton(cx, StrL("disabled-button"), true, &kButtonStyles)
                     ->PadX(12)
                     ->H(28)
                     ->ItemsCenter()
                     ->Font(12)
-                    ->Border(1, Rgb(0x17, 0x17, 0x17))
-                    ->Bg(Rgb(0x17, 0x17, 0x17))
-                    ->HoverBg(Rgb(0x40, 0x40, 0x40))
+                    ->Border(1, ExampleRgb(0x171717))
+                    ->Bg(ExampleRgb(0x171717))
+                    ->HoverBg(ExampleRgb(0x404040))
                     ->Child(TextEl(a, StrL("Disabled"))
                                 ->Font(12)
-                                ->Fg(Rgb(0xff, 0xff, 0xff))));
+                                ->Fg(ExampleRgb(0xffffff))));
 }
 
 SHOWCASE_PAGE(CompButton, ShowcaseButton);

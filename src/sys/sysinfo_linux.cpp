@@ -8,6 +8,8 @@
 
 #include <dirent.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
 
@@ -306,6 +308,48 @@ void SysRefresh(SysState* s) {
     RefreshDisk(s);
     RefreshBattery(s);
     RefreshProcesses(s);
+}
+
+// crates/fps/src/memory/linux.rs. RssAnon out of /proc/self/status: the
+// resident anonymous memory of this process — its heap, its thread stacks and
+// every private mapping — and none of the files it maps. Split out of VmRSS
+// in 4.5, which is old enough not to need a fallback.
+//
+// RssAnon rather than the Private_Dirty of /proc/self/smaps_rollup, which is
+// the closer analogue of what macOS and Windows report: smaps_rollup walks
+// every mapping under the address space lock, ~425us a read against ~5us for
+// status on a windowed process, and a HUD should not perturb what it measures
+// to account for a few megabytes of relocations. The kernel publishes the
+// value in kibibytes, and every counter in the file is in that unit, so it is
+// parsed as a fixed `kB` rather than read back.
+bool SysSelfPrivateMemory(uint64_t* bytes) {
+    char buf[8192];
+    if (ReadSmallFile("/proc/self/status", buf, sizeof(buf)) <= 0) {
+        return false;
+    }
+    const char* key = "RssAnon:";
+    size_t keyLen = strlen(key);
+    const char* line = buf;
+    while (line && *line) {
+        if (strncmp(line, key, keyLen) == 0) {
+            const char* p = line + keyLen;
+            while (*p == ' ' || *p == '\t') {
+                p++;
+            }
+            if (*p < '0' || *p > '9') {
+                return false;
+            }
+            if (bytes) {
+                *bytes = strtoull(p, nullptr, 10) * 1024ull;
+            }
+            return true;
+        }
+        line = strchr(line, '\n');
+        if (line) {
+            line++;
+        }
+    }
+    return false;
 }
 
 } // namespace gpui

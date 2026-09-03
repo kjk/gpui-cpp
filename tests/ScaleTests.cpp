@@ -293,6 +293,26 @@ static void ScaleBandSingle() {
     utassert(b.LeastIndex(80.f) == 0);
 }
 
+// test_scale_band_dedup: a grouped bar chart of 2 series over 3 categories
+// reaches Rust as 6 entries with 3 distinct values, and the scale must give
+// 3 bands across the whole range rather than 6 half-width ones in its left
+// half. The domain here is the distinct count, so the same case is
+// constructed with the 3 the dedupe leaves Rust with, and the bands land on
+// the same ticks at the same width.
+static void ScaleBandDedup() {
+    const float range[2] = {0.f, 90.f};
+    ScaleBand b = ScaleBand::New(3, range, 2);
+    float t = 0;
+    utassert(b.Tick(0, &t) && TestNear(t, 0.f));
+    utassert(b.Tick(1, &t) && TestNear(t, 30.f));
+    utassert(b.Tick(2, &t) && TestNear(t, 60.f));
+    utassertnear(b.BandWidth(), 30.f);
+    // The band count is the domain, so there is no repeated slot that could
+    // go unaddressable: every index below it answers, and the one past the
+    // end does not.
+    utassert(!b.Tick(3, &t));
+}
+
 static void ScaleBandLeastIndex() {
     const float range[2] = {0.f, 90.f};
     ScaleBand b = ScaleBand::New(3, range, 2);
@@ -545,6 +565,7 @@ void TestScale() {
     ScaleBandEmpty();
     ScaleBandPadding();
     ScaleBandSingle();
+    ScaleBandDedup();
     ScaleBandLeastIndex();
 
     TestSuite("plot/tooltip");

@@ -72,6 +72,10 @@ struct ScriptView {
     Policy* policy = nullptr;
     ShellError error = {};
     EntityId self = {};
+    // The palette revision the current snapshot resolved its colors against.
+    // A theme change reaches every description, and nothing else would notify
+    // a view about it.
+    uint32_t themeRevision = 0;
     bool dirty = true;
 
     ~ScriptView();
@@ -100,6 +104,9 @@ struct ScriptView {
                             intptr_t binding);
     static void OnBoundString(ScriptView* self, Ctx* cx,
                               const ClickEvent* event, intptr_t binding);
+    static void OnItemSecondaryPress(ScriptView* self, Ctx* cx,
+                                     const MouseDownEvent* event,
+                                     intptr_t binding);
     static void OnSelectAction(ScriptView* self, Ctx* cx,
                                const ActionEvent* event, intptr_t binding);
     static void OnSelectOpen(ScriptView* self, Ctx* cx, const ClickEvent* event,

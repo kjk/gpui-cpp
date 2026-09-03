@@ -194,4 +194,30 @@ void SysRefresh(SysState* s) {
     RefreshProcesses(s);
 }
 
+// crates/fps/src/memory/windows.rs. PrivateUsage is this process' private
+// commit: the pages it asked the memory manager for, and not the image pages
+// its working set holds in common with every process mapping the same DLL.
+// Private commit rather than the private *working set*, which is closer to
+// what the other platforms report but is only reachable per page through
+// QueryWorkingSetEx, a walk of the whole address space; the difference is the
+// process' own memory that has been paged out, which is memory it is still
+// responsible for.
+//
+// The call takes the shorter PROCESS_MEMORY_COUNTERS, and `cb` is what tells
+// it the buffer is in fact the longer structure carrying PrivateUsage; the two
+// share a prefix by definition, so the cast is the documented way to ask.
+bool SysSelfPrivateMemory(uint64_t* bytes) {
+    PROCESS_MEMORY_COUNTERS_EX counters = {};
+    counters.cb = sizeof(counters);
+    if (!GetProcessMemoryInfo(GetCurrentProcess(),
+                              (PROCESS_MEMORY_COUNTERS*)&counters,
+                              sizeof(counters))) {
+        return false;
+    }
+    if (bytes) {
+        *bytes = (uint64_t)counters.PrivateUsage;
+    }
+    return true;
+}
+
 } // namespace gpui

@@ -156,5 +156,7 @@ void BenchFlexbox();
 void BenchGrid();
 void BenchTreeCreation();
 void BenchMarkdown();
+// bench/MotionBench.cpp — the motion core's steady sampling paths.
+void BenchMotion();
 
 #endif // GPUI_BENCH_H_

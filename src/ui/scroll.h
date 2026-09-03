@@ -3,6 +3,7 @@
 /* Themed scroll — crates/ui/src/scroll */
 
 #include "ui/sizing.h"
+#include "base/scrollable_mask.h"
 
 namespace gpui {
 
@@ -66,23 +67,9 @@ struct ScrollableElement {
     static Scrollable* OverflowYScrollbar(Ctx* cx, El* element);
 };
 
-// crates/ui/src/scroll/scrollable_mask.rs::ScrollableMask. GPUI paints this
-// as a transparent sibling over a ScrollHandle. The integrated C++ scroll
-// element already owns that handle, so IntoEl returns the same viewport after
-// marking the axis whose wheel gestures its mask captures.
-struct ScrollableMask {
-    Arena* a = nullptr;
-    Axis axis = Axis::Vertical;
-    El* element = nullptr;
-    Str id = {};
-    bool debug = false;
-
-    static ScrollableMask* New(Ctx* cx, Axis axis, El* element);
-    static El* Apply(El* element, Axis axis);
-    ScrollableMask* Id(Str v);
-    ScrollableMask* Debug(bool v = true);
-    El* IntoEl();
-};
+// `pub use gpui_base::ScrollableMask`. The mask moved to gpui-base with the
+// Markdown table that wants it; scroll/mod.rs re-exports it and so does this.
+using ScrollableMask = gpui::ScrollableMask;
 
 } // namespace component
 } // namespace gpui

@@ -94,6 +94,10 @@ struct Select {
     const Str* sections = nullptr;
     int nSections = 0;
     Str placeholder = {};
+    // The accessible name. The placeholder and the selected value are not
+    // used as one, because they describe the current value rather than the
+    // control itself.
+    Str accessibilityLabel = {};
     Str titlePrefix = {};
     Str empty = {};
     El* emptyEl = nullptr;
@@ -133,6 +137,8 @@ struct Select {
     Select* Items(const SearchableItem* items, int n);
     Select* Sections(const Str* titles, int n);
     Select* Placeholder(Str s);
+    // Set the name a screen reader announces for the select.
+    Select* AccessibilityLabel(Str s);
     Select* TitlePrefix(Str s);
     Select* Empty(Str s);
     Select* Empty(El* element);

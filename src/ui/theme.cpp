@@ -1,11 +1,34 @@
 #include "ui/theme.h"
 
 #include "gpui/assets.h"
+#include "ui/text.h"
 
 #include <math.h>
 #include <stdio.h>
 
 namespace gpui {
+
+// theme/motion.rs: the numbers every styled component's motion is tuned to.
+// The three curves are CSS cubic Béziers, and both springs carry the
+// tolerance their unit wants — normalized for a control, a tenth of a pixel
+// for something travelling across the screen.
+MotionTokens MotionTokens::Default() {
+    MotionTokens m;
+    m.durationInstantMs = 0.f;
+    m.durationFastMs = 120.f;
+    m.durationNormalMs = 180.f;
+    m.durationSlowMs = 280.f;
+    // Rust `.expect("static enter curve is valid")`: all three are constants
+    // that have been checked, so the unwrap cannot fail.
+    m.easingEnter = Easing::CubicBezier(0.16f, 1.f, 0.3f, 1.f).Unwrap();
+    m.easingExit = Easing::CubicBezier(0.4f, 0.f, 1.f, 1.f).Unwrap();
+    m.easingMove = Easing::CubicBezier(0.2f, 0.f, 0.f, 1.f).Unwrap();
+    m.springControl = Spring::New(180.f);
+    m.springMove = Spring::New(280.f).WithDamping(0.85f).WithEpsilon(0.1f);
+    m.distanceShort = 4.f;
+    m.distanceMedium = 8.f;
+    return m;
+}
 
 ThemeToken ThemeToken::New(Rgba color, Background background) {
     ThemeToken out;
@@ -779,6 +802,9 @@ SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
     c.border = t.border;
     c.input = t.inputBorder;
     c.ring = t.ring;
+    // `selection` joined the Base palette when rich text moved down: the
+    // wash behind selected text had been a literal in three places.
+    c.selection = t.selection;
 
     out.radius.none = 0;
     out.radius.sm = t.radius / 2.f;
@@ -825,6 +851,8 @@ void ThemeApplySemanticTokens(Theme* t, const SemanticThemeTokens& tokens) {
     t->border = c.border;
     t->inputBorder = c.input;
     t->ring = c.ring;
+    t->selection = c.selection;
+    t->tokens.selection = Background(c.selection);
     // The seven tokens Rust writes back beside the flat colours, so a
     // gradient left over from the palette this was applied to does not
     // outlive the colour under it.
@@ -885,6 +913,10 @@ void ThemeSyncBase(App* app) {
     base.resizable.hasHandle = true;
     base.resizable.hasActiveHandle = true;
     BaseThemeSet(app, base);
+    // `install_text_view_defaults`: rich text lives in Base and reads no
+    // theme, so the themed palette and the themed syntax highlighter are
+    // handed to it here, on the same beat the Base theme is replaced.
+    component::TextViewInstallDefaults(app);
 }
 
 #if GPUI_OS_WINDOWS

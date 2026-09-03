@@ -29,7 +29,30 @@ struct ColorTokens {
     Rgba border = {};
     Rgba input = {};
     Rgba ring = {};
+    // The background painted behind selected text. Selection quads go under
+    // the glyphs, so this is a translucent wash rather than a solid fill.
+    Rgba selection = {};
+
+    // Every field zeroed is transparent on transparent, which is what a Base
+    // application that never installs a palette used to render as. The
+    // default is the light palette instead — `impl Default for ColorTokens`.
+    ColorTokens();
+    // The two palettes, aligned with gpui-component's Default Light and
+    // Default Dark themes.
+    static ColorTokens Light();
+    static ColorTokens Dark();
+
+  private:
+    // The zeroed state the two palettes are filled in from; the public
+    // default constructor answers Light() and would otherwise recurse.
+    struct Empty {};
+    explicit ColorTokens(Empty) {}
 };
+
+bool operator==(const ColorTokens& a, const ColorTokens& b);
+inline bool operator!=(const ColorTokens& a, const ColorTokens& b) {
+    return !(a == b);
+}
 
 struct RadiusTokens {
     float none = 0;

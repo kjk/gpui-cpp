@@ -24,7 +24,7 @@ El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
                       ->Bg(Rgb(0, 0, 0))
                       ->Child(TextEl(a, StrL("Open Popover"))
                                   ->Font(12)
-                                  ->Fg(Rgb(0xff, 0xff, 0xff)));
+                                  ->Fg(ExampleRgb(0xffffff)));
     El* content = nullptr;
     if (app->popoverOpen) {
         content = Div(a)
@@ -32,14 +32,14 @@ El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
                       ->Pad(8)
                       ->FlexCol()
                       ->Gap(8)
-                      ->Bg(Rgb(0xff, 0xff, 0xff))
-                      ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                      ->Bg(ExampleRgb(0xffffff))
+                      ->Border(1, ExampleRgb(0xd4d4d4))
                       ->Child(TextEl(a, StrL("Workspace access"))
                                   ->Font(12)
-                                  ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                  ->Fg(ExampleRgb(0x171717)))
                       ->Child(TextEl(a, StrL("Anyone with the link can view."))
                                   ->Font(12)
-                                  ->Fg(Rgb(0x73, 0x73, 0x73)))
+                                  ->Fg(ExampleRgb(0x737373)))
                       ->Child(Div(a)->FlexRow()->JustifyEnd()->Child(
                           Button::New(cx, StrL("popover-done"))
                               ->OnClick(Listen(cx, &ClosePopover))
@@ -50,7 +50,7 @@ El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
                               ->Bg(Rgb(0, 0, 0))
                               ->Child(TextEl(a, StrL("Done"))
                                           ->Font(12)
-                                          ->Fg(Rgb(0xff, 0xff, 0xff)))));
+                                          ->Fg(ExampleRgb(0xffffff)))));
     }
     return Popover::New(cx, StrL("example-popover"))
         ->Trigger(trigger)

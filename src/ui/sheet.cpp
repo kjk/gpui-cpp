@@ -88,7 +88,11 @@ El* Sheet::IntoEl(WinSize win) {
         return Div(a);
     }
     const Theme& th = ThemeNow(cx->app);
-    Edges windowPadding = WindowPaddings(cx->win);
+    // The frame's content area, not just its shadow padding: a sheet sits
+    // flush against the inside of the window border and starts below the
+    // title bar, rather than hanging into the shadow on one side and leaving
+    // a border's gap on the other.
+    Edges windowPadding = WindowContentInsets(cx->win);
     float viewW = win.dipW - windowPadding.left - windowPadding.right;
     float viewH = win.dipH - windowPadding.top - windowPadding.bottom;
     bool horizontal =

@@ -67,18 +67,11 @@ declare module "gpui" {
     | { [key: string]: HostValue };
 
   /**
-   * A color: a semantic token name, or a `#rgb`, `#rrggbb` or `#rrggbbaa`
-   * literal. Prefer a token; a literal bypasses the theme, and a theme
-   * switch will not reach it.
-   *
-   * The union is closed, so a mistyped token is a compile error. A token
-   * name that reaches a call through a variable widens to `string` and
-   * has to say what it is:
-   *
-   *     /** @type {{ bg: import("gpui").Color }} *\/
-   *     const palette = tone === "blocking" ? ... : ...;
+   * A concrete `#rgb`, `#rrggbb`, or `#rrggbbaa` color value.
+   * Read semantic colors from `cx.theme().colors`; bare token names are
+   * intentionally not accepted.
    */
-  export type Color = import("gpui-base").ColorToken | `#${string}`;
+  export type Color = `#${string}`;
 
   /**
    * An accessibility role, mirroring `gpui::Role` in snake_case.
@@ -299,11 +292,43 @@ declare module "gpui" {
    */
   export interface Context {
     /**
-     * Requests a re-render. Legal from an event handler or a task; calling it
-     * during `render` throws, because notifying yourself while rendering is a
-     * loop.
+     * Requests a re-render of the current view, or of one retained `Entity`.
+     *
+     * Pass a target after changing shared state that retained child reads. It
+     * invalidates that child's script description without invoking its
+     * `update(props)`; use `entity.set_props(props)` when the child must receive
+     * and process new props.
+     *
+     * Legal from an event handler or a task. Calling it during `render` throws,
+     * because notifying a view while rendering is a loop.
      */
-    notify(): void;
+    notify(target?: Entity): void;
+    /**
+     * `App::bind_keys`. Installs key bindings and answers how many.
+     *
+     * The keymap is the application's, not a window's or a view's, so a chord
+     * bound here is live wherever its `context` predicate matches. The whole
+     * list is validated before any of it is installed: a keymap half applied
+     * because one entry had a typo is a worse state than one not applied, and
+     * the script cannot see which half made it.
+     *
+     * Illegal from `render`.
+     */
+    bind_keys(bindings: KeyBinding[]): number;
+    /**
+     * `App::stop_propagation`. Stops this event reaching the handlers above
+     * this element.
+     *
+     * GPUI delivers an event to every handler on the path, so a row inside a
+     * list with its own `on_click` fires both. Call this from the inner one to
+     * keep the event there.
+     */
+    stop_propagation(): void;
+    /**
+     * `App::propagate`. Undoes a `stop_propagation()` made earlier in the same
+     * dispatch, letting the event continue.
+     */
+    propagate(): void;
     phase(): import("gpui-shell").ScopePhase;
     /** Reads the current `gpui_base::Theme` semantic token projection. */
     theme(): import("gpui-base").Theme;
@@ -375,7 +400,8 @@ declare module "gpui" {
    * A context that may be held across an `await`.
    *
    * The mirror of GPUI's `AsyncApp`. An ordinary [`Context`] speaks for one
-   * host call and reports clearly once that call has returned — which is what
+)GPUI_DTS";
+static const char kShellTypes1[] = R"GPUI_DTS(   * host call and reports clearly once that call has returned — which is what
    * catches a `cx` stashed in a closure. This one names no call at all: it
    * resolves whichever is running when a member is used, and refuses only when
    * none is.
@@ -395,6 +421,19 @@ declare module "gpui" {
     alt: boolean;
     /** Command on macOS, Windows key elsewhere. */
     platform: boolean;
+    /** The Function key. */
+    function: boolean;
+  }
+
+  /** The Caps Lock state carried by GPUI modifier-change events. */
+  export interface Capslock {
+    on: boolean;
+  }
+
+  /** What an `on_modifiers_changed` handler receives. */
+  export interface ModifiersChangedEvent {
+    modifiers: Modifiers;
+    capslock: Capslock;
   }
 
   /** What an `on_click` handler receives. Keyboard activation counts as one. */
@@ -403,13 +442,93 @@ declare module "gpui" {
     modifiers: Modifiers;
   }
 
+  /**
+   * What an `on_key_down` or `on_key_up` handler receives.
+   *
+   * `keystroke` is the whole chord in the spelling a key binding is written
+   * in — `"cmd-shift-s"`, `"escape"`, `"ctrl-alt-delete"` — and is what a
+   * comparison is normally written against. `key` and `modifiers` are the
+   * same thing taken apart, for when only one half matters.
+   *
+   * The platform modifier is spelled `cmd` on every platform, including Linux
+   * and Windows. GPUI spells it for the platform it was built for, which is
+   * right for a keymap a person reads and wrong for a string a program
+   * compares: one script runs on all three, and `event.keystroke === "cmd-s"`
+   * has to mean the same thing in all three. It is also the spelling
+   * `cx.bind_keys` accepts everywhere, so a binding and the event it produces
+   * agree by construction.
+   */
+  export interface KeyEvent {
+    /** The key printed on the key that was pressed, e.g. `"s"` or `"escape"`. */
+    key: string;
+    /** The full chord, as GPUI's `Keystroke::unparse` spells it. */
+    keystroke: string;
+    /** The character this keystroke would type, when it types one. */
+    key_char?: string;
+    modifiers: Modifiers;
+    /** Whether the key is being held down. Absent on `on_key_up`. */
+    is_held?: boolean;
+  }
+
   export interface Point { x: number; y: number; }
-)GPUI_DTS";
-static const char kShellTypes1[] = R"GPUI_DTS(  /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
+  export interface Size { width: number; height: number; }
+  /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
   export interface MouseMoveEvent {
     position: Point;
     local_position: Point;
     bounds: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /**
+   * What an `on_mouse_down`, `on_mouse_up` or `on_mouse_down_out` handler
+   * receives.
+   *
+   * `local_position` and `bounds` are absent when the element has not been
+   * painted yet, and on an `on_mouse_down_out` press they describe an element
+   * the pointer is outside of — so `local_position` there is negative, or past
+   * the far edge, which is exactly what says which way.
+   */
+  export interface MouseButtonEvent {
+    button: MouseButton;
+    /** How many presses in the current sequence; `2` on a double-click. */
+    click_count: number;
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /** What an `on_action` handler receives. */
+  export interface ActionEvent {
+    /** The action's name, as the script bound and registered it. */
+    action: string;
+  }
+
+  /** One entry of `cx.bind_keys`. */
+  export interface KeyBinding {
+    /** The chord, e.g. `"cmd-s"`, or a sequence: `"ctrl-k ctrl-s"`. */
+    keystroke: string;
+    /** The action this chord dispatches. */
+    action: string;
+    /**
+     * Where it applies, as a key-context predicate matched against the
+     * `key_context(...)` an element declares — `"Editor"`, `"Pane && !modal"`.
+     * Omitted, the binding is global.
+     */
+    context?: string;
+  }
+
+  /** What an `on_scroll_wheel` handler receives. */
+  export interface ScrollWheelEvent {
+    /** The scroll distance in pixels, whichever unit the device reported. */
+    delta: Point;
+    /** The same distance in lines, when the device reported lines. */
+    delta_lines?: Point;
+    touch_phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
     modifiers: Modifiers;
   }
 
@@ -518,6 +637,22 @@ static const char kShellTypes1[] = R"GPUI_DTS(  /** GPUI mouse coordinates. `pos
      */
     content(element: Element): Element;
     /**
+     * Fills an `Avatar`'s `image` slot, which takes an `AvatarImage`.
+     *
+     * Consumed exactly as `content` is — a slot element is not also drawn as a
+     * child. Base renders this one when it is there and the `fallback` when it
+     * is not, so filling both is how a picture gets something to fall back to.
+     */
+    image(element: Element): Element;
+    /** Fills an `Avatar`'s `fallback` slot, which takes an `AvatarFallback`. */
+    fallback(element: Element): Element;
+    /** Fills an `AccordionItem`'s `header` slot, which takes an `AccordionHeader`. */
+    header(element: Element): Element;
+    /** Fills a component's named `footer` slot. */
+    footer(element: Element): Element;
+    /** Fills an `AccordionItem`'s `panel` slot, which takes an `AccordionPanel`. */
+    panel(element: Element): Element;
+    /**
      * Fills the `trigger` slot of a `Popover` or a `HoverCard`: the element
      * that is on screen while the surface is closed, and that opens it.
      *
@@ -541,7 +676,8 @@ static const char kShellTypes1[] = R"GPUI_DTS(  /** GPUI mouse coordinates. `pos
      * Supplies the look of a `NumberInput`'s decrement button.
      *
      * Not optional in practice. The step button is built by the base layer and
-     * is completely unstyled — no size, no content — so a number input that
+)GPUI_DTS";
+static const char kShellTypes2[] = R"GPUI_DTS(     * is completely unstyled — no size, no content — so a number input that
      * leaves this empty has a decrement control that cannot be seen and cannot
      * be pressed.
      *
@@ -581,6 +717,104 @@ static const char kShellTypes1[] = R"GPUI_DTS(  /** GPUI mouse coordinates. `pos
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
     on_hover(handler: (hovered: boolean, cx: Context) => void): Element;
     /**
+     * GPUI `InteractiveElement::on_key_down`, delivered while this element or
+     * something inside it holds the keyboard.
+     *
+     * A key event travels the focus path, so `track_focus(handle)` is half of
+     * this registration rather than a separate concern: without it the handler
+     * sits on an element the keyboard never reaches and nothing arrives. The
+     * event continues to the handlers above unless `cx.stop_propagation()`
+     * says otherwise.
+     *
+     * Wired on `div`, `h_flex`, `v_flex`, `Button`, `Link`, `Checkbox`,
+     * `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. On any other component it
+     * is recorded and never reaches GPUI, and the log says so — wrap it and
+     * write the handler on the wrapper. The same list applies to `on_key_up`,
+     * the four pointer handlers, `on_action` and `key_context`.
+     *
+     * Wired is not the same as reachable. A key travels the focus path, so a
+     * component that accepts no focus handle — `Tab` — hears presses and never
+     * hears keys, however well both are wired.
+     */
+    on_key_down(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_key_up`, on the same focus path as `on_key_down`. */
+    on_key_up(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_modifiers_changed`, on the keyboard focus path. */
+    on_modifiers_changed(
+      handler: (event: ModifiersChangedEvent, cx: Context) => void,
+    ): Element;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down`, for one button.
+     *
+     * Lower-level than `on_click`, and the reason to reach for it is that a
+     * press is not a click: it fires before the release, it reports which
+     * button, and `click_count` distinguishes a double-click. Registering it
+     * for two buttons on one element is fine — the two handlers are
+     * independent.
+     */
+    on_mouse_down(
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /** GPUI `InteractiveElement::on_mouse_up`, for one button. */
+    on_mouse_up(
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down_out`: a press anywhere *outside*
+     * this element, delivered during the capture phase.
+     *
+     * This is how a surface a script drew itself is dismissed by a press
+     * elsewhere — the same listener base's own components close on. It fires
+     * for any button.
+     */
+    on_mouse_down_out(handler: (event: MouseButtonEvent, cx: Context) => void): Element;
+    /**
+     * GPUI `InteractiveElement::on_scroll_wheel`: wheel and trackpad scrolling
+     * over this element.
+     *
+     * For scrolling a region, `overflow_scroll()` is the answer and this is
+     * not: it hands GPUI's own retained scroll container the job. Use this when
+     * the gesture drives something else — a zoom, a value, a custom viewport.
+     */
+    on_scroll_wheel(handler: (event: ScrollWheelEvent, cx: Context) => void): Element;
+    /**
+     * `handler(event, cx)` when the named action is dispatched to this element
+     * or to something inside it.
+     *
+     * An action is the level above a keystroke: `cx.bind_keys` says which
+     * chord means `"save"`, in which context, and this says what `"save"`
+     * does. A menu item or a button dispatching the same name through
+     * `window.dispatch_action("save")` reaches the same handler without
+     * pretending to be a keyboard.
+     *
+     * Registering several on one element is fine and they are independent. An
+     * action none of them names carries on to an element further out.
+     */
+    on_action(action: string, handler: (event: ActionEvent, cx: Context) => void): Element;
+    /**
+     * `InteractiveElement::key_context`: the key-binding context this element
+     * and its subtree sit in.
+     *
+     * What a binding's `context` predicate is matched against, so one chord can
+     * mean one thing in a list and another in an editor. The value is a name or
+     * a predicate expression, not free text; an unparsable one is reported and
+     * the context is left unset.
+     */
+    key_context(context: string): Element;
+    /**
+     * An `AccordionHeader`'s announced heading level — "heading level 3" — as
+     * `aria-level` means it. Defaults to 3. It announces; it sizes nothing.
+     */
+    aria_level(level: number): Element;
+    /**
+     * Whether an `AccordionPanel` stays in the tree while shut. Off by default;
+     * on, its content keeps a scroll position or a half-typed field across a
+     * close and reopen.
+     */
+    keep_mounted(value?: boolean): Element;
+    /**
      * `handler(key, cx)` when a row of a virtual list is clicked, where `key`
      * is what the list's `get_key(index)` returned for that row.
      *
@@ -606,6 +840,27 @@ static const char kShellTypes1[] = R"GPUI_DTS(  /** GPUI mouse coordinates. `pos
      * against `on_item_click`.
      */
     on_item_click(handler: (key: string, cx: Context) => void): Element;
+    /**
+     * `handler(key, event, cx)` on a secondary press — the right button — over
+     * a row of a virtual list. `key` is what the list's `get_key(index)`
+     * returned for that row, and `event` is the press as `on_mouse_down`
+     * reports it: `position` in the window, `local_position` and `bounds`
+     * against the row's own box.
+     *
+     * A press rather than a click, because that is when a context menu opens:
+     * the row is still under the pointer, so the menu can name what it is for
+     * before it is drawn over it. And one handler for the list rather than one
+     * per row, for the reason `on_item_click` gives.
+     *
+     * It is delivered on the row, so a handler for the same button on an
+     * element around the list still fires after it, in the ordinary bubble
+     * order, with that element's own `local_position`. A menu drawn inside a
+     * pane learns which row was pressed from this handler and where in the
+     * pane to open from the pane's.
+     */
+    on_item_secondary_click(
+      handler: (key: string, event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
     /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
@@ -640,8 +895,7 @@ static const char kShellTypes1[] = R"GPUI_DTS(  /** GPUI mouse coordinates. `pos
      * its open state cannot produce. A hover card's open state is its own, so
      * nothing is lost except the notification.
      */
-)GPUI_DTS";
-static const char kShellTypes2[] = R"GPUI_DTS(    on_open_change(handler: (open: boolean, cx: Context) => void): Element;
+    on_open_change(handler: (open: boolean, cx: Context) => void): Element;
     /**
      * `handler(_, cx)` on Enter in an open `Select` or `Combobox`.
      *
@@ -656,7 +910,8 @@ static const char kShellTypes2[] = R"GPUI_DTS(    on_open_change(handler: (open:
      * `on_open_change(false)` — which is what lets a script commit a pending
      * value on the way out.
      */
-    on_dismiss(handler: (event: {}, cx: Context) => void): Element;
+)GPUI_DTS";
+static const char kShellTypes3[] = R"GPUI_DTS(    on_dismiss(handler: (event: {}, cx: Context) => void): Element;
     /**
      * The label a hover shows over this element, once the pointer has rested
      * on it for half a second.
@@ -889,8 +1144,7 @@ static const char kShellTypes2[] = R"GPUI_DTS(    on_open_change(handler: (open:
      * Setting it at all makes a `Popover` controlled: the script holds the open
      * state, is told about every change through `on_open_change`, and decides
      * what to do about it. Leaving it off leaves the popover to open and close
-)GPUI_DTS";
-static const char kShellTypes3[] = R"GPUI_DTS(     * itself from `default_open`. The three combobox roots have no uncontrolled
+     * itself from `default_open`. The three combobox roots have no uncontrolled
      * mode at all: they start shut and stay shut until the script says
      * otherwise.
      *
@@ -908,7 +1162,8 @@ static const char kShellTypes3[] = R"GPUI_DTS(     * itself from `default_open`.
      */
     overlay_closable(value: boolean): Element;
     /**
-     * Which corner of a `Popover` or `HoverCard` is pinned to its trigger, or
+)GPUI_DTS";
+static const char kShellTypes4[] = R"GPUI_DTS(     * Which corner of a `Popover` or `HoverCard` is pinned to its trigger, or
      * where an `fps_monitor()` is pinned inside its relative parent. Omitted,
      * each keeps its own default: `Popover` is `top_left`, `HoverCard` is
      * `top_center`, and `fps_monitor()` is `top_right`.
@@ -917,6 +1172,10 @@ static const char kShellTypes3[] = R"GPUI_DTS(     * itself from `default_open`.
      * edge is a preference rather than a promise.
      */
     anchor(value: Anchor): Element;
+    /** Whether an fps_monitor requests continuous whole-window redraws. Default false. */
+    continuous(value: boolean): Element;
+    /** Frame budget, in milliseconds, used by an fps_monitor's FRAME grading. */
+    frame_budget(milliseconds: number): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
     mouse_button(value: MouseButton): Element;
     /**
@@ -988,6 +1247,57 @@ static const char kShellTypes3[] = R"GPUI_DTS(     * itself from `default_open`.
     active(declare: (el: Element) => Element | void): Element;
     /** Styles applied while the element has focus. */
     focus(declare: (el: Element) => Element | void): Element;
+    /**
+     * Displays the tab at `index` in `group` when this element is clicked.
+     *
+     * One of the twelve **dock commands**, which are how an element a dock's
+     * chrome drew says what it does. A chrome handler runs once per container
+     * per frame for as long as the dock is on screen, so it may not register an
+     * event handler — one created there would pile up for as long as the dock
+     * stood. A command carries no script value: it names a container in the
+     * area and what to ask it, and base does the work.
+     *
+     * Every command takes the object its handler was given — the group, the
+     * dock, the tile — as its first argument. They belong on a `div`, an
+     * `h_flex` or a `v_flex`; a `Button` builds its own interior and has
+     * nowhere to put one.
+     */
+    select_tab(group: import("gpui-base").DockGroup, index: number): Element;
+    /** Closes `panel` when this element is clicked, if its group allows it. */
+    close_panel(group: import("gpui-base").DockGroup, panel: number): Element;
+    /** Zooms the group in, or back out. */
+    toggle_zoom(group: import("gpui-base").DockGroup): Element;
+    /**
+     * Makes this element the drag source for the tab at `index`, carrying
+     * base's own panel payload — so dropping it on another group, or on the
+     * area itself, moves the panel there.
+     */
+    drag_tab(group: import("gpui-base").DockGroup, index: number): Element;
+    /**
+     * Accepts a dragged panel here. `index` is the slot it lands in; leave it
+     * out to append, which is what a drop past the last tab means.
+     */
+    drop_tab(group: import("gpui-base").DockGroup, index?: number): Element;
+    /** Opens or closes the dock when this element is clicked. */
+    toggle_dock(dock: import("gpui-base").DockRegion): Element;
+    /**
+     * Drags the dock's edge. Base clamps every size it is given against the
+     * area and the opposite dock, so nothing here has to.
+     */
+    resize_dock(dock: import("gpui-base").DockRegion): Element;
+    /** Drags the tile around its canvas, raising it first. */
+    move_tile(tile: import("gpui-base").DockTile): Element;
+    /** Drags one edge or corner of the tile. */
+    resize_tile(
+      tile: import("gpui-base").DockTile,
+      side: import("gpui-base").TileResizeSide,
+    ): Element;
+    /** Brings the tile above the others when this element is pressed. */
+    raise_tile(tile: import("gpui-base").DockTile): Element;
+    /** Zooms the tile to fill its dock, or back out. */
+    toggle_tile_zoom(tile: import("gpui-base").DockTile): Element;
+    /** Closes the tile. */
+    close_tile(tile: import("gpui-base").DockTile): Element;
 
     // Style methods that take an argument. Which length type a method
     // accepts follows its Rust signature, so `.p("auto")` and
@@ -1094,7 +1404,8 @@ static const char kShellTypes3[] = R"GPUI_DTS(     * itself from `default_open`.
     /** Sets the corner radius on the two right corners. */
     rounded_r(value: AbsoluteLength): Element;
     /** Sets the corner radius on the two top corners. */
-    rounded_t(value: AbsoluteLength): Element;
+)GPUI_DTS";
+static const char kShellTypes5[] = R"GPUI_DTS(    rounded_t(value: AbsoluteLength): Element;
     /** Sets the corner radius on the top-left corner. */
     rounded_tl(value: AbsoluteLength): Element;
     /** Sets the corner radius on the top-right corner. */
@@ -1164,8 +1475,7 @@ static const char kShellTypes3[] = R"GPUI_DTS(     * itself from `default_open`.
      */
     border_12(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes4[] = R"GPUI_DTS(     * Sets the border width of the element. [Docs](https://tailwindcss.com/docs/border-width)
+     * Sets the border width of the element. [Docs](https://tailwindcss.com/docs/border-width)
      *
      * 16px
      */
@@ -1483,7 +1793,8 @@ static const char kShellTypes4[] = R"GPUI_DTS(     * Sets the border width of th
      *
      * 2px
      */
-    border_r_2(): Element;
+)GPUI_DTS";
+static const char kShellTypes6[] = R"GPUI_DTS(    border_r_2(): Element;
     /**
      * Sets the border width of the right side of the element. [Docs](https://tailwindcss.com/docs/border-width#individual-sides)
      *
@@ -1551,8 +1862,7 @@ static const char kShellTypes4[] = R"GPUI_DTS(     * Sets the border width of th
      */
     border_t_0(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes5[] = R"GPUI_DTS(     * Sets the border width of the top side of the element. [Docs](https://tailwindcss.com/docs/border-width#individual-sides)
+     * Sets the border width of the top side of the element. [Docs](https://tailwindcss.com/docs/border-width#individual-sides)
      *
      * 1px
      */
@@ -1840,7 +2150,8 @@ static const char kShellTypes5[] = R"GPUI_DTS(     * Sets the border width of th
      */
     border_y_7(): Element;
     /**
-     * Sets the border width of the horizontal sides of the element. [Docs](https://tailwindcss.com/docs/border-width#horizontal-and-vertical-sides)
+)GPUI_DTS";
+static const char kShellTypes7[] = R"GPUI_DTS(     * Sets the border width of the horizontal sides of the element. [Docs](https://tailwindcss.com/docs/border-width#horizontal-and-vertical-sides)
      *
      * 8px
      */
@@ -1912,8 +2223,7 @@ static const char kShellTypes5[] = R"GPUI_DTS(     * Sets the border width of th
      */
     bottom_1_12(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes6[] = R"GPUI_DTS(     * Sets the bottom value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+     * Sets the bottom value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 50% (1/2)
      */
@@ -2231,7 +2541,8 @@ static const char kShellTypes6[] = R"GPUI_DTS(     * Sets the bottom value of a 
      */
     bottom_neg_20(): Element;
     /**
-     * Sets the bottom value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+)GPUI_DTS";
+static const char kShellTypes8[] = R"GPUI_DTS(     * Sets the bottom value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 96px (6rem)
      */
@@ -2303,8 +2614,7 @@ static const char kShellTypes6[] = R"GPUI_DTS(     * Sets the bottom value of a 
      */
     bottom_neg_40(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes7[] = R"GPUI_DTS(     * Sets the bottom value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+     * Sets the bottom value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 192px (12rem)
      */
@@ -2614,7 +2924,8 @@ static const char kShellTypes7[] = R"GPUI_DTS(     * Sets the bottom value of a 
     flex(): Element;
     /**
      * Sets the element to allow a flex item to grow and shrink as needed, ignoring its initial size.
-     *
+)GPUI_DTS";
+static const char kShellTypes9[] = R"GPUI_DTS(     *
      * [Docs](https://tailwindcss.com/docs/flex#flex-1)
      */
     flex_1(): Element;
@@ -2687,8 +2998,7 @@ static const char kShellTypes7[] = R"GPUI_DTS(     * Sets the bottom value of a 
     /**
      * Enables flex item shrinking (flex-shrink: 1).
      *
-)GPUI_DTS";
-static const char kShellTypes8[] = R"GPUI_DTS(     * [Docs](https://tailwindcss.com/docs/flex-shrink#shrink-1)
+     * [Docs](https://tailwindcss.com/docs/flex-shrink#shrink-1)
      */
     flex_shrink_1(): Element;
     /**
@@ -3026,7 +3336,8 @@ static const char kShellTypes8[] = R"GPUI_DTS(     * [Docs](https://tailwindcss.
      *
      * 48px (3rem)
      */
-    gap_neg_12(): Element;
+)GPUI_DTS";
+static const char kShellTypes10[] = R"GPUI_DTS(    gap_neg_12(): Element;
     /**
      * Sets the gap between rows and columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap)
      *
@@ -3104,8 +3415,7 @@ static const char kShellTypes8[] = R"GPUI_DTS(     * [Docs](https://tailwindcss.
      *
      * 66% (2/3)
      */
-)GPUI_DTS";
-static const char kShellTypes9[] = R"GPUI_DTS(    gap_neg_2_3(): Element;
+    gap_neg_2_3(): Element;
     /**
      * Sets the gap between rows and columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap)
      *
@@ -3415,7 +3725,8 @@ static const char kShellTypes9[] = R"GPUI_DTS(    gap_neg_2_3(): Element;
     /**
      * Sets the gap between columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
      *
-     * 75% (3/4)
+)GPUI_DTS";
+static const char kShellTypes11[] = R"GPUI_DTS(     * 75% (3/4)
      */
     gap_x_3_4(): Element;
     /**
@@ -3479,8 +3790,7 @@ static const char kShellTypes9[] = R"GPUI_DTS(    gap_neg_2_3(): Element;
      */
     gap_x_6(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes10[] = R"GPUI_DTS(     * Sets the gap between columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
+     * Sets the gap between columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
      *
      * 256px (16rem)
      */
@@ -3762,7 +4072,8 @@ static const char kShellTypes10[] = R"GPUI_DTS(     * Sets the gap between colum
      */
     gap_x_neg_72(): Element;
     /**
-     * Sets the gap between columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
+)GPUI_DTS";
+static const char kShellTypes12[] = R"GPUI_DTS(     * Sets the gap between columns in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
      *
      * 32px (2rem)
      */
@@ -3826,8 +4137,7 @@ static const char kShellTypes10[] = R"GPUI_DTS(     * Sets the gap between colum
      *
      * 40px (2.5rem)
      */
-)GPUI_DTS";
-static const char kShellTypes11[] = R"GPUI_DTS(    gap_y_10(): Element;
+    gap_y_10(): Element;
     /**
      * Sets the gap between rows in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
      *
@@ -4117,7 +4427,8 @@ static const char kShellTypes11[] = R"GPUI_DTS(    gap_y_10(): Element;
      */
     gap_y_neg_128(): Element;
     /**
-     * Sets the gap between rows in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
+)GPUI_DTS";
+static const char kShellTypes13[] = R"GPUI_DTS(     * Sets the gap between rows in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
      *
      * 64px (4rem)
      */
@@ -4182,8 +4493,7 @@ static const char kShellTypes11[] = R"GPUI_DTS(    gap_y_10(): Element;
      * 96px (6rem)
      */
     gap_y_neg_24(): Element;
-)GPUI_DTS";
-static const char kShellTypes12[] = R"GPUI_DTS(    /**
+    /**
      * Sets the gap between rows in flex layouts. [Docs](https://tailwindcss.com/docs/gap#changing-row-and-column-gaps-independently)
      *
      * 66% (2/3)
@@ -4516,7 +4826,8 @@ static const char kShellTypes12[] = R"GPUI_DTS(    /**
     /**
      * Sets the height of the element. [Docs](https://tailwindcss.com/docs/height)
      *
-     * 14px (0.875rem)
+)GPUI_DTS";
+static const char kShellTypes14[] = R"GPUI_DTS(     * 14px (0.875rem)
      */
     h_3p5(): Element;
     /**
@@ -4609,13 +4920,47 @@ static const char kShellTypes12[] = R"GPUI_DTS(    /**
      * 384px (24rem)
      */
     h_96(): Element;
-)GPUI_DTS";
-static const char kShellTypes13[] = R"GPUI_DTS(    /**
+    /**
      * Sets the height of the element. [Docs](https://tailwindcss.com/docs/height)
      *
      * Auto
      */
     h_auto(): Element;
+    /**
+     * Lays children out in a row, centered on the cross axis.
+     *
+     * The centering is the desktop default for a row of controls — an icon
+     *
+     * beside its label lines up without either side asking for it — but it is
+     *
+     * **not** the mirror image of [`Self::v_flex`], which leaves the cross axis
+     *
+     * stretching. A column placed in a row therefore does not take the row's
+     *
+     * height: it takes its content's height and is centered inside the row.
+     *
+     * When its content is taller than the row, it overflows equally above and
+     *
+     * below, so the column's header is pushed off the top edge and clipped.
+     *
+     * Give a full-height column `h_full()` (or the row `items_start()` /
+     *
+     * `items_stretch()`) whenever the child owns a header, a footer, or a
+     *
+     * scroll region that has to resolve against the row's height.
+     *
+     * ```
+     *
+     * use gpui_base::StyledExt as _;
+     *
+     * use gpui::{ParentElement as _, Styled as _, div};
+     *
+     * // A sidebar beside a detail pane, both spanning the full height.
+     *
+     * div().h_flex().size_full().child(div().w_64().h_full());
+     *
+     * ```
+     */
     h_flex(): Element;
     /**
      * Sets the height of the element. [Docs](https://tailwindcss.com/docs/height)
@@ -4937,7 +5282,8 @@ static const char kShellTypes13[] = R"GPUI_DTS(    /**
     inset_11(): Element;
     /**
      * Sets the top, right, bottom, and left values of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
-     *
+)GPUI_DTS";
+static const char kShellTypes15[] = R"GPUI_DTS(     *
      * 448px (28rem)
      */
     inset_112(): Element;
@@ -5040,8 +5386,7 @@ static const char kShellTypes13[] = R"GPUI_DTS(    /**
     /**
      * Sets the top, right, bottom, and left values of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
-)GPUI_DTS";
-static const char kShellTypes14[] = R"GPUI_DTS(     * 10px (0.625rem)
+     * 10px (0.625rem)
      */
     inset_2p5(): Element;
     /**
@@ -5291,7 +5636,8 @@ static const char kShellTypes14[] = R"GPUI_DTS(     * 10px (0.625rem)
      */
     inset_neg_24(): Element;
     /**
-     * Sets the top, right, bottom, and left values of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+)GPUI_DTS";
+static const char kShellTypes16[] = R"GPUI_DTS(     * Sets the top, right, bottom, and left values of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 66% (2/3)
      */
@@ -5391,8 +5737,7 @@ static const char kShellTypes14[] = R"GPUI_DTS(     * 10px (0.625rem)
      *
      * 24px (1.5rem)
      */
-)GPUI_DTS";
-static const char kShellTypes15[] = R"GPUI_DTS(    inset_neg_6(): Element;
+    inset_neg_6(): Element;
     /**
      * Sets the top, right, bottom, and left values of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
@@ -5656,7 +6001,8 @@ static const char kShellTypes15[] = R"GPUI_DTS(    inset_neg_6(): Element;
      */
     left_24(): Element;
     /**
-     * Sets the left value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+)GPUI_DTS";
+static const char kShellTypes17[] = R"GPUI_DTS(     * Sets the left value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 66% (2/3)
      */
@@ -5774,8 +6120,7 @@ static const char kShellTypes15[] = R"GPUI_DTS(    inset_neg_6(): Element;
      *
      * 288px (18rem)
      */
-)GPUI_DTS";
-static const char kShellTypes16[] = R"GPUI_DTS(    left_72(): Element;
+    left_72(): Element;
     /**
      * Sets the left value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
@@ -6055,7 +6400,8 @@ static const char kShellTypes16[] = R"GPUI_DTS(    left_72(): Element;
     /**
      * Sets the left value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
-     * 320px (20rem)
+)GPUI_DTS";
+static const char kShellTypes18[] = R"GPUI_DTS(     * 320px (20rem)
      */
     left_neg_80(): Element;
     /**
@@ -6191,8 +6537,7 @@ static const char kShellTypes16[] = R"GPUI_DTS(    left_72(): Element;
      */
     m_1p5(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes17[] = R"GPUI_DTS(     * Sets the margin of the element. [Docs](https://tailwindcss.com/docs/margin)
+     * Sets the margin of the element. [Docs](https://tailwindcss.com/docs/margin)
      *
      * 8px (0.5rem)
      */
@@ -6534,7 +6879,8 @@ static const char kShellTypes17[] = R"GPUI_DTS(     * Sets the margin of the ele
      */
     m_neg_3p5(): Element;
     /**
-     * Sets the margin of the element. [Docs](https://tailwindcss.com/docs/margin)
+)GPUI_DTS";
+static const char kShellTypes19[] = R"GPUI_DTS(     * Sets the margin of the element. [Docs](https://tailwindcss.com/docs/margin)
      *
      * 16px (1rem)
      */
@@ -6672,8 +7018,7 @@ static const char kShellTypes17[] = R"GPUI_DTS(     * Sets the margin of the ele
      */
     max_h_11(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes18[] = R"GPUI_DTS(     * Sets the maximum height of the element. [Docs](https://tailwindcss.com/docs/max-height)
+     * Sets the maximum height of the element. [Docs](https://tailwindcss.com/docs/max-height)
      *
      * 448px (28rem)
      */
@@ -6985,7 +7330,8 @@ static const char kShellTypes18[] = R"GPUI_DTS(     * Sets the maximum height of
      */
     max_h_neg_1_3(): Element;
     /**
-     * Sets the maximum height of the element. [Docs](https://tailwindcss.com/docs/max-height)
+)GPUI_DTS";
+static const char kShellTypes20[] = R"GPUI_DTS(     * Sets the maximum height of the element. [Docs](https://tailwindcss.com/docs/max-height)
      *
      * 25% (1/4)
      */
@@ -7111,8 +7457,7 @@ static const char kShellTypes18[] = R"GPUI_DTS(     * Sets the maximum height of
      */
     max_h_neg_5(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes19[] = R"GPUI_DTS(     * Sets the maximum height of the element. [Docs](https://tailwindcss.com/docs/max-height)
+     * Sets the maximum height of the element. [Docs](https://tailwindcss.com/docs/max-height)
      *
      * 224px (14rem)
      */
@@ -7488,7 +7833,8 @@ static const char kShellTypes19[] = R"GPUI_DTS(     * Sets the maximum height of
      *
      * 44px (2.75rem)
      */
-    max_size_neg_11(): Element;
+)GPUI_DTS";
+static const char kShellTypes21[] = R"GPUI_DTS(    max_size_neg_11(): Element;
     /**
      * Sets the maximum width and height of the element.
      *
@@ -7646,8 +7992,7 @@ static const char kShellTypes19[] = R"GPUI_DTS(     * Sets the maximum height of
      */
     max_size_neg_48(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes20[] = R"GPUI_DTS(     * Sets the maximum width and height of the element.
+     * Sets the maximum width and height of the element.
      *
      * 80% (4/5)
      */
@@ -7982,7 +8327,8 @@ static const char kShellTypes20[] = R"GPUI_DTS(     * Sets the maximum width and
      * 320px (20rem)
      */
     max_w_80(): Element;
-    /**
+)GPUI_DTS";
+static const char kShellTypes22[] = R"GPUI_DTS(    /**
      * Sets the maximum width of the element. [Docs](https://tailwindcss.com/docs/max-width)
      *
      * 36px (2.25rem)
@@ -8109,8 +8455,7 @@ static const char kShellTypes20[] = R"GPUI_DTS(     * Sets the maximum width and
      */
     max_w_neg_2(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes21[] = R"GPUI_DTS(     * Sets the maximum width of the element. [Docs](https://tailwindcss.com/docs/max-width)
+     * Sets the maximum width of the element. [Docs](https://tailwindcss.com/docs/max-width)
      *
      * 80px (5rem)
      */
@@ -8408,7 +8753,8 @@ static const char kShellTypes21[] = R"GPUI_DTS(     * Sets the maximum width of 
      *
      * 50% (2/4)
      */
-    mb_2_4(): Element;
+)GPUI_DTS";
+static const char kShellTypes23[] = R"GPUI_DTS(    mb_2_4(): Element;
     /**
      * Sets the bottom margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
@@ -8519,8 +8865,7 @@ static const char kShellTypes21[] = R"GPUI_DTS(     * Sets the maximum width of 
     mb_72(): Element;
     /**
      * Sets the bottom margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
-)GPUI_DTS";
-static const char kShellTypes22[] = R"GPUI_DTS(     *
+     *
      * 32px (2rem)
      */
     mb_8(): Element;
@@ -8796,7 +9141,8 @@ static const char kShellTypes22[] = R"GPUI_DTS(     *
     mb_neg_8(): Element;
     /**
      * Sets the bottom margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
-     *
+)GPUI_DTS";
+static const char kShellTypes24[] = R"GPUI_DTS(     *
      * 320px (20rem)
      */
     mb_neg_80(): Element;
@@ -8921,8 +9267,7 @@ static const char kShellTypes22[] = R"GPUI_DTS(     *
      */
     min_h_1_6(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes23[] = R"GPUI_DTS(     * Sets the minimum height of the element. [Docs](https://tailwindcss.com/docs/min-height)
+     * Sets the minimum height of the element. [Docs](https://tailwindcss.com/docs/min-height)
      *
      * 6px (0.375rem)
      */
@@ -9234,7 +9579,8 @@ static const char kShellTypes23[] = R"GPUI_DTS(     * Sets the minimum height of
      */
     min_h_neg_2_5(): Element;
     /**
-     * Sets the minimum height of the element. [Docs](https://tailwindcss.com/docs/min-height)
+)GPUI_DTS";
+static const char kShellTypes25[] = R"GPUI_DTS(     * Sets the minimum height of the element. [Docs](https://tailwindcss.com/docs/min-height)
      *
      * 10px (0.625rem)
      */
@@ -9356,8 +9702,7 @@ static const char kShellTypes23[] = R"GPUI_DTS(     * Sets the minimum height of
     /**
      * Sets the minimum height of the element. [Docs](https://tailwindcss.com/docs/min-height)
      *
-)GPUI_DTS";
-static const char kShellTypes24[] = R"GPUI_DTS(     * 384px (24rem)
+     * 384px (24rem)
      */
     min_h_neg_96(): Element;
     /**
@@ -9751,7 +10096,8 @@ static const char kShellTypes24[] = R"GPUI_DTS(     * 384px (24rem)
      */
     min_size_neg_2(): Element;
     /**
-     * Sets the minimum width and height of the element.
+)GPUI_DTS";
+static const char kShellTypes26[] = R"GPUI_DTS(     * Sets the minimum width and height of the element.
      *
      * 80px (5rem)
      */
@@ -9908,8 +10254,7 @@ static const char kShellTypes24[] = R"GPUI_DTS(     * 384px (24rem)
     min_size_neg_96(): Element;
     /**
      * Sets the minimum width and height of the element.
-)GPUI_DTS";
-static const char kShellTypes25[] = R"GPUI_DTS(     *
+     *
      * 100%
      */
     min_size_neg_full(): Element;
@@ -10231,7 +10576,8 @@ static const char kShellTypes25[] = R"GPUI_DTS(     *
      * 448px (28rem)
      */
     min_w_neg_112(): Element;
-    /**
+)GPUI_DTS";
+static const char kShellTypes27[] = R"GPUI_DTS(    /**
      * Sets the minimum width of the element. [Docs](https://tailwindcss.com/docs/min-width)
      *
      * 48px (3rem)
@@ -10358,8 +10704,7 @@ static const char kShellTypes25[] = R"GPUI_DTS(     *
      */
     min_w_neg_3_5(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes26[] = R"GPUI_DTS(     * Sets the minimum width of the element. [Docs](https://tailwindcss.com/docs/min-width)
+     * Sets the minimum width of the element. [Docs](https://tailwindcss.com/docs/min-width)
      *
      * 14px (0.875rem)
      */
@@ -10653,7 +10998,8 @@ static const char kShellTypes26[] = R"GPUI_DTS(     * Sets the minimum width of 
      */
     ml_40(): Element;
     /**
-     * Sets the left margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes28[] = R"GPUI_DTS(     * Sets the left margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 192px (12rem)
      */
@@ -10767,8 +11113,7 @@ static const char kShellTypes26[] = R"GPUI_DTS(     * Sets the minimum width of 
      */
     ml_neg_10(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes27[] = R"GPUI_DTS(     * Sets the left margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+     * Sets the left margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 44px (2.75rem)
      */
@@ -11044,7 +11389,8 @@ static const char kShellTypes27[] = R"GPUI_DTS(     * Sets the left margin of th
      */
     mr_10(): Element;
     /**
-     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes29[] = R"GPUI_DTS(     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 44px (2.75rem)
      */
@@ -11158,8 +11504,7 @@ static const char kShellTypes27[] = R"GPUI_DTS(     * Sets the left margin of th
      */
     mr_2p5(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes28[] = R"GPUI_DTS(     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 12px (0.75rem)
      */
@@ -11435,7 +11780,8 @@ static const char kShellTypes28[] = R"GPUI_DTS(     * Sets the right margin of t
      */
     mr_neg_3(): Element;
     /**
-     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes30[] = R"GPUI_DTS(     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 128px (8rem)
      */
@@ -11549,8 +11895,7 @@ static const char kShellTypes28[] = R"GPUI_DTS(     * Sets the right margin of t
      */
     mr_neg_96(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes29[] = R"GPUI_DTS(     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+     * Sets the right margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 100%
      */
@@ -11832,7 +12177,8 @@ static const char kShellTypes29[] = R"GPUI_DTS(     * Sets the right margin of t
      */
     mt_auto(): Element;
     /**
-     * Sets the top margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes31[] = R"GPUI_DTS(     * Sets the top margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 100%
      */
@@ -11946,8 +12292,7 @@ static const char kShellTypes29[] = R"GPUI_DTS(     * Sets the right margin of t
      */
     mt_neg_20(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes30[] = R"GPUI_DTS(     * Sets the top margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
+     * Sets the top margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-margin-to-a-single-side)
      *
      * 96px (6rem)
      */
@@ -12227,7 +12572,8 @@ static const char kShellTypes30[] = R"GPUI_DTS(     * Sets the top margin of the
      *
      * 96px (6rem)
      */
-    mx_24(): Element;
+)GPUI_DTS";
+static const char kShellTypes32[] = R"GPUI_DTS(    mx_24(): Element;
     /**
      * Sets the horizontal margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-horizontal-margin)
      *
@@ -12343,8 +12689,7 @@ static const char kShellTypes30[] = R"GPUI_DTS(     * Sets the top margin of the
      */
     mx_7(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes31[] = R"GPUI_DTS(     * Sets the horizontal margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-horizontal-margin)
+     * Sets the horizontal margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-horizontal-margin)
      *
      * 288px (18rem)
      */
@@ -12620,7 +12965,8 @@ static const char kShellTypes31[] = R"GPUI_DTS(     * Sets the horizontal margin
      */
     mx_neg_72(): Element;
     /**
-     * Sets the horizontal margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-horizontal-margin)
+)GPUI_DTS";
+static const char kShellTypes33[] = R"GPUI_DTS(     * Sets the horizontal margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-horizontal-margin)
      *
      * 32px (2rem)
      */
@@ -12738,8 +13084,7 @@ static const char kShellTypes31[] = R"GPUI_DTS(     * Sets the horizontal margin
      *
      * 25% (1/4)
      */
-)GPUI_DTS";
-static const char kShellTypes32[] = R"GPUI_DTS(    my_1_4(): Element;
+    my_1_4(): Element;
     /**
      * Sets the vertical margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-vertical-margin)
      *
@@ -13023,7 +13368,8 @@ static const char kShellTypes32[] = R"GPUI_DTS(    my_1_4(): Element;
      */
     my_neg_1_6(): Element;
     /**
-     * Sets the vertical margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-vertical-margin)
+)GPUI_DTS";
+static const char kShellTypes34[] = R"GPUI_DTS(     * Sets the vertical margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-vertical-margin)
      *
      * 6px (0.375rem)
      */
@@ -13143,8 +13489,7 @@ static const char kShellTypes32[] = R"GPUI_DTS(    my_1_4(): Element;
      */
     my_neg_5_6(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes33[] = R"GPUI_DTS(     * Sets the vertical margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-vertical-margin)
+     * Sets the vertical margin of the element. [Docs](https://tailwindcss.com/docs/margin#add-vertical-margin)
      *
      * 24px (1.5rem)
      */
@@ -13456,7 +13801,8 @@ static const char kShellTypes33[] = R"GPUI_DTS(     * Sets the vertical margin o
      */
     p_64(): Element;
     /**
-     * Sets the padding of the element. [Docs](https://tailwindcss.com/docs/padding)
+)GPUI_DTS";
+static const char kShellTypes35[] = R"GPUI_DTS(     * Sets the padding of the element. [Docs](https://tailwindcss.com/docs/padding)
      *
      * 28px (1.75rem)
      */
@@ -13600,8 +13946,7 @@ static const char kShellTypes33[] = R"GPUI_DTS(     * Sets the vertical margin o
      */
     p_neg_2(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes34[] = R"GPUI_DTS(     * Sets the padding of the element. [Docs](https://tailwindcss.com/docs/padding)
+     * Sets the padding of the element. [Docs](https://tailwindcss.com/docs/padding)
      *
      * 80px (5rem)
      */
@@ -13901,7 +14246,8 @@ static const char kShellTypes34[] = R"GPUI_DTS(     * Sets the padding of the el
      */
     pb_2_4(): Element;
     /**
-     * Sets the bottom padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes36[] = R"GPUI_DTS(     * Sets the bottom padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
      * 40% (2/5)
      */
@@ -14019,8 +14365,7 @@ static const char kShellTypes34[] = R"GPUI_DTS(     * Sets the padding of the el
      *
      * 320px (20rem)
      */
-)GPUI_DTS";
-static const char kShellTypes35[] = R"GPUI_DTS(    pb_80(): Element;
+    pb_80(): Element;
     /**
      * Sets the bottom padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
@@ -14282,7 +14627,8 @@ static const char kShellTypes35[] = R"GPUI_DTS(    pb_80(): Element;
     /**
      * Sets the bottom padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
-     * 320px (20rem)
+)GPUI_DTS";
+static const char kShellTypes37[] = R"GPUI_DTS(     * 320px (20rem)
      */
     pb_neg_80(): Element;
     /**
@@ -14404,8 +14750,7 @@ static const char kShellTypes35[] = R"GPUI_DTS(    pb_80(): Element;
      *
      * 16% (1/6)
      */
-)GPUI_DTS";
-static const char kShellTypes36[] = R"GPUI_DTS(    pl_1_6(): Element;
+    pl_1_6(): Element;
     /**
      * Sets the left padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
@@ -14673,7 +15018,8 @@ static const char kShellTypes36[] = R"GPUI_DTS(    pl_1_6(): Element;
     /**
      * Sets the left padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
-     * 6px (0.375rem)
+)GPUI_DTS";
+static const char kShellTypes38[] = R"GPUI_DTS(     * 6px (0.375rem)
      */
     pl_neg_1p5(): Element;
     /**
@@ -14791,8 +15137,7 @@ static const char kShellTypes36[] = R"GPUI_DTS(    pl_1_6(): Element;
      */
     pl_neg_5_6(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes37[] = R"GPUI_DTS(     * Sets the left padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
+     * Sets the left padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
      * 24px (1.5rem)
      */
@@ -15062,7 +15407,8 @@ static const char kShellTypes37[] = R"GPUI_DTS(     * Sets the left padding of t
      */
     pr_56(): Element;
     /**
-     * Sets the right padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes39[] = R"GPUI_DTS(     * Sets the right padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
      * 80% (5/6)
      */
@@ -15178,8 +15524,7 @@ static const char kShellTypes37[] = R"GPUI_DTS(     * Sets the left padding of t
     /**
      * Sets the right padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
-)GPUI_DTS";
-static const char kShellTypes38[] = R"GPUI_DTS(     * 8% (1/12)
+     * 8% (1/12)
      */
     pr_neg_1_12(): Element;
     /**
@@ -15447,7 +15792,8 @@ static const char kShellTypes38[] = R"GPUI_DTS(     * 8% (1/12)
      */
     pt_128(): Element;
     /**
-     * Sets the top padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes40[] = R"GPUI_DTS(     * Sets the top padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
      * 64px (4rem)
      */
@@ -15567,8 +15913,7 @@ static const char kShellTypes38[] = R"GPUI_DTS(     * 8% (1/12)
      */
     pt_3p5(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes39[] = R"GPUI_DTS(     * Sets the top padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
+     * Sets the top padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
      * 16px (1rem)
      */
@@ -15838,7 +16183,8 @@ static const char kShellTypes39[] = R"GPUI_DTS(     * Sets the top padding of th
      */
     pt_neg_4(): Element;
     /**
-     * Sets the top padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
+)GPUI_DTS";
+static const char kShellTypes41[] = R"GPUI_DTS(     * Sets the top padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-padding-to-a-single-side)
      *
      * 160px (10rem)
      */
@@ -15955,8 +16301,7 @@ static const char kShellTypes39[] = R"GPUI_DTS(     * Sets the top padding of th
      * Sets the horizontal padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-horizontal-padding)
      *
      * 4px (0.25rem)
-)GPUI_DTS";
-static const char kShellTypes40[] = R"GPUI_DTS(     */
+     */
     px_1(): Element;
     /**
      * Sets the horizontal padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-horizontal-padding)
@@ -16229,7 +16574,8 @@ static const char kShellTypes40[] = R"GPUI_DTS(     */
      */
     px_neg_10(): Element;
     /**
-     * Sets the horizontal padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-horizontal-padding)
+)GPUI_DTS";
+static const char kShellTypes42[] = R"GPUI_DTS(     * Sets the horizontal padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-horizontal-padding)
      *
      * 44px (2.75rem)
      */
@@ -16344,8 +16690,7 @@ static const char kShellTypes40[] = R"GPUI_DTS(     */
     px_neg_2p5(): Element;
     /**
      * Sets the horizontal padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-horizontal-padding)
-)GPUI_DTS";
-static const char kShellTypes41[] = R"GPUI_DTS(     *
+     *
      * 12px (0.75rem)
      */
     px_neg_3(): Element;
@@ -16620,7 +16965,8 @@ static const char kShellTypes41[] = R"GPUI_DTS(     *
      */
     py_2p5(): Element;
     /**
-     * Sets the vertical padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-vertical-padding)
+)GPUI_DTS";
+static const char kShellTypes43[] = R"GPUI_DTS(     * Sets the vertical padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-vertical-padding)
      *
      * 12px (0.75rem)
      */
@@ -16740,8 +17086,7 @@ static const char kShellTypes41[] = R"GPUI_DTS(     *
      */
     py_96(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes42[] = R"GPUI_DTS(     * Sets the vertical padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-vertical-padding)
+     * Sets the vertical padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-vertical-padding)
      *
      * 100%
      */
@@ -17015,7 +17360,8 @@ static const char kShellTypes42[] = R"GPUI_DTS(     * Sets the vertical padding 
      *
      * 1px
      */
-    py_neg_px(): Element;
+)GPUI_DTS";
+static const char kShellTypes44[] = R"GPUI_DTS(    py_neg_px(): Element;
     /**
      * Sets the vertical padding of the element. [Docs](https://tailwindcss.com/docs/padding#add-vertical-padding)
      *
@@ -17137,8 +17483,7 @@ static const char kShellTypes42[] = R"GPUI_DTS(     * Sets the vertical padding 
      */
     right_20(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes43[] = R"GPUI_DTS(     * Sets the right value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+     * Sets the right value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 96px (6rem)
      */
@@ -17414,7 +17759,8 @@ static const char kShellTypes43[] = R"GPUI_DTS(     * Sets the right value of a 
      */
     right_neg_24(): Element;
     /**
-     * Sets the right value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+)GPUI_DTS";
+static const char kShellTypes45[] = R"GPUI_DTS(     * Sets the right value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 66% (2/3)
      */
@@ -17532,8 +17878,7 @@ static const char kShellTypes43[] = R"GPUI_DTS(     * Sets the right value of a 
      *
      * 288px (18rem)
      */
-)GPUI_DTS";
-static const char kShellTypes44[] = R"GPUI_DTS(    right_neg_72(): Element;
+    right_neg_72(): Element;
     /**
      * Sets the right value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
@@ -17773,7 +18118,8 @@ static const char kShellTypes44[] = R"GPUI_DTS(    right_neg_72(): Element;
      *
      * 9999px
      */
-    rounded_l_full(): Element;
+)GPUI_DTS";
+static const char kShellTypes46[] = R"GPUI_DTS(    rounded_l_full(): Element;
     /**
      * Sets the border radius of the left side of the element. [Docs](https://tailwindcss.com/docs/border-radius#rounding-sides-separately)
      *
@@ -17877,8 +18223,7 @@ static const char kShellTypes44[] = R"GPUI_DTS(    right_neg_72(): Element;
      */
     rounded_r_xl(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes45[] = R"GPUI_DTS(     * Sets the border radius of the right side of the element. [Docs](https://tailwindcss.com/docs/border-radius#rounding-sides-separately)
+     * Sets the border radius of the right side of the element. [Docs](https://tailwindcss.com/docs/border-radius#rounding-sides-separately)
      *
      * 2px (0.125rem)
      */
@@ -18122,7 +18467,8 @@ static const char kShellTypes45[] = R"GPUI_DTS(     * Sets the border radius of 
      *
      * [Docs](https://tailwindcss.com/docs/box-shadow)
      */
-    shadow_2xs(): Element;
+)GPUI_DTS";
+static const char kShellTypes47[] = R"GPUI_DTS(    shadow_2xs(): Element;
     /**
      * Sets the box shadow of the element.
      *
@@ -18293,8 +18639,7 @@ static const char kShellTypes45[] = R"GPUI_DTS(     * Sets the border radius of 
     size_2_5(): Element;
     /**
      * Sets the width and height of the element.
-)GPUI_DTS";
-static const char kShellTypes46[] = R"GPUI_DTS(     *
+     *
      * 10px (0.625rem)
      */
     size_2p5(): Element;
@@ -18721,7 +19066,8 @@ static const char kShellTypes46[] = R"GPUI_DTS(     *
     /**
      * Sets the text size to 'base'.
      *
-     * [Docs](https://tailwindcss.com/docs/font-size#setting-the-font-size)
+)GPUI_DTS";
+static const char kShellTypes48[] = R"GPUI_DTS(     * [Docs](https://tailwindcss.com/docs/font-size#setting-the-font-size)
      */
     text_base(): Element;
     /** Sets the text alignment to center */
@@ -18835,8 +19181,7 @@ static const char kShellTypes46[] = R"GPUI_DTS(     *
      *
      * 2px (0.125rem)
      */
-)GPUI_DTS";
-static const char kShellTypes47[] = R"GPUI_DTS(    top_0p5(): Element;
+    top_0p5(): Element;
     /**
      * Sets the top value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
@@ -19126,7 +19471,8 @@ static const char kShellTypes47[] = R"GPUI_DTS(    top_0p5(): Element;
      */
     top_neg_11(): Element;
     /**
-     * Sets the top value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
+)GPUI_DTS";
+static const char kShellTypes49[] = R"GPUI_DTS(     * Sets the top value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
      *
      * 448px (28rem)
      */
@@ -19241,8 +19587,7 @@ static const char kShellTypes47[] = R"GPUI_DTS(    top_0p5(): Element;
     top_neg_3(): Element;
     /**
      * Sets the top value of a positioned element. [Docs](https://tailwindcss.com/docs/top-right-bottom-left)
-)GPUI_DTS";
-static const char kShellTypes48[] = R"GPUI_DTS(     *
+     *
      * 128px (8rem)
      */
     top_neg_32(): Element;
@@ -19384,6 +19729,13 @@ static const char kShellTypes48[] = R"GPUI_DTS(     *
      * [Docs](https://tailwindcss.com/docs/text-decoration-line#underling-text)
      */
     underline(): Element;
+    /**
+     * Lays children out in a column, stretching them across the cross axis.
+     *
+     * Unlike [`Self::h_flex`] this installs no cross-axis alignment, so a child
+     *
+     * without a width fills the column. See `h_flex` for the asymmetry.
+     */
     v_flex(): Element;
     /**
      * Sets the visibility of the element to `visible`.
@@ -19548,7 +19900,8 @@ static const char kShellTypes48[] = R"GPUI_DTS(     *
      */
     w_3_4(): Element;
     /**
-     * Sets the width of the element. [Docs](https://tailwindcss.com/docs/width)
+)GPUI_DTS";
+static const char kShellTypes50[] = R"GPUI_DTS(     * Sets the width of the element. [Docs](https://tailwindcss.com/docs/width)
      *
      * 60% (3/5)
      */
@@ -19704,8 +20057,7 @@ static const char kShellTypes48[] = R"GPUI_DTS(     *
      */
     w_neg_12(): Element;
     /**
-)GPUI_DTS";
-static const char kShellTypes49[] = R"GPUI_DTS(     * Sets the width of the element. [Docs](https://tailwindcss.com/docs/width)
+     * Sets the width of the element. [Docs](https://tailwindcss.com/docs/width)
      *
      * 512px (32rem)
      */
@@ -19983,7 +20335,8 @@ static const char kShellTypes49[] = R"GPUI_DTS(     * Sets the width of the elem
     cubic_bezier_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_a_x: import("gpui-shell").PathCoordinate, control_a_y: import("gpui-shell").PathCoordinate, control_b_x: import("gpui-shell").PathCoordinate, control_b_y: import("gpui-shell").PathCoordinate): PathBuilder;
     arc_to(radius_x: import("gpui-shell").PathCoordinate, radius_y: import("gpui-shell").PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate): PathBuilder;
     add_polygon(points: ReadonlyArray<readonly [import("gpui-shell").PathCoordinate, import("gpui-shell").PathCoordinate]>, closed?: boolean): PathBuilder;
-    close(): PathBuilder;
+)GPUI_DTS";
+static const char kShellTypes51[] = R"GPUI_DTS(    close(): PathBuilder;
     dash_array(values: readonly number[]): PathBuilder;
     build(): Path;
   }
@@ -20076,13 +20429,94 @@ static const char kShellTypes49[] = R"GPUI_DTS(     * Sets the width of the elem
      * Paints immutable GPUI geometry with a reusable native `Background`.
      * `Window::paint_path`.
      *
-)GPUI_DTS";
-static const char kShellTypes50[] = R"GPUI_DTS(     * The one element constructor reached through an object rather than as a
+     * The one element constructor reached through an object rather than as a
      * free function, and it is one because the thing it mirrors is a method on
      * the window rather than on the app. Legal from `render`, unlike the
      * overlays above — it builds a description like any other element.
      */
     paint_path(path: Path, background: Background | Color): Element;
+
+    /**
+     * `Window::dispatch_action`. Dispatches an action down this window's focus
+     * path, reaching the same handlers a bound chord would.
+     *
+     * This is how a menu item or a toolbar button does what a keystroke does,
+     * without either of them knowing about the other. Illegal from `render`.
+     */
+    dispatch_action(action: string): void;
+
+    /**
+     * `Window::rem_size`. The pixel value one `rem` currently means.
+     *
+     * Legal from `render`, like every measurement below it: a view that sizes
+     * itself from the window has to ask during the pass that draws it.
+     */
+    rem_size(): number;
+    /** `Window::line_height`, in pixels. */
+    line_height(): number;
+    /** `Window::viewport_size`: the drawable area, in pixels. */
+    viewport_size(): Size;
+    /** `Window::bounds`: where the window is on screen, and how big. */
+    bounds(): import("gpui-shell").ElementBounds;
+    /** `Window::mouse_position`, in window coordinates. */
+    mouse_position(): Point;
+    /**
+     * `Window::appearance`, reduced to the two a script can draw for.
+     *
+     * GPUI reports four — each of light and dark has a vibrant variant — but
+     * the difference is in how the platform paints *behind* the window, which
+     * a script neither controls nor needs to branch on.
+     */
+    appearance(): "light" | "dark";
+    /** `Window::is_window_active`: whether this window has the platform's focus. */
+    is_window_active(): boolean;
+    /** `Window::is_fullscreen`. */
+    is_fullscreen(): boolean;
+    /** `Window::is_maximized`. */
+    is_maximized(): boolean;
+
+    /**
+     * `Window::set_rem_size`. Rescales everything expressed in rems.
+     *
+     * Illegal from `render`, as is everything below it: a frame that changes
+     * the window it is drawing into is a frame arguing with itself. Call it
+     * from an event handler or a task.
+     */
+    set_rem_size(size: number): void;
+    /**
+     * `Window::refresh`: redraw every view in this window, not just this one.
+     *
+     * The most expensive call on this object, and the one easiest to reach for.
+     * Every view rebuilds -- retained children, charts, virtualized lists, the
+     * lot -- so calling it where `cx.notify()` would do turns one view's update
+     * into all of them, and calling it per incoming message turns a data feed
+     * into a frame-rate problem. An application that pushed a quote through it
+     * for each tick of a live market watchlist measured seven frames a second.
+     *
+     * Reach for it only when there is genuinely no view to notify:
+     *
+     * - `cx.notify()` repaints the view that owns the state that changed, which
+     *   is almost always the right call.
+     * - `handle.set_props(...)` repaints a nested view from its parent.
+     * - A dock panel is the case that tempts you here, because a panel rebuilt
+     *   by `DockArea.load` is not the instance the script created and
+     *   `set_props` on the old handle reaches nothing. If you must refresh for
+     *   that reason, coalesce: let a timer collect a burst into one call rather
+     *   than making one per event.
+     */
+    refresh(): void;
+    /** `Window::focus_next`: move the keyboard to the next tab stop. */
+    focus_next(): void;
+    /** `Window::focus_prev`: move it to the previous one. */
+    focus_prev(): void;
+    /** `Window::activate_window`: bring this window to the front. */
+    activate_window(): void;
+    /** `Window::minimize_window`. */
+    minimize_window(): void;
+    /** `Window::zoom_window`: the platform's zoom, not a scale factor. */
+    zoom_window(): void;
+    /** `Window::toggle_fullscreen`. */
+    toggle_fullscreen(): void;
   }
 
 
@@ -20174,6 +20608,7 @@ declare module "gpui-base" {
     | "border"
     | "input"
     | "ring"
+    | "selection"
     ;
 
 
@@ -20203,6 +20638,18 @@ declare module "gpui-base" {
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /** Rich HTML or Markdown text. CSS in HTML is not supported. */
+)GPUI_DTS";
+static const char kShellTypes52[] = R"GPUI_DTS(  export interface TextViewElement extends Element {
+    /** Overrides TextView's default URL opening and reports the resolved URL. */
+    on_link_click(handler: (url: string, cx: Context) => void): TextViewElement;
+    selectable(value?: boolean): TextViewElement;
+    scrollable(value?: boolean): TextViewElement;
+  }
+  export const TextView: {
+    html(id: string, html: string): TextViewElement;
+    markdown(id: string, markdown: string): TextViewElement;
+  };
   /**
    * A tab list. It holds no selection of its own — each `Tab` is told whether
    * it is selected, and reports activation through `on_click`, so the script
@@ -20232,6 +20679,203 @@ declare module "gpui-base" {
    * you announced, and add `transition("width", ...)` if it should slide.
    */
   export const ProgressIndicator: PartType;
+  /**
+   * An avatar root. It renders its `image` slot, or its `fallback` slot when
+   * there is no image, and never both.
+   *
+   * That choice is the whole of what it does. It draws no circle, no size and
+   * no background, so the picture is yours: `w`, `h`, `rounded_full` and a
+   * background go on the root, and the fallback is styled where it is written.
+   *
+   * ```js
+   * Avatar.new().w(40).h(40).rounded_full().overflow_hidden()
+   *   .image(AvatarImage.new("avatars/ada.png").size_full())
+   *   .fallback(AvatarFallback.new().size_full().items_center().justify_center().child("AL"));
+   * ```
+   *
+   * Ordinary children are drawn beside whichever slot won, which is where a
+   * status dot or a badge goes.
+   */
+  export const Avatar: PartType;
+  /**
+   * The image slot: a picture from the application's own directory, at the
+   * same kind of path `image(...)` takes.
+   *
+   * It is a slot type, not an element — used as an ordinary child it draws
+   * nothing and says so in the log. Give it `size_full()` unless you want it at
+   * its natural size.
+   */
+  export const AvatarImage: { new(path: string): Element };
+  /**
+   * The fallback slot: an ordinary box holding whatever stands in for the
+   * image — initials, a shape, an `svg(...)`.
+   *
+   * A slot type like `AvatarImage`, and worth filling: an `Avatar` with an
+   * image path that does not resolve has nothing else to show.
+   */
+  export const AvatarFallback: PartType;
+  /**
+   * A pagination root: a navigation landmark carrying the announced label, and
+   * nothing on screen.
+   *
+   * The page buttons are yours. What base contributes that you cannot write
+   * for yourself is which page numbers to show — that is `pagination_items`
+   * below, a calculation rather than a component.
+   *
+   * ```js
+   * Pagination.new("results").accessibility_label("Results").h_flex().gap_1().children(
+   *   pagination_items(this.page, this.pages).map((item) =>
+   *     item.ellipsis
+   *       ? div().child("…")
+   *       : Button.new(`page-${item.page}`)
+   *           .selected(item.page === this.page)
+   *           .on_click((_, cx) => { this.page = item.page; cx.notify(); })
+   *           .child(String(item.page)),
+   *   ),
+   * );
+   * ```
+   */
+  export const Pagination: ComponentType;
+  /**
+   * An accordion root: a group holding items, and nothing on screen.
+   *
+   * None of the five parts draws anything — no chevron, no border, no
+   * animation, no layout. What they carry is what a screen reader reads: the
+   * group, the heading and its level, the button and its expanded state, and
+   * the region that button controls.
+   *
+   * The item owns `open` and passes it down to both the trigger and the panel,
+   * so it is set once rather than three times in agreement with itself.
+   *
+   * ```js
+   * Accordion.new("faq").child(
+   *   AccordionItem.new()
+   *     .open(this.open === "shipping")
+   *     .header(
+   *       AccordionHeader.new(
+   *         AccordionTrigger.new("shipping-trigger")
+   *           .on_change((open, cx) => { this.open = open ? "shipping" : null; cx.notify(); })
+   *           .child("Shipping"),
+   *       ).aria_level(3),
+   *     )
+   *     .panel(AccordionPanel.new().child("Two to five business days.")),
+   * );
+   * ```
+   */
+  export const Accordion: ComponentType;
+  /**
+   * One item. `open(...)` in, and the trigger's `on_change(...)` out.
+   *
+   * `disabled(true)` stops the trigger under it responding, whatever the
+   * trigger itself says.
+   */
+  export const AccordionItem: PartType;
+  /**
+   * The heading that owns one item's trigger, which it takes at construction
+   * for the same reason `Popup.new` takes its own: a heading whose button
+   * arrived a frame later would announce nothing in between.
+   *
+   * `aria_level(n)` is what a screen reader reads out — "heading level 3" —
+   * and defaults to 3. It announces; it does not size any text.
+   */
+  export const AccordionHeader: { new(trigger: Element): Element };
+  /**
+   * The region an item reveals. Left out of the tree entirely while shut,
+   * unless `keep_mounted(true)` — which is how its content keeps a scroll
+   * position or a half-typed field across a close and reopen.
+   */
+  export const AccordionPanel: PartType;
+  /**
+   * The button. It announces the item's expanded state and asks for the
+   * opposite: `on_change` receives `true` when a shut item was pressed.
+   *
+   * `open` and `disabled` come from the item, so setting them here is
+   * overwritten. Without an `on_change` nothing can open.
+   */
+  export const AccordionTrigger: ComponentType;
+  /**
+   * A calendar's month, and the date chosen in it. Retained: create it in
+   * `init`, never in `render`.
+   *
+   * `month_days()` is why this exists — which dates fall in which week, where
+   * the neighbouring months' days go, and how many weeks this month needs.
+   * You draw the cells: a button per day, styled how you like.
+   *
+   * Base's `Calendar` element is deliberately not bound. It walks the same
+   * grid calling a renderer once per cell — up to forty-two crossings into
+   * JavaScript per frame, from inside GPUI's layout pass, for cells that carry
+   * no behavior. Reading the grid here and drawing it yourself is the same
+   * work without them.
+   *
+   * ```js
+   * const grid = this.calendar.month_days()[0];
+   * v_flex().children(grid.map((week) =>
+   *   h_flex().children(week.map((day) =>
+   *     Button.new(day)
+   *       .selected(day === this.calendar.value())
+   *       .on_click((_, cx) => { this.calendar.set_value(day); cx.notify(); })
+   *       .child(String(Number(day.slice(8)))),
+   *   )),
+   * ));
+   * ```
+   *
+   * Dates are `"YYYY-MM-DD"` — sortable as text, and readable by `new Date(s)`
+   * when you need a weekday name or a localized month label.
+   */
+  export const CalendarState: { new(): CalendarStateHandle };
+  /** A selected date: one day, a `[start, end]` range, or nothing. */
+  export type CalendarDate = string | [string | null, string | null] | null;
+  export interface CalendarStateHandle {
+    /**
+     * The grid, as months of weeks of days. One month unless base was asked
+     * for more; each week is always seven days, and the first and last carry
+     * the neighbouring months' days so the rows line up under their weekday
+     * headings.
+     */
+    month_days(): string[][][];
+    /** The year the grid is for. */
+    year(): number;
+    /** Its month, 1–12. */
+    month(): number;
+    /** Today, as the state read it when it was created. */
+    today(): string;
+    /** What is selected. */
+    value(): CalendarDate;
+    /** Selects a day, a range, or nothing. */
+    set_value(next: CalendarDate): void;
+    /** Moves the grid forward one month. Illegal from `render`. */
+    next_month(): void;
+    /** And back one. Illegal from `render`. */
+    prev_month(): void;
+    /**
+     * `"change"` is the only event, and reports a date being selected. As
+     * everywhere else, registering twice means the second handler.
+     */
+    on(event: "change", handler: (date: CalendarDate, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+  /**
+   * Which page numbers to draw, and where the gaps fall.
+   *
+   * Keeps the first page, the last page and a window around the current one,
+   * collapsing each broken run into an ellipsis. `visible_pages` defaults to
+   * seven and is clamped to a minimum of five; a total of one page or fewer
+   * answers an empty list, because a control for a single page is not one.
+   *
+   * An ellipsis names the pages it stands for, inclusive on both ends, so it
+   * can be a "jump to" control rather than inert text.
+   *
+   * Legal from `render` — it reads nothing and is where the buttons are built.
+   */
+  export function pagination_items(
+    current_page: number,
+    total_pages: number,
+    visible_pages?: number,
+  ): PaginationEntry[];
+  /** One entry of the page layout: a page, or a gap standing for a range. */
+  export type PaginationEntry =
+    | { page: number; ellipsis?: undefined }
+    | { ellipsis: [first: number, last: number]; page?: undefined };
   /**
    * One option in a radio group. No styling: draw the dot yourself.
    *
@@ -20281,7 +20925,8 @@ declare module "gpui-base" {
   /** The body row group of a `Table`. */
   export const TableBody: ComponentType;
   /** One row. `TableRow.new(id, row_index)`, one-based. */
-  export const TableRow: { new: (id: string | number, row_index: number) => Element };
+)GPUI_DTS";
+static const char kShellTypes53[] = R"GPUI_DTS(  export const TableRow: { new: (id: string | number, row_index: number) => Element };
   /** One column header. `TableHead.new(id, column_index)`, one-based. */
   export const TableHead: { new: (id: string | number, column_index: number) => Element };
   /** One data cell. `TableCell.new(id, column_index)`, one-based. */
@@ -20365,8 +21010,7 @@ declare module "gpui-base" {
    * where it got to.
    *
    * `track_focus(handle)` names what takes the keyboard when it opens — the
-)GPUI_DTS";
-static const char kShellTypes51[] = R"GPUI_DTS(   * search field of a picker, say — instead of the surface itself.
+   * search field of a picker, say — instead of the surface itself.
    */
   export const Popover: ComponentType;
   /**
@@ -20420,13 +21064,14 @@ static const char kShellTypes51[] = R"GPUI_DTS(   * search field of a picker, sa
    * `content_focus_handle(...)` the list's; without the first, nothing on
    * screen has the keyboard and no key reaches the root at all.
    *
-   * **Arrow-key navigation of an open list is not there.** Base opens the list
-   * on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
+   * **Arrow-key navigation of an open list is yours to write.** Base opens the
+   * list on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
    * expects whatever is inside to run the highlight from its own key bindings.
-   * The shell has no key-binding layer, so nothing takes over: the pointer
-   * works, Escape closes, Enter and ↓ open, and moving the highlight with the
-   * keyboard once open does not. Say so in your UI rather than shipping a
-   * control that looks keyboard-operable and is not.
+   * Nothing does that for you — but the pieces are here: put `on_key_down` on
+   * the content element the keyboard was moved to and move your own highlight,
+   * or bind ↑ / ↓ to actions under a `key_context` of your own. Out of the box
+   * the pointer works, Escape closes, Enter and ↓ open, and the highlight does
+   * not move; a control shipped that way looks keyboard-operable and is not.
    *
    * **The highlighted option marks itself.** GPUI puts the active descendant on
    * the option element rather than on the container, so the root cannot mark
@@ -20536,7 +21181,8 @@ static const char kShellTypes51[] = R"GPUI_DTS(   * search field of a picker, sa
    *
    * * **No handlers inside the renderer.** `on_click` and the rest throw if
    *   called there. Use `on_item_click` on the list — see its note for why.
-   * * **No state inside the renderer.** `InputState.new()`, `cx.focus_handle()`
+)GPUI_DTS";
+static const char kShellTypes54[] = R"GPUI_DTS(   * * **No state inside the renderer.** `InputState.new()`, `cx.focus_handle()`
    *   and the rest throw there as they do in `render()`, and `cx.notify()` is
    *   refused: asking for a re-render from inside layout is a loop.
    *
@@ -20634,8 +21280,7 @@ static const char kShellTypes51[] = R"GPUI_DTS(   * search field of a picker, sa
     /** `change`, `submit`, `focus` or `blur`. */
     on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /**
-)GPUI_DTS";
-static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves the value in a `NumberInput`. Default is 1;
+     * How much one step moves the value in a `NumberInput`. Default is 1;
      * `null` gives up stepping entirely.
      *
      * There is no numeric state type — the step, the bounds and the mask are
@@ -20764,9 +21409,9 @@ static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves th
    * Slider.new(this.volume).child(
    *   SliderTrack.new(this.volume).flex().items_center().h(24).w_full().child(
    *     SliderIndicator.new(this.volume)
-   *       .relative().w_full().h(6).rounded(3).bg("secondary")
-   *       .range_style((fill) => fill.rounded(3).bg("primary"))
-   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg("primary").ml(-8)),
+   *       .relative().w_full().h(6).rounded(3).bg(`#e5e7eb`)
+   *       .range_style((fill) => fill.rounded(3).bg(`#2563eb`))
+   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg(`#2563eb`).ml(-8)),
    *   ),
    * );
    * ```
@@ -20817,7 +21462,8 @@ static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves th
    * state is: the base layer has no setter for it.
    */
   export interface OtpState {
-    /** The digits entered so far — shorter than `len()` until the code is complete. */
+)GPUI_DTS";
+static const char kShellTypes55[] = R"GPUI_DTS(    /** The digits entered so far — shorter than `len()` until the code is complete. */
     value(): string;
     /**
      * Sets the code from the script. Deliberately unfiltered, as in the base
@@ -20854,9 +21500,9 @@ static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves th
    *   .flex().gap(8)
    *   .cell_style((cell) =>
    *     cell.size(40).flex().items_center().justify_center()
-   *       .border_1().border_color("border").rounded("md"))
-   *   .cell_active_style((cell) => cell.border_color("ring"))
-   *   .caret_style((caret) => caret.w(2).h(18).bg("foreground"))
+   *       .border_1().border_color(`#d1d5db`).rounded("md"))
+   *   .cell_active_style((cell) => cell.border_color(`#2563eb`))
+   *   .caret_style((caret) => caret.w(2).h(18).bg(`#111111`))
    * ```
    *
    * Alone among the bound components, its cells are not the script's to
@@ -20877,6 +21523,264 @@ static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves th
    */
   export const OtpInput: { new: (state: OtpState) => Element };
 
+  /** Where a region sits relative to the center of a dock area. */
+  export type DockPlacement = "center" | "left" | "right" | "bottom";
+
+  /** One panel, as `panels()` reports it. */
+  export interface DockPanel {
+    /** Stable for as long as the panel lives. Pass it to `remove_panel`. */
+    readonly id: number;
+    /** Namespaced: `shell:<application>/<name>`. */
+    readonly name: string;
+    readonly placement: DockPlacement;
+    /** The container holding it, which is also `group.node` in the chrome. */
+    readonly node: number;
+    /** Its position in that container. */
+    readonly index: number;
+    /** Whether it is the one its container is showing. */
+    readonly active: boolean;
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** One tab of a group, as a chrome handler is given it. */
+  export interface DockTab {
+    /** Its position in the group, which is what `select_tab` takes. */
+    readonly index: number;
+    readonly name: string;
+    readonly id: number;
+    readonly active: boolean;
+    /**
+     * Hidden panels are included, and keep their place in tab order — filter
+     * on this rather than re-deriving an index into an already filtered list.
+     */
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** A tab group, as `tab_bar` and `empty_group` are given it. */
+  export interface DockGroup {
+    readonly node: number;
+    readonly active_index: number;
+    readonly zoomed: boolean;
+    readonly collapsed: boolean;
+    readonly locked: boolean;
+    readonly draggable: boolean;
+    readonly droppable: boolean;
+    readonly closable: boolean;
+    readonly tabs: readonly DockTab[];
+  }
+
+  /** One dock, as the `dock` handler is given it. */
+  export interface DockRegion {
+    readonly placement: DockPlacement;
+    /** Its extent along its own axis: width for left and right, height for bottom. */
+    readonly size: number;
+    readonly open: boolean;
+    readonly collapsible: boolean;
+  }
+
+  /** One tile of a tiles canvas, as the two tile handlers are given it. */
+  export interface DockTile {
+    readonly node: number;
+    readonly panel: { readonly name: string; readonly id: number; readonly visible: boolean };
+    /**
+     * Already resolved — base snaps, clamps and rounds before a skin sees
+     * them, so nothing here has to be positioned by hand.
+     */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    readonly z_index: number;
+    readonly moving: boolean;
+    readonly resizing: boolean;
+    readonly closable: boolean;
+    readonly zoomed: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** Where a dragged panel would land, as the `drop_indicator` handler is given it. */
+  export interface DockDrop {
+    /** `null` means the drop merges into the group's tabs rather than splitting beside it. */
+    readonly placement: Placement | null;
+    /** The hovered group's content box, in window coordinates. */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    /** Where the placeholder starts, relative to `bounds`. */
+    readonly from: import("gpui-shell").ElementBounds;
+    /** Where it settles. */
+    readonly to: import("gpui-shell").ElementBounds;
+  }
+
+  /** What `add_panel` is told about the panel it is adding. */
+  export interface DockPanelOptions {
+    /**
+     * What the panel is filed under in a saved layout, and what
+     * `DockArea.register_panel` finds it again by. Required.
+     */
+    name: string;
+    /** Default `"center"`. */
+    placement?: DockPlacement;
+    /** Seeds the dock's extent when the panel is the first thing in it. */
+    size?: number;
+    /**
+     * Places the panel on the region's tiles canvas instead of in a tab group.
+     * A region with no canvas has nowhere to put a tile, so nothing happens.
+     */
+    bounds?: { x: number; y: number; width: number; height: number };
+    /** Default `true`. */
+    closable?: boolean;
+    /** Default `true`. */
+    zoomable?: boolean;
+    /** Default `true`. */
+    visible?: boolean;
+  }
+
+  /**
+   * A dockable layout: splits, tab groups, docks and tiles that the user can
+   * rearrange, and that survives a restart.
+   *
+   * Retained for a reason none of the other handles share. **The layout is what
+   * the user changed** — a drag, a resize, a closed tab and a collapsed dock all
+   * happen without the script rendering — so it lives here rather than in a
+   * description that would put every one of them back the way the last render
+   * described it.
+   *
+   * `DockArea.new(id)` needs a live host call, so it belongs in `init` or an
+   * event handler, never in `render`.
+   *
+   * **Every edit takes effect once the call that made it has returned.**
+   * `add_panel` is handed a view from `cx.new(Class)`, which is itself still
+   * being constructed; `load` rebuilds panels, which constructs more. So
+   * `panels()` and `dump()` read the layout as it was before this turn's edits,
+   * and `on("layout_changed", …)` is where to read it after them.
+   *
+   * ```js
+   * init(_props, cx) {
+   *   DockArea.register_panel("inbox", Inbox);
+   *   this.dock = DockArea.new("workspace");
+   *   this.dock.add_panel(cx.new(Inbox), { name: "inbox", placement: "left", size: 240 });
+   *   this.dock.on("layout_changed", () => localStorage.setItem("layout", JSON.stringify(this.dock.dump())));
+   * }
+   * render() {
+   *   return dock_area(this.dock).size_full().tab_bar((group) => …);
+   * }
+   * ```
+   */
+  export interface DockArea {
+    /** Docks `view` — a view from `cx.new(Class)`, not an element. */
+    add_panel(view: import("gpui").Entity, options: DockPanelOptions): void;
+    /** Removes the panel with this id, wherever it sits. */
+    remove_panel(id: number): void;
+    /** Every panel in the area, in tree order. */
+    panels(): DockPanel[];
+    /**
+     * The whole layout as plain data: the tree, the docks, and each panel's own
+     * `serialize()` payload. Hand it back to `load` after a restart.
+     */
+    dump(): any;
+    /**
+     * Restores a layout `dump()` wrote, rebuilding each panel through the class
+     * registered under its name.
+     *
+     * A panel whose name nothing registered is not dropped: it is carried
+     * forward — name, payload and position — so uninstalling an application and
+     * reinstalling it puts its panels back where they were.
+     */
+    load(state: any): void;
+    has_dock(placement: DockPlacement): boolean;
+    is_dock_open(placement: DockPlacement): boolean;
+    toggle_dock(placement: DockPlacement): void;
+    remove_dock(placement: DockPlacement): void;
+    dock_size(placement: DockPlacement): number | null;
+    set_dock_size(placement: DockPlacement, size: number): void;
+    set_dock_collapsible(placement: DockPlacement, collapsible: boolean): void;
+    /** A locked area cannot be rearranged or dropped into; dock and tile resizing stays available. */
+    is_locked(): boolean;
+    set_locked(locked: boolean): void;
+    is_zoomed(): boolean;
+    /** Clears the zoom, whichever container holds it. */
+    zoom_out(): void;
+    /**
+     * Fires on every edit — including each step of a tile drag — so save on a
+     * timer rather than on every one.
+     */
+    on(event: "layout_changed", handler: (cx: Context) => void): boolean;
+    release(): boolean;
+  }
+
+  export const DockArea: {
+    new: (id: string, options?: { version?: number }) => DockArea;
+    /**
+     * Teaches the runtime to rebuild `name`'s panel from `Class` when a saved
+     * layout mentions it, and answers with the namespaced name it registered
+     * under.
+     *
+     * The class is an ordinary view class. Two of its methods carry state
+     * across a restart, and both are optional:
+     *
+     * - `serialize()` returns plain data, and is read when the layout is saved.
+     *   It runs without a host call, so it must not touch entities, `cx`, or
+     *   anything else that needs one — return a value and nothing else.
+     * - `deserialize(data)` is handed back whatever `serialize()` wrote, right
+     *   after the view is built, with a real host call available.
+     *
+     * Registering the same name twice replaces the class, which is what a hot
+     * reload does.
+     */
+    register_panel: (name: string, Class: import("gpui").ViewClass) => string;
+  };
+
+  /**
+   * Draws a dock area.
+   *
+   * Base draws **no chrome at all** — an area with none still docks, drags,
+   * resizes and persists, painting only the panels — so every tab bar, dock
+   * frame and drag bar is one of the six handlers below.
+   *
+   * Each handler is first called from inside GPUI's layout pass and is given
+   * base's own resolved state: never a drag event, a mouse position or a hit
+   * test. Its description is cached until that state or the handler changes,
+   * so unchanged frames do not enter JavaScript. It may not register event
+   * handlers — cached chrome has no script callback lifecycle of its own — so
+   * the elements it returns say what they do with a **command** instead:
+   * `select_tab(group, i)`, `close_panel(group, id)`, `toggle_dock(dock)`,
+   * `move_tile(tile)` and the rest. A command carries no script value, and base
+   * does the work.
+   */
+  export function dock_area(area: DockArea): DockAreaElement;
+
+  export interface DockAreaElement extends Element {
+    /** The tab bar above a group's displayed panel. */
+)GPUI_DTS";
+static const char kShellTypes56[] = R"GPUI_DTS(    tab_bar(handler: (group: DockGroup, cx: Context) => Element): DockAreaElement;
+    /** What a group with no displayed panel shows. */
+    empty_group(handler: (group: DockGroup, cx: Context) => Element | null): DockAreaElement;
+    /** The hint showing where a dragged panel would land. */
+    drop_indicator(handler: (drop: DockDrop, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * One dock's chrome around its content: title strip, collapse affordance,
+     * resize handle. Whatever this returns replaces the content, so put
+     * `dock_content()` where the panels belong.
+     */
+    dock(handler: (dock: DockRegion, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * The strip a tile is dragged by. Its height is fixed at base's drag-bar
+     * height, which the snapping arithmetic assumes.
+     */
+    tile_drag_bar(handler: (tile: DockTile, cx: Context) => Element): DockAreaElement;
+    /** A tile's resize affordances. */
+    tile_resize_handles(handler: (tile: DockTile, cx: Context) => Element | null): DockAreaElement;
+  }
+
+  /**
+   * Where a dock's own panels go inside the chrome the `dock` handler drew
+   * around them. Legal only inside that handler, and only once.
+   */
+  export function dock_content(): Element;
+
+  /** Which edge or corner of a tile a resize handle pulls. */
+  export type TileResizeSide = "left" | "right" | "top" | "bottom" | "bottom_right";
+
   /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
   export type ColorTokens = { readonly [Role in ColorToken]: Color };
   /** Semantic spacing scale, aligned with `gpui_base::SpacingTokens`. */
@@ -20889,19 +21793,62 @@ static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves th
     readonly none: number; readonly sm: number; readonly md: number;
     readonly lg: number; readonly xl: number; readonly full: number;
   }
+  /** One entry in the type scale, aligned with `gpui_base::TextStyleToken`. */
+  export interface TextStyleToken {
+    readonly size: number;
+    readonly line_height: number;
+    /** The CSS range: 100 is thin, 400 regular, 700 bold. */
+    readonly weight: number;
+  }
+  /**
+   * Semantic type scale, aligned with `gpui_base::TypographyTokens`.
+   *
+   * `md` is the window's base text size: everything the shell draws for itself
+   * — toasts, sheets, dialog chrome — inherits it, so an application that
+   * draws densely says so here rather than restating a size per component.
+   */
+  export interface TypographyTokens {
+    /** The face the scale is set in, and the scale itself. */
+    readonly sans: string;
+    readonly xs: TextStyleToken; readonly sm: TextStyleToken; readonly md: TextStyleToken;
+    readonly lg: TextStyleToken; readonly xl: TextStyleToken;
+    /**
+     * Code: a face and one size, not a sixth step of the scale. `mono_md` is
+     * the size `mono` is set at, and the two are read together.
+     */
+    readonly mono: string;
+    readonly mono_md: TextStyleToken;
+  }
   export interface SemanticThemeTokens {
     readonly colors: ColorTokens;
     readonly spacing: SpacingTokens;
     readonly radius: RadiusTokens;
+    readonly typography: TypographyTokens;
   }
 
   /**
    * Replaces gpui-base's active semantic tokens for the current application.
    * Legal only from an event handler or task backed by a live host call.
+   *
+   * Colours, spacing and radius are stated in full: a palette with half its
+   * roles missing is a window drawn in two themes. Typography is an override —
+   * every entry is optional, and one left out keeps the value it has — so a
+   * theme that only wants a smaller base says `{ md: { size: 12 } }` rather
+   * than restating two font families and six line heights it has no opinion
+   * about. A theme that says nothing about type is drawn as it always was.
    */
   export function set_theme(theme: {
     readonly appearance: "light" | "dark";
-    readonly tokens: SemanticThemeTokens;
+    readonly tokens: Omit<SemanticThemeTokens, "typography"> & {
+      readonly typography?: {
+        readonly sans?: string;
+        readonly mono?: string;
+      } & {
+        readonly [Step in keyof Omit<TypographyTokens, "sans" | "mono">]?: {
+          readonly [Field in keyof TextStyleToken]?: number;
+        };
+      };
+    };
   }): void;
   /** The Base-aligned semantic tokens plus the current appearance. Read-only. */
   export interface Theme extends SemanticThemeTokens, ColorTokens {
@@ -20909,6 +21856,10 @@ static const char kShellTypes52[] = R"GPUI_DTS(     * How much one step moves th
     readonly is_dark: boolean;
   }
 
+}
+
+declare module "gpui-component" {
+  import { ClickEvent, Context, Element } from "gpui";
 }
 
 declare module "gpui-shell" {
@@ -20924,8 +21875,7 @@ declare module "gpui-shell" {
     | "none"
     ;
 
-)GPUI_DTS";
-static const char kShellTypes53[] = R"GPUI_DTS(  /** A path coordinate in pixels or as a percentage of the painted bounds. */
+  /** A path coordinate in pixels or as a percentage of the painted bounds. */
   export type PathCoordinate = number | `${number}%`;
 
   /** The property bag carried across the JavaScript view bridge. */
@@ -20976,13 +21926,44 @@ static const char kShellTypes53[] = R"GPUI_DTS(  /** A path coordinate in pixels
 }
 
 declare module "gpui-fps" {
-  import { Element } from "gpui";
+  import { Anchor, Element } from "gpui";
 
   /**
    * The native `gpui-fps` performance HUD, shared once per window and pinned
    * to the top-right by default. Its parent must be `relative()`.
+   *
+   * Prefer `show_fps_monitor()`: a HUD placed inside the script's own tree is
+   * rebuilt with it, and what the tree does then counts against the reading.
    */
   export function fps_monitor(): Element;
+
+  /** Where the root-owned HUD sits and how it behaves. Every key is optional. */
+  export interface FpsMonitorOptions {
+    /** Corner or edge of the window. Default `top_right`. */
+    anchor?: Anchor;
+    /**
+     * Whether the HUD requests a redraw after every frame, so the rate it
+     * shows is the rate the window *can* sustain. Default `false`: the HUD
+     * observes the application's own frames and reads zero while it idles.
+     */
+    continuous?: boolean;
+    /** Frame budget in milliseconds, for the FRAME grading and the chart's scale. */
+    frame_budget?: number;
+  }
+
+  /**
+   * Draws the performance HUD over the whole window, above every overlay,
+   * until `hide_fps_monitor()`. The window root owns it: the script says
+   * whether and where, and nothing the script renders can move it, rebuild
+   * it, or count against it. Calling it again moves or reconfigures the HUD
+   * that is already up; the monitor behind it keeps its history across a hide
+   * and a show. Needs a live host call: `init()`, an event handler or a task.
+   */
+  export function show_fps_monitor(options?: FpsMonitorOptions): void;
+  /** Takes the HUD down. `true` if one was up. */
+  export function hide_fps_monitor(): boolean;
+  /** Whether the root-owned HUD is up. */
+  export function fps_monitor_visible(): boolean;
 }
 
 declare module "buffer" {
@@ -21065,7 +22046,8 @@ declare module "fs/promises" {
   export function exists(path: string): Promise<boolean>;
   export function unlink(path: string): Promise<void>;
   export function rmdir(path: string): Promise<void>;
-  export function mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
+)GPUI_DTS";
+static const char kShellTypes57[] = R"GPUI_DTS(  export function mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
 }
 declare module "net" {
   export interface Socket {
@@ -21105,8 +22087,12 @@ interface ShellFetchResponse {
   json(): Promise<unknown>;
 }
 interface ShellFetchOptions {
-  /** GET by default; POST is available for OAuth-style form exchanges. */
-  method?: "GET" | "POST";
+  /**
+   * GET by default. Any HTTP method may be named; which of them may reach a
+   * given host and path is the plugin's `capabilities.network` policy, not
+   * this field.
+   */
+  method?: string;
   /** Client-managed framing headers such as Host and Content-Length are refused. */
   headers?: Record<string, string>;
   body?: string | Uint8Array;
@@ -21195,6 +22181,10 @@ void AppendBuiltinTypeDeclarations(StrBuilder* out) {
     out->Append(Str(kShellTypes51, (int)sizeof(kShellTypes51) - 1));
     out->Append(Str(kShellTypes52, (int)sizeof(kShellTypes52) - 1));
     out->Append(Str(kShellTypes53, (int)sizeof(kShellTypes53) - 1));
+    out->Append(Str(kShellTypes54, (int)sizeof(kShellTypes54) - 1));
+    out->Append(Str(kShellTypes55, (int)sizeof(kShellTypes55) - 1));
+    out->Append(Str(kShellTypes56, (int)sizeof(kShellTypes56) - 1));
+    out->Append(Str(kShellTypes57, (int)sizeof(kShellTypes57) - 1));
 }
 
 } // namespace gpui::shell

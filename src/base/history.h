@@ -3,6 +3,11 @@
 /* Generic undo/redo history — crates/base/src/history.rs.
    (`crates/ui/src/history.rs` is a re-export of this one, not a second copy.)
 
+   A linear history of items with a cursor: what came before can be taken back
+   with Undo, and taken back again with Redo. Pushing after an undo starts a
+   new branch — the undone items are dropped, as a browser drops its forward
+   pages when a new page is opened.
+
    I is the C++ HistoryItem convention: a POD-friendly value with
 
        uint64_t Version() const;
@@ -69,8 +74,10 @@ struct History {
         VecClear(redos);
     }
 
+    // Pushes an item, dropping anything that had been undone.
     void Push(I item) {
         uint64_t nextVersion = IncVersion();
+        VecClear(redos);
         if (maxUndos <= 0) {
             return;
         }
@@ -79,12 +86,39 @@ struct History {
         }
         if (unique) {
             RetainDifferent(&undos, item);
-            RetainDifferent(&redos, item);
         }
         item.SetVersion(nextVersion);
         VecAppend(undos, item);
-        // Deliberately do not clear redos. Upstream keeps them when a new
-        // item is pushed after undo; its own test then redoes the older path.
+    }
+
+    // The most recent item, the one Undo would take back. Null when empty —
+    // Rust's Option<&I>.
+    const I* Current() const {
+        return undos.len > 0 ? &undos[undos.len - 1] : nullptr;
+    }
+    I* Current() { return undos.len > 0 ? &undos[undos.len - 1] : nullptr; }
+
+    // Replaces the most recent item in place, keeping its version, so the
+    // history does not grow: a location that was recorded before it had
+    // finished loading is corrected rather than followed by a duplicate.
+    // Pushes when there is nothing to replace.
+    void ReplaceCurrent(I item) {
+        if (undos.len <= 0) {
+            Push(item);
+            return;
+        }
+        I& current = undos[undos.len - 1];
+        item.SetVersion(current.Version());
+        current = item;
+    }
+
+    // Keeps only the items `keep` accepts, on both sides of the cursor. Use it
+    // when items can stop being valid — a location whose tab was closed. Rust
+    // takes `impl FnMut(&I) -> bool`; the C++ callback convention in this tree
+    // is a function pointer plus the user pointer it would have captured.
+    void Retain(bool (*keep)(const I&, void*), void* user = nullptr) {
+        RetainIf(&undos, keep, user);
+        RetainIf(&redos, keep, user);
     }
 
     // Empty means there was nothing to undo/redo. Otherwise every returned
@@ -117,6 +151,24 @@ struct History {
         int out = 0;
         for (int i = 0; i < values->len; i++) {
             if ((*values)[i] == item) {
+                continue;
+            }
+            if (out != i) {
+                (*values)[out] = (*values)[i];
+            }
+            out++;
+        }
+        values->len = out;
+    }
+
+    static void RetainIf(Vec<I>* values, bool (*keep)(const I&, void*),
+                         void* user) {
+        if (!values || !keep) {
+            return;
+        }
+        int out = 0;
+        for (int i = 0; i < values->len; i++) {
+            if (!keep((*values)[i], user)) {
                 continue;
             }
             if (out != i) {

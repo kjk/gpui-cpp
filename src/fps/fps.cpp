@@ -3,6 +3,7 @@
 #include "gpui/paint.h"
 #include "sys/executor.h"
 #include "sys/gpu.h"
+#include "sys/sysinfo.h"
 
 #include <math.h>
 
@@ -36,7 +37,8 @@ Rgba FpsLevelColor(const FpsStyle& style, float frameSecs, float budgetSecs) {
 
 // ─── sampler (crates/fps/src/sampler.rs) ──────────────────────────────────
 
-// Frames older than this stop contributing to the FPS readout.
+// FPS_WINDOW: frames presented longer ago than this stop contributing to the
+// FPS readout.
 static const double kFpsWindow = 1.0;
 
 void FrameSamplerSetCapacity(FrameSampler* s, int capacity) {
@@ -49,28 +51,14 @@ void FrameSamplerSetCapacity(FrameSampler* s, int capacity) {
     s->capacity = capacity;
     if (s->n > capacity) {
         int drop = s->n - capacity;
-        memmove(s->draws, s->draws + drop, sizeof(float) * (size_t)capacity);
+        memmove(s->samples, s->samples + drop,
+                sizeof(FrameSample) * (size_t)capacity);
         s->n = capacity;
     }
 }
 
-static void FrameSamplerPush(FrameSampler* s, float drawSecs, double now) {
-    if (s->n == s->capacity) {
-        memmove(s->draws, s->draws + 1, sizeof(float) * (size_t)(s->n - 1));
-        s->n--;
-    }
-    s->draws[s->n++] = drawSecs;
-
-    if (s->nArrivals == kFpsArrivals) {
-        memmove(s->arrivals, s->arrivals + 1,
-                sizeof(double) * (size_t)(s->nArrivals - 1));
-        s->nArrivals--;
-    }
-    s->arrivals[s->nArrivals++] = now;
-}
-
-void FrameSamplerIngest(FrameSampler* s, const float* drawSecs, int n,
-                        double now) {
+void FrameSamplerIngestDraws(FrameSampler* s, const FrameSample* samples,
+                             int n) {
     if (!s) {
         return;
     }
@@ -78,18 +66,62 @@ void FrameSamplerIngest(FrameSampler* s, const float* drawSecs, int n,
         s->capacity = kFpsCapacity;
     }
     for (int i = 0; i < n; i++) {
-        FrameSamplerPush(s, drawSecs[i], now);
+        if (s->n == s->capacity) {
+            memmove(s->samples, s->samples + 1,
+                    sizeof(FrameSample) * (size_t)(s->n - 1));
+            s->n--;
+        }
+        s->samples[s->n++] = samples[i];
+    }
+}
+
+void FrameSamplerIngestPresents(FrameSampler* s, const double* presentAt, int n,
+                                double now) {
+    if (!s) {
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        if (s->nPresents == kFpsPresents) {
+            memmove(s->presents, s->presents + 1,
+                    sizeof(double) * (size_t)(s->nPresents - 1));
+            s->nPresents--;
+        }
+        s->presents[s->nPresents++] = presentAt[i];
     }
 
     int drop = 0;
-    while (drop < s->nArrivals && now - s->arrivals[drop] > kFpsWindow) {
+    while (drop < s->nPresents && now - s->presents[drop] > kFpsWindow) {
         drop++;
     }
     if (drop > 0) {
-        memmove(s->arrivals, s->arrivals + drop,
-                sizeof(double) * (size_t)(s->nArrivals - drop));
-        s->nArrivals -= drop;
+        memmove(s->presents, s->presents + drop,
+                sizeof(double) * (size_t)(s->nPresents - drop));
+        s->nPresents -= drop;
     }
+}
+
+void FrameSamplerIngest(FrameSampler* s, const FrameTiming* frames, int n,
+                        double now) {
+    if (!s) {
+        return;
+    }
+    if (n > kFrameTraceCap) {
+        n = kFrameTraceCap;
+    }
+    FrameSample draws[kFrameTraceCap];
+    double presents[kFrameTraceCap];
+    int nPresents = 0;
+    for (int i = 0; i < n; i++) {
+        draws[i].drawSecs = frames[i].drawSecs;
+        draws[i].invalidations = frames[i].invalidations;
+        // A frame the scene found identical to the last one was drawn but
+        // never presented, so it costs a draw time and delimits no interval.
+        if (frames[i].presentAt >= 0) {
+            presents[nPresents++] = frames[i].presentAt;
+        }
+    }
+    FrameSamplerIngestDraws(s, draws, n);
+    FrameSamplerIngestPresents(s, presents, nPresents, now);
 }
 
 void FrameSamplerTick(FrameSampler* s, Window* win) {
@@ -98,22 +130,26 @@ void FrameSamplerTick(FrameSampler* s, Window* win) {
     }
     FrameTiming timings[kFrameTraceCap];
     int n = WindowCollectFrames(win, &s->cursor, timings, kFrameTraceCap);
-    float draws[kFrameTraceCap];
-    for (int i = 0; i < n; i++) {
-        draws[i] = timings[i].drawSecs;
-    }
-    FrameSamplerIngest(s, draws, n, TimeNow());
+    FrameSamplerIngest(s, timings, n, TimeNow());
 }
 
 float FrameSamplerFps(const FrameSampler* s) {
-    if (s->nArrivals < 2) {
+    if (s->nPresents < 2) {
         return 0;
     }
-    double span = s->arrivals[s->nArrivals - 1] - s->arrivals[0];
+    double span = s->presents[s->nPresents - 1] - s->presents[0];
     if (span <= 0) {
         return 0;
     }
-    return (float)((double)(s->nArrivals - 1) / span);
+    return (float)((double)(s->nPresents - 1) / span);
+}
+
+float FrameSamplerPresentInterval(const FrameSampler* s) {
+    float fps = FrameSamplerFps(s);
+    if (fps <= 0) {
+        return 0;
+    }
+    return 1.f / fps;
 }
 
 float FrameSamplerMeanDraw(const FrameSampler* s) {
@@ -122,16 +158,56 @@ float FrameSamplerMeanDraw(const FrameSampler* s) {
     }
     double total = 0;
     for (int i = 0; i < s->n; i++) {
-        total += s->draws[i];
+        total += s->samples[i].drawSecs;
     }
     return (float)(total / (double)s->n);
+}
+
+float FrameSamplerPercentileDraw(const FrameSampler* s, float percentile) {
+    if (s->n <= 0) {
+        return 0;
+    }
+    // A sorted copy of the draw times. The retained set is at most
+    // kFpsCapacity long, so an insertion sort is the whole of it.
+    float draws[kFpsCapacity];
+    for (int i = 0; i < s->n; i++) {
+        float v = s->samples[i].drawSecs;
+        int j = i - 1;
+        for (; j >= 0 && draws[j] > v; j--) {
+            draws[j + 1] = draws[j];
+        }
+        draws[j + 1] = v;
+    }
+    if (percentile < 0) {
+        percentile = 0;
+    }
+    if (percentile > 1) {
+        percentile = 1;
+    }
+    int last = s->n - 1;
+    int rank = (int)lroundf(percentile * (float)last);
+    if (rank > last) {
+        rank = last;
+    }
+    return draws[rank];
+}
+
+float FrameSamplerMeanInvalidations(const FrameSampler* s) {
+    if (s->n <= 0) {
+        return 0;
+    }
+    uint64_t total = 0;
+    for (int i = 0; i < s->n; i++) {
+        total += s->samples[i].invalidations;
+    }
+    return (float)total / (float)s->n;
 }
 
 float FrameSamplerPeakDraw(const FrameSampler* s) {
     float peak = 0;
     for (int i = 0; i < s->n; i++) {
-        if (s->draws[i] > peak) {
-            peak = s->draws[i];
+        if (s->samples[i].drawSecs > peak) {
+            peak = s->samples[i].drawSecs;
         }
     }
     return peak;
@@ -143,26 +219,76 @@ float FrameSamplerOverBudget(const FrameSampler* s, float budgetSecs) {
     }
     int over = 0;
     for (int i = 0; i < s->n; i++) {
-        if (s->draws[i] > budgetSecs) {
+        if (s->samples[i].drawSecs > budgetSecs) {
             over++;
         }
     }
     return (float)over / (float)s->n;
 }
 
-bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
-    if (!probe || !out) {
+void ResourceHistoryPush(ResourceHistory* h, ResourceSample sample,
+                         double now) {
+    if (!h) {
+        return;
+    }
+    if (h->n == kResourceHistoryCap) {
+        memmove(h->at, h->at + 1, sizeof(double) * (size_t)(h->n - 1));
+        memmove(h->samples, h->samples + 1,
+                sizeof(ResourceSample) * (size_t)(h->n - 1));
+        h->n--;
+    }
+    h->at[h->n] = now;
+    h->samples[h->n] = sample;
+    h->n++;
+
+    // The window is inclusive of a reading exactly its age.
+    int drop = 0;
+    while (drop < h->n && now - h->at[drop] > (double)h->windowSecs) {
+        drop++;
+    }
+    if (drop > 0) {
+        memmove(h->at, h->at + drop, sizeof(double) * (size_t)(h->n - drop));
+        memmove(h->samples, h->samples + drop,
+                sizeof(ResourceSample) * (size_t)(h->n - drop));
+        h->n -= drop;
+    }
+}
+
+bool ResourceHistoryMean(const ResourceHistory* h, ResourceSample* out) {
+    if (!h || !out || h->n <= 0) {
         return false;
     }
-    if (!probe->primed) {
-        probe->cores = (float)PlatCoreCount();
+    double cpu = 0;
+    // Summed wide: the byte counts are large and the window is only bounded
+    // by time, so a fast sampling cadence must not be able to overflow it.
+    // Rust sums into a u128; a double carries the same range here.
+    double memory = 0;
+    double gpuTotal = 0;
+    int gpuReadings = 0;
+    for (int i = 0; i < h->n; i++) {
+        const ResourceSample& s = h->samples[i];
+        cpu += s.cpuPercent;
+        memory += (double)s.memoryBytes;
+        if (s.gpuPercent >= 0) {
+            gpuTotal += s.gpuPercent;
+            gpuReadings++;
+        }
     }
+    out->cpuPercent = (float)(cpu / (double)h->n);
+    out->memoryBytes = (uint64_t)(memory / (double)h->n);
+    out->gpuPercent =
+        gpuReadings > 0 ? (float)(gpuTotal / (double)gpuReadings) : -1.f;
+    return true;
+}
+
+// ResourceProbe::read: one raw reading, before the window averages it.
+static bool ResourceProbeRead(ResourceProbe* probe, ResourceSample* out,
+                              double now) {
     uint64_t cpu100ns = 0;
-    uint64_t memBytes = 0;
-    if (!PlatSelfUsage(&cpu100ns, &memBytes)) {
+    uint64_t residentBytes = 0;
+    if (!PlatSelfUsage(&cpu100ns, &residentBytes)) {
         return false;
     }
-    double now = TimeNow();
 
     // The first sample only establishes the baseline; CPU is a delta against
     // the previous one and reads zero until there is one.
@@ -180,10 +306,15 @@ bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
         return false;
     }
 
-    // 100ns ticks of CPU over 100ns ticks of wall clock across every core.
-    float cpu = (float)((double)delta / (elapsed * 1e7 * probe->cores) * 100.);
-    out->cpuPercent = cpu > 100.f ? 100.f : cpu;
-    out->memoryBytes = memBytes;
+    // 100ns ticks of CPU over 100ns ticks of wall clock. Left on the single
+    // core scale sysinfo reports, which passes 100 as soon as the process
+    // spreads over more than one core; it is not divided by the core count.
+    out->cpuPercent = (float)((double)delta / (elapsed * 1e7) * 100.);
+    // Private memory where the platform publishes the counter, and the
+    // resident set where it does not — a worse number, but a present one.
+    uint64_t privateBytes = 0;
+    out->memoryBytes =
+        SysSelfPrivateMemory(&privateBytes) ? privateBytes : residentBytes;
     // The third reading, and for a renderer the half that usually explains a
     // slow frame. -1 where the platform has no counter, which keeps the row
     // out of the HUD rather than showing a zero.
@@ -191,7 +322,26 @@ bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
     return true;
 }
 
+bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
+    if (!probe || !out) {
+        return false;
+    }
+    double now = TimeNow();
+    ResourceSample reading;
+    if (!ResourceProbeRead(probe, &reading, now)) {
+        return false;
+    }
+    ResourceHistoryPush(&probe->history, reading, now);
+    return ResourceHistoryMean(&probe->history, out);
+}
+
 // ─── monitor (crates/fps/src/monitor.rs) ──────────────────────────────────
+
+// FRAME_PERCENTILE: which frame the P95 row reports. The 95th rather than the
+// 99th: the chart keeps 120 frames by default, so the 99th is the second
+// slowest of them — one frame, which moves the row on its own and reads as
+// noise.
+static const float kFramePercentile = 0.95f;
 
 // How fast the chart's y axis relaxes back down after a spike. Growth is
 // immediate so a slow frame is never clipped, while the decay is gradual so
@@ -236,13 +386,7 @@ static const float kFpsTolerance = 0.95f;
 // Distance from the edges the overlay is pinned to.
 static const float kOverlayMargin = 12.f;
 
-// Grades the frame rate against the rate the budget implies.
-//
-// This deliberately does not compare 1/fps against the budget the way the
-// per-frame trace does. Under vsync the measured rate lands just under the
-// refresh rate essentially always, so an exact comparison would paint a
-// perfectly healthy application as over budget.
-static Rgba FpsColor(float fps, float budgetSecs, const FpsStyle& style) {
+Rgba FpsRateColor(float fps, float budgetSecs, const FpsStyle& style) {
     if (fps <= 0) {
         return style.muted;
     }
@@ -256,7 +400,18 @@ static Rgba FpsColor(float fps, float budgetSecs, const FpsStyle& style) {
     return style.bad;
 }
 
-static TempStr FpsFormatBytes(uint64_t bytes) {
+// A tenth is worth showing while the reading is small, where it is the
+// difference between idle and a busy timer; past ten the extra digit only
+// churns, and dropping it also keeps the reading inside the row's share of the
+// HUD on a machine with enough cores to reach four figures.
+TempStr FpsFormatCpu(float percent) {
+    if (percent < 10.f) {
+        return fmt("%.1f%%", percent);
+    }
+    return fmt("%.0f%%", percent);
+}
+
+TempStr FpsFormatBytes(uint64_t bytes) {
     const double kMib = 1024. * 1024.;
     const double kGib = kMib * 1024.;
     double v = (double)bytes;
@@ -266,18 +421,37 @@ static TempStr FpsFormatBytes(uint64_t bytes) {
     return fmt("%.0f MB", v / kMib);
 }
 
+void FpsMonitorSetFrameBudget(FpsMonitor* self, float budgetSecs) {
+    if (!self || budgetSecs <= 0) {
+        return;
+    }
+    self->frameBudget = budgetSecs;
+    self->axisMax = budgetSecs * 2.f;
+}
+
+void FpsMonitorSetContinuous(FpsMonitor* self, bool continuous) {
+    if (self) {
+        self->continuous = continuous;
+    }
+}
+
 // Republishes the readings if kReadoutInterval has passed.
 static void UpdateReadout(FpsMonitor* self) {
     double now = TimeNow();
     if (self->readoutAt >= 0 && now - self->readoutAt < kReadoutInterval) {
         return;
     }
-    self->readout.fps = FrameSamplerFps(&self->sampler);
+    const FrameSampler* s = &self->sampler;
+    self->readout.fps = FrameSamplerFps(s);
+    self->readout.intervalMillis = FrameSamplerPresentInterval(s) * 1000.f;
     // The mean over the interval rather than the latest frame, which at this
     // cadence would be an arbitrary sample.
-    self->readout.frameMillis = FrameSamplerMeanDraw(&self->sampler) * 1000.f;
-    self->readout.droppedPercent =
-        FrameSamplerOverBudget(&self->sampler, self->frameBudget) * 100.f;
+    self->readout.frameMillis = FrameSamplerMeanDraw(s) * 1000.f;
+    self->readout.percentileMillis =
+        FrameSamplerPercentileDraw(s, kFramePercentile) * 1000.f;
+    self->readout
+        .droppedPercent = FrameSamplerOverBudget(s, self->frameBudget) * 100.f;
+    self->readout.invalidations = FrameSamplerMeanInvalidations(s);
     self->readoutAt = now;
 }
 
@@ -307,10 +481,9 @@ static void FpsResourceWork(FpsResourceJob* job) {
 }
 
 static void FpsResourceDone(FpsResourceJob* job) {
-    FpsMonitor* self =
-        job && job->app
-            ? (FpsMonitor*)EntityGet(job->app, job->monitor)
-            : nullptr;
+    FpsMonitor* self = job && job->app
+                           ? (FpsMonitor*)EntityGet(job->app, job->monitor)
+                           : nullptr;
     // A completion can arrive after the keyed state was dropped, or after a
     // newer job replaced it. In either case the heap job is all that remains
     // ours to touch.
@@ -329,8 +502,7 @@ static void FpsResourceDone(FpsResourceJob* job) {
     delete job;
 }
 
-void FpsMonitor::OnResourceTick(FpsMonitor* self, Ctx* cx,
-                                const TickEvent*) {
+void FpsMonitor::OnResourceTick(FpsMonitor* self, Ctx* cx, const TickEvent*) {
     if (!self || !cx || self->resourceTask || self->resourceJob) {
         return;
     }
@@ -338,8 +510,8 @@ void FpsMonitor::OnResourceTick(FpsMonitor* self, Ctx* cx,
     job->app = cx->app;
     job->monitor = cx->self;
     job->probe = self->probe;
-    int task = ExecSpawn(MkFunc0(FpsResourceWork, job),
-                         MkFunc0(FpsResourceDone, job));
+    int task =
+        ExecSpawn(MkFunc0(FpsResourceWork, job), MkFunc0(FpsResourceDone, job));
     if (!task) {
         delete job;
         return;
@@ -359,8 +531,8 @@ static void StartResourceSampling(FpsMonitor* self, Ctx* cx) {
         ms = 200;
     }
     self->resourceWindow = cx->win;
-    self->resourceTimer = WindowSetInterval(
-        cx->win, ms, Listen(cx, &FpsMonitor::OnResourceTick));
+    self->resourceTimer =
+        WindowSetInterval(cx->win, ms, Listen(cx, &FpsMonitor::OnResourceTick));
     if (!self->resourceTimer) {
         self->resourceWindow = nullptr;
         return;
@@ -376,6 +548,13 @@ FpsMonitor::~FpsMonitor() {
     }
     if (resourceTask && ExecCancel(resourceTask)) {
         delete resourceJob;
+    } else if (resourceJob) {
+        // The job is already running or its completion is queued, so it
+        // outlives this monitor and will be drained later — possibly after
+        // AppFree. Detach it: FpsResourceDone answers a null app by deleting
+        // the job and touching nothing else, so the App pointer it carries
+        // can never be followed once the App is gone.
+        resourceJob->app = nullptr;
     }
     resourceWindow = nullptr;
     resourceTimer = 0;
@@ -412,7 +591,7 @@ static void PaintFpsTrace(PaintCtx* ctx, El* e, void* user) {
     float py[kFpsCapacity];
     Rgba colors[kFpsCapacity];
     for (int i = 0; i < s->n; i++) {
-        float secs = s->draws[i];
+        float secs = s->samples[i].drawSecs;
         float ratio = secs / axisMax;
         if (ratio < 0) {
             ratio = 0;
@@ -443,14 +622,20 @@ static void PaintFpsTrace(PaintCtx* ctx, El* e, void* user) {
     }
 }
 
+// row(): a row carrying two pairs, pushed to either inner edge.
+static El* FpsRow(Ctx* cx) {
+    return Div(cx->a)->FlexRow()->W(kFill)->JustifyBetween()->Gap(8)->PadY(1);
+}
+
 // A `LABEL value` pair kept together, for rows that carry more than one
 // reading. The label stays muted so it reads as a caption, not as data.
-static El* FpsPair(Ctx* cx, Str label, Str value, const FpsStyle& style) {
+static El* FpsPair(Ctx* cx, Str label, Str value, Rgba valueColor,
+                   const FpsStyle& style) {
     return Div(cx->a)
         ->FlexRow()
         ->Gap(4)
         ->Child(TextEl(cx->a, label)->Fg(style.muted))
-        ->Child(TextEl(cx->a, value)->Fg(style.foreground));
+        ->Child(TextEl(cx->a, value)->Fg(valueColor));
 }
 
 // One `LABEL … value` row. The value is right aligned against the HUD's inner
@@ -458,12 +643,7 @@ static El* FpsPair(Ctx* cx, Str label, Str value, const FpsStyle& style) {
 // nothing shifts as the readings change width.
 static El* FpsReading(Ctx* cx, Str label, Str value, Rgba valueColor,
                       const FpsStyle& style) {
-    return Div(cx->a)
-        ->FlexRow()
-        ->W(kFill)
-        ->JustifyBetween()
-        ->Gap(8)
-        ->PadY(1)
+    return FpsRow(cx)
         ->Child(TextEl(cx->a, label)->Fg(style.muted))
         ->Child(TextEl(cx->a, value)->Fg(valueColor));
 }
@@ -535,7 +715,13 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
 
     const FpsStyle& style = FpsStyleDark();
     FpsReadout r = self->readout;
-    Rgba fpsColor = FpsColor(r.fps, self->frameBudget, style);
+    float budget = self->frameBudget;
+    // Continuous, the rate is the rate the window can sustain, and falling
+    // short of the target is the finding. Drawing on demand, the rate is how
+    // often something changed, and the platform's own overlay prints it plain
+    // — so does this one.
+    Rgba fpsColor = self->continuous ? FpsRateColor(r.fps, budget, style)
+                                     : style.foreground;
 
     El* hud = Div(cx->a)
                   ->Click(HashClickId(StrL("gpui-fps-hud")))
@@ -569,18 +755,45 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
         ->PadY(6)
         ->Radius(4)
         ->Child(FpsHeadline(cx, self, r.fps, fpsColor, style))
-        // Graded against the budget, not against the frame rate. An idle
-        // window draws a handful of frames a second, so the headline goes red
-        // while every one of those frames was in fact drawn well inside the
-        // budget; this row is what says so.
-        ->Child(FpsReading(cx, StrL("FRAME"), fmt("%.1f ms", r.frameMillis),
-                           FpsLevelColor(style, r.frameMillis / 1000.f,
-                                         self->frameBudget),
+        // The same figure the platform overlay calls its frame interval: time
+        // between presents, which is the headline's reciprocal. Ungraded,
+        // like there.
+        ->Child(FpsReading(cx, StrL("INTERVAL"),
+                           fmt("%.1f ms", r.intervalMillis), style.foreground,
                            style))
+        // Graded against the budget, not against the frame rate: an idle
+        // window draws a handful of frames a second, every one of them well
+        // inside the budget, and this row is what says so.
+        ->Child(FpsReading(cx, StrL("FRAME"), fmt("%.1f ms", r.frameMillis),
+                           FpsLevelColor(style, r.frameMillis / 1000.f, budget),
+                           style))
+        // Graded the same way, so the two millisecond rows read as one
+        // measurement seen twice: what a frame usually costs, and what its
+        // slow tail costs.
         ->Child(FpsReading(
-            cx, StrL("DROP"), fmt("%.1f%%", r.droppedPercent),
-            FpsLevelColor(style, r.droppedPercent > 0 ? 1.f : 0.f, 0.5f),
-            style));
+            cx, StrL("P95"), fmt("%.1f ms", r.percentileMillis),
+            FpsLevelColor(style, r.percentileMillis / 1000.f, budget), style))
+        // Dropped frames and wasted invalidations share a row: both count
+        // redundant work rather than measuring a duration, so neither belongs
+        // in the millisecond column above.
+        ->Child(
+            FpsRow(cx)
+                ->Child(
+                    FpsPair(cx, StrL("DROP"), fmt("%.1f%%", r.droppedPercent),
+                            FpsLevelColor(
+                                style, r.droppedPercent > 0 ? 1.f : 0.f, 0.5f),
+                            style))
+                // Ungraded, unlike every other reading in the HUD. One per
+                // frame is the ideal, but it is not the floor here: in
+                // continuous mode the monitor requests an animation frame of
+                // its own on every render, so an application invalidating
+                // once a frame measures two and a healthy HUD would sit
+                // permanently in the red. The baseline depends on that switch
+                // and on how the application drives its own redraws, which is
+                // not something the HUD can grade — so the number is reported
+                // and the reading is left to whoever knows what to expect.
+                ->Child(FpsPair(cx, StrL("INV"), fmt("%.1f", r.invalidations),
+                                style.foreground, style)));
     if (self->showResources && self->hasResources) {
         // The GPU reading is a row of its own, and is left out where the
         // platform publishes no counter for it — `when_some(gpu_percent)`.
@@ -592,25 +805,33 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
         // CPU and memory share a row: both are coarse background samples,
         // unlike the per-frame numbers.
         hud->Child(
-            Div(cx->a)
-                ->FlexRow()
-                ->W(kFill)
-                ->JustifyBetween()
-                ->Gap(8)
-                ->PadY(1)
+            FpsRow(cx)
                 ->Child(FpsPair(cx, StrL("CPU"),
-                                fmt("%.1f%%", self->resources.cpuPercent),
-                                style))
+                                FpsFormatCpu(self->resources.cpuPercent),
+                                style.foreground, style))
                 ->Child(FpsPair(cx, StrL("MEM"),
                                 FpsFormatBytes(self->resources.memoryBytes),
-                                style)));
+                                style.foreground, style)));
     }
     return hud;
 }
 
 // ─── overlay (crates/fps/src/overlay.rs) ──────────────────────────────────
 
-El* FpsOverlayEl(Ctx* cx, Entity<FpsMonitor> monitor, FpsAnchor anchor) {
+El* FpsOverlayEl(Ctx* cx, Entity<FpsMonitor> monitor, FpsOverlayOpts opts) {
+    // The overlay's settings land on the monitor before it renders, the way
+    // FpsOverlay::render updates the entity before handing it to the tree.
+    if (opts.frameBudget > 0 || opts.continuous >= 0) {
+        FpsMonitor* self = monitor.Get(cx->app);
+        if (self) {
+            if (opts.frameBudget > 0) {
+                FpsMonitorSetFrameBudget(self, opts.frameBudget);
+            }
+            if (opts.continuous >= 0) {
+                FpsMonitorSetContinuous(self, opts.continuous != 0);
+            }
+        }
+    }
     El* hud = EntityRender(cx->app, cx->win, cx->a, monitor.id);
     if (!hud) {
         return Div(cx->a);
@@ -621,7 +842,7 @@ El* FpsOverlayEl(Ctx* cx, Entity<FpsMonitor> monitor, FpsAnchor anchor) {
     // laid over the content as small as possible.
     El* box = Div(cx->a)->Absolute()->FlexRow();
     float m = kOverlayMargin;
-    switch (anchor) {
+    switch (opts.anchor) {
         case FpsAnchor::TopLeft:
             box->Top(m)->Left(m);
             break;
@@ -650,7 +871,7 @@ El* FpsOverlayEl(Ctx* cx, Entity<FpsMonitor> monitor, FpsAnchor anchor) {
     return box->Child(hud);
 }
 
-El* FpsMonitorEl(Ctx* cx) {
+El* FpsMonitorEl(Ctx* cx, FpsOverlayOpts opts) {
     // The monitor is created on first use and reused afterwards, one per
     // window, so this can be called straight from Render every frame. Rust
     // keeps the same map as a global keyed by WindowId.
@@ -662,7 +883,7 @@ El* FpsMonitorEl(Ctx* cx) {
     if (!slot->IsValid()) {
         *slot = EntityNew<FpsMonitor>(cx);
     }
-    return FpsOverlayEl(cx, *slot, FpsAnchor::TopRight);
+    return FpsOverlayEl(cx, *slot, opts);
 }
 
 } // namespace gpui

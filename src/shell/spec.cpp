@@ -2,6 +2,68 @@
 
 namespace gpui::shell {
 
+uint64_t StructureMix(uint64_t state, uint64_t value) {
+    uint64_t rotated = (state << 23) | (state >> 41);
+    uint64_t hashed = rotated ^ (value * 0x9E3779B97F4A7C15ull);
+    hashed ^= hashed >> 30;
+    hashed *= 0xBF58476D1CE4E5B9ull;
+    return hashed ^ (hashed >> 27);
+}
+
+// A method name is identified by what it says rather than by where it is.
+// Rust hashes the `&'static str`'s pointer, because upstream's reflection
+// table hands the same pointer to every call of one builder method; here a
+// name arrives copied into a per-call arena, so there is no pointer to lean
+// on and the bytes are what separate two names.
+static uint64_t StructureName(Str name) {
+    uint64_t hashed = 0;
+    for (int i = 0; i < name.len; i++) {
+        hashed = StructureMix(hashed, (uint64_t)(uint8_t)name.s[i]);
+    }
+    return StructureMix(hashed, (uint64_t)name.len);
+}
+
+// What this node contributes to a fingerprint: which constructor produced it,
+// and nothing it carries. A Text's string, a Button's id, a VirtualList's item
+// count and a ChildView's handle are all *values* as far as a template is
+// concerned.
+static uint64_t ComponentShape(const Component& component) {
+    return StructureMix(0, (uint64_t)component.kind);
+}
+
+// What this operation contributes: which call it was, and not what was passed
+// to it. Arguments are left out because a colour, a length or a label changing
+// is precisely the case a template exists to serve, and a CallbackId is left
+// out because it is minted per render and retired with the snapshot
+// generation, so keeping it would make every description containing a single
+// handler look like a new shape.
+static uint64_t OpShape(const SpecOp& op) {
+    switch (op.kind) {
+        case SpecOpKind::NullaryStyle:
+            return StructureMix(1, StructureName(op.name));
+        case SpecOpKind::ParamStyle:
+            return StructureMix(2, StructureName(op.name));
+        case SpecOpKind::Method:
+            return StructureMix(3, StructureName(op.name));
+        case SpecOpKind::Callback:
+            return StructureMix(4, StructureName(op.name));
+        // The detached node these point at is part of the shape: a hover style
+        // and the declarations inside it are one structure.
+        case SpecOpKind::StateStyle:
+            return StructureMix(StructureMix(6, StructureName(op.name)),
+                                op.node);
+        case SpecOpKind::Slot:
+            return StructureMix(StructureMix(7, StructureName(op.name)),
+                                op.node);
+    }
+    return 0;
+}
+
+Template::~Template() {
+    delete arena;
+    VecReset(slots);
+}
+
 const char* ComponentName(const Component& component) {
     switch (component.kind) {
         case ComponentKind::Div:
@@ -183,6 +245,7 @@ void SpecArena::Reset() {
     VecClear(claimed);
     VecClear(mountedViews);
     virtualItems = 0;
+    structure = 0;
     arena->Reset();
 }
 
@@ -225,6 +288,7 @@ SpecOp SpecArena::CopyOp(const SpecOp& source) {
 }
 
 SpecId SpecArena::Push(const Component& component) {
+    structure = StructureMix(structure, ComponentShape(component));
     SpecNode* node = ArenaNew<SpecNode>(arena);
     node->component = CopyComponent(component);
     VecAppend(nodes, node);
@@ -286,6 +350,9 @@ bool SpecArena::CheckLive(SpecId id, SpecError* error) const {
 
 bool SpecArena::PushOp(SpecId id, const SpecOp& op, SpecError* error) {
     if (!CheckLive(id, error)) return false;
+    // After the check, not before: a rejected call records nothing, so it must
+    // not move the shape either.
+    structure = StructureMix(structure, OpShape(op));
     return nodes[(int)id]->ops.Append(arena, CopyOp(op));
 }
 
@@ -295,6 +362,7 @@ bool SpecArena::Claim(SpecId id, SpecError* error) {
         SetSpecError(error, SpecErrorKind::Claimed);
         return false;
     }
+    structure = StructureMix(structure, StructureMix(8, id));
     claimed[(int)id] = 1;
     return true;
 }
@@ -309,8 +377,101 @@ bool SpecArena::Attach(SpecId parent, SpecId child, SpecError* error) {
         SetSpecError(error, SpecErrorKind::SelfParent);
         return false;
     }
+    // The tree is the half of the shape the nodes themselves do not carry: the
+    // same components in a different arrangement are a different structure,
+    // and a template could not fill one from the other.
+    structure = StructureMix(StructureMix(structure, parent),
+                             (uint64_t)child ^ (1ull << 32));
     parented[(int)child] = 1;
     return nodes[(int)parent]->children.Append(arena, child);
+}
+
+SpecId SpecArena::Graft(const Template& tmpl) {
+    SpecId base = (SpecId)nodes.len;
+    const SpecArena* source = tmpl.arena;
+    if (!source) return base;
+    for (int i = 0; i < source->nodes.len; i++) {
+        const SpecNode* from = source->nodes[i];
+        SpecNode* node = ArenaNew<SpecNode>(arena);
+        node->component = CopyComponent(from->component);
+        for (const SpecOp& op : from->ops) {
+            SpecOp copied = CopyOp(op);
+            if (copied.kind == SpecOpKind::StateStyle ||
+                copied.kind == SpecOpKind::Slot) {
+                copied.node += base;
+            }
+            node->ops.Append(arena, copied);
+        }
+        for (SpecId child : from->children) {
+            node->children.Append(arena, child + base);
+        }
+        VecAppend(nodes, node);
+        VecAppend(parented, source->parented[i]);
+        VecAppend(claimed, source->claimed[i]);
+    }
+    // The root arrives with no parent so the caller can attach it, whatever it
+    // was in the template.
+    parented[(int)(tmpl.root + base)] = 0;
+
+    // One mix for the whole graft rather than one per node: the template's own
+    // fingerprint already summarizes everything inside it, and a description
+    // that instantiates the same template twice must not look like one that
+    // instantiated two different ones.
+    structure = StructureMix(structure, StructureMix(9, source->structure));
+    return tmpl.root + base;
+}
+
+bool SpecArena::WriteSlot(SpecId base, const Slot& slot, const SlotValue& value,
+                          SpecError* error) {
+    SpecId target = slot.node + base;
+    if (target >= (SpecId)nodes.len || !nodes[(int)target]) {
+        SetSpecError(error, SpecErrorKind::Expired);
+        return false;
+    }
+    SpecNode* node = nodes[(int)target];
+    if (slot.site.kind == SlotSiteKind::Text &&
+        value.kind == SlotValueKind::Text) {
+        node->component.kind = ComponentKind::Text;
+        node->component.text = StrDup(arena, value.text);
+        return true;
+    }
+    if (slot.site.kind == SlotSiteKind::Argument &&
+        value.kind == SlotValueKind::Value) {
+        if ((int)slot.site.op >= node->ops.len) {
+            SetSpecError(error, SpecErrorKind::Expired);
+            return false;
+        }
+        SpecOp& op = node->ops[slot.site.op];
+        if (op.kind != SpecOpKind::ParamStyle &&
+            op.kind != SpecOpKind::Method) {
+            SetSpecError(error, SpecErrorKind::Expired);
+            return false;
+        }
+        if ((int)slot.site.argument >= op.argCount) {
+            SetSpecError(error, SpecErrorKind::Expired);
+            return false;
+        }
+        Bridged written = value.value;
+        if (written.kind == BridgedKind::String) {
+            written.string = StrDup(arena, written.string);
+        }
+        op.args[slot.site.argument] = written;
+        return true;
+    }
+    if (slot.site.kind == SlotSiteKind::Handler &&
+        value.kind == SlotValueKind::Handler) {
+        if ((int)slot.site.op >= node->ops.len ||
+            node->ops[slot.site.op].kind != SpecOpKind::Callback) {
+            SetSpecError(error, SpecErrorKind::Expired);
+            return false;
+        }
+        node->ops[slot.site.op].callback = value.handler;
+        return true;
+    }
+    // Every pairing is decided when the slot is recorded, so a mismatch is the
+    // runtime disagreeing with itself rather than a script mistake.
+    SetSpecError(error, SpecErrorKind::Expired);
+    return false;
 }
 
 bool SpecArena::ClaimVirtualItems(uint64_t count, uint64_t limit) {

@@ -2,6 +2,7 @@
 
 #include "base/json.h"
 #include "shell/filesystem.h"
+#include "shell/host_modules.h"
 #include "shell/scope.h"
 
 #include <stdio.h>
@@ -230,6 +231,317 @@ static bool ValidatePlaceholders(const Vec<Str>& paths, Str field,
     return true;
 }
 
+// --- Git-backed dependencies -------------------------------------------
+//
+// Ports crates/shell/src/plugin.rs's `GitDependency`, its string shorthand
+// and `validate_dependencies`. The manifest is the whole description of a
+// dependency, and every question a Git command would otherwise discover is
+// answered here, before one runs.
+
+static Str TrimAscii(Str value) {
+    int start = 0;
+    int end = value.len;
+    while (start < end && (uint8_t)value.s[start] <= ' ') start++;
+    while (end > start && (uint8_t)value.s[end - 1] <= ' ') end--;
+    return Str(value.s + start, end - start);
+}
+
+// `valid_git_ref_name`: git-check-ref-format's rules, so a selector cannot be
+// a refspec.
+static bool ValidGitRefName(Str reference) {
+    if (!reference || StrEq(reference, "@")) return false;
+    char first = reference.s[0];
+    char last = reference.s[reference.len - 1];
+    if (first == '.' || first == '/' || last == '.' || last == '/')
+        return false;
+    if (StrContains(reference, StrL("..")) ||
+        StrContains(reference, StrL("@{")) ||
+        StrContains(reference, StrL("//")))
+        return false;
+    for (int i = 0; i < reference.len; i++) {
+        uint8_t c = (uint8_t)reference.s[i];
+        if (c < 0x20 || c == 0x7f || c == ' ' || c == '~' || c == '^' ||
+            c == ':' || c == '?' || c == '*' || c == '[' || c == '\\')
+            return false;
+    }
+    int start = 0;
+    for (int i = 0; i <= reference.len; i++) {
+        if (i < reference.len && reference.s[i] != '/') continue;
+        Str component(reference.s + start, i - start);
+        if (component.len == 0 || component.s[0] == '.' ||
+            StrEndsWith(component, ".lock"))
+            return false;
+        start = i + 1;
+    }
+    return true;
+}
+
+static bool ValidGitHubComponent(Str component) {
+    if (component.len == 0 || StrEq(component, ".") || StrEq(component, ".."))
+        return false;
+    for (int i = 0; i < component.len; i++) {
+        char c = component.s[i];
+        bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                  (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+static bool LooksLikeScpGitUrl(Str remote) {
+    int colon = StrFind(remote, StrL(":"));
+    if (colon < 0) return false;
+    Str authority(remote.s, colon);
+    Str path(remote.s + colon + 1, remote.len - colon - 1);
+    return StrContains(authority, StrL("@")) &&
+           !StrContains(authority, StrL("/")) && path.len > 0 &&
+           StrContains(path, StrL("/"));
+}
+
+// `parse_git_dependency_string`: a Git URL or a GitHub `owner/repository`,
+// each with at most one `#ref`.
+static bool ParseGitDependencyString(Arena* arena, Str source, Str* git,
+                                     Str* reference, Str* detail) {
+    int hashes = 0;
+    for (int i = 0; i < source.len; i++)
+        if (source.s[i] == '#') hashes++;
+    if (!StrEq(TrimAscii(source), source) || source.len == 0 || hashes > 1) {
+        *detail = StrL(
+            "a string dependency must be a Git URL or GitHub "
+            "owner/repository with one optional #Git ref");
+        return false;
+    }
+    int hash = StrFind(source, StrL("#"));
+    Str remote = hash < 0 ? source : Str(source.s, hash);
+    Str fragment = {};
+    if (hash >= 0) {
+        fragment = Str(source.s + hash + 1, source.len - hash - 1);
+        if (fragment.len == 0) {
+            *detail = StrL("a string dependency #Git ref must not be empty");
+            return false;
+        }
+        if (!ValidGitRefName(fragment)) {
+            *detail = StrDup(arena,
+                             fmt("string dependency selector `%s` is not a "
+                                 "valid Git ref",
+                                 fragment));
+            return false;
+        }
+    }
+
+    if (StrContains(remote, StrL("://")) || LooksLikeScpGitUrl(remote)) {
+        bool whitespace = false;
+        for (int i = 0; i < remote.len; i++)
+            if ((uint8_t)remote.s[i] <= ' ') whitespace = true;
+        if (whitespace || StrEndsWith(remote, "://") ||
+            StrStartsWith(remote, "://")) {
+            *detail = StrL("a string dependency must contain a valid Git URL");
+            return false;
+        }
+        *git = StrDup(arena, remote);
+        *reference = fragment ? StrDup(arena, fragment) : Str{};
+        return true;
+    }
+
+    Str owner = {};
+    Str repository = {};
+    int components = 0;
+    int start = 0;
+    for (int i = 0; i <= remote.len; i++) {
+        if (i < remote.len && remote.s[i] != '/') continue;
+        Str component(remote.s + start, i - start);
+        if (components == 0) owner = component;
+        else if (components == 1) repository = component;
+        components++;
+        start = i + 1;
+    }
+    if (components != 2 || !ValidGitHubComponent(owner) ||
+        !ValidGitHubComponent(repository)) {
+        *detail = StrL(
+            "GitHub shorthand must contain exactly owner/repository plus an "
+            "optional #Git ref");
+        return false;
+    }
+    *git = StrDup(arena, fmt("https://github.com/%s/%s", owner, repository));
+    *reference = StrDup(arena, fragment ? fragment : StrL("main"));
+    return true;
+}
+
+static bool ValidBareModuleName(Str name) {
+    if (!name || name.s[0] == '.' || name.s[0] == '/') return false;
+    if (StrContains(name, StrL("\\")) || StrContains(name, StrL(":")))
+        return false;
+    int start = 0;
+    for (int i = 0; i <= name.len; i++) {
+        if (i < name.len && name.s[i] != '/') continue;
+        Str part(name.s + start, i - start);
+        if (part.len == 0 || StrEq(part, "..")) return false;
+        start = i + 1;
+    }
+    return true;
+}
+
+static void SetDependencyError(ShellError* error, Str detail) {
+    SetError(error, fmt("invalid `dependencies`: %s. Use a GitHub "
+                        "owner/repository shorthand or full Git URL with an "
+                        "optional #ref, or an object with a Git URL, exactly "
+                        "one non-empty `branch` or `tag`, and an optional "
+                        "repository-relative `entry`",
+                        detail));
+}
+
+// `validate_dependencies`: everything answerable before a Git command runs.
+static bool ValidateDependency(const GitDependency& dependency,
+                               ShellError* error) {
+    Str name = dependency.name;
+    if (!ValidBareModuleName(name)) {
+        SetDependencyError(error,
+                           fmt("`%s` is not a valid bare module name", name));
+        return false;
+    }
+    if (HostIsReservedSpecifier(name)) {
+        SetDependencyError(error, fmt("`%s` is reserved by gpui-shell and "
+                                      "cannot name a Git dependency",
+                                      name));
+        return false;
+    }
+    if (TrimAscii(dependency.git).len == 0) {
+        SetDependencyError(error, fmt("`%s.git` must not be empty", name));
+        return false;
+    }
+    if (dependency.packageEntry) {
+        if (dependency.reference && !ValidGitRefName(dependency.reference)) {
+            SetDependencyError(
+                error, fmt("`%s` selector `%s` is not a valid Git ref", name,
+                           dependency.reference));
+            return false;
+        }
+        return true;
+    }
+    bool hasBranch = dependency.branch && TrimAscii(dependency.branch).len > 0;
+    bool hasTag = dependency.tag && TrimAscii(dependency.tag).len > 0;
+    if (dependency.branch && dependency.tag) {
+        SetDependencyError(
+            error,
+            fmt("`%s` must select either `branch` or `tag`, not both", name));
+        return false;
+    }
+    if (hasBranch == hasTag) {
+        SetDependencyError(
+            error,
+            fmt("`%s` must select one non-empty `branch` or `tag`", name));
+        return false;
+    }
+    Str reference = hasBranch ? dependency.branch : dependency.tag;
+    if (!ValidGitRefName(reference)) {
+        SetDependencyError(error,
+                           fmt("`%s` selector `%s` is not a valid Git ref name",
+                               name, reference));
+        return false;
+    }
+    if (!ValidEntry(dependency.entry)) {
+        SetDependencyError(
+            error,
+            fmt("`%s.entry` must be a path inside the Git repository", name));
+        return false;
+    }
+    return true;
+}
+
+// Rust's BTreeMap iterates by key; the store, the resolver and the editor
+// links all walk dependencies in that order, so the vector is kept sorted.
+static bool DependencyNameOrdered(Str left, Str right) {
+    int shared = left.len < right.len ? left.len : right.len;
+    for (int i = 0; i < shared; i++) {
+        uint8_t a = (uint8_t)left.s[i];
+        uint8_t b = (uint8_t)right.s[i];
+        if (a != b) return a < b;
+    }
+    return left.len <= right.len;
+}
+
+static bool ParseDependencies(const JsonValue* value, PluginManifest* out,
+                              ShellError* error) {
+    if (!value || value->kind == JsonKind::Null) return true;
+    if (value->kind != JsonKind::Object) {
+        SetDependencyError(error, StrL("the block must be an object"));
+        return false;
+    }
+    for (const JsonValue* field = value->first; field; field = field->next) {
+        GitDependency dependency;
+        dependency.name = StrDup(out->arena, field->key);
+        if (field->kind == JsonKind::String) {
+            Str detail = {};
+            if (!ParseGitDependencyString(out->arena, field->str,
+                                          &dependency.git,
+                                          &dependency.reference, &detail)) {
+                SetDependencyError(error, detail);
+                return false;
+            }
+            dependency.entry = Str(kGitDependencyDefaultEntry);
+            dependency.packageEntry = true;
+        } else if (field->kind == JsonKind::Object) {
+            static const char* fields[] = {"git", "branch", "tag", "entry"};
+            bool known = true;
+            for (const JsonValue* member = field->first; member;
+                 member = member->next) {
+                bool found = false;
+                for (int i = 0; i < 4; i++)
+                    if (StrEq(member->key, fields[i])) found = true;
+                if (!found) {
+                    SetDependencyError(
+                        error, fmt("unknown field `%s` in `%s`", member->key,
+                                   dependency.name));
+                    known = false;
+                    break;
+                }
+            }
+            if (!known) return false;
+            const JsonValue* git = JsonGet(field, "git");
+            const JsonValue* branch = JsonGet(field, "branch");
+            const JsonValue* tag = JsonGet(field, "tag");
+            const JsonValue* entry = JsonGet(field, "entry");
+            if (!git || git->kind != JsonKind::String ||
+                (branch && branch->kind != JsonKind::Null &&
+                 branch->kind != JsonKind::String) ||
+                (tag && tag->kind != JsonKind::Null &&
+                 tag->kind != JsonKind::String) ||
+                (entry && entry->kind != JsonKind::Null &&
+                 entry->kind != JsonKind::String)) {
+                SetDependencyError(
+                    error, fmt("`%s` must name a string `git`, and string "
+                               "`branch`, `tag` and `entry` where present",
+                               dependency.name));
+                return false;
+            }
+            dependency.git = StrDup(out->arena, git->str);
+            if (branch && branch->kind == JsonKind::String)
+                dependency.branch = StrDup(out->arena, branch->str);
+            if (tag && tag->kind == JsonKind::String)
+                dependency.tag = StrDup(out->arena, tag->str);
+            dependency.entry = entry && entry->kind == JsonKind::String
+                                   ? StrDup(out->arena, entry->str)
+                                   : Str(kGitDependencyDefaultEntry);
+        } else {
+            SetDependencyError(
+                error,
+                fmt("`%s` must be a string or an object", dependency.name));
+            return false;
+        }
+        if (!ValidateDependency(dependency, error)) return false;
+        int at = out->dependencies.len;
+        VecAppend(out->dependencies, dependency);
+        while (at > 0 && !DependencyNameOrdered(out->dependencies[at - 1].name,
+                                                out->dependencies[at].name)) {
+            GitDependency swap = out->dependencies[at - 1];
+            out->dependencies[at - 1] = out->dependencies[at];
+            out->dependencies[at] = swap;
+            at--;
+        }
+    }
+    return true;
+}
+
 static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
                               ShellError* error) {
     if (!value || value->kind == JsonKind::Null) return true;
@@ -393,6 +705,7 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
 PluginManifest::PluginManifest() : arena(ArenaNew()) {}
 
 PluginManifest::~PluginManifest() {
+    VecReset(dependencies);
     VecReset(readRoots);
     VecReset(writeRoots);
     VecReset(execute);
@@ -417,9 +730,10 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
         SetError(error, StrL("the manifest is not valid JSON"));
         return false;
     }
-    static const char* fields[] = {"id", "name", "version",
-                                   "shell-version", "entry", "capabilities"};
-    if (!HasOnly(root, fields, 6, StrL("the manifest"), error)) return false;
+    static const char* fields[] = {"id",    "name",         "version",
+                                   "shell-version", "entry", "dependencies",
+                                   "capabilities"};
+    if (!HasOnly(root, fields, 7, StrL("the manifest"), error)) return false;
     Str id, name, entry;
     if (!RequiredString(root, "id", &id, error) ||
         !RequiredString(root, "name", &name, error) ||
@@ -474,6 +788,8 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
     out->version = StrDup(out->arena, versionText);
     out->shellVersion = StrDup(out->arena, required);
     out->entry = StrDup(out->arena, entry);
+    if (!ParseDependencies(JsonGet(root, "dependencies"), out, error))
+        return false;
     return ParseCapabilities(JsonGet(root, "capabilities"), out, error);
 }
 
@@ -505,7 +821,8 @@ void PluginManifestSchema(StrBuilder* out) {
         "\"additionalProperties\":false,\"required\":[\"id\",\"name\",\"entry\"],"
         "\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},"
         "\"version\":{\"type\":\"string\"},\"shell-version\":{\"type\":\"string\"},"
-        "\"entry\":{\"type\":\"string\"},\"capabilities\":{\"type\":\"object\"}}}"));
+        "\"entry\":{\"type\":\"string\"},\"dependencies\":{\"type\":\"object\"},"
+        "\"capabilities\":{\"type\":\"object\"}}}"));
 }
 
 static bool AbsolutePath(Str path) {

@@ -143,6 +143,16 @@ struct NotificationListState {
     // NotificationSettings::delivery: where a notification with none of its
     // own goes.
     NotificationDelivery delivery = NotificationDelivery::InApp;
+    // Whether the lifecycle clock is running, and the window timer that is
+    // it. Rust spawns a detached task from `push` that ends itself once the
+    // manager is empty; a window interval is the same clock, armed and
+    // cancelled at the same two moments. With nothing mounted there is
+    // nothing to advance, so an idle window arms no timer.
+    bool isAdvancing = false;
+    int advanceTimer = 0;
+    // The window the clock is armed on, so it can be cancelled from a tick
+    // that has one and from the destructor, which has neither.
+    Window* advanceWin = nullptr;
     bool stackHovered[8] = {};
     bool stackFocused[8] = {};
     FocusHandle stackFocus[8] = {};
@@ -193,6 +203,14 @@ void NotificationDismissByTypeKey(NotificationListState* s, Ctx* cx,
                                   NotificationTypeId type, uint32_t key);
 // clear().
 void NotificationClear(NotificationListState* s, Ctx* cx);
+// start_advancing(): tick the toast lifecycle until the last notification is
+// unmounted. It advances the transition phases and samples the pause input
+// (stack expansion) that reaches the list through no event. Idempotent, and
+// `push` is the only thing that calls it.
+void NotificationStartAdvancing(NotificationListState* s, Ctx* cx);
+// The other end of it: the clock stops itself at an instant when nothing is
+// mounted, so a mounted toast always has a running clock.
+void NotificationStopAdvancing(NotificationListState* s);
 // advance(): move every notification on by `deltaMs`, dropping the ones that
 // finished leaving. Answers whether anything changed.
 bool NotificationAdvance(NotificationListState* s, int deltaMs);

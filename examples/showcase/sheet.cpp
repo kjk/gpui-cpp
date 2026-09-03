@@ -25,11 +25,11 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                       ->PadX(8)
                       ->ItemsCenter()
                       ->JustifyCenter()
-                      ->Border(1, Rgb(0x17, 0x17, 0x17))
-                      ->Bg(Rgb(0xff, 0xff, 0xff))
+                      ->Border(1, ExampleRgb(0x171717))
+                      ->Bg(ExampleRgb(0xffffff))
                       ->Child(TextEl(a, StrL("Open settings"))
                                   ->Font(12)
-                                  ->Fg(Rgb(0x17, 0x17, 0x17)));
+                                  ->Fg(ExampleRgb(0x171717)));
     root->Child(trigger);
     if (!app->sheetOpen) {
         return root;
@@ -78,7 +78,7 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                     ->Bg(Rgb(0, 0, 0))
                     ->Child(TextEl(a, StrL("Done"))
                                 ->Font(12)
-                                ->Fg(Rgb(0xff, 0xff, 0xff)))));
+                                ->Fg(ExampleRgb(0xffffff)))));
 
     El* overlay = Div(a)->Absolute()->Top(0)->Left(0)->W(kFill)->H(kFill)->Bg(
         Rgba8(0, 0, 0, 38));

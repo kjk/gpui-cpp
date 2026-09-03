@@ -681,6 +681,9 @@ void AppQuit(Window* win) {
 }
 
 void AppInvalidate(Window* win) {
+    if (win) {
+        win->invalidations++;
+    }
     if (win && win->plat) {
         win->plat->dirty = true;
     }

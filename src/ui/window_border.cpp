@@ -30,6 +30,29 @@ Edges WindowPaddings(Window* window) {
     return WindowBorderInsets(shadow, window->tiling);
 }
 
+Edges WindowContentInsets(Window* window) {
+    if (!window || !WindowClientDecorated(window)) {
+        return {};
+    }
+    float shadow =
+        window->clientInset >= 0 ? window->clientInset : kWindowShadowSize;
+    Edges insets = WindowBorderInsets(shadow, window->tiling);
+    const WindowTiling& tiling = window->tiling;
+    if (!tiling.top) {
+        insets.top += kWindowBorderSize;
+    }
+    if (!tiling.bottom) {
+        insets.bottom += kWindowBorderSize;
+    }
+    if (!tiling.left) {
+        insets.left += kWindowBorderSize;
+    }
+    if (!tiling.right) {
+        insets.right += kWindowBorderSize;
+    }
+    return insets;
+}
+
 WindowEdge WindowResizeEdge(float x, float y, float w, float h, Edges insets,
                             WindowTiling tiling, float hitSize) {
     float innerLeft = insets.left;

@@ -40,7 +40,9 @@ static void PrintHelp() {
         "  <directory>  The application root, or the main.js inside it.\n\n"
         "Commands:\n"
         "  types        Write gpui.d.ts beside scripts that import Shell "
-        "modules.\n"
+        "modules, and\n"
+        "               link the manifest's Git dependencies into "
+        "node_modules.\n"
         "  check        Load and render once without opening a window.\n\n"
         "Options:\n"
         "  --watch      Reload when application sources change.\n"
@@ -395,6 +397,19 @@ int GpuiMain(int argc, char** argv) {
     if (invocation.kind == CommandKind::Types) {
         Policy* policy = PolicyDefault();
         int status = RefreshTypes(root, policy, true) ? 0 : 1;
+        // The declarations describe the runtime; the manifest's Git
+        // dependencies are the rest of what the editor has to resolve, and a
+        // command that wrote half of it and said nothing would leave the
+        // import underlined with no explanation.
+        Str linkError = {};
+        if (status == 0 &&
+            !ShellWriteDependencyLinks(root, nullptr, &linkError)) {
+            fprintf(stderr, "gpui-shell: ");
+            Print(linkError, stderr);
+            fputc('\n', stderr);
+            status = 1;
+        }
+        StrFree(linkError);
         PolicyRelease(policy);
         StrFree2(root);
         ShellErrorClear(&error);

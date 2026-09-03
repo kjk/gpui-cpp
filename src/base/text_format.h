@@ -1,12 +1,12 @@
-#ifndef GPUI_UI_HTML_H_
-#define GPUI_UI_HTML_H_
+#ifndef GPUI_BASE_TEXT_FORMAT_H_
+#define GPUI_BASE_TEXT_FORMAT_H_
 /* HTML into the same block tree markdown produces —
-   crates/ui/src/text/format/html.rs
+   crates/base/src/text/format/html.rs
 
    Rust hands the source to html5ever, walks the RcDom and folds it into the
    BlockNode tree node.rs renders. There is no html5ever here and no room for
    one (hard rule 3), so this is a tokenizer and a stack of open elements that
-   fold the same tags into ui/text.h's MdNode — the tree src/markdown already
+   fold the same tags into base/text.h's MdNode — the tree src/markdown already
    builds. One renderer walks both, which is exactly how Rust arranges it.
 
    The subset is Rust's: the block elements it lists, the inline marks it
@@ -14,11 +14,9 @@
    alignment, and <img> reduced to its alt text. `style` and `script` are
    dropped, as they are there. */
 
-#include "ui/text.h"
+#include "base/text.h"
 
 namespace gpui {
-
-namespace component {
 
 // format/html5minify Minifier. The Rust type writes to io::Write after an
 // html5ever DOM pass; this dependency-free projection writes to an Arena and
@@ -74,6 +72,5 @@ HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag);
 // does not carry it.
 Str HtmlAttrValue(Arena* a, Str attrs, const char* name);
 
-} // namespace component
 } // namespace gpui
-#endif // GPUI_UI_HTML_H_
+#endif // GPUI_BASE_TEXT_FORMAT_H_

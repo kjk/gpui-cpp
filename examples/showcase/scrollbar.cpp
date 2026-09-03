@@ -21,7 +21,7 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
                         ->PadX(8)
                         ->ItemsCenter()
                         ->JustifyBetween()
-                        ->BorderB(1, Rgb(0xe5, 0xe7, 0xeb))
+                        ->BorderB(1, ExampleRgb(0xe5e7eb))
                         ->Child(TextEl(a, DupFmt(cx, "Activity %d", i))
                                     ->Font(12)
                                     ->Fg(ScInk()))

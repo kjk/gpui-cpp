@@ -7,6 +7,12 @@
 namespace gpui {
 
 struct BaseGlobalState {
+    // The TextView being rendered, and the reading order the next selectable
+    // run takes. Both came down from `crates/ui/src/global_state.rs` with the
+    // rich text that uses them: a Base-only application renders a TextView
+    // without a themed Root, so the stack has to live where TextView does.
+    Vec<EntityId> textViewStateStack;
+    uint64_t selectionDocumentOrder = 1;
     Vec<EntityId> deferredPopovers;
     // Rust keeps Vec<OwnedMenu> here so the system menu and the in-window
     // AppMenuBar read one model. MenuDef is the port's owned-menu vocabulary;
@@ -16,6 +22,7 @@ struct BaseGlobalState {
     bool suppressTextSelection = false;
 
     ~BaseGlobalState() {
+        VecReset(textViewStateStack);
         VecReset(deferredPopovers);
         VecReset(appMenus);
         if (appMenuArena) {
@@ -40,6 +47,18 @@ bool BaseIsTextSelectionSuppressed(const App* app);
 // installs that same copy into the platform menu seam.
 const MenuDef* BaseAppMenus(const App* app, int* count);
 void BaseSetAppMenus(App* app, const MenuDef* menus, int count);
+
+// `begin_selection_frame` / `next_selection_document_order`: the reading
+// order a frame's selectable runs are numbered in. The TextSelectionLayer
+// resets it as it prepaints, so a Base application needs no themed Root.
+void BaseSelectionFrameBegin(App* app);
+uint64_t BaseSelectionNextDocumentOrder(App* app);
+
+// `text_view_state_stack`: the TextView whose document the runs being built
+// belong to, innermost last.
+void BaseTextViewStatePush(App* app, EntityId state);
+void BaseTextViewStatePop(App* app);
+EntityId BaseTextViewStateCurrent(const App* app);
 
 // A live popover is represented by its generational entity handle. Stale
 // handles are swept on read, which is the Rc<Weak<()>> lifetime Rust uses

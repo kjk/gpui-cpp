@@ -17,9 +17,10 @@ namespace gpui {
 const float kDockPanelMinSize = 100.f;
 // resize_handle: the grab between two panels, and along a Dock's inner edge.
 const float kDockHandleW = 4;
-// A closed bottom dock keeps its tab bar, so there is something left to click
-// to open it again (Dock::render).
-const float kDockCollapsedH = 29.f;
+// CLOSED_BOTTOM_STRIP: a closed bottom dock keeps this much, so its tab bar
+// stays clickable. A closed side dock keeps nothing: there is no tab bar left
+// to click at zero width, and reopening it is the application's to offer.
+const float kClosedBottomStrip = 29.f;
 // DragPanel's own box — `w_24` and a line of text between two paddings —
 // which is both what follows the pointer and where the drop placeholder flies
 // in from.
@@ -484,6 +485,10 @@ float DockTabScrollTo(float scrollX, Bounds strip, Bounds tab);
 // Dock::toggle_open, and the size a drag on its edge asks for.
 void DockToggleSide(DockState* s, Ctx* cx, DockPlacement p);
 void DockResizeSide(DockState* s, Ctx* cx, DockPlacement p, float x, float y);
+// DockArea::set_dock_size: the programmatic size, clamped the way the Dock
+// clamps it. Only an effective change is persisted — a size that lands where
+// it already was neither redraws nor emits LayoutChanged.
+void DockSetDockSize(DockState* s, Ctx* cx, DockPlacement p, float size);
 // ToggleZoom.
 void DockToggleZoom(DockState* s, Ctx* cx, int panelIx);
 // The Dock on one side, or null for Center.
@@ -555,6 +560,16 @@ struct DockCtx {
 };
 
 using DockContext = DockCtx;
+
+// dock_extent: how much room a dock asks for along its own axis — its size
+// while open, CLOSED_BOTTOM_STRIP for a shut bottom dock, nothing for a shut
+// side dock.
+float DockExtent(const DockCtx* dock);
+// dock_frame: the box a dock occupies — its extent along its own axis, full
+// across, and held at that size rather than stretched by the row it sits in.
+// Structural, not decorative, which is why base builds it around whatever
+// the renderer's `dock` hook returns rather than leaving it to the skin.
+El* DockFrame(Ctx* cx, const DockCtx* dock, float size);
 
 // ResizeHandleContext: one boundary between two panels, and how it is being
 // touched. `is_active()` is the drag, and it is the whole of what Rust hands
@@ -680,9 +695,14 @@ struct DockRenderer {
     // render_split_handle: the paint inside the grab, which base sizes,
     // gives a cursor and drags.
     El* (*splitHandle)(Ctx* cx, void* data, const DockHandleCtx* h) = nullptr;
-    // render_dock: the box one Dock is drawn in, with its content inside.
-    // A skin that answers null for a shut Dock takes it out of the layout,
-    // which is what upstream's does.
+    // render_dock: one Dock's chrome around its content — the title strip,
+    // the collapse affordance, the resize handle. Chrome only: the dock's own
+    // box, its extent along its axis and the `flex_none` that holds it there,
+    // is DockFrame's, applied by base around whatever this returns, so a skin
+    // cannot misplace a dock by not knowing to size it and a skin with no
+    // hook at all still gets a dock the right shape. Base never asks for a
+    // dock with no extent, so a shut side dock is out of the layout before
+    // the skin hears of it.
     El* (*dock)(Ctx* cx, void* data, const DockCtx* d, El* content) = nullptr;
     // TabGroupRenderer::frame, content_frame and render_tab_bar. The bar is
     // the whole of the chrome — tabs, toggles, tools, the lot.
