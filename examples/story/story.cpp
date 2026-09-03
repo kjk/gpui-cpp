@@ -1071,6 +1071,10 @@ static Window* StoryOpenWindow(App* app, int story) {
         return nullptr;
     }
     self->story = story;
+    const char* envFps = getenv("GPUI_FPS");
+    if (envFps && envFps[0] && envFps[0] != '0') {
+        self->fpsMonitor = true;
+    }
     InputSetPlaceholder(&self->search, StrL("Search…"));
     WinOpts opts = {};
     // TitleBar::window_options(): the story owns its title bar on every

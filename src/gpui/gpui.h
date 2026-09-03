@@ -5003,6 +5003,12 @@ struct Window {
     // The instant this frame started. Every transition in it samples the same
     // `now`, which is what Rust gets from reading the executor's clock.
     double frameNow = 0;
+    // Time the last frame was presented / drawn. Used for inactive window
+    // throttling (GPUI's inactive_frame_interval).
+    double lastDrawTime = 0;
+    // Set when an invalidation arrived while inactive before the inactive
+    // frame interval had elapsed, so the frame is deferred until the timer fires.
+    bool pendingInvalidate = false;
     bool mouseDown = false;
     // cx.stop_propagation(): set by a handler, read by the chain it is in.
     bool stopPropagation = false;

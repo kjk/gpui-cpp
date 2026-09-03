@@ -179,8 +179,16 @@ static float HostDpi(HWND hwnd) {
 
 static void RenderFrame(Window* win) {
     HWND hwnd = Hwnd(win);
-    if (!hwnd) {
+    if (!hwnd || IsIconic(hwnd)) {
         return;
+    }
+    if (!win->active && win->lastDrawTime > 0) {
+        double now = TimeNow();
+        if (now - win->lastDrawTime < kInactiveFrameInterval - 0.020) {
+            win->pendingInvalidate = true;
+            PlatSetTimer(win, WindowTimerMs(win));
+            return;
+        }
     }
     RECT rc = {};
     GetClientRect(hwnd, &rc);
@@ -687,6 +695,14 @@ void AppQuit(Window* win) {
 void AppInvalidate(Window* win) {
     if (win) {
         win->invalidations++;
+        if (!win->active && win->lastDrawTime > 0) {
+            double now = TimeNow();
+            if (now - win->lastDrawTime < kInactiveFrameInterval - 0.020) {
+                win->pendingInvalidate = true;
+                PlatSetTimer(win, WindowTimerMs(win));
+                return;
+            }
+        }
     }
     HWND hwnd = Hwnd(win);
     if (hwnd) {

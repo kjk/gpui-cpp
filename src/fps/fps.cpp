@@ -710,8 +710,8 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
     StartResourceSampling(self, cx);
     // The HUD keeps the window drawing back to back. GPUI spells this
     // window.request_animation_frame() once per render.
-    if (self->continuous && cx->win && !cx->win->anim) {
-        AppRequestAnim(cx->win, true);
+    if (self->continuous && cx->win) {
+        WindowRequestAnimationFrame(cx->win);
     }
 
     const FpsStyle& style = FpsStyleDark();

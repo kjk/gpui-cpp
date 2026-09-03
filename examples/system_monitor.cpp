@@ -52,8 +52,9 @@ static void Collect(MonitorApp* app) {
     PushHist(app, app->sys.cpu, app->sys.mem);
 }
 
-static void OnTick(MonitorApp* app, Ctx*, const TickEvent*) {
+static void OnTick(MonitorApp* app, Ctx* cx, const TickEvent*) {
     Collect(app);
+    Notify(cx);
 }
 
 static void OnWheel(MonitorApp* app, Ctx* cx, const ScrollWheelEvent* ev) {

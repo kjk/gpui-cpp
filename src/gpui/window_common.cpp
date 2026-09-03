@@ -623,6 +623,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     bool presented = !(SceneOn() && scene::SkipPresent(&win->paint));
     timing.presentAt = presented ? drawEnd : -1;
     win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
+    win->lastDrawTime = drawEnd;
+    win->pendingInvalidate = false;
     InteractionBenchRecord(win, timing);
     win->frameSeq++;
     FrameBenchTick(win, timing.drawSecs);
@@ -2517,7 +2519,6 @@ void WindowTimerTick(Window* win) {
         }
         TickEvent ev = {ms};
         ListenerCall(win->app, win, l, &ev);
-        repaint = true;
     }
 
     // Drop the one-shots that fired, and any timer whose view is gone — the
@@ -2534,7 +2535,8 @@ void WindowTimerTick(Window* win) {
     }
     win->timers.len = keep;
 
-    if (win->anim || win->animFrame || repaint) {
+    if (win->anim || win->animFrame || win->pendingInvalidate || repaint) {
+        win->pendingInvalidate = false;
         AppInvalidate(win);
     }
     PlatSetTimer(win, WindowTimerMs(win));
@@ -2560,11 +2562,18 @@ int WindowTimerMs(Window* win) {
     // if nothing does.
     double now = TimeNow();
     double soonest = -1;
-    if (win->anim || win->opts.anim || win->animFrame) {
+    if (win->anim || win->opts.anim || win->animFrame || win->pendingInvalidate) {
         // WindowOptions::inactive_frame_interval. A window nobody is looking
         // at animates at 2 FPS rather than at the display's rate, which is
         // what the story app asks GPUI for; an active window keeps the 16 ms.
-        soonest = now + (win->active ? 0.016 : kInactiveFrameInterval);
+        double interval = win->active ? 0.016 : kInactiveFrameInterval;
+        double target = (win->lastDrawTime > 0) ? (win->lastDrawTime + interval) : now;
+        if (target < now) {
+            target = now;
+        }
+        if (soonest < 0 || target < soonest) {
+            soonest = target;
+        }
     }
     // A fetch in flight used to be a reason to come back at 20 Hz and ask the
     // table whether it had landed yet. It reports itself now: the executor

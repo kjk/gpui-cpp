@@ -326,6 +326,8 @@ void WindowSetActive(Window* win, bool active) {
         win->eatChar = false;
         win->keyPressPending = false;
     }
+    win->pendingInvalidate = false;
+    win->lastDrawTime = 0;
     AppInvalidate(win);
 }
 
