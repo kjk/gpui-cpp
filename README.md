@@ -179,7 +179,10 @@ bun cmd/wsl-run.ts -rel system_monitor
 bun cmd/mac-build.ts -rel -all
 ```
 
-CI compiles every example on all three platforms on each push
+CI compiles every example and runs the tests on all three desktop platforms
+and wasm on each push. It also checks separate translation units on every
+desktop, clang-cl/clang++ on Windows and Linux, the mini markdown parser, and
+all Windows paint backends
 ([`.github/workflows/build.yml`](.github/workflows/build.yml)).
 
 # Why port to C++?

@@ -1,9 +1,11 @@
 name: build
 
 # Compiles every example on all three platforms plus wasm, and runs the test
-# suite on each. `bun cmd/build.ts -rel -all` succeeding is most of the check;
-# `bun cmd/test.ts` is the rest. The wasm job runs the same suite under node,
-# which is the only place this tree is checked on a 32-bit word.
+# suite on each. The desktop jobs also compile the source tree as separate
+# translation units. Dedicated Windows and Linux jobs repeat the build with
+# clang and the mini markdown parser; Windows compiles all three paint
+# backends. The wasm job runs the same suite under node, which is the only
+# place this tree is checked on a 32-bit word.
 
 on:
   push:
@@ -66,7 +68,8 @@ jobs:
           if not defined VSPATH (echo could not find a VC toolset & exit /b 1)
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
           bun cmd/build.ts -rel -all || exit /b 1
-          bun cmd/test.ts -rel
+          bun cmd/test.ts -rel || exit /b 1
+          bun cmd/build-no-amalgam.ts -rel
 
       - name: Build (Linux / macOS)
         if: matrix.name == 'linux' || matrix.name == 'macos'
@@ -77,6 +80,13 @@ jobs:
       - name: Test (Linux / macOS)
         if: matrix.name == 'linux' || matrix.name == 'macos'
         run: bun cmd/test.ts -rel
+
+      # Amalgamation can hide missing includes, declarations and duplicate
+      # internal names. Keep the installed-library shape healthy on every
+      # desktop platform, not just on a developer's current host.
+      - name: Build without amalgamation (Linux / macOS)
+        if: matrix.name == 'linux' || matrix.name == 'macos'
+        run: bun cmd/build-no-amalgam.ts -rel
 
       - uses: mymindstorm/setup-emsdk@v14
         if: matrix.name == 'wasm'
@@ -91,3 +101,45 @@ jobs:
       - name: Test (wasm)
         if: matrix.name == 'wasm'
         run: bun cmd/run.ts -wasm -rel tests
+
+  compiler-portability:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-clang-mini-all-backends
+            os: windows-latest
+          - name: linux-clang-mini
+            os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Linux dependencies
+        if: matrix.name == 'linux-clang-mini'
+        run: bash cmd/ubuntu-install-deps.sh --build-only
+
+      - name: Build and test (clang-cl)
+        if: matrix.name == 'windows-clang-mini-all-backends'
+        shell: cmd
+        run: |
+          set VSWHERE="%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSPATH=%%i"
+          if not defined VSPATH (echo could not find a VC toolset & exit /b 1)
+          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          set GPUI_MARKDOWN=mini
+          bun cmd/build.ts -clang -rel --win-backend=all -all || exit /b 1
+          set GPUI_MARKDOWN=full
+          bun cmd/test.ts -clang -rel --win-backend=all
+
+      - name: Build and test (clang++)
+        if: matrix.name == 'linux-clang-mini'
+        run: |
+          GPUI_MARKDOWN=mini bun cmd/build.ts -clang -rel -all
+          GPUI_MARKDOWN=full bun cmd/test.ts -clang -rel

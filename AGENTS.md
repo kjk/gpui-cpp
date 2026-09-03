@@ -516,8 +516,12 @@ snapshotting the tree to a scratch branch — it compiles only, since a Cocoa
 window needs a login session.
 
 CI (`.github/workflows/build.yml`) runs `bun cmd/build.ts -rel -all` then
-`bun cmd/test.ts -rel` on windows/ubuntu/macos-latest, with
-`GPUI_NO_RUST_TREE=1` so the Rust clone is skipped.
+`bun cmd/test.ts -rel` on windows/ubuntu/macos-latest, and compiles the source
+tree without amalgamation on all three. Separate Windows and Linux lanes use
+clang-cl/clang++, compile the mini markdown configuration, and run the full
+parser's tests; the Windows lane also compiles all paint backends. A wasm lane
+builds every supported example and runs the tests under node. CI sets
+`GPUI_NO_RUST_TREE=1`, so the Rust clone is skipped.
 
 **Warnings are errors** — `/W4 /WX`, `-Wall -Wextra -Werror`. Fix the warning;
 do not add a suppression. The only ones left are the same amalgam artifact
