@@ -222,8 +222,8 @@ void CanvasPopClip(PaintCtx* ctx);
 
 // ─── paths ────────────────────────────────────────────────────────────────
 //
-// Build, draw, free. There is no retained geometry: an icon or a chart area
-// is rebuilt every frame, which is what both backends want anyway.
+// Build, draw, free. Ordinary callers rebuild each frame; the scene may keep
+// the backend geometry and draw translated copies across frames.
 
 struct Path;
 
@@ -240,16 +240,19 @@ void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
                bool clockwise);
 void PathClose(Path* p);
 
-void PathFill(PaintCtx* ctx, Path* p, Rgba c);
+// `dx`/`dy` place a retained path that was built at the origin. Ordinary
+// callers leave them zero; the scene cache uses them to share one backend
+// geometry between translated copies of the same shape.
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx = 0, float dy = 0);
 // A vertical linear gradient from `top` at y0 to `bot` at y1.
 // A linear gradient between two points, which is what a sankey ribbon wants:
 // its two ends are side by side, not one above the other.
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to);
+                      float y1, Rgba from, Rgba to, float dx = 0, float dy = 0);
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
                        Rgba bot);
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
-                bool roundCaps = false);
+                bool roundCaps = false, float dx = 0, float dy = 0);
 // Say that `p` is about to be drawn more than once, so a backend that can
 // pay a tessellation forward does it now: D2D builds a geometry realization,
 // which is the one thing that makes a path cheap to fill twice. A backend

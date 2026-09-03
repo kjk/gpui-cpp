@@ -468,13 +468,20 @@ void PathRealize(PaintCtx* ctx, Path* p) {
     (void)p;
 }
 
-void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx, float dy) {
     cairo_t* cr = Cr(ctx);
+    if (!cr) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_translate(cr, dx, dy);
     if (!Replay(cr, p)) {
+        cairo_restore(cr);
         return;
     }
     SetColor(ctx, cr, c);
     cairo_fill(cr);
+    cairo_restore(cr);
 }
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
@@ -483,15 +490,22 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 }
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to) {
+                      float y1, Rgba from, Rgba to, float dx, float dy) {
     cairo_t* cr = Cr(ctx);
+    if (!cr) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_translate(cr, dx, dy);
     if (!Replay(cr, p)) {
+        cairo_restore(cr);
         return;
     }
     cairo_pattern_t* pat = cairo_pattern_create_linear(x0, y0, x1, y1);
     if (!pat) {
         SetColor(ctx, cr, from);
         cairo_fill(cr);
+        cairo_restore(cr);
         return;
     }
     from = PaintFade(ctx, from);
@@ -503,11 +517,19 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
     cairo_set_source(cr, pat);
     cairo_fill(cr);
     cairo_pattern_destroy(pat);
+    cairo_restore(cr);
 }
 
-void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
+                float dx, float dy) {
     cairo_t* cr = Cr(ctx);
+    if (!cr) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_translate(cr, dx, dy);
     if (!Replay(cr, p)) {
+        cairo_restore(cr);
         return;
     }
     SetColor(ctx, cr, c);
@@ -519,6 +541,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
     cairo_stroke(cr);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
+    cairo_restore(cr);
 }
 
 // ─── images ───────────────────────────────────────────────────────────────

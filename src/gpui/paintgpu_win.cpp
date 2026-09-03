@@ -2456,7 +2456,7 @@ static int ContourEnd(const GpuPath* p, int ci) {
 
 // The stencil pass: for every contour, the fan (first, i, i+1). It may
 // self-overlap and wind either way — that is what the stencil op is counting.
-static void PathStencil(PaintCtx* ctx, GpuPath* p) {
+static void PathStencil(PaintCtx* ctx, GpuPath* p, float dx, float dy) {
     (void)ctx;
     Rgba none = {};
     for (int ci = 0; ci < p->starts.len; ci++) {
@@ -2465,17 +2465,19 @@ static void PathStencil(PaintCtx* ctx, GpuPath* p) {
         if (b - a < 3) {
             continue;
         }
-        float ax = p->pts[a * 2];
-        float ay = p->pts[a * 2 + 1];
+        float ax = p->pts[a * 2] + dx;
+        float ay = p->pts[a * 2 + 1] + dy;
         for (int i = a + 1; i + 1 < b; i++) {
             TriVertex(ax, ay, none);
-            TriVertex(p->pts[i * 2], p->pts[i * 2 + 1], none);
-            TriVertex(p->pts[(i + 1) * 2], p->pts[(i + 1) * 2 + 1], none);
+            TriVertex(p->pts[i * 2] + dx, p->pts[i * 2 + 1] + dy, none);
+            TriVertex(p->pts[(i + 1) * 2] + dx, p->pts[(i + 1) * 2 + 1] + dy,
+                      none);
         }
     }
 }
 
-static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto) {
+static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto, float dx,
+                      float dy) {
     Gpu* g = &gGpu;
     // The bounding box, one pixel out so an antialiased edge is not clipped
     // by its own cover quad.
@@ -2483,8 +2485,8 @@ static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto) {
     // instance in the buffer and SV_InstanceID will read it at 0 — D3D11 does
     // not fold StartInstanceLocation into that id.
     Inst i = proto;
-    i.rect[0] = p->minX - 1;
-    i.rect[1] = p->minY - 1;
+    i.rect[0] = p->minX + dx - 1;
+    i.rect[1] = p->minY + dy - 1;
     i.rect[2] = (p->maxX - p->minX) + 2;
     i.rect[3] = (p->maxY - p->minY) + 2;
     memcpy(i.clip, gB.clip, sizeof(i.clip));
@@ -2525,16 +2527,17 @@ static void PathCover(PaintCtx* ctx, GpuPath* p, const Inst& proto) {
     gB.insts.len = 0;
 }
 
-static void PathFillWith(PaintCtx* ctx, Path* path, const Inst& proto) {
+static void PathFillWith(PaintCtx* ctx, Path* path, const Inst& proto, float dx,
+                         float dy) {
     GpuPath* p = P(path);
     if (!gB.target || !p || p->pts.len < 6) {
         return;
     }
     Flush();
-    PathStencil(ctx, p);
+    PathStencil(ctx, p, dx, dy);
     FlushTris(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
               p->winding ? kTriNonZero : kTriEvenOdd);
-    PathCover(ctx, p, proto);
+    PathCover(ctx, p, proto, dx, dy);
 }
 
 // Nothing to do: a GpuPath is already the flattened contours the stencil
@@ -2545,7 +2548,7 @@ void PathRealize(PaintCtx* ctx, Path* p) {
     (void)p;
 }
 
-void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx, float dy) {
     c = PaintFade(ctx, c);
     if (c.a == 0) {
         return;
@@ -2553,26 +2556,26 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     Inst proto = {};
     SetColor(proto.color, c);
     proto.misc[2] = (float)kQuadSolid;
-    PathFillWith(ctx, p, proto);
+    PathFillWith(ctx, p, proto, dx, dy);
 }
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to) {
+                      float y1, Rgba from, Rgba to, float dx, float dy) {
     from = PaintFade(ctx, from);
     to = PaintFade(ctx, to);
     Inst proto = {};
     SetColor(proto.color, from);
     SetColor(proto.color2, to);
     proto.misc[2] = (float)kQuadGradient;
-    proto.uv[0] = x0;
-    proto.uv[1] = y0;
-    proto.uv[2] = x1;
-    proto.uv[3] = y1;
-    PathFillWith(ctx, p, proto);
+    proto.uv[0] = x0 + dx;
+    proto.uv[1] = y0 + dy;
+    proto.uv[2] = x1 + dx;
+    proto.uv[3] = y1 + dy;
+    PathFillWith(ctx, p, proto, dx, dy);
 }
 
-void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c,
-                bool roundCaps) {
+void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c, bool roundCaps,
+                float dx, float dy) {
     GpuPath* p = P(path);
     if (!gB.target || !p || stroke <= 0) {
         return;
@@ -2585,9 +2588,9 @@ void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c,
         int a = p->starts[ci];
         int b = ContourEnd(p, ci);
         for (int i = a; i + 1 < b; i++) {
-            StrokeSegment(ctx, p->pts[i * 2], p->pts[i * 2 + 1],
-                          p->pts[(i + 1) * 2], p->pts[(i + 1) * 2 + 1], stroke,
-                          c);
+            StrokeSegment(ctx, p->pts[i * 2] + dx, p->pts[i * 2 + 1] + dy,
+                          p->pts[(i + 1) * 2] + dx,
+                          p->pts[(i + 1) * 2 + 1] + dy, stroke, c);
         }
         // A disc at every joint, which is a round join. The tree strokes
         // chart lines and icon outlines, where a miter and a round join are a
@@ -2596,7 +2599,8 @@ void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c,
             int first = roundCaps ? a : a + 1;
             int last = roundCaps ? b : b - 1;
             for (int i = first; i < last; i++) {
-                StrokeDisc(p->pts[i * 2], p->pts[i * 2 + 1], stroke * 0.5f, c);
+                StrokeDisc(p->pts[i * 2] + dx, p->pts[i * 2 + 1] + dy,
+                           stroke * 0.5f, c);
             }
         }
     }
@@ -3100,10 +3104,10 @@ void PathLineTo(Path*, float, float) {}
 void PathCubicTo(Path*, float, float, float, float, float, float) {}
 void PathArcTo(Path*, float, float, float, float, float, bool) {}
 void PathClose(Path*) {}
-void PathFill(PaintCtx*, Path*, Rgba) {}
-void PathFillGradient(PaintCtx*, Path*, float, float, float, float, Rgba,
-                      Rgba) {}
-void PathStroke(PaintCtx*, Path*, float, Rgba, bool) {}
+void PathFill(PaintCtx*, Path*, Rgba, float, float) {}
+void PathFillGradient(PaintCtx*, Path*, float, float, float, float, Rgba, Rgba,
+                      float, float) {}
+void PathStroke(PaintCtx*, Path*, float, Rgba, bool, float, float) {}
 void PathRealize(PaintCtx*, Path*) {}
 void ImageDraw(PaintCtx*, Image*, Bounds, float) {}
 void TextLayoutDraw(PaintCtx*, TextLayout*, float, float, Rgba, bool, float) {}

@@ -392,11 +392,13 @@ void PathRealize(PaintCtx* ctx, Path* p) {
     (void)p;
 }
 
-void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx, float dy) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
     }
+    CGContextSaveGState(cg);
+    CGContextTranslateCTM(cg, dx, dy);
     SetFill(ctx, cg, c);
     CGContextAddPath(cg, p->path);
     if (p->winding) {
@@ -404,6 +406,7 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     } else {
         CGContextEOFillPath(cg);
     }
+    CGContextRestoreGState(cg);
 }
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
@@ -412,7 +415,7 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 }
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to) {
+                      float y1, Rgba from, Rgba to, float dx, float dy) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
@@ -428,10 +431,11 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
         CGGradientCreateWithColorComponents(space, comps, stops, 2);
     CGColorSpaceRelease(space);
     if (!grad) {
-        PathFill(ctx, p, from);
+        PathFill(ctx, p, from, dx, dy);
         return;
     }
     CGContextSaveGState(cg);
+    CGContextTranslateCTM(cg, dx, dy);
     CGContextAddPath(cg, p->path);
     if (p->winding) {
         CGContextClip(cg);
@@ -445,11 +449,14 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
     CGGradientRelease(grad);
 }
 
-void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
+                float dx, float dy) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
     }
+    CGContextSaveGState(cg);
+    CGContextTranslateCTM(cg, dx, dy);
     SetStroke(ctx, cg, c);
     CGContextSetLineWidth(cg, stroke);
     CGContextSetLineCap(cg, roundCaps ? kCGLineCapRound : kCGLineCapButt);
@@ -458,6 +465,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
     CGContextStrokePath(cg);
     CGContextSetLineCap(cg, kCGLineCapButt);
     CGContextSetLineJoin(cg, kCGLineJoinMiter);
+    CGContextRestoreGState(cg);
 }
 
 // ─── utf-8 / utf-16 offsets ───────────────────────────────────────────────

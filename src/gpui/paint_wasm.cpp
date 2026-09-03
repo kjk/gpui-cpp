@@ -477,37 +477,46 @@ EM_JS(int, GpJsPathBuild, (const float* ops, int n, int winding), {
     return G.alloc(G.paths, G.pathFree, {p: p, winding: winding !== 0});
 });
 
-EM_JS(void, GpJsPathFill, (int id, int color), {
+EM_JS(void, GpJsPathFill, (int id, int color, float dx, float dy), {
     const G = globalThis.__gpui;
     const c = G.cur, e = G.paths[id];
     if (!c || !e) {
         return;
     }
+    c.save();
+    c.translate(dx, dy);
     c.fillStyle = G.color(color);
     c.fill(e.p, e.winding ? "nonzero" : "evenodd");
+    c.restore();
 });
 
 EM_JS(void, GpJsPathFillGradient,
-      (int id, float x0, float y0, float x1, float y1, int from, int to), {
+      (int id, float x0, float y0, float x1, float y1, int from, int to,
+       float dx, float dy), {
     const G = globalThis.__gpui;
     const c = G.cur, e = G.paths[id];
     if (!c || !e) {
         return;
     }
+    c.save();
+    c.translate(dx, dy);
     const g = c.createLinearGradient(x0, y0, x1, y1);
     g.addColorStop(0, G.color(from));
     g.addColorStop(1, G.color(to));
     c.fillStyle = g;
     c.fill(e.p, e.winding ? "nonzero" : "evenodd");
+    c.restore();
 });
 
 EM_JS(void, GpJsPathStroke,
-      (int id, float stroke, int color, int roundCaps), {
+      (int id, float stroke, int color, int roundCaps, float dx, float dy), {
     const G = globalThis.__gpui;
     const c = G.cur, e = G.paths[id];
     if (!c || !e) {
         return;
     }
+    c.save();
+    c.translate(dx, dy);
     c.strokeStyle = G.color(color);
     c.lineWidth = stroke;
     c.lineCap = roundCaps ? "round" : "butt";
@@ -515,6 +524,7 @@ EM_JS(void, GpJsPathStroke,
     c.stroke(e.p);
     c.lineCap = "butt";
     c.lineJoin = "miter";
+    c.restore();
 });
 
 EM_JS(void, GpJsPathFree, (int id), {
@@ -1118,12 +1128,12 @@ void PathRealize(PaintCtx* ctx, Path* p) {
     (void)p;
 }
 
-void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx, float dy) {
     int id = JsPath(p);
     if (!id || !ctx || !ctx->rt) {
         return;
     }
-    GpJsPathFill(id, (int)Packed(ctx, c));
+    GpJsPathFill(id, (int)Packed(ctx, c), dx, dy);
 }
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
@@ -1132,21 +1142,22 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 }
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to) {
+                      float y1, Rgba from, Rgba to, float dx, float dy) {
     int id = JsPath(p);
     if (!id || !ctx || !ctx->rt) {
         return;
     }
     GpJsPathFillGradient(id, x0, y0, x1, y1, (int)Packed(ctx, from),
-                         (int)Packed(ctx, to));
+                         (int)Packed(ctx, to), dx, dy);
 }
 
-void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
+                float dx, float dy) {
     int id = JsPath(p);
     if (!id || !ctx || !ctx->rt) {
         return;
     }
-    GpJsPathStroke(id, stroke, (int)Packed(ctx, c), roundCaps ? 1 : 0);
+    GpJsPathStroke(id, stroke, (int)Packed(ctx, c), roundCaps ? 1 : 0, dx, dy);
 }
 
 // ─── images ───────────────────────────────────────────────────────────────

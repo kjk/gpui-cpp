@@ -105,6 +105,10 @@ struct PathRec {
     bool winding = false;
     bool hashed = false;
     uint64_t hash = 0;
+    uint64_t cacheHash = 0;
+    // First coordinate in the path. Cache geometry is built relative to it;
+    // the primitive hash and damage bounds remain in absolute frame space.
+    float originX = 0, originY = 0;
     // Grown as points arrive; empty until the first one.
     float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     bool any = false;
@@ -284,15 +288,37 @@ static uint64_t HashPath(PathRec& pr) {
         return pr.hash;
     }
     uint64_t h = kHashSeed;
+    uint64_t relative = kHashSeed;
     uint8_t w = pr.winding ? 1 : 0;
     h = HashBytes(h, &w, 1);
+    relative = HashBytes(relative, &w, 1);
     if (pr.verbCount > 0) {
         h = HashBytes(h, &gVerbs[pr.verbFirst], pr.verbCount);
+        relative = HashBytes(relative, &gVerbs[pr.verbFirst], pr.verbCount);
     }
     if (pr.ptCount > 0) {
         h = HashBytes(h, &gPts[pr.ptFirst], pr.ptCount * (int)sizeof(float));
+        int vi = pr.verbFirst;
+        int pi = pr.ptFirst;
+        for (int i = 0; i < pr.verbCount; i++) {
+            uint8_t verb = gVerbs[vi++] & 0x7f;
+            int pairs = verb == kVCubic ? 3 : verb == kVClose ? 0 : 1;
+            for (int pair = 0; pair < pairs; pair++) {
+                float x = gPts[pi++] - pr.originX;
+                float y = gPts[pi++] - pr.originY;
+                relative = HashBytes(relative, &x, (int)sizeof(x));
+                relative = HashBytes(relative, &y, (int)sizeof(y));
+            }
+            if (verb == kVArc) {
+                // Radius and angles describe shape, not placement.
+                relative =
+                    HashBytes(relative, &gPts[pi], 3 * (int)sizeof(float));
+                pi += 3;
+            }
+        }
     }
     pr.hash = h;
+    pr.cacheHash = relative;
     pr.hashed = true;
     return h;
 }
@@ -360,6 +386,9 @@ void FrameBegin(PaintCtx* ctx) {
     gClip = Bounds{0, 0, gViewW, gViewH};
     gStats.clipPushes = 0;
     gStats.culled = 0;
+    gStats.framePathCacheHits = 0;
+    gStats.framePathCacheMisses = 0;
+    gStats.framePathBuildMs = 0;
 }
 
 void RecClear(PaintCtx* ctx, Rgba c) {
@@ -505,6 +534,10 @@ static void Verb(PathRec* pr, uint8_t v) {
 }
 
 static void Pt(PathRec* pr, float x, float y) {
+    if (!pr->any) {
+        pr->originX = x;
+        pr->originY = y;
+    }
     VecAppend(gPts, x);
     VecAppend(gPts, y);
     pr->ptCount += 2;
@@ -566,6 +599,8 @@ void RecPathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
     pr->ptCount += 5;
     pr->hashed = false;
     if (!pr->any) {
+        pr->originX = cx;
+        pr->originY = cy;
         pr->any = true;
         pr->x0 = cx - r;
         pr->y0 = cy - r;
@@ -775,6 +810,20 @@ static void CacheSweep() {
     }
 }
 
+static bool TranslationIndependentPathCache() {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char* value = getenv("GPUI_PATH_CACHE_TRANSLATION");
+        bool off =
+            value && (value[0] == '0' ||
+                      ((value[0] == 'o' || value[0] == 'O') &&
+                       (value[1] == 'f' || value[1] == 'F') &&
+                       (value[2] == 'f' || value[2] == 'F') && value[3] == 0));
+        enabled = off ? 0 : 1;
+    }
+    return enabled != 0;
+}
+
 void Invalidate(PaintCtx* ctx) {
     State* s = StateFor(ctx, false);
     if (!s) {
@@ -829,32 +878,35 @@ void Free(PaintCtx* ctx) {
 
 // Build a backend path out of the recorded verbs. The caller is drawing, so
 // Recording() is already false and these are the real entry points.
-static Path* BuildPath(PaintCtx* ctx, const PathRec& pr) {
+static Path* BuildPath(PaintCtx* ctx, const PathRec& pr, bool relative) {
     Path* p = PathNew(ctx, pr.winding);
     if (!p) {
         return nullptr;
     }
     int vi = pr.verbFirst;
     int pi = pr.ptFirst;
+    float ox = relative ? pr.originX : 0;
+    float oy = relative ? pr.originY : 0;
     for (int i = 0; i < pr.verbCount; i++) {
         uint8_t v = gVerbs[vi++];
         switch (v & 0x7f) {
             case kVMove:
-                PathMoveTo(p, gPts[pi], gPts[pi + 1]);
+                PathMoveTo(p, gPts[pi] - ox, gPts[pi + 1] - oy);
                 pi += 2;
                 break;
             case kVLine:
-                PathLineTo(p, gPts[pi], gPts[pi + 1]);
+                PathLineTo(p, gPts[pi] - ox, gPts[pi + 1] - oy);
                 pi += 2;
                 break;
             case kVCubic:
-                PathCubicTo(p, gPts[pi], gPts[pi + 1], gPts[pi + 2],
-                            gPts[pi + 3], gPts[pi + 4], gPts[pi + 5]);
+                PathCubicTo(p, gPts[pi] - ox, gPts[pi + 1] - oy,
+                            gPts[pi + 2] - ox, gPts[pi + 3] - oy,
+                            gPts[pi + 4] - ox, gPts[pi + 5] - oy);
                 pi += 6;
                 break;
             case kVArc:
-                PathArcTo(p, gPts[pi], gPts[pi + 1], gPts[pi + 2], gPts[pi + 3],
-                          gPts[pi + 4], (v & 0x80) != 0);
+                PathArcTo(p, gPts[pi] - ox, gPts[pi + 1] - oy, gPts[pi + 2],
+                          gPts[pi + 3], gPts[pi + 4], (v & 0x80) != 0);
                 pi += 5;
                 break;
             case kVClose:
@@ -869,33 +921,50 @@ static Path* BuildPath(PaintCtx* ctx, const PathRec& pr) {
 
 // The path a primitive draws, built or found. `owned` comes back true when
 // the caller has to free it, which is every path at a level below `cache`.
-static Path* PathFor(PaintCtx* ctx, const Prim& prim, bool* owned) {
+static Path* PathFor(PaintCtx* ctx, const Prim& prim, bool* owned, float* dx,
+                     float* dy) {
     *owned = true;
+    *dx = 0;
+    *dy = 0;
     if (prim.path < 0 || prim.path >= gPaths.len) {
         return nullptr;
     }
     const PathRec& pr = gPaths[prim.path];
     if (SceneLevelOn() < kSceneCache) {
         gStats.pathCacheMisses++;
-        return BuildPath(ctx, pr);
+        gStats.framePathCacheMisses++;
+        double started = TimeNow();
+        Path* p = BuildPath(ctx, pr, false);
+        gStats.framePathBuildMs += (float)((TimeNow() - started) * 1000.0);
+        return p;
     }
-    CacheEntry* e = CacheFind(pr.hash ? pr.hash : 1);
-    if (e && e->live && e->hash == (pr.hash ? pr.hash : 1)) {
+    bool relative = TranslationIndependentPathCache();
+    uint64_t rawHash = relative ? pr.cacheHash : pr.hash;
+    uint64_t cacheHash = rawHash ? rawHash : 1;
+    CacheEntry* e = CacheFind(cacheHash);
+    *dx = relative ? pr.originX : 0;
+    *dy = relative ? pr.originY : 0;
+    if (e && e->live && e->hash == cacheHash) {
         e->lastFrame = gFrameNo;
         gStats.pathCacheHits++;
+        gStats.framePathCacheHits++;
         *owned = false;
         return e->path;
     }
-    Path* p = BuildPath(ctx, pr);
+    double started = TimeNow();
+    Path* p = BuildPath(ctx, pr, relative);
     gStats.pathCacheMisses++;
+    gStats.framePathCacheMisses++;
     if (!p) {
+        gStats.framePathBuildMs += (float)((TimeNow() - started) * 1000.0);
         return nullptr;
     }
     // Realizing costs something, which is why it happens here and not on
     // every path: a path worth caching is a path worth tessellating once.
     PathRealize(ctx, p);
+    gStats.framePathBuildMs += (float)((TimeNow() - started) * 1000.0);
     if (e && !e->live) {
-        e->hash = pr.hash ? pr.hash : 1;
+        e->hash = cacheHash;
         e->path = p;
         e->lastFrame = gFrameNo;
         e->live = true;
@@ -1173,18 +1242,19 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
             case kPPathGradient:
             case kPPathStroke: {
                 bool owned = false;
-                Path* path = PathFor(ctx, p, &owned);
+                float dx = 0, dy = 0;
+                Path* path = PathFor(ctx, p, &owned, &dx, &dy);
                 if (!path) {
                     break;
                 }
                 if (p.kind == kPPathFill) {
-                    PathFill(ctx, path, p.color);
+                    PathFill(ctx, path, p.color, dx, dy);
                 } else if (p.kind == kPPathGradient) {
-                    PathFillGradient(ctx, path, p.e0, p.e1, p.e2, p.e3, p.color,
-                                     p.color2);
+                    PathFillGradient(ctx, path, p.e0 - dx, p.e1 - dy, p.e2 - dx,
+                                     p.e3 - dy, p.color, p.color2, dx, dy);
                 } else {
                     PathStroke(ctx, path, p.e1, p.color,
-                               (p.flags & kFRoundCaps) != 0);
+                               (p.flags & kFRoundCaps) != 0, dx, dy);
                 }
                 if (owned) {
                     PathFree(path);

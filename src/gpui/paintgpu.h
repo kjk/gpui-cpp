@@ -116,10 +116,11 @@ void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
 void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
                bool clockwise);
 void PathClose(Path* p);
-void PathFill(PaintCtx* ctx, Path* p, Rgba c);
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx, float dy);
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to);
-void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps);
+                      float y1, Rgba from, Rgba to, float dx, float dy);
+void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
+                float dx, float dy);
 void PathRealize(PaintCtx* ctx, Path* p);
 
 void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius);

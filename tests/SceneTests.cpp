@@ -67,7 +67,36 @@ static void TextLayoutsHaveStableGenerations() {
     PaintAppFree(app);
 }
 
+static bool RecordTriangle(PaintCtx* paint, float x, float y) {
+    paint->viewW = 320;
+    paint->viewH = 200;
+    scene::FrameBegin(paint);
+    Path* path = scene::RecPathNew(paint, true);
+    scene::RecPathMoveTo(path, x, y);
+    scene::RecPathLineTo(path, x + 20, y);
+    scene::RecPathLineTo(path, x + 10, y + 20);
+    scene::RecPathClose(path);
+    scene::RecPathFill(paint, path, Rgba8(0, 0, 0, 255));
+    Bounds damage = {};
+    return scene::FrameEnd(paint, &damage);
+}
+
+static void PathPlacementRemainsPartOfTheFrameHash() {
+    TestSuite("scene translated path placement");
+    PaintCtx paint = {};
+
+    utassert(RecordTriangle(&paint, 10, 20));
+    // The cache may share these two paths' relative geometry, but the frame
+    // diff must still see that the primitive moved.
+    utassert(RecordTriangle(&paint, 30, 40));
+    utassert(!RecordTriangle(&paint, 30, 40));
+    utassert(scene::Stats(&paint).pathPrims == 1);
+
+    scene::Free(&paint);
+}
+
 void TestScene() {
     FrameComparisonBelongsToOnePaintContext();
     TextLayoutsHaveStableGenerations();
+    PathPlacementRemainsPartOfTheFrameHash();
 }

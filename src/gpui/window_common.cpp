@@ -99,12 +99,15 @@ static void InteractionBenchRecord(Window* win, const FrameTiming& timing) {
     logf(
         "interaction-bench frame=%llu draw=%.6f build=%.6f layout=%.6f "
         "paint=%.6f presented=%d invalidations=%llu prims=%d changed=%d "
-        "damage=%.6f",
+        "damage=%.6f pathHits=%d pathMisses=%d pathBuild=%.6f",
         (unsigned long long)win->frameSeq, timing.drawSecs * 1000.f,
         gFrameBuildSecs * 1000.0, gFrameLayoutSecs * 1000.0,
         gFramePaintSecs * 1000.0, timing.presentAt >= 0 ? 1 : 0,
         (unsigned long long)timing.invalidations, SceneOn() ? sc.prims : -1,
-        SceneOn() ? sc.primsChanged : -1, SceneOn() ? sc.damageFraction : -1.f);
+        SceneOn() ? sc.primsChanged : -1, SceneOn() ? sc.damageFraction : -1.f,
+        SceneOn() ? sc.framePathCacheHits : -1,
+        SceneOn() ? sc.framePathCacheMisses : -1,
+        SceneOn() ? sc.framePathBuildMs : -1.f);
 }
 
 static void FrameBenchTick(Window* win, float secs) {

@@ -1087,13 +1087,30 @@ void PathRealize(PaintCtx* ctx, Path* p) {
                                         &p->fillReal);
 }
 
-void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+static bool PathOffsetBegin(PaintCtx* ctx, float dx, float dy) {
+    if (!ctx || !ctx->rt || (dx == 0 && dy == 0)) {
+        return false;
+    }
+    // Paint.h otherwise draws in one identity-transform DIP space. Clips are
+    // already fixed in device space when pushed, so translating only while
+    // issuing this geometry leaves its content mask where the scene put it.
+    ctx->rt->rt->SetTransform(D2D1::Matrix3x2F::Translation(dx, dy));
+    return true;
+}
+
+static void PathOffsetEnd(PaintCtx* ctx, bool offset) {
+    if (offset) {
+        ctx->rt->rt->SetTransform(D2D1::Matrix3x2F::Identity());
+    }
+}
+
+void PathFill(PaintCtx* ctx, Path* p, Rgba c, float dx, float dy) {
     if (scene::Recording()) {
         scene::RecPathFill(ctx, p, c);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::PathFill(ctx, p, c);
+        gpuw::PathFill(ctx, p, c, dx, dy);
         return;
     }
     ID2D1PathGeometry* g = PathSeal(p);
@@ -1101,14 +1118,17 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     if (!g || !b) {
         return;
     }
+    bool offset = PathOffsetBegin(ctx, dx, dy);
     if (p->fillReal) {
         ID2D1DeviceContext1* dc = Dc1(ctx);
         if (dc) {
             dc->DrawGeometryRealization(p->fillReal, b);
+            PathOffsetEnd(ctx, offset);
             return;
         }
     }
     ctx->rt->rt->FillGeometry(g, b, nullptr);
+    PathOffsetEnd(ctx, offset);
 }
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
@@ -1117,13 +1137,13 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 }
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
-                      float y1, Rgba from, Rgba to) {
+                      float y1, Rgba from, Rgba to, float dx, float dy) {
     if (scene::Recording()) {
         scene::RecPathFillGradient(ctx, p, x0, y0, x1, y1, from, to);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::PathFillGradient(ctx, p, x0, y0, x1, y1, from, to);
+        gpuw::PathFillGradient(ctx, p, x0, y0, x1, y1, from, to, dx, dy);
         return;
     }
     ID2D1PathGeometry* g = PathSeal(p);
@@ -1145,24 +1165,27 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
                                                 D2D1::Point2F(x1, y1)),
             stops, &gb);
         if (gb) {
+            bool offset = PathOffsetBegin(ctx, dx, dy);
             ctx->rt->rt->FillGeometry(g, gb);
+            PathOffsetEnd(ctx, offset);
             gb->Release();
             filled = true;
         }
         stops->Release();
     }
     if (!filled) {
-        PathFill(ctx, p, from);
+        PathFill(ctx, p, from, dx, dy);
     }
 }
 
-void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
+                float dx, float dy) {
     if (scene::Recording()) {
         scene::RecPathStroke(ctx, p, stroke, c, roundCaps);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::PathStroke(ctx, p, stroke, c, roundCaps);
+        gpuw::PathStroke(ctx, p, stroke, c, roundCaps, dx, dy);
         return;
     }
     ID2D1PathGeometry* g = PathSeal(p);
@@ -1171,7 +1194,9 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
         return;
     }
     ID2D1StrokeStyle* ss = DashStyle(ctx, nullptr, roundCaps);
+    bool offset = PathOffsetBegin(ctx, dx, dy);
     ctx->rt->rt->DrawGeometry(g, b, stroke, ss);
+    PathOffsetEnd(ctx, offset);
     Rel(&ss);
 }
 

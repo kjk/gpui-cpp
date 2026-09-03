@@ -114,11 +114,9 @@ profile requires it.
 
 The worthwhile near-term work is narrower:
 
-1. If path construction remains material, key paths relative to their origin
-   and draw cached geometry with a translation.
-2. Enable the recorder on Linux, macOS and wasm only after measuring its cost
+1. Enable the recorder on Linux, macOS and wasm only after measuring its cost
    on those backends.
-3. Port `BoundsTree` and typed batches only when an ordering problem or a new
+2. Port `BoundsTree` and typed batches only when an ordering problem or a new
    renderer needs them.
 
 Per-window ownership and stable resource generations were the first
@@ -159,3 +157,28 @@ earns that limited place through the 25% scrolling median improvement, not as a
 general default: caret and popup regress, chart's small median improvement does
 not improve its p95, and scrolling's p95 is also slightly worse. A future
 renderer or workload should rerun the command before relying on damage mode.
+
+### Translated path cache
+
+The interaction trace also reports per-frame path hits, misses and backend
+construction time. An icon-heavy scroll through the Button story crossed the
+threshold for making cache keys translation-independent: with absolute keys,
+30 wheel steps produced 272 misses and path construction took 0.203 ms per
+frame in `skip` mode. Relative keys reduced that to 20 first-shape misses and
+0.053 ms per frame. Median paint fell from 1.600 to 1.291 ms and median total
+draw from 2.268 to 2.013 ms in the same-build A/B comparison.
+
+The implementation retains absolute path coordinates in primitive hashes and
+damage bounds, but hashes and builds cached backend geometry relative to the
+path's first point. Replay supplies the absolute translation separately for
+fills, gradients and strokes. `GPUI_PATH_CACHE_TRANSLATION=off` restores the
+old absolute keys for profiling; `cmd/bench-scene.ts -absolute-paths` drives
+that comparison.
+
+Direct2D, D3D11 and D3D12 all completed the icon-scroll interaction with the
+translated cache. The `skip` and `damage` captures were pixel-identical in the
+20-step Direct2D validation and in both GPU validations. Compared with the
+uncached Direct2D surface, the only differences remained the already-recorded
+geometry-realization edge pixels. A same-mode Direct2D comparison between
+relative and absolute cache keys differed at one pixel by less than the image
+comparison tolerance.

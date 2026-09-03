@@ -10,6 +10,10 @@
    of this header for the numbers, and for the one scene it costs rather than
    pays on.
 
+   GPUI_PATH_CACHE_TRANSLATION=off restores absolute-coordinate path keys for
+   profiling the translated cache against its predecessor. It is otherwise
+   inert and is not a supported rendering mode.
+
    What a scene is for, given that `paintgpu_win.cpp` already puts a frame in
    one instance buffer: the instance buffer is built *while* the tree paints,
    so nothing can be known about the frame as a whole. Collect first and three
@@ -174,6 +178,11 @@ struct SceneStats {
     // Paths the replay found already built, and paths it had to build.
     int pathCacheHits = 0;
     int pathCacheMisses = 0;
+    // Cache activity and backend path construction for the most recent
+    // frame. Construction includes PathRealize on a cache miss.
+    int framePathCacheHits = 0;
+    int framePathCacheMisses = 0;
+    float framePathBuildMs = 0;
     int pathCacheLive = 0;
     // Across the run, so a bench line can report a rate.
     int frames = 0;
@@ -270,10 +279,6 @@ const SceneStats& Stats(PaintCtx* ctx);
 //   the GPU backend still stencils and covers every frame and the D2D one
 //   still fills a realization. A mask cache keyed by the same hash is the
 //   next thing worth measuring.
-// - **The path cache is keyed on absolute coordinates.** An icon that has not
-//   moved hits; the same icon one pixel down the page misses. Hashing the
-//   geometry relative to its own origin and carrying the offset separately
-//   would fix it, and needs a Paint.h that can draw a path translated.
 // - **Only Windows records.** scene.cpp names no OS and no GPU type, but the
 //   dispatch into it is the one line at the top of each entry point that
 //   paint_win.cpp has, and the other three backends do not have it yet.

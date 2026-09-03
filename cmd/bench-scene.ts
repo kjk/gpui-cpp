@@ -4,6 +4,9 @@
 //
 //   bun cmd/bench-scene.ts
 //   bun cmd/bench-scene.ts -n=20 -nobuild
+//   bun cmd/bench-scene.ts -only=icon-scroll
+//   bun cmd/bench-scene.ts -only=icon-scroll -paint=d3d11
+//   bun cmd/bench-scene.ts -only=icon-scroll -absolute-paths
 
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -15,6 +18,7 @@ import {
   getCursorPos,
   hoverClient,
   killAndWait,
+  moveWindow,
   packCoords,
   sendMessage,
   setCursorPos,
@@ -35,15 +39,28 @@ if (process.platform !== "win32") {
 
 let cycles = 12;
 let build = true;
+let onlyName = "";
+let paintName = "";
+let absolutePaths = false;
 for (const arg of Bun.argv.slice(2)) {
   if (arg === "-nobuild") {
     build = false;
   } else if (arg.startsWith("-n=")) {
     cycles = Math.max(4, Number.parseInt(arg.slice(3), 10) || cycles);
+  } else if (arg.startsWith("-only=")) {
+    onlyName = arg.slice(6);
+  } else if (arg.startsWith("-paint=")) {
+    paintName = arg.slice(7);
+  } else if (arg === "-absolute-paths") {
+    absolutePaths = true;
   } else {
     console.error(`unknown argument: ${arg}`);
     process.exit(1);
   }
+}
+if (paintName && !["d2d", "d3d11", "d3d12"].includes(paintName)) {
+  console.error(`unknown paint backend: ${paintName}`);
+  process.exit(1);
 }
 
 type Scenario = {
@@ -75,6 +92,26 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name: "icon-scroll",
+    exe: "story",
+    // The long Button story has eighteen icon paths spread through enough
+    // sections to move them through the viewport while scrolling.
+    args: ["button"],
+    deterministic: true,
+    expectVisibleChange: true,
+    drive: async (hwnd) => {
+      const r = getClientRect(hwnd);
+      const x = Math.floor(r.right / 2);
+      const y = Math.floor(r.bottom / 2);
+      const screen = clientToScreen(hwnd, x, y);
+      for (let i = 0; i < cycles; i++) {
+        const delta = i < Math.floor((cycles * 3) / 4) ? -120 : 120;
+        sendMessage(hwnd, 0x020a /* WM_MOUSEWHEEL */, (delta << 16) >>> 0, packCoords(screen.x, screen.y));
+        await sleep(45);
+      }
+    },
+  },
+  {
     name: "hover",
     exe: "showcase",
     args: ["button"],
@@ -83,7 +120,8 @@ const scenarios: Scenario[] = [
     drive: async (hwnd) => {
       // The centered row starts left of the window midpoint. Use the primary
       // button so each move crosses an element with a visible hover style.
-      const inside = { x: 305, y: 320 };
+      const r = getClientRect(hwnd);
+      const inside = { x: Math.floor(r.right / 2) - 110, y: Math.floor(r.bottom / 2) };
       const outside = { x: 12, y: 12 };
       for (let i = 0; i < cycles; i++) {
         const p = i + 1 === cycles || (i & 1) === 0 ? inside : outside;
@@ -146,6 +184,9 @@ type Frame = {
   paint: number;
   presented: number;
   damage: number;
+  pathHits: number;
+  pathMisses: number;
+  pathBuild: number;
 };
 type Result = {
   scenario: string;
@@ -157,7 +198,12 @@ type Result = {
 };
 
 function runBuild(target: string): void {
-  const result = Bun.spawnSync(["bun", "cmd/build.ts", "-rel", target], {
+  const args = ["bun", "cmd/build.ts", "-rel"];
+  if (paintName) {
+    args.push("--win-backend=all");
+  }
+  args.push(target);
+  const result = Bun.spawnSync(args, {
     cwd: root,
     stdout: "inherit",
     stderr: "inherit",
@@ -167,8 +213,14 @@ function runBuild(target: string): void {
   }
 }
 
+const selectedScenarios = onlyName ? scenarios.filter((scenario) => scenario.name === onlyName) : scenarios;
+if (selectedScenarios.length === 0) {
+  console.error(`unknown scenario: ${onlyName}`);
+  process.exit(1);
+}
+
 if (build) {
-  for (const target of [...new Set(scenarios.map((scenario) => scenario.exe))]) {
+  for (const target of [...new Set(selectedScenarios.map((scenario) => scenario.exe))]) {
     runBuild(target);
   }
 }
@@ -180,7 +232,7 @@ const logPath = join(root, "out", "gpui.log");
 function parseFrames(text: string): Frame[] {
   const frames: Frame[] = [];
   const pattern =
-    /interaction-bench frame=\d+ draw=([\d.]+) build=([\d.]+) layout=([\d.]+) paint=([\d.]+) presented=(\d+) invalidations=\d+ prims=-?\d+ changed=-?\d+ damage=(-?[\d.]+)/g;
+    /interaction-bench frame=\d+ draw=([\d.]+) build=([\d.]+) layout=([\d.]+) paint=([\d.]+) presented=(\d+) invalidations=\d+ prims=-?\d+ changed=-?\d+ damage=(-?[\d.]+) pathHits=(-?\d+) pathMisses=(-?\d+) pathBuild=(-?[\d.]+)/g;
   for (const match of text.matchAll(pattern)) {
     frames.push({
       draw: Number(match[1]),
@@ -189,6 +241,9 @@ function parseFrames(text: string): Frame[] {
       paint: Number(match[4]),
       presented: Number(match[5]),
       damage: Number(match[6]),
+      pathHits: Number(match[7]),
+      pathMisses: Number(match[8]),
+      pathBuild: Number(match[9]),
     });
   }
   return frames;
@@ -214,9 +269,18 @@ async function runOne(scenario: Scenario, mode: Mode): Promise<Result> {
     throw new Error(`missing ${exe}`);
   }
   rmSync(logPath, { force: true });
-  const proc = Bun.spawn([exe, ...scenario.args, `__scene=${mode}`], {
+  const args = [exe, ...scenario.args, `__scene=${mode}`];
+  if (paintName) {
+    args.push(`__paint=${paintName}`);
+  }
+  const proc = Bun.spawn(args, {
     cwd: root,
-    env: { ...process.env, GPUI_HOVER_HOLD: "1", GPUI_INTERACTION_BENCH: "1" },
+    env: {
+      ...process.env,
+      GPUI_HOVER_HOLD: "1",
+      GPUI_INTERACTION_BENCH: "1",
+      ...(absolutePaths ? { GPUI_PATH_CACHE_TRANSLATION: "off" } : {}),
+    },
     stdout: "ignore",
     stderr: "ignore",
   });
@@ -225,6 +289,7 @@ async function runOne(scenario: Scenario, mode: Mode): Promise<Result> {
     await killAndWait(proc);
     throw new Error(`${scenario.name}/${mode}: window did not appear`);
   }
+  moveWindow(hwnd, 40, 40, 1100, 750);
   setForegroundWindow(hwnd);
   await sleep(700);
   // Establish the same unhovered baseline even when a prior run left the
@@ -257,12 +322,12 @@ async function runOne(scenario: Scenario, mode: Mode): Promise<Result> {
   return { scenario: scenario.name, mode, frames, image, imageHash, visiblyChanged };
 }
 
-function percentile(frames: Frame[], field: keyof Pick<Frame, "draw" | "paint">, p: number): number {
+function percentile(frames: Frame[], field: keyof Pick<Frame, "draw" | "paint" | "pathBuild">, p: number): number {
   const values = frames.map((frame) => frame[field]).sort((a, b) => a - b);
   return values[Math.min(values.length - 1, Math.floor(values.length * p))]!;
 }
 
-function mean(frames: Frame[], field: keyof Pick<Frame, "build" | "layout" | "damage">): number {
+function mean(frames: Frame[], field: keyof Pick<Frame, "build" | "layout" | "damage" | "pathBuild">): number {
   return frames.reduce((sum, frame) => sum + frame[field], 0) / frames.length;
 }
 
@@ -270,7 +335,7 @@ setProcessDpiAware();
 const cursor = getCursorPos();
 const results: Result[] = [];
 try {
-  for (const scenario of scenarios) {
+  for (const scenario of selectedScenarios) {
     for (const mode of modes) {
       console.log(`${scenario.name}/${mode}`);
       results.push(await runOne(scenario, mode));
@@ -283,16 +348,16 @@ try {
 const lines = [
   "# Scene interaction benchmark",
   "",
-  `Generated ${new Date().toISOString()} with \`bun cmd/bench-scene.ts -n=${cycles}\`.`,
+  `Generated ${new Date().toISOString()} with \`bun cmd/bench-scene.ts -n=${cycles}${onlyName ? ` -only=${onlyName}` : ""}${paintName ? ` -paint=${paintName}` : ""}${absolutePaths ? " -absolute-paths" : ""}\`.`,
   "Times are milliseconds. Startup frames are excluded before each interaction begins.",
   "",
-  "| scenario | scene | frames | draw median | draw p95 | paint median | paint p95 | build mean | layout mean | mean damage | presents |",
-  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+  "| scenario | scene | frames | draw median | draw p95 | paint median | paint p95 | build mean | layout mean | mean damage | path hits | path misses | path build mean / p95 | presents |",
+  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
 ];
 for (const result of results) {
   const f = result.frames;
   lines.push(
-    `| ${result.scenario} | ${result.mode} | ${f.length} | ${percentile(f, "draw", 0.5).toFixed(3)} | ${percentile(f, "draw", 0.95).toFixed(3)} | ${percentile(f, "paint", 0.5).toFixed(3)} | ${percentile(f, "paint", 0.95).toFixed(3)} | ${mean(f, "build").toFixed(3)} | ${mean(f, "layout").toFixed(3)} | ${mean(f, "damage").toFixed(3)} | ${f.reduce((n, frame) => n + frame.presented, 0)} |`,
+    `| ${result.scenario} | ${result.mode} | ${f.length} | ${percentile(f, "draw", 0.5).toFixed(3)} | ${percentile(f, "draw", 0.95).toFixed(3)} | ${percentile(f, "paint", 0.5).toFixed(3)} | ${percentile(f, "paint", 0.95).toFixed(3)} | ${mean(f, "build").toFixed(3)} | ${mean(f, "layout").toFixed(3)} | ${mean(f, "damage").toFixed(3)} | ${f.reduce((n, frame) => n + Math.max(0, frame.pathHits), 0)} | ${f.reduce((n, frame) => n + Math.max(0, frame.pathMisses), 0)} | ${mean(f, "pathBuild").toFixed(3)} / ${percentile(f, "pathBuild", 0.95).toFixed(3)} | ${f.reduce((n, frame) => n + frame.presented, 0)} |`,
   );
 }
 
@@ -303,7 +368,7 @@ for (const result of results) {
   );
 }
 lines.push("");
-for (const scenario of scenarios.filter((item) => item.deterministic)) {
+for (const scenario of selectedScenarios.filter((item) => item.deterministic)) {
   const skip = results.find((result) => result.scenario === scenario.name && result.mode === "skip")!;
   const damage = results.find((result) => result.scenario === scenario.name && result.mode === "damage")!;
   lines.push(
