@@ -668,12 +668,11 @@ end
 }
 
 // ignorer.rs, over a fixture in a directory of the test's own. It used to
-// write .gitignore straight into the working directory on the assumption that
-// cwd is always the out dir; running the binary directly from a checkout —
-// `out
-el ests.exe` — then overwrote and deleted the repository's own
-    // .gitignore. A test never writes a dotfile into a directory it does not own.
-    static const char* kIgnoreDir = "autocorrect_ignorer_test_root";
+// write .gitignore straight into the working directory on the assumption
+// that cwd is always the out dir; running the binary directly from a
+// checkout then overwrote and deleted the repository's own .gitignore. A
+// test never writes a dotfile into a directory it does not own.
+static const char* kIgnoreDir = "autocorrect_ignorer_test_root";
 
 static bool WriteIgnoreFile(const char* name, const char* content) {
     char path[kMaxPath] = {};
