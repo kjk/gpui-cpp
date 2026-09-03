@@ -113,7 +113,6 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   it, with integer handles where Rust has a handle whose destructor is the
   cancel
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
-- Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
 - A general network beyond one request at a time. `src/sys/http.h` sends one
   http(s) request with the OS's own client — WinHTTP, NSURLSession, libcurl —
   and reads its answer. It carries a **method, request headers and a request

@@ -14,8 +14,6 @@
 | Metrics | `sysinfo`, `battery` | `src/sys/*` (Win32) |
 | Strings/arrays | `String`, `Vec` | `Str`, `Vec` from SumatraPDF |
 
-An earlier STL-based sketch exists in `../gpui/`. Ignore it for implementation. Type names there can be used as a glossary for GPUI vocabulary only.
-
 ## 2. Rust dependency graph (what we are *not* porting)
 
 Workspace crates: `gpui-component` (`crates/ui`), `gpui-base`, `gpui-component-assets`, `gpui-component-macros`, `story`, `fps`, `webview`.

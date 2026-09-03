@@ -111,7 +111,6 @@ cargo run -p system_monitor
 - Direct2D + DirectWrite on Windows, over a DXGI flip-model swap chain. The DC render target this used to say was replaced once profiling showed its GDI interop costing ~70% of the frame; only the offscreen target, which hands its pixels back as a DIB, still uses one.
 - Frame-rebuilt element tree on a frame arena
 - Win32 APIs instead of `sysinfo` / `battery`
-- Do not reuse `../gpui/` (STL experiment)
 
 ## Log
 
