@@ -467,12 +467,12 @@ struct FsJob {
 struct ShellFetchJob {
     ShellRuntimeControl* control = nullptr;
     uint32_t task = 0;
-    Str url;
+    shell::FetchRequest request;
     Capabilities capabilities;
     shell::FetchResult result;
 
     void Free() {
-        StrFree(url);
+        request.Free();
         result.Free();
     }
 };
@@ -715,7 +715,7 @@ static void FsJobWork(FsJob* job) {
 }
 
 static void FetchJobWork(ShellFetchJob* job) {
-    shell::FetchGet(job->url, job->capabilities, &job->result);
+    shell::FetchSend(job->request, job->capabilities, &job->result);
 }
 
 static void StorageWriteWork(StorageWriteJob* job) {
@@ -5884,71 +5884,157 @@ static bool FsBoolOption(JSContext* ctx, JSValueConst value, const char* key,
     return true;
 }
 
+// __fetch_send(url, method, headers, body): the whole of `fetch`'s request
+// surface. `headers` is a flat [name, value, ...] array, which is what the
+// prelude has already validated into shape; `body` is a string or a
+// Uint8Array, and undefined for a request that carries none.
 static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
                            JSValueConst* argv) {
     Arena* arena = ArenaNew();
     Str url;
     bool converted = argc >= 1 && JsString(ctx, argv[0], arena, &url);
-    // `parse_method`. Upstream parses any HTTP method here and leaves what may
-    // be sent to the capability policy, which already takes the method. This
-    // port keeps the token check and its refusal, and then refuses every
-    // method but GET: the repository's network boundary is one system-backed
-    // GET, so a granted PUT has nothing to carry it.
     Str method = StrL("GET");
     if (converted && argc >= 2 && !JS_IsUndefined(argv[1])) {
         converted = JsString(ctx, argv[1], arena, &method);
     }
-    if (converted && !shell::FetchIsHttpMethod(method)) {
+    if (!converted) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    if (!shell::FetchIsHttpMethod(method)) {
         JSValue thrown = JS_ThrowTypeError(
             ctx, "fetch(url, options).method `%.*s` is not an HTTP method",
             method.len, method.s ? method.s : "");
         ArenaDelete(arena);
         return thrown;
     }
-    if (converted && !StrEqI(method, StrL("GET"))) {
-        JSValue thrown = JS_ThrowTypeError(
-            ctx,
-            "fetch(url, options).method `%.*s` is outside this port's network "
-            "boundary, which is GET only",
-            method.len, method.s ? method.s : "");
+
+    shell::FetchRequest request;
+    request.url = StrDup(url);
+    // Upper-cased on the way through, the way `fetch` does with a known
+    // method, so a policy written in the ordinary spelling matches.
+    Str upper = StrDup(method);
+    for (int i = 0; i < upper.len; i++) {
+        if (upper.s[i] >= 'a' && upper.s[i] <= 'z') {
+            upper.s[i] = (char)(upper.s[i] - 'a' + 'A');
+        }
+    }
+    request.method = upper;
+    bool ok = request.url.s && request.method.s;
+
+    if (ok && argc >= 3 && JS_IsArray(argv[2])) {
+        int64_t count = 0;
+        JSValue lengthValue = JS_GetPropertyStr(ctx, argv[2], "length");
+        if (JS_ToInt64(ctx, &count, lengthValue) < 0) count = 0;
+        JS_FreeValue(ctx, lengthValue);
+        for (int64_t i = 0; ok && i + 1 < count; i += 2) {
+            JSValue nameValue = JS_GetPropertyUint32(ctx, argv[2], (uint32_t)i);
+            JSValue valueValue =
+                JS_GetPropertyUint32(ctx, argv[2], (uint32_t)(i + 1));
+            Str name;
+            Str value;
+            if (JsString(ctx, nameValue, arena, &name) &&
+                JsString(ctx, valueValue, arena, &value)) {
+                if (shell::FetchHeaderIsProhibited(name)) {
+                    JS_FreeValue(ctx, nameValue);
+                    JS_FreeValue(ctx, valueValue);
+                    JSValue thrown = JS_ThrowTypeError(
+                        ctx, "fetch(url, options).headers may not set `%.*s`",
+                        name.len, name.s ? name.s : "");
+                    request.Free();
+                    ArenaDelete(arena);
+                    return thrown;
+                }
+                shell::FetchHeader header;
+                header.name = StrDup(name);
+                header.value = StrDup(value);
+                if (header.name.s && header.value.s) {
+                    VecAppend(request.headers, header);
+                } else {
+                    StrFree(header.name);
+                    StrFree(header.value);
+                    ok = false;
+                }
+            } else {
+                ok = false;
+            }
+            JS_FreeValue(ctx, nameValue);
+            JS_FreeValue(ctx, valueValue);
+        }
+    }
+
+    if (ok && argc >= 4 && !JS_IsUndefined(argv[3]) && !JS_IsNull(argv[3])) {
+        if (JS_IsString(argv[3])) {
+            Str text;
+            if (JsString(ctx, argv[3], arena, &text)) {
+                request.body = StrDup(text);
+                ok = request.body.s || text.len == 0;
+            } else {
+                ok = false;
+            }
+        } else {
+            size_t count = 0;
+            uint8_t* bytes = JS_GetUint8Array(ctx, &count, argv[3]);
+            if (!bytes) {
+                request.Free();
+                ArenaDelete(arena);
+                return JS_EXCEPTION;
+            }
+            request.body = StrDup(Str((const char*)bytes, (int)count));
+            ok = request.body.s || count == 0;
+        }
+    }
+    if (ok && request.body.len > shell::kFetchMaxRequestBody) {
+        JSValue thrown = JS_ThrowRangeError(
+            ctx, "fetch request body exceeded the %d byte limit",
+            shell::kFetchMaxRequestBody);
+        request.Free();
         ArenaDelete(arena);
         return thrown;
     }
+    if (!ok) {
+        request.Free();
+        ArenaDelete(arena);
+        return JS_ThrowOutOfMemory(ctx);
+    }
+
     bool release = false;
     Policy* policy = CurrentPolicy(&release);
     Str authorizationError;
-    bool allowed =
-        converted && shell::FetchAuthorizeGet(url, PolicyCapabilities(policy),
-                                              &authorizationError);
+    bool allowed = shell::FetchAuthorize(request.url, request.method,
+                                         PolicyCapabilities(policy),
+                                         &authorizationError);
     if (!allowed) {
-        JSValue result =
-            converted ? JS_ThrowTypeError(ctx, "%.*s", authorizationError.len,
-                                          authorizationError.s
-                                              ? authorizationError.s
-                                              : "fetch URL is not granted")
-                      : JS_EXCEPTION;
+        JSValue result = JS_ThrowTypeError(
+            ctx, "%.*s", authorizationError.len,
+            authorizationError.s ? authorizationError.s
+                                 : "fetch URL is not granted");
         StrFree(authorizationError);
         if (release) PolicyRelease(policy);
+        request.Free();
         ArenaDelete(arena);
         return result;
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     if (!host.IsSet()) {
         if (release) PolicyRelease(policy);
+        request.Free();
         ArenaDelete(arena);
         return JS_ThrowTypeError(ctx, "fetch() needs a live host task");
     }
 
     ShellFetchJob* job = new ShellFetchJob();
-    job->url = StrDup(url);
+    // The job takes the request whole. The local's owning fields are then
+    // cleared rather than freed: VecTake hands the header storage over
+    // without copying it, and VecReset here would free what the job holds.
+    job->request = request;
+    request.url = {};
+    request.method = {};
+    request.body = {};
+    VecTake(request.headers);
     job->capabilities = PolicyCapabilities(policy);
     if (release) PolicyRelease(policy);
     ArenaDelete(arena);
-    if (!job->url.s) {
-        job->Free();
-        delete job;
-        return JS_ThrowOutOfMemory(ctx);
-    }
 
     JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
     JSValue promise = JS_NewPromiseCapability(ctx, resolving);
@@ -7059,27 +7145,50 @@ globalThis.__gpui = (() => {
   });
   globalThis.fetch = (url, options) => {
     let method = "GET";
+    let headers = [];
+    let body = undefined;
     if (options !== undefined && options !== null) {
       if (typeof options !== "object" || Array.isArray(options)) {
         throw new TypeError("fetch(url, options) expects an options object");
       }
       for (const key of Object.keys(options)) {
         if (key !== "method" && key !== "headers" && key !== "body") {
-          throw new TypeError("unknown option `" + key + "` for fetch(url, options)");
+          throw new TypeError(
+            "unknown option `" + key +
+            "` for fetch(url, options); expected method, headers or body");
         }
       }
       if (options.method !== undefined && options.method !== null) {
         method = String(options.method);
       }
-      if (options.body !== undefined && options.body !== null) {
-        throw new TypeError("a GET fetch may not carry a request body");
+      if (options.headers !== undefined && options.headers !== null) {
+        const source = options.headers;
+        if (typeof source !== "object" || Array.isArray(source)) {
+          throw new TypeError(
+            "fetch(url, options).headers expects a plain object of string values");
+        }
+        for (const name of Object.keys(source)) {
+          const value = source[name];
+          if (typeof value !== "string") {
+            throw new TypeError(
+              "fetch(url, options).headers expects string header values");
+          }
+          headers.push(name, value);
+        }
       }
-      if (options.headers !== undefined && options.headers !== null &&
-          Object.keys(options.headers).length !== 0) {
-        throw new TypeError("custom fetch headers are outside the repository network boundary");
+      if (options.body !== undefined && options.body !== null) {
+        const source = options.body;
+        if (typeof source === "string") {
+          body = source;
+        } else if (source instanceof Uint8Array) {
+          body = source;
+        } else {
+          throw new TypeError(
+            "fetch(url, options).body expects a string or Uint8Array");
+        }
       }
     }
-    return __fetch_get(new URL(String(url)).href, method);
+    return __fetch_send(new URL(String(url)).href, method, headers, body);
   };
 
   globalThis.__shell_os = Object.freeze({
@@ -9251,7 +9360,7 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeZlib, 1, 2);
     SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip",
                            NativeZlib, 1, 3);
-    SetGlobalFunction(impl->context, global, "__fetch_get", NativeFetch, 2);
+    SetGlobalFunction(impl->context, global, "__fetch_send", NativeFetch, 4);
     SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
                            (int)shell::FsOperation::Read);
     SetGlobalMagicFunction(impl->context, global, "__fs_write", NativeFs, 2,

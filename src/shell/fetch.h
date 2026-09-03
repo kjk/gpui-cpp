@@ -20,20 +20,68 @@ struct FetchResult {
 
 // `parse_method`: a token check, not a list. Which method may reach which
 // host on which path is `Capabilities::MayRequest`'s decision and it already
-// takes the method; what is refused here is a string that is not an HTTP
-// method at all — an empty field, a space, a quote.
-//
-// The standing repository boundary is one system-backed GET, so a method that
-// is a method but is not GET is still refused, by `FetchAuthorizeMethod`
-// rather than by this.
+// takes the method; a second list here would be a second policy to keep in
+// step with the first, and the way that goes wrong is a grant that cannot be
+// exercised. What is refused here is a string that is not an HTTP method at
+// all — an empty field, a space, a quote.
 bool FetchIsHttpMethod(Str method);
 
-bool FetchAuthorizeGet(Str url, const Capabilities& capabilities,
-                       Str* error = nullptr);
-bool FetchGet(Str url, const Capabilities& capabilities, FetchResult* out);
+// `prohibited_header`: the ones the client owns. A script that sets its own
+// Content-Length or Transfer-Encoding is describing a message the client is
+// about to describe differently, and Host picks the connection.
+bool FetchHeaderIsProhibited(Str name);
 
-using FetchHttpGet = bool (*)(Str url, HttpRsp* out);
-void FetchSetHttpGetForTests(FetchHttpGet get);
+// One request header, owned by the request that carries it.
+struct FetchHeader {
+    Str name;
+    Str value;
+};
+
+struct FetchRequest {
+    Str url;
+    // Empty means GET.
+    Str method;
+    Vec<FetchHeader> headers;
+    Str body;
+
+    void Free();
+};
+
+constexpr int kFetchMaxRequestBody = 8 * 1024 * 1024;
+
+// Whether the capability policy grants this method to this URL.
+bool FetchAuthorize(Str url, Str method, const Capabilities& capabilities,
+                    Str* error = nullptr);
+
+// Sends `request`, following redirects only where the policy allows it.
+bool FetchSend(const FetchRequest& request, const Capabilities& capabilities,
+               FetchResult* out);
+
+// ─── the redirect rules, exposed because they are what the tests pin ──────
+
+// `follows_location`: 301, 302, 303, 307 and 308, and nothing else in 3xx.
+bool FetchFollowsLocation(int status);
+
+// `rewrite_redirect_request`: a 301 or 302 answering a POST, and a 303
+// answering anything but HEAD, continue as a GET with no body — so the entity
+// and the headers describing it do not follow.
+void FetchRewriteRedirect(int status, Str* method, Vec<FetchHeader>* headers,
+                          Str* body);
+
+// `same_origin`: scheme, host and *effective* port, so https://h and
+// https://h:443 are one origin and http://h is not.
+bool FetchSameOrigin(Str left, Str right);
+
+// `authorize_redirect`. Beyond the target needing its own grant: an HTTPS
+// request never continues onto plaintext, a method that is not GET never
+// replays its body across origins, and neither Authorization nor any other
+// caller-supplied header follows a redirect off its origin.
+bool FetchAuthorizeRedirect(const Capabilities& capabilities, Str method,
+                            Str current, Str next,
+                            const Vec<FetchHeader>& headers, Str* error);
+
+using FetchHttpSend = bool (*)(const HttpReq& req, HttpRsp* out);
+void FetchSetHttpSendForTests(FetchHttpSend send);
 
 } // namespace gpui::shell
 #endif // GPUI_SHELL_FETCH_H_

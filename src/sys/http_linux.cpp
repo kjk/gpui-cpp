@@ -47,7 +47,9 @@ static size_t OnBody(char* data, size_t size, size_t n, void* userp) {
     return want;
 }
 
-static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
+bool HttpSend(const HttpReq& req, HttpRsp* out) {
+    Str url = req.url;
+    bool noRedirect = req.noRedirect;
     if (!out || !HttpUrlIsRemote(url)) {
         return false;
     }
@@ -86,7 +88,51 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
                      (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
 #endif
 
-    CURLcode err = curl_easy_perform(c);
+    // The method, and the body that goes with it. CUSTOMREQUEST changes the
+    // verb without changing anything else about the transfer, which is what
+    // this wants: POSTFIELDS alone would also turn a redirect's method into
+    // GET behind curl's back, and the redirect rules are the caller's.
+    char* verb = nullptr;
+    if (req.method.len > 0 && !StrEq(req.method, StrL("GET"))) {
+        verb = AllocArray<char>(req.method.len + 1);
+        if (!verb) {
+            curl_easy_cleanup(c);
+            Free(nullptr, u);
+            return false;
+        }
+        memcpy(verb, req.method.s, (size_t)req.method.len);
+        verb[req.method.len] = 0;
+        curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, verb);
+    }
+    if (req.body.len > 0) {
+        curl_easy_setopt(c, CURLOPT_POSTFIELDS, req.body.s);
+        curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, (long)req.body.len);
+    }
+    struct curl_slist* headers = nullptr;
+    bool headersReady = true;
+    for (int i = 0; i < req.nHeaders && headersReady; i++) {
+        StrBuilder line;
+        line.Append(req.headers[i].name);
+        line.Append(StrL(": "));
+        line.Append(req.headers[i].value);
+        Str text = line.TakeStr();
+        if (!text.s) {
+            headersReady = false;
+        } else {
+            struct curl_slist* next = curl_slist_append(headers, text.s);
+            if (next) {
+                headers = next;
+            } else {
+                headersReady = false;
+            }
+        }
+        StrFree(text);
+    }
+    if (headers) {
+        curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
+    }
+
+    CURLcode err = headersReady ? curl_easy_perform(c) : CURLE_OUT_OF_MEMORY;
     bool ok = err == CURLE_OK;
     if (ok) {
         long status = 0;
@@ -109,6 +155,10 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
         }
     }
     curl_easy_cleanup(c);
+    if (headers) {
+        curl_slist_free_all(headers);
+    }
+    Free(nullptr, verb);
     Free(nullptr, u);
     if (!ok) {
         VecReset(out->body);
@@ -117,14 +167,27 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
 }
 
 bool HttpGet(Str url, HttpRsp* out) {
-    return HttpGetInternal(url, out, false);
+    HttpReq req;
+    req.url = url;
+    return HttpSend(req, out);
 }
 
 bool HttpGetNoRedirect(Str url, HttpRsp* out) {
-    return HttpGetInternal(url, out, true);
+    HttpReq req;
+    req.url = url;
+    req.noRedirect = true;
+    return HttpSend(req, out);
 }
 
 #else
+
+bool HttpSend(const HttpReq& req, HttpRsp* out) {
+    // Built without libcurl: there is no client here to make the request
+    // with, so every request fails the way one to an unreachable host would.
+    (void)req;
+    (void)out;
+    return false;
+}
 
 bool HttpGet(Str url, HttpRsp* out) {
     // Built without libcurl: there is no client here to make the request

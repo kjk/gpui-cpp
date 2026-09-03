@@ -54,7 +54,18 @@ static Str StrFromNS(NSString* s) {
     return StrDup(Str(u));
 }
 
-static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
+static NSString* NSFromStr(Str s) {
+    if (s.len <= 0) {
+        return @"";
+    }
+    return [[NSString alloc] initWithBytes:s.s
+                                    length:(NSUInteger)s.len
+                                  encoding:NSUTF8StringEncoding];
+}
+
+bool HttpSend(const HttpReq& request, HttpRsp* out) {
+    Str url = request.url;
+    bool noRedirect = request.noRedirect;
     if (!out || !HttpUrlIsRemote(url)) {
         return false;
     }
@@ -70,8 +81,22 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
              requestWithURL:u
                 cachePolicy:NSURLRequestUseProtocolCachePolicy
             timeoutInterval:(NSTimeInterval)kHttpTimeoutMs / 1000.0];
-        [req setHTTPMethod:@"GET"];
+        NSString* verb =
+            request.method.len > 0 ? NSFromStr(request.method) : @"GET";
+        [req setHTTPMethod:verb];
         [req setValue:@"gpui/1.0" forHTTPHeaderField:@"User-Agent"];
+        for (int i = 0; i < request.nHeaders; i++) {
+            NSString* name = NSFromStr(request.headers[i].name);
+            NSString* value = NSFromStr(request.headers[i].value);
+            if (name && value) {
+                [req setValue:value forHTTPHeaderField:name];
+            }
+        }
+        if (request.body.len > 0) {
+            [req setHTTPBody:[NSData
+                                 dataWithBytes:request.body.s
+                                        length:(NSUInteger)request.body.len]];
+        }
 
         __block NSData* body = nil;
         __block NSHTTPURLResponse* rsp = nil;
@@ -138,11 +163,16 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
 }
 
 bool HttpGet(Str url, HttpRsp* out) {
-    return HttpGetInternal(url, out, false);
+    HttpReq req;
+    req.url = url;
+    return HttpSend(req, out);
 }
 
 bool HttpGetNoRedirect(Str url, HttpRsp* out) {
-    return HttpGetInternal(url, out, true);
+    HttpReq req;
+    req.url = url;
+    req.noRedirect = true;
+    return HttpSend(req, out);
 }
 
 } // namespace gpui

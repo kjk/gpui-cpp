@@ -145,7 +145,9 @@ static bool ReadResponse(HINTERNET req, const wchar_t* base, bool noRedirect,
     }
 }
 
-static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
+bool HttpSend(const HttpReq& req, HttpRsp* out) {
+    Str url = req.url;
+    bool noRedirect = req.noRedirect;
     if (!out || !HttpUrlIsRemote(url)) {
         return false;
     }
@@ -198,22 +200,51 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
                 DWORD flags = uc.nScheme == INTERNET_SCHEME_HTTPS
                                   ? WINHTTP_FLAG_SECURE
                                   : 0;
-                WinHttpHandle req;
-                req.h = WinHttpOpenRequest(
-                    conn.h, L"GET", pathLen > 0 ? path : L"/", nullptr,
-                    WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+                wchar_t* verb =
+                    ToWide(req.method.len > 0 ? req.method : StrL("GET"));
+                // Every request header in one CRLF-separated block, which is
+                // the shape WinHttpSendRequest takes. The caller has already
+                // decided these may be sent.
+                wchar_t* headers = nullptr;
+                bool headersReady = true;
+                if (req.nHeaders > 0) {
+                    StrBuilder block;
+                    for (int i = 0; i < req.nHeaders; i++) {
+                        block.Append(req.headers[i].name);
+                        block.Append(StrL(": "));
+                        block.Append(req.headers[i].value);
+                        block.Append(StrL("\r\n"));
+                    }
+                    Str text = block.TakeStr();
+                    headers = text.s ? ToWide(text) : nullptr;
+                    headersReady = headers != nullptr;
+                    StrFree(text);
+                }
+                WinHttpHandle request;
+                request.h = verb ? WinHttpOpenRequest(
+                                       conn.h, verb, pathLen > 0 ? path : L"/",
+                                       nullptr, WINHTTP_NO_REFERER,
+                                       WINHTTP_DEFAULT_ACCEPT_TYPES, flags)
+                                 : nullptr;
                 DWORD redirectPolicy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
                 bool redirectReady =
                     !noRedirect ||
-                    (req.h &&
-                     WinHttpSetOption(req.h, WINHTTP_OPTION_REDIRECT_POLICY,
+                    (request.h &&
+                     WinHttpSetOption(request.h, WINHTTP_OPTION_REDIRECT_POLICY,
                                       &redirectPolicy, sizeof(redirectPolicy)));
-                if (req.h && redirectReady &&
-                    WinHttpSendRequest(req.h, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                       WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-                    WinHttpReceiveResponse(req.h, nullptr)) {
-                    ok = ReadResponse(req.h, wurl, noRedirect, out);
+                if (request.h && redirectReady && headersReady &&
+                    WinHttpSendRequest(
+                        request.h,
+                        headers ? headers : WINHTTP_NO_ADDITIONAL_HEADERS,
+                        headers ? (DWORD)-1 : 0,
+                        req.body.len > 0 ? (void*)req.body.s
+                                         : WINHTTP_NO_REQUEST_DATA,
+                        (DWORD)req.body.len, (DWORD)req.body.len, 0) &&
+                    WinHttpReceiveResponse(request.h, nullptr)) {
+                    ok = ReadResponse(request.h, wurl, noRedirect, out);
                 }
+                Free(nullptr, headers);
+                Free(nullptr, verb);
             }
         }
     }
@@ -226,11 +257,16 @@ static bool HttpGetInternal(Str url, HttpRsp* out, bool noRedirect) {
 }
 
 bool HttpGet(Str url, HttpRsp* out) {
-    return HttpGetInternal(url, out, false);
+    HttpReq req;
+    req.url = url;
+    return HttpSend(req, out);
 }
 
 bool HttpGetNoRedirect(Str url, HttpRsp* out) {
-    return HttpGetInternal(url, out, true);
+    HttpReq req;
+    req.url = url;
+    req.noRedirect = true;
+    return HttpSend(req, out);
 }
 
 } // namespace gpui

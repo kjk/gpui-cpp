@@ -1,21 +1,24 @@
 #ifndef GPUI_SYS_HTTP_H_
 #define GPUI_SYS_HTTP_H_
-/* A GET, and the OS's own library to make it with.
+/* One request, and the OS's own library to make it with.
 
-   This is the whole of the network in this tree: fetch the bytes at an
-   http(s) URL, and nothing else — no POST, no cookies, no connection kept.
-   The image path follows redirects through the platform client; the shell
-   path exposes each redirect so its capability policy can approve the target
-   first. That is what a remote image and a guarded fetch need, and a bigger
-   client would need a bigger reason.
+   This is the whole of the network in this tree: send one http(s) request and
+   read its answer. A method, request headers and a request body are carried,
+   because `crates/shell`'s `fetch` carries them and an OAuth form exchange or
+   an authenticated read is the ordinary shape of what a script does. What is
+   still not here: cookies, a session, a connection kept alive, a socket, a
+   TLS stack of ours. The image path follows redirects through the platform
+   client; the shell path exposes each redirect so its capability policy can
+   approve the target first.
 
    Each platform brings its own, so there is no library to vendor and no TLS
    stack to carry: WinHTTP on Windows, NSURLSession on macOS, libcurl on
    Linux, which is the same place X11, cairo and Pango come from.
 
-   `HttpGet` blocks, so nothing on the UI thread may call it. `HttpFetch` is
-   the half that does: it hands the URL to a worker thread and answers what
-   the cache holds now, so a paint asks every frame and never waits. */
+   `HttpSend` and `HttpGet` block, so nothing on the UI thread may call them.
+   `HttpFetch` is the half that does: it hands the URL to a worker thread and
+   answers what the cache holds now, so a paint asks every frame and never
+   waits. */
 
 #include "base.h"
 
@@ -38,16 +41,41 @@ struct HttpRsp {
 
 void HttpRspFree(HttpRsp* r);
 
+// One request header. Both halves are borrowed for the length of the call:
+// the request is sent before `HttpSend` returns, so nothing here is copied.
+struct HttpHeader {
+    Str name;
+    Str value;
+};
+
+// What to send. `method` empty means GET. `body` is sent as the request
+// entity for any method that has one; an empty body sends none, so a GET
+// carries no Content-Length it did not ask for.
+//
+// The caller has already decided that these headers may be sent — the
+// platform layer sets no header of its own beyond what the client needs to
+// make the connection, and rejects none.
+struct HttpReq {
+    Str url;
+    Str method;
+    const HttpHeader* headers = nullptr;
+    int nHeaders = 0;
+    Str body;
+    // Answer a 3xx rather than following it, filling `redirectUrl` with the
+    // absolute target. Shell uses this so its capability policy can approve a
+    // Location before anything contacts it.
+    bool noRedirect = false;
+};
+
 // Answers true when the transfer finished, whatever the status: `status` and
 // `body` are then the server's. False means it never got that far.
 //
-// A body over `kHttpMaxBody` is refused rather than truncated, and the whole
-// thing gives up after `kHttpTimeoutMs`.
-bool HttpGet(Str url, HttpRsp* out);
+// A response body over `kHttpMaxBody` is refused rather than truncated, and
+// the whole thing gives up after `kHttpTimeoutMs`.
+bool HttpSend(const HttpReq& req, HttpRsp* out);
 
-// One GET without automatic redirects. Shell uses this narrower seam so it
-// can capability-check a Location target before contacting it. HttpGet keeps
-// the platform client's ordinary redirect behavior for remote images.
+// The two GETs the image path is written against, in terms of the above.
+bool HttpGet(Str url, HttpRsp* out);
 bool HttpGetNoRedirect(Str url, HttpRsp* out);
 
 // Big enough for any picture a document sensibly holds, small enough that a

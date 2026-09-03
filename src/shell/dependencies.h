@@ -8,8 +8,8 @@
 // editor at the same checkouts the runtime is about to execute.
 //
 // Everything here shells out to the `git` executable through the existing
-// bounded process runner. Nothing in this file speaks a network protocol; the
-// repository's one system-backed GET is untouched.
+// bounded process runner. Nothing in this file speaks a network protocol;
+// the system HTTP client in src/sys/http.h is untouched.
 
 namespace gpui::shell {
 

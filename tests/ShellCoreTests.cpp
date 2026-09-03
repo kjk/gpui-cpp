@@ -2022,9 +2022,27 @@ static void ShellCryptoAndCompressionMatchStandardRuntime() {
 
 static int gShellFetchCalls = 0;
 static int gShellFetchMode = 0;
+static Str gShellFetchMethod;
+static Str gShellFetchBody;
+static Str gShellFetchHeaders;
 
-static bool ShellFetchFixture(Str url, HttpRsp* out) {
+static bool ShellFetchFixture(const HttpReq& req, HttpRsp* out) {
     gShellFetchCalls++;
+    Str url = req.url;
+    StrFree(gShellFetchMethod);
+    gShellFetchMethod = StrDup(req.method);
+    StrFree(gShellFetchBody);
+    gShellFetchBody = StrDup(req.body);
+    StrBuilder headers;
+    for (int i = 0; i < req.nHeaders; i++) {
+        headers.Append(req.headers[i].name);
+        headers.Append(StrL(":"));
+        headers.Append(req.headers[i].value);
+        headers.Append(StrL(";"));
+    }
+    StrFree(gShellFetchHeaders);
+    gShellFetchHeaders = headers.TakeStr();
+
     if (gShellFetchMode == 1 && StrEq(url, "https://api.example.test/start")) {
         out->status = 302;
         out->redirectUrl = StrDup(StrL("https://cdn.example.test/result"));
@@ -2033,6 +2051,19 @@ static bool ShellFetchFixture(Str url, HttpRsp* out) {
     if (gShellFetchMode == 2 && StrEq(url, "https://api.example.test/start")) {
         out->status = 302;
         out->redirectUrl = StrDup(StrL("http://api.example.test/result"));
+        return true;
+    }
+    if (gShellFetchMode == 3 && StrEq(url, "https://api.example.test/start")) {
+        // A 303 turns any method but HEAD into a bodyless GET, which is what
+        // makes this redirect same-origin-safe to follow.
+        out->status = 303;
+        out->redirectUrl = StrDup(StrL("https://api.example.test/result"));
+        return true;
+    }
+    if (StrEq(url, "https://api.example.test/result")) {
+        out->status = 200;
+        const char* body = "after";
+        memcpy(VecAppendBlanks(out->body, 5), body, 5);
         return true;
     }
     if (StrEq(url, "https://cdn.example.test/result")) {
@@ -2050,29 +2081,214 @@ static bool ShellFetchFixture(Str url, HttpRsp* out) {
     return false;
 }
 
+// fetch.rs: only_location_redirect_statuses_are_followed.
+static void ShellFetchFollowsOnlyLocationRedirectStatuses() {
+    for (int status : {301, 302, 303, 307, 308}) {
+        utassert(FetchFollowsLocation(status));
+    }
+    for (int status : {300, 304, 305, 200, 400}) {
+        utassert(!FetchFollowsLocation(status));
+    }
+}
+
+// fetch.rs: redirect_statuses_apply_fetch_method_and_body_rewrites.
+static void ShellFetchRedirectsRewriteMethodAndBody() {
+    struct Case {
+        int status;
+        const char* initial;
+        const char* expected;
+    };
+    static const Case cases[] = {
+        {301, "POST", "GET"}, {302, "POST", "GET"},  {303, "PUT", "GET"},
+        {307, "POST", "POST"}, {308, "POST", "POST"},
+    };
+    for (const Case& c : cases) {
+        Str method = StrDup(Str(c.initial));
+        Str body = StrDup(StrL("side effect"));
+        Vec<FetchHeader> headers;
+        FetchHeader type;
+        type.name = StrDup(StrL("Content-Type"));
+        type.value = StrDup(StrL("application/json"));
+        VecAppend(headers, type);
+
+        FetchRewriteRedirect(c.status, &method, &headers, &body);
+
+        utassert(StrEq(method, Str(c.expected)));
+        if (StrEq(method, StrL("GET"))) {
+            utassert(body.len == 0 && headers.len == 0);
+        } else {
+            utassert(body.len > 0 && headers.len == 1);
+        }
+        StrFree(method);
+        StrFree(body);
+        for (int i = 0; i < headers.len; i++) {
+            StrFree(headers[i].name);
+            StrFree(headers[i].value);
+        }
+        VecReset(headers);
+    }
+}
+
+// fetch.rs: origin_comparison_includes_scheme_host_and_effective_port.
+static void ShellFetchOriginComparesSchemeHostAndEffectivePort() {
+    Str origin = StrL("https://api.example.test:443/v1/quote");
+    utassert(FetchSameOrigin(origin, StrL("https://api.example.test/next")));
+    utassert(!FetchSameOrigin(origin, StrL("http://api.example.test/next")));
+    utassert(!FetchSameOrigin(origin, StrL("https://other.example.test/next")));
+    utassert(
+        !FetchSameOrigin(origin, StrL("https://api.example.test:8443/next")));
+}
+
+// fetch.rs: the four authorize_redirect refusals.
+static void ShellFetchRedirectsKeepCredentialsOnTheirOrigin() {
+    Capabilities two;
+    two.AddNetworkHost(StrL("api.example.test"))
+        .AddNetworkHost(StrL("login.example.test"))
+        .AddNetworkHost(StrL("cdn.example.test"));
+
+    // authorization_never_follows_a_cross_origin_redirect
+    Vec<FetchHeader> bearer;
+    FetchHeader authorization;
+    authorization.name = StrDup(StrL("Authorization"));
+    authorization.value = StrDup(StrL("Bearer secret"));
+    VecAppend(bearer, authorization);
+    Str error = {};
+    utassert(!FetchAuthorizeRedirect(
+        two, StrL("GET"), StrL("https://api.example.test/v1/quote"),
+        StrL("https://login.example.test/continue"), bearer, &error));
+    utassert(StrContains(error, StrL("cross-origin redirect")));
+    StrFree(error);
+    error = {};
+    // The same header does follow a redirect that stays on its origin.
+    utassert(FetchAuthorizeRedirect(
+        two, StrL("GET"), StrL("https://api.example.test/v1/quote"),
+        StrL("https://api.example.test/v2/quote"), bearer, &error));
+    StrFree(error);
+    error = {};
+    StrFree(bearer[0].name);
+    StrFree(bearer[0].value);
+    VecReset(bearer);
+
+    // https_redirects_never_downgrade_to_plain_http
+    Vec<FetchHeader> none;
+    utassert(!FetchAuthorizeRedirect(two, StrL("GET"),
+                                     StrL("https://api.example.test/start"),
+                                     StrL("http://api.example.test/continue"),
+                                     none, &error));
+    utassert(StrContains(error, StrL("HTTPS downgrade")));
+    StrFree(error);
+    error = {};
+
+    // a_post_is_never_replayed_across_origins
+    utassert(!FetchAuthorizeRedirect(two, StrL("POST"),
+                                     StrL("https://api.example.test/token"),
+                                     StrL("https://login.example.test/token"),
+                                     none, &error));
+    utassert(StrContains(error, StrL("POST")) &&
+             StrContains(error, StrL("cross-origin")));
+    StrFree(error);
+    error = {};
+
+    // caller_supplied_headers_never_follow_a_cross_origin_redirect
+    Vec<FetchHeader> custom;
+    FetchHeader key;
+    key.name = StrDup(StrL("X-Api-Key"));
+    key.value = StrDup(StrL("secret"));
+    VecAppend(custom, key);
+    utassert(!FetchAuthorizeRedirect(two, StrL("GET"),
+                                     StrL("https://api.example.test/data"),
+                                     StrL("https://cdn.example.test/data"),
+                                     custom, &error));
+    utassert(StrContains(error, StrL("request headers")));
+    StrFree(error);
+    error = {};
+    StrFree(custom[0].name);
+    StrFree(custom[0].value);
+    VecReset(custom);
+
+    // a_redirect_is_checked_against_http_method_and_path_rules
+    HttpRequestGrant allowed(StrL("api.example.test"));
+    allowed.AddMethod(StrL("GET")).AddPath(StrL("/allowed"));
+    Capabilities scoped;
+    scoped.AddHttpRequest(allowed);
+    utassert(!FetchAuthorizeRedirect(scoped, StrL("GET"),
+                                     StrL("https://api.example.test/allowed"),
+                                     StrL("https://api.example.test/admin"),
+                                     none, &error));
+    utassert(StrContains(error, StrL("HTTP request")));
+    StrFree(error);
+}
+
+// fetch.rs: an_http_rule_cannot_be_bypassed_with_an_unlisted_method_or_path,
+// and an_http_rule_is_bound_to_scheme_effective_port_and_path_segments.
+static void ShellFetchGrantsBindMethodSchemePortAndPath() {
+    HttpRequestGrant readOnly(StrL("api.example.test"));
+    readOnly.AddMethod(StrL("GET")).AddPath(StrL("/v1/read/profile"));
+    Capabilities exact;
+    exact.AddHttpRequest(readOnly);
+    utassert(FetchAuthorize(StrL("https://api.example.test/v1/read/profile"),
+                            StrL("GET"), exact));
+    utassert(!FetchAuthorize(StrL("https://api.example.test/v1/read/profile"),
+                             StrL("POST"), exact));
+    utassert(!FetchAuthorize(StrL("https://api.example.test/v1/write/item"),
+                             StrL("POST"), exact));
+
+    HttpRequestGrant prefixed(StrL("api.example.test"));
+    prefixed.AddMethod(StrL("GET")).AddPathPrefix(StrL("/v1/account"));
+    Capabilities scoped;
+    scoped.AddHttpRequest(prefixed);
+    utassert(FetchAuthorize(
+        StrL("https://api.example.test/v1/account/profile"), StrL("GET"),
+        scoped));
+    utassert(!FetchAuthorize(
+        StrL("http://api.example.test/v1/account/profile"), StrL("GET"),
+        scoped));
+    utassert(!FetchAuthorize(
+        StrL("https://api.example.test:8443/v1/account/profile"), StrL("GET"),
+        scoped));
+    utassert(!FetchAuthorize(
+        StrL("https://api.example.test/v1/accounts-delete"), StrL("GET"),
+        scoped));
+}
+
+static void ShellFetchProhibitsTheHeadersTheClientOwns() {
+    for (const char* name :
+         {"Host", "content-length", "Connection", "Expect",
+          "Proxy-Authenticate", "proxy-authorization", "TE", "Trailer",
+          "Transfer-Encoding", "upgrade"}) {
+        utassert(FetchHeaderIsProhibited(Str(name)));
+    }
+    for (const char* name :
+         {"Authorization", "Content-Type", "Accept", "X-Api-Key"}) {
+        utassert(!FetchHeaderIsProhibited(Str(name)));
+    }
+}
+
 static void ShellFetchChecksEveryGetTargetBeforeContact() {
     HttpRequestGrant exact(StrL("api.example.test"));
     exact.AddMethod(StrL("GET")).AddPath(StrL("/v1/quote"));
     Capabilities scoped;
     scoped.AddHttpRequest(exact);
     Str fetchError;
-    utassert(FetchAuthorizeGet(
-        StrL("https://api.example.test/v1/quote?currency=usd"), scoped,
-        &fetchError));
+    utassert(FetchAuthorize(
+        StrL("https://api.example.test/v1/quote?currency=usd"), StrL("GET"),
+        scoped, &fetchError));
     utassert(!fetchError);
-    utassert(!FetchAuthorizeGet(StrL("https://api.example.test/v1/private"),
-                                scoped, &fetchError));
+    utassert(!FetchAuthorize(StrL("https://api.example.test/v1/private"),
+                             StrL("GET"), scoped, &fetchError));
     utassert(fetchError);
     StrFree(fetchError);
 
     Capabilities both;
     both.AddNetworkHost(StrL("api.example.test"))
         .AddNetworkHost(StrL("cdn.example.test"));
-    FetchSetHttpGetForTests(ShellFetchFixture);
+    FetchSetHttpSendForTests(ShellFetchFixture);
     gShellFetchCalls = 0;
     gShellFetchMode = 1;
+    FetchRequest request;
+    request.url = StrDup(StrL("https://api.example.test/start"));
     FetchResult result;
-    utassert(FetchGet(StrL("https://api.example.test/start"), both, &result));
+    utassert(FetchSend(request, both, &result));
     utassert(!result.error && result.status == 201 &&
              StrEq(result.url, "https://cdn.example.test/result") &&
              StrEq(result.body, "redirected"));
@@ -2083,19 +2299,52 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     initialOnly.AddNetworkHost(StrL("api.example.test"));
     gShellFetchCalls = 0;
     gShellFetchMode = 1;
-    utassert(!FetchGet(StrL("https://api.example.test/start"), initialOnly,
-                       &result));
+    utassert(!FetchSend(request, initialOnly, &result));
     utassert(result.error && gShellFetchCalls == 1);
     result.Free();
 
     gShellFetchCalls = 0;
     gShellFetchMode = 2;
-    utassert(!FetchGet(StrL("https://api.example.test/start"), initialOnly,
-                       &result));
+    utassert(!FetchSend(request, initialOnly, &result));
     utassert(result.error &&
              StrContains(result.error, StrL("HTTPS downgrade")) &&
              gShellFetchCalls == 1);
     result.Free();
+
+    // A POST reaches the wire as a POST, carrying its body and its headers.
+    gShellFetchCalls = 0;
+    gShellFetchMode = 0;
+    FetchRequest posted;
+    posted.url = StrDup(StrL("https://api.example.test/data"));
+    posted.method = StrDup(StrL("POST"));
+    posted.body = StrDup(StrL("grant_type=client_credentials"));
+    FetchHeader type;
+    type.name = StrDup(StrL("Content-Type"));
+    type.value = StrDup(StrL("application/x-www-form-urlencoded"));
+    VecAppend(posted.headers, type);
+    utassert(FetchSend(posted, initialOnly, &result));
+    utassert(!result.error && result.status == 200 &&
+             StrEq(gShellFetchMethod, "POST") &&
+             StrEq(gShellFetchBody, "grant_type=client_credentials") &&
+             StrContains(gShellFetchHeaders,
+                         StrL("Content-Type:application/"
+                              "x-www-form-urlencoded;")));
+    result.Free();
+
+    // A 303 answering that POST continues as a GET with no body, and the
+    // header that described the body does not follow it.
+    gShellFetchCalls = 0;
+    gShellFetchMode = 3;
+    StrFree(posted.url);
+    posted.url = StrDup(StrL("https://api.example.test/start"));
+    utassert(FetchSend(posted, initialOnly, &result));
+    utassert(!result.error && result.status == 200 &&
+             StrEq(result.body, "after") && gShellFetchCalls == 2 &&
+             StrEq(gShellFetchMethod, "GET") && gShellFetchBody.len == 0 &&
+             gShellFetchHeaders.len == 0);
+    result.Free();
+    posted.Free();
+    request.Free();
 
     App app;
     Window window;
@@ -2111,35 +2360,40 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     Str source = StrL(
         "import { View, div } from 'gpui';\n"
         "globalThis.fetchResult = 'pending';\n"
-        // 9a64d865 makes `method` a token check rather than a two-name list.
-        // The token check and its refusal are ported; a method that is a
-        // method but is not GET is still outside this repository's network
-        // boundary, and is refused for that reason instead.
-        "let postRefused = false; try { fetch('https://api.example.test/data', { method: 'POST' }); } catch (error) { postRefused = error.message.includes('GET only'); }\n"
-        "if (!postRefused) throw new Error('POST was not refused');\n"
-        "let putRefused = false; try { fetch('https://api.example.test/data', { method: 'put' }); } catch (error) { putRefused = error.message.includes('`put` is outside'); }\n"
-        "if (!putRefused) throw new Error('PUT was not refused as a boundary');\n"
+        // 9a64d865 makes `method` a token check rather than a two-name list:
+        // what may be sent where is the capability policy's decision, which
+        // already takes the method.
         "for (const bad of ['', 'a method', '\"GET\"', 'GET/1']) {\n"
         "  let refused = false;\n"
         "  try { fetch('https://api.example.test/data', { method: bad }); } catch (error) { refused = error.message.includes('is not an HTTP method'); }\n"
         "  if (!refused) throw new Error(`\\`${bad}\\` was not refused as a non-method`);\n"
         "}\n"
+        "let ownedRefused = false;\n"
+        "try { fetch('https://api.example.test/data', { headers: { 'Content-Length': '3' } }); } catch (error) { ownedRefused = error.message.includes('may not set'); }\n"
+        "if (!ownedRefused) throw new Error('a client-owned header was not refused');\n"
+        "let shapeRefused = false;\n"
+        "try { fetch('https://api.example.test/data', { body: 42 }); } catch (error) { shapeRefused = error.message.includes('string or Uint8Array'); }\n"
+        "if (!shapeRefused) throw new Error('a body that is neither string nor bytes was not refused');\n"
+        "let unknownRefused = false;\n"
+        "try { fetch('https://api.example.test/data', { mode: 'cors' }); } catch (error) { unknownRefused = error.message.includes('unknown option'); }\n"
+        "if (!unknownRefused) throw new Error('an unknown option was not refused');\n"
         "export default class Main extends View {\n"
         "  init(props, cx) { cx.spawn(async cx => {\n"
+        "    const posted = await fetch('https://api.example.test/data', { method: 'post', headers: { 'X-Api-Key': 'k' }, body: 'hello' });\n"
         "    const response = await fetch('https://api.example.test/data');\n"
         "    const text = response.text(), json = response.json();\n"
-        "    fetchResult = `${response.status}|${response.ok}|${response.url}|${text instanceof Promise}|${await text}|${(await json).answer}`; cx.notify();\n"
+        "    fetchResult = `${posted.status}|${response.status}|${response.ok}|${response.url}|${text instanceof Promise}|${await text}|${(await json).answer}`; cx.notify();\n"
         "  }); }\n"
         "  render(cx) { return div().child(fetchResult); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("fetch.js"), source,
-                                               &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
+    ViewType* type2 = runtime
+                          ? runtime->LoadSource(StrL("fetch.js"), source,
+                                                &error)
+                          : nullptr;
+    Entity<ScriptView> view = type2
+                                  ? ScriptView::New(&app, runtime, type2)
                                   : Entity<ScriptView>{};
-    ViewTypeRelease(type);
+    ViewTypeRelease(type2);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
     El* root = view.IsValid()
@@ -2148,16 +2402,24 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     utassert(root != nullptr && !error.IsSet());
     utassert(ExecWaitIdle(5000));
     utassert(runtime && runtime->Eval(
-        StrL("if (fetchResult !== '200|true|https://api.example.test/data|true|{\"answer\":42}|42') throw new Error(fetchResult)"),
+        StrL("if (fetchResult !== '200|200|true|https://api.example.test/data|true|{\"answer\":42}|42') throw new Error(fetchResult)"),
         StrL("fetch-result.js"), &error));
-    utassert(runtime && runtime->LiveTasks() == 0 && gShellFetchCalls == 1);
+    // The lowercase `post` reached the policy and the wire upper-cased.
+    utassert(StrEq(gShellFetchMethod, "GET"));
+    utassert(runtime && runtime->LiveTasks() == 0 && gShellFetchCalls == 2);
     EntityDrop(&app, view.id);
     app.windows.len = 0;
     ArenaDelete(frame);
     runtime->Release();
     ShellErrorClear(&error);
     AppGlobalClear(&app);
-    FetchSetHttpGetForTests(nullptr);
+    FetchSetHttpSendForTests(nullptr);
+    StrFree(gShellFetchMethod);
+    gShellFetchMethod = {};
+    StrFree(gShellFetchBody);
+    gShellFetchBody = {};
+    StrFree(gShellFetchHeaders);
+    gShellFetchHeaders = {};
     Capabilities denied;
     PolicyUpdateDefaultCapabilities(denied);
 }
@@ -3293,6 +3555,12 @@ void TestShellCore() {
     ShellFilesystemUsesGrantedHandleRelativePaths();
     ShellAssetsStayInsideTheApplicationRoot();
     ShellCryptoAndCompressionMatchStandardRuntime();
+    ShellFetchFollowsOnlyLocationRedirectStatuses();
+    ShellFetchRedirectsRewriteMethodAndBody();
+    ShellFetchOriginComparesSchemeHostAndEffectivePort();
+    ShellFetchRedirectsKeepCredentialsOnTheirOrigin();
+    ShellFetchGrantsBindMethodSchemePortAndPath();
+    ShellFetchProhibitsTheHeadersTheClientOwns();
     ShellFetchChecksEveryGetTargetBeforeContact();
     ShellAccessibilityRolesMirrorUpstream();
     ShellDockPanelsPersistAndChromeRunsInLayoutScope();

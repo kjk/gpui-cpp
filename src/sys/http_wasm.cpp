@@ -23,6 +23,12 @@
 
 namespace gpui {
 
+bool HttpSend(const HttpReq& req, HttpRsp* out) {
+    (void)req;
+    (void)out;
+    return false;
+}
+
 bool HttpGet(Str url, HttpRsp* out) {
     (void)url;
     (void)out;

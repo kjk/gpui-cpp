@@ -11654,3 +11654,58 @@ header it includes. The bench helper is `MdParseRun` now. `bun
 cmd/bench.ts` reports no asymptotic change — the 316x316 grid is 285 ms,
 which is the number that matters, since that is the shape a bad sort took
 94 seconds on.
+
+## fetch carries a method, headers and a body
+
+The standing network boundary moves. It was one system-backed GET, and
+`9a64d865` was ported against it: the method token check landed, and a method
+that was a method but was not GET was refused with a message naming the
+boundary. That refusal is gone. `crates/shell`'s `fetch` is now ported whole,
+which is what makes an OAuth form exchange and an authenticated read work.
+
+`src/sys/http.h` grew `HttpSend(const HttpReq&, HttpRsp*)`. `HttpReq` carries
+the URL, a method, request headers and a request body, and `noRedirect` — the
+flag that used to be a second entry point. `HttpGet` and `HttpGetNoRedirect`
+are the two-line wrappers the image path still calls. All four backends
+implement it: WinHTTP builds one CRLF-separated header block and passes the
+body to `WinHttpSendRequest`; libcurl uses `CURLOPT_CUSTOMREQUEST` with
+`POSTFIELDS` and a `curl_slist` (CUSTOMREQUEST rather than POST because
+POSTFIELDS alone would also rewrite a redirect's method behind curl's back,
+and the redirect rules belong to the caller); NSURLSession sets `HTTPMethod`,
+`HTTPBody` and each header on the request; wasm still answers false, because
+everything a page can fetch with is asynchronous and this seam blocks.
+
+`src/shell/fetch.h` is where the policy lives, and it is the part that carries
+the security. `FetchAuthorize` takes the method, so a grant that names `GET`
+does not admit a `POST` to the same path. Then the four refusals from
+`authorize_redirect`, each ported with its upstream test:
+
+- a redirect target needs its own grant, checked before anything contacts it;
+- an HTTPS request never continues onto plaintext;
+- a method that is not GET never replays its body across origins;
+- neither `Authorization` nor any other caller-supplied header follows a
+  redirect off its origin.
+
+`FetchSameOrigin` compares scheme, host and *effective* port, so `https://h`
+and `https://h:443` are one origin. `FetchRewriteRedirect` is upstream's
+rule that a 301 or 302 answering a POST, and a 303 answering anything but
+HEAD, continue as a bodyless GET — and it runs *before* the authorization
+check, so what is approved is the request that would actually be sent.
+`FetchHeaderIsProhibited` refuses the ten headers the client owns.
+
+The JavaScript surface is upstream's: `method`, `headers` and `body`, an
+unknown option refused by name, a header map that must hold strings, a body
+that is a string or a `Uint8Array`, and the 8 MiB request bound. The method
+is upper-cased on the way through, the way `fetch` does, so a policy written
+in the ordinary spelling matches a script that wrote `post`. The generated
+`gpui.d.ts` already declared exactly this surface at the pin, which is what
+it was checked against.
+
+Both cross-origin refusals were checked by mutation: breaking the header rule
+fails two assertions, breaking the POST replay rule fails two more. MSVC
+release passes 23,338 checks, `bun cmd/build.ts -rel -all` and
+`bun cmd/build-no-amalgam.ts -rel` are clean under `/W4 /WX`.
+
+What is still not here, and still wants a bigger reason than tidiness: a
+session, a cookie jar, a connection kept alive, a socket, a WebSocket, and a
+TLS stack of ours.

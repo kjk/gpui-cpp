@@ -114,14 +114,21 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   cancel
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
 - Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
-- A general network beyond one GET. `src/sys/http.h` fetches the bytes at an http(s)
-  URL with the OS's own client — WinHTTP, NSURLSession, libcurl — because a
-  remote image needs it. There is no POST, no session, no socket and no TLS
-  of ours, and a bigger client wants a bigger reason than "it would be tidy".
-  What it is for: `gpui/image.h`. Shell's default-denied capabilities are the
-  exception: its private platform seams implement the bounded HTTP, TCP and
-  WebSocket surface upstream exposes, without turning `src/sys/http.h` into a
-  general client.
+- A general network beyond one request at a time. `src/sys/http.h` sends one
+  http(s) request with the OS's own client — WinHTTP, NSURLSession, libcurl —
+  and reads its answer. It carries a **method, request headers and a request
+  body**, so `crates/shell`'s `fetch` is ported whole: a POST, an OAuth form
+  exchange and an authenticated read all work, and what may be sent to which
+  host on which path is the capability policy's decision rather than a second
+  list in the client. `src/shell/fetch.h` is where that policy lives, and it
+  is the security-carrying part: a redirect is authorized before it is
+  followed, an HTTPS request never continues onto plaintext, a non-GET never
+  replays its body across origins, and neither `Authorization` nor any other
+  caller-supplied header follows a redirect off its origin.
+  There is still no session, no cookie jar, no connection kept alive, no
+  socket, no WebSocket and no TLS of ours, and each of those wants a bigger
+  reason than "it would be tidy". The other caller is `gpui/image.h`, which
+  uses the plain-GET wrappers.
 - Anything that needs a third-party C++ library, by hard rule 3: tree-sitter
   and syntect (so `highlighter` stays the small hand-written lexer it is), an
   LSP client, resvg, ropey, html5ever. Where Rust reaches for one of these and
@@ -223,7 +230,7 @@ implementation per platform:
 | 2D drawing and shaped text                 | `src/gpui/paint.h`     | `src/gpui/paint_win.cpp`  | `src/gpui/paint_linux.cpp`  | `src/gpui/paint_mac.cpp`  | `src/gpui/paint_wasm.cpp`  |
 | the OS window and its event loop           | `src/gpui/platform.h`  | `src/gpui/window_win.cpp` | `src/gpui/window_linux.cpp` | `src/gpui/window_mac.cpp` | `src/gpui/window_wasm.cpp` |
 | system metrics                             | `src/sys/sysinfo.h`    | `src/sys/sysinfo_win.cpp` | `src/sys/sysinfo_linux.cpp` | `src/sys/sysinfo_mac.cpp` | `src/sys/sysinfo_wasm.cpp` |
-| one HTTP GET                               | `src/sys/http.h`       | `src/sys/http_win.cpp`    | `src/sys/http_linux.cpp`    | `src/sys/http_mac.cpp`    | `src/sys/http_wasm.cpp`    |
+| one HTTP request                           | `src/sys/http.h`       | `src/sys/http_win.cpp`    | `src/sys/http_linux.cpp`    | `src/sys/http_mac.cpp`    | `src/sys/http_wasm.cpp`    |
 | a webview in the window                    | `src/wry/wry.h`        | `src/wry/wry_win.cpp`     | `src/wry/wry_linux.cpp`     | `src/wry/wry_mac.cpp`     | `src/wry/wry_wasm.cpp`     |
 
 `_posix.cpp` is the fourth suffix: Linux, macOS **and** wasm compile it, since
