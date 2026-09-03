@@ -246,6 +246,7 @@ const testTargets: Record<string, string[]> = {
   ],
   "ui/checkbox": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/collapsible": ["tests/AccessibilityTests.cpp"],
+  "ui/color_picker": ["tests/ColorPickerTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/combobox": ["tests/SelectTests.cpp", "tests/SearchableListTests.cpp"],
   "ui/command": ["tests/CommandTests.cpp"],
   "ui/description_list": [
@@ -273,6 +274,8 @@ const testTargets: Record<string, string[]> = {
   "ui/notification": ["tests/NotificationTests.cpp"],
   "ui/plot": ["tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
   "ui/popover": ["tests/PopupTests.cpp"],
+  "ui/progress": ["tests/AccessibilityTests.cpp"],
+  "ui/radio": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/root": ["tests/RootTests.cpp"],
   "ui/scroll": ["tests/ScrollbarTests.cpp", "tests/AutoScrollTests.cpp"],
   "ui/select": ["tests/SelectTests.cpp"],
@@ -282,6 +285,7 @@ const testTargets: Record<string, string[]> = {
   "ui/spinner": ["tests/MotionTests.cpp"],
   "ui/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/tab": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/table": ["tests/DataTableTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/text": ["tests/TextViewTests.cpp", "tests/MarkdownTests.cpp"],
   "ui/theme": [
     "tests/ThemeColorTests.cpp",
