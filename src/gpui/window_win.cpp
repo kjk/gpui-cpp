@@ -685,6 +685,9 @@ void AppQuit(Window* win) {
 }
 
 void AppInvalidate(Window* win) {
+    if (win) {
+        win->invalidations++;
+    }
     HWND hwnd = Hwnd(win);
     if (hwnd) {
         InvalidateRect(hwnd, nullptr, FALSE);

@@ -125,4 +125,11 @@ void SysRefresh(SysState* s) {
     VecReset(s->procs);
 }
 
+// crates/fps/src/memory/unsupported.rs: a page publishes no private-memory
+// counter, so the FPS HUD stays on the linear heap PlatSelfUsage reports.
+bool SysSelfPrivateMemory(uint64_t* bytes) {
+    (void)bytes;
+    return false;
+}
+
 } // namespace gpui

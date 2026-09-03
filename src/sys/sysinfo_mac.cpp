@@ -11,6 +11,7 @@
 #include <mach/mach_host.h>
 #include <mach/mach_time.h>
 #include <sys/mount.h>
+#include <sys/resource.h>
 #include <sys/sysctl.h>
 #include <time.h>
 #include <unistd.h>
@@ -253,6 +254,28 @@ void SysRefresh(SysState* s) {
     RefreshDisk(s);
     RefreshBattery(s);
     RefreshProcesses(s);
+}
+
+// crates/fps/src/memory/macos.rs. ri_phys_footprint through proc_pid_rusage:
+// the counter behind Activity Monitor's Memory column and the one the kernel
+// judges a process against under memory pressure. It is the dirty and
+// compressed memory the task owns, so unlike its resident size it does not
+// count the clean pages of the frameworks and the Metal stack it maps.
+//
+// proc_pid_rusage rather than task_info(TASK_VM_INFO), which carries the same
+// footprint: the rusage flavors are a stable public interface with a versioned
+// layout, while task_vm_info_data_t is a Mach structure whose size is the
+// version. V2 is the oldest flavor carrying the footprint, so it is the one
+// asked for.
+bool SysSelfPrivateMemory(uint64_t* bytes) {
+    rusage_info_v2 info = {};
+    if (proc_pid_rusage(getpid(), RUSAGE_INFO_V2, (rusage_info_t*)&info) != 0) {
+        return false;
+    }
+    if (bytes) {
+        *bytes = (uint64_t)info.ri_phys_footprint;
+    }
+    return true;
 }
 
 } // namespace gpui
