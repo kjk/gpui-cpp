@@ -10369,3 +10369,162 @@ for mdast's tab arithmetic, caught by the probe. readme-dist.md documents
 each pair with crate versions filled from the cmd/run.ts pins
 (<taffy-version>, <markdown-version>, <wry-version> beside
 <autocorrect-version>).
+
+## Upstream ingest after `6d07863f`: shell template cache and theme fast path
+
+`14ba7869` changes a README URL and nothing else; there is no C++ equivalent
+to move.
+
+`0e2fb7ac` is the template cache, and the whole mechanism is here.
+`StructureFingerprint` is accumulated on the recording path — one SplitMix64
+mix per component, per operation, per claim and per parent/child edge — rather
+than walked out of the arena afterwards, because a walk that costs the arena's
+length is exactly the cost a template cache exists to remove. `ScriptView`
+compares a new snapshot's fingerprint against the one it replaces and reports
+the answer through `RuntimeMetrics::structureRepeats`, `structureChanges` and
+`StructureRepeatRate`; nothing acts on it, which is upstream's own position.
+One deliberate difference: Rust identifies a builder method by its
+`&'static str` pointer, because its reflection table hands the same pointer to
+every call. Here a method name arrives copied into a per-call arena, so
+`StructureName` hashes the bytes instead. A fingerprint is only ever compared
+against another taken in the same process, from the same view, one render
+apart, so the substitution is invisible.
+
+The cache itself is `Template`, `Slot`, `SlotSite`, `SlotValue` and
+`SpecArena::Graft` / `WriteSlot` / `MountsAnEntity`, plus the discovery half in
+`runtime.cpp`. A body runs once with a sentinel object in each parameter
+position; wherever a sentinel comes to rest is a slot, and what is left over is
+structure. `__template_begin` swaps the description being recorded for a fresh
+arena so a template's ids are dense and start at zero, which makes grafting one
+addition per id; `__template_end` takes it back out and refuses the four things
+a template cannot hold — a body that mounts a retained entity, a body that
+registers its own handler, a parameter that reaches no builder call, and a
+nested template — while `__template_abort` puts the interrupted description
+back when the body threw. A sentinel refuses to become a primitive, so a
+template literal over an argument is a diagnostic where it was written rather
+than a panel that silently stops updating. It stays off the script surface, as
+upstream decided: `globalThis.__template` is how the tests reach it.
+
+Two smaller differences. This tree validates a param style at materialization
+rather than while recording, so upstream's re-run of `style::apply_param` at
+instantiation has nothing to re-run and the equivalent test is not ported; a
+bad colour still reports, one phase later. And one sentinel per builder call is
+supported rather than an arbitrary number, which is all upstream's
+single-value style path can produce anyway; a second in the same call is
+refused with the message that names the three positions a template does fill.
+
+`6761b4ec` makes a script overlay rebuild from the state it closes over. An
+overlay's content is a function over somebody else's state and neither
+`open_dialog` nor `open_sheet` answers a view handle, so nothing can notify it.
+Both shell overlay layers now mark their `ScriptView` dirty as they render,
+which costs no frame of its own — the overlay is about to render as part of
+this one.
+
+`b4393e22` is ported in the half this tree has. `ModifiersObject` is now the
+one place a modifier payload is built, so a press reported through a row
+carries the same fields as one reported through the element it landed on, and
+it gained `platform` and `function` beside the three that were there. The
+`on_modifiers_changed` element method is **not** ported: this runtime has no
+`ModifiersChangedEvent` and no element-level seam for one — `El` has
+`OnKeyDown` and no modifier-change counterpart, and the platform windows
+synthesize nothing of the kind. Adding it is a `src/gpui` change well outside
+`src/shell`, and the element event surface that would carry it (`on_key_down`,
+`on_key_up`, `on_mouse_down`, `on_mouse_up`, `on_mouse_down_out`,
+`on_scroll_wheel`) arrives with `27b08eca`, which is not in this package.
+
+`08d2c8d2` lets a script state its type scale. `set_theme` now reads an
+optional `typography` block — the only block a theme may leave out, because
+colours, spacing and radius are a palette that is either whole or wrong while
+typography arrived after themes were already being written. Every field inside
+it is an override: `{ md: { size: 12 } }` moves the base text size and keeps
+the line height, the weight and both families. A size or a line height of zero
+is refused, a weight outside 1..1000 is refused, and a family is taken as
+written because refusing one would mean this module deciding which fonts exist.
+`cx.theme()` reports the whole scale back, deeply frozen, and `ShellRoot` now
+sets the window's base text size from `typography.md.size` so the chrome it
+draws itself — toasts, the sheet, the dialog scrim — is drawn at the
+application's size rather than at the runtime's default. The two families are
+owned for the life of the process, because `TypographyTokens` carries borrowed
+`Str`s and the base theme is process-global.
+
+`d6c10c21` is ported in its shell half, minus the two pieces that belong to
+other packages. The theme snapshot is now built once per palette rather than
+once per reader: `ThemeTokensSync` bumps a revision only when the tokens or the
+appearance actually change, and `__theme_snapshot` answers the string it
+answered last time while that revision holds. What is **not** ported is the
+root's `.cached(StyleRefinement)` around the script content: this tree rebuilds
+the whole element tree every frame by design (`AGENTS.md`, "App, Window,
+Entity, Ctx", rule 8) and has no per-view subtree cache to reach for —
+`src/gpui/scene.h` caches a frame's *primitives*, not a view's elements. The
+`continuous` and `frame_budget` element methods on `fps_monitor()` are not
+ported either: they are the `crates/fps` half of the same checkin, and
+`FpsOverlayEl` takes only an anchor here until that half lands.
+
+`0ed8a146` keeps theme reads on the JS fast path.
+`__theme_revision(generation)` is a new binding that validates the calling `cx`
+exactly as `__theme_snapshot(generation)` does and answers one number, and the
+prelude's theme cache refreshes only when that number moves or `__theme_dirty`
+is set. `__prepare_theme` warms the cache inside the render scope before
+`render` runs, so the first `cx.theme()` in a description costs what every
+later one does. Upstream dropped the generation from both bindings; this tree
+keeps it, because the stale-`cx` refusal is pinned by an existing test and a
+`cx.theme` that outlived its call must not answer a palette from a frame that
+is over. `ScriptView` now carries the palette revision its snapshot resolved
+against and rebuilds when it moves, which is what makes a theme change reach a
+view nothing notified.
+
+`5bc60f2d` reports a secondary press on a virtual list row. `598d85a2` and its
+revert `ed76af28` touch the same lines and cancel out; only `5bc60f2d`'s final
+state is ported. A list may now register `on_item_secondary_click`, and the row
+wrapper the list already builds for `on_item_click` takes an `OnMouseDown`
+beside the click. The handler filters to the right button, and the payload
+carries `button`, `click_count`, `position`, `local_position` and `modifiers`.
+Upstream captures the row's box with a `canvas` element because a GPUI
+`MouseDownEvent` does not carry one; here `MouseDownEvent::el` is the box of
+the element the press landed on, so `local_position` is a subtraction and the
+extra absolutely-positioned child is not needed. The refusal a handler
+registered inside an item renderer gets now names both list-level handlers.
+
+`cf50074b` lets a script switch on a root-owned performance HUD.
+`show_fps_monitor(options)`, `hide_fps_monitor()` and `fps_monitor_visible()`
+are exported from `gpui-fps`; the root owns the HUD, so what a script renders
+can neither move it nor rebuild it, and the monitor behind it is the window's
+own — the same keyed slot `fps_monitor()` uses — so a HUD hidden and shown
+again keeps its history. `anchor`, `continuous` and `frame_budget` are all
+honoured, because `FpsMonitor` here already carries `continuous` and
+`frameBudget`; an unknown anchor is refused with the eight valid names rather
+than falling back to a corner. The HUD draws above every other layer: it is a
+diagnostic, and a dialog over it would hide the reading the dialog's own frames
+are producing.
+
+`346f7035`'s shell half is a no-op here. `gpui_shell/main.cpp` never shipped a
+palette, so there is no `install_palette` to remove and no
+`bin/default-tokens.json` to move; the checkin's two additions — the
+`colors.selection` token and `ColorTokens::default()` becoming the light
+palette — are `crates/base` changes that belong to the TextView-into-Base
+package, and `src/shell` picks them up for free when `ColorTokens` grows the
+field.
+
+Two upstream halves have no host in this tree.
+`crates/story/src/stories/shell_story.rs` and `crates/story/js/quotes/` are not
+ported — the Shell story page arrives with `39c2c86d`, which is not in this
+package — so `0e2fb7ac`'s shape-repeat readout and `cf50074b`'s story wiring
+have nothing to attach to; the counters they display are on `RuntimeMetrics`
+and ready for the page when it lands. `src/shell/typings_data.cpp` is generated
+from the pinned crate and is never hand-edited: the declarations for
+`typography`, `on_modifiers_changed`, `on_item_secondary_click` and the three
+HUD functions arrive with its next regeneration at the new pin.
+
+The HUD test found one hazard worth recording. `FpsMonitor` samples resources
+on the executor and its completion reaches back for the `App` that spawned it,
+so a monitor left live when its `App` dies hands a later `ExecDrain` a dangling
+pointer — the first suite to render the overlay and then let its stack `App` go
+crashed a completely unrelated test three suites later. The test drains the
+executor and drops the monitor while both are still alive; the underlying
+lifetime is `src/fps`'s and is left to the package that owns it.
+
+Verification: MSVC release tests pass 22,205 checks, and the release
+`gpui_shell` and `story` targets build with `/W4 /WX`. Note for anyone building
+incrementally after these changes — `ScriptView` and `ShellRoot` grew fields,
+and `cmd/test.ts` will relink a stale `tests/` object against the new amalgam;
+delete `out/rel/obj/tests` if a suite that passed starts crashing.

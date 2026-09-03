@@ -34,6 +34,11 @@ El* ScriptView::Render(ScriptView* self, Ctx* cx) {
     if (!self || !self->runtime || !self->type) {
         return Div(cx->a)->Child(TextEl(cx->a, StrL("Shell view is not initialized")));
     }
+    uint32_t revision = shell::ThemeTokensSync(cx->app);
+    if (revision != self->themeRevision) {
+        self->themeRevision = revision;
+        self->dirty = true;
+    }
     if (!self->object) {
         self->object = self->runtime->Instantiate(
             self->type, cx->win, cx->app, self->policy, &self->error, cx->self);
@@ -43,6 +48,16 @@ El* ScriptView::Render(ScriptView* self, Ctx* cx) {
             self->object, cx->win, cx->app, cx->self, self->policy,
             &self->error);
         if (next) {
+            // Measured here rather than anywhere else because this is the only
+            // place two consecutive descriptions of one view exist at the same
+            // time. Nothing acts on the answer: it counts how often a rebuild
+            // produced the shape it replaced, which is what a template cache
+            // would have to be able to fill instead of rebuild. A first build
+            // has no predecessor and is not a data point either way.
+            if (self->snapshot) {
+                self->runtime->RecordStructure(self->snapshot->Structure() ==
+                                               next->Structure());
+            }
             delete self->snapshot;
             self->snapshot = next;
             self->dirty = false;
@@ -161,6 +176,18 @@ void ScriptView::OnBoundString(ScriptView* self, Ctx* cx,
     if (!self || !self->runtime || !value || !value->callback) return;
     self->runtime->DispatchString(value->callback, value->value, cx->win,
                                   cx->app);
+}
+
+// Only the secondary button: the row already reports its click through
+// on_item_click, and a left press here would report the same interaction twice.
+void ScriptView::OnItemSecondaryPress(ScriptView* self, Ctx* cx,
+                                      const MouseDownEvent* event,
+                                      intptr_t binding) {
+    ShellStringBinding* value = (ShellStringBinding*)binding;
+    if (!self || !self->runtime || !event || !value || !value->callback) return;
+    if (event->button != MouseButton::Right) return;
+    self->runtime->DispatchItemSecondaryClick(value->callback, value->value,
+                                              *event, cx->win, cx->app);
 }
 
 void ScriptView::OnSelectAction(ScriptView* self, Ctx* cx,

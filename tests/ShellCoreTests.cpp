@@ -2475,6 +2475,742 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     ShellErrorClear(&error);
 }
 
+// ── templates ────────────────────────────────────────────────────────────
+// Ported from crates/shell/src/tests/template.rs. `template(build)` is a
+// description recorded once and filled per call: the body runs a single time
+// with a sentinel in each parameter position, and every call after that grafts
+// the structure and writes its arguments into the slots.
+
+// Renders one source and answers its debug tree, or an empty Str plus the
+// runtime error the render reported.
+static Str ShellTemplateTree(Arena* into, Str source, Str* failure) {
+    App app;
+    Window window;
+    window.app = &app;
+    ShellError error = {};
+    Str tree = {};
+    if (failure) *failure = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    if (runtime) {
+        ViewType* type =
+            runtime->LoadSource(StrL("template-test.js"), source, &error);
+        ViewObject* object =
+            type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+                 : nullptr;
+        RenderSnapshot* snapshot =
+            object ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr,
+                                            &error)
+                   : nullptr;
+        if (snapshot) {
+            tree = snapshot->DebugTree(into);
+            delete snapshot;
+        } else if (failure) {
+            *failure = StrDup(into, error.message);
+        }
+        ViewObjectRelease(object);
+        ViewTypeRelease(type);
+        runtime->Release();
+    }
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+    return tree;
+}
+
+static bool ShellTemplateRefuses(Str source, Str expected) {
+    Arena* arena = ArenaNew();
+    Str failure = {};
+    Str tree = ShellTemplateTree(arena, source, &failure);
+    bool refused = tree.len == 0 && StrFind(failure, expected) >= 0;
+    ArenaDelete(arena);
+    return refused;
+}
+
+static void ShellTemplatesRecordOnceAndFillPerCall() {
+    // A filled template must be indistinguishable from the chain it replaces.
+    Str inlineSource = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { v_flex, h_flex } from 'gpui-base';\n"
+        "export default class Board extends View {\n"
+        "  render() {\n"
+        "    const rows = [['AAPL', '230.42'], ['MSFT', '410.08']];\n"
+        "    return v_flex().gap(4).children(rows.map(([symbol, price]) =>\n"
+        "      h_flex().gap(6).px(6)\n"
+        "        .child(div().w(80).child(symbol))\n"
+        "        .child(div().w(80).child(price))));\n"
+        "  }\n"
+        "}\n");
+    Str templatedSource = StrL(
+        "import { View, div } from 'gpui';\n"
+        "import { v_flex, h_flex } from 'gpui-base';\n"
+        "const template = globalThis.__template;\n"
+        "const Row = template((symbol, price) =>\n"
+        "  h_flex().gap(6).px(6)\n"
+        "    .child(div().w(80).child(symbol))\n"
+        "    .child(div().w(80).child(price)));\n"
+        "export default class Board extends View {\n"
+        "  render() {\n"
+        "    const rows = [['AAPL', '230.42'], ['MSFT', '410.08']];\n"
+        "    return v_flex().gap(4).children(rows.map(([symbol, price]) =>\n"
+        "      Row(symbol, price)));\n"
+        "  }\n"
+        "}\n");
+    Arena* arena = ArenaNew();
+    Str failure = {};
+    Str inlineTree = ShellTemplateTree(arena, inlineSource, &failure);
+    utassert(inlineTree.len > 0 && failure.len == 0);
+    Str templatedTree = ShellTemplateTree(arena, templatedSource, &failure);
+    utassert(templatedTree.len > 0 && failure.len == 0);
+    utassert(StrEq(inlineTree, templatedTree));
+
+    // A style argument and a handler are slots too, and each call writes its
+    // own.
+    Str slots = ShellTemplateTree(
+        arena,
+        StrL("import { View } from 'gpui';\n"
+             "import { v_flex, Button } from 'gpui-base';\n"
+             "const template = globalThis.__template;\n"
+             "const Row = template((color, label, onPick) =>\n"
+             "  Button.new('pick').bg(color).on_click(onPick).child(label));\n"
+             "export default class Board extends View {\n"
+             "  render() {\n"
+             "    return v_flex()\n"
+             "      .child(Row('#f8f8f8', 'one', () => 1))\n"
+             "      .child(Row('#2563eb', 'two', () => 2));\n"
+             "  }\n"
+             "}\n"),
+        &failure);
+    utassert(failure.len == 0);
+    utassert(StrFind(slots, StrL(".bg(\"#f8f8f8\")")) >= 0);
+    utassert(StrFind(slots, StrL(".bg(\"#2563eb\")")) >= 0);
+    utassert(StrFind(slots, StrL("text \"one\"")) >= 0);
+    utassert(StrFind(slots, StrL("text \"two\"")) >= 0);
+    ArenaDelete(arena);
+
+    // Two calls must not share a handler, and a second render must not reuse
+    // the first render's. A callback belongs to the snapshot that registered
+    // it and is retired with it, so a template holding one would hand a
+    // retired id to every call that followed.
+    {
+        App app;
+        Window window;
+        window.app = &app;
+        ShellError error = {};
+        ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+        utassert(runtime != nullptr);
+        ViewType* type =
+            runtime
+                ? runtime->LoadSource(
+                      StrL("handlers.js"),
+                      StrL("import { View } from 'gpui';\n"
+                           "import { v_flex, Button } from 'gpui-base';\n"
+                           "const template = globalThis.__template;\n"
+                           "const Row = template((label, onPick) =>\n"
+                           "  Button.new('pick').on_click(onPick)"
+                           ".child(label));\n"
+                           "export default class Board extends View {\n"
+                           "  render() {\n"
+                           "    return v_flex().child(Row('one', () => 1))\n"
+                           "      .child(Row('two', () => 2));\n"
+                           "  }\n"
+                           "}\n"),
+                      &error)
+                : nullptr;
+        ViewObject* object =
+            type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+                 : nullptr;
+        utassert(object != nullptr && !error.IsSet());
+        shell::CallbackId seen[4] = {0, 0, 0, 0};
+        int count = 0;
+        RenderSnapshot* held[2] = {nullptr, nullptr};
+        for (int pass = 0; pass < 2 && object; pass++) {
+            held[pass] = runtime->BuildSnapshot(object, &window, &app, {},
+                                                nullptr, &error);
+            utassert(held[pass] != nullptr);
+            if (!held[pass]) break;
+            const SpecArena* specs = held[pass]->Specs();
+            for (SpecId id = 0; id < (SpecId)specs->Len(); id++) {
+                const SpecNode* node = specs->Node(id);
+                if (!node) continue;
+                for (const SpecOp& op : node->ops) {
+                    if (op.kind == SpecOpKind::Callback && count < 4) {
+                        seen[count++] = op.callback;
+                    }
+                }
+            }
+        }
+        utassert(count == 4);
+        for (int i = 0; i < count; i++) {
+            utassert(seen[i] != 0 && seen[i] != UINT64_MAX);
+            for (int j = i + 1; j < count; j++) utassert(seen[i] != seen[j]);
+        }
+        delete held[0];
+        delete held[1];
+        ViewObjectRelease(object);
+        ViewTypeRelease(type);
+        if (runtime) runtime->Release();
+        ShellErrorClear(&error);
+        AppGlobalClear(&app);
+    }
+
+    // The things a template cannot hold, refused where they were written
+    // rather than baked in.
+    utassert(ShellTemplateRefuses(
+        StrL("import { View, div } from 'gpui';\n"
+             "const template = globalThis.__template;\n"
+             "const Row = template((price) => div().child(`$${price}`));\n"
+             "export default class Board extends View {\n"
+             "  render() { return Row('230.42'); }\n"
+             "}\n"),
+        StrL("passed to a builder call but not computed on")));
+    utassert(ShellTemplateRefuses(
+        StrL("import { View } from 'gpui';\n"
+             "import { Button } from 'gpui-base';\n"
+             "const template = globalThis.__template;\n"
+             "const Row = template((label) =>\n"
+             "  Button.new('pick').on_click(() => 1).child(label));\n"
+             "export default class Board extends View {\n"
+             "  render() { return Row('one'); }\n"
+             "}\n"),
+        StrL("Take the handler as a parameter")));
+    utassert(ShellTemplateRefuses(
+        StrL("import { View, div } from 'gpui';\n"
+             "const template = globalThis.__template;\n"
+             "const Row = template((symbol, unused) => div().child(symbol));\n"
+             "export default class Board extends View {\n"
+             "  render() { return Row('AAPL', 'ignored'); }\n"
+             "}\n"),
+        StrL("template argument 1 is never used")));
+    utassert(ShellTemplateRefuses(
+        StrL("import { View, div } from 'gpui';\n"
+             "const template = globalThis.__template;\n"
+             "const Cell = template((value) => div().child(value));\n"
+             "const Row = template((value) => div().child(Cell(value)));\n"
+             "export default class Board extends View {\n"
+             "  render() { return Row('AAPL'); }\n"
+             "}\n"),
+        StrL("template body cannot")));
+    utassert(ShellTemplateRefuses(
+        StrL("import { View } from 'gpui';\n"
+             "import { Checkbox } from 'gpui-base';\n"
+             "const template = globalThis.__template;\n"
+             "const Row = template((flag) =>\n"
+             "  Checkbox.new('pick').disabled(flag));\n"
+             "export default class Board extends View {\n"
+             "  render() { return Row(true); }\n"
+             "}\n"),
+        StrL("text children, style arguments and handlers")));
+    utassert(
+        ShellTemplateRefuses(StrL("import { View, div } from 'gpui';\n"
+                                  "const template = globalThis.__template;\n"
+                                  "const Row = template((symbol, price) =>\n"
+                                  "  div().child(symbol).child(price));\n"
+                                  "export default class Board extends View {\n"
+                                  "  render() { return Row('AAPL'); }\n"
+                                  "}\n"),
+                             StrL("takes 2 argument(s) and was given 1")));
+
+    // A state style survives being grafted twice: the interior of a grafted
+    // subtree arrives already claimed, and only its root is free to attach.
+    {
+        Arena* a = ArenaNew();
+        Str reused = ShellTemplateTree(
+            a,
+            StrL("import { View, div } from 'gpui';\n"
+                 "import { v_flex } from 'gpui-base';\n"
+                 "const template = globalThis.__template;\n"
+                 "const Row = template((label) =>\n"
+                 "  div().hover((s) => s.bg('#111111')).child(label));\n"
+                 "export default class Board extends View {\n"
+                 "  render() {\n"
+                 "    return v_flex().child(Row('one')).child(Row('two'));\n"
+                 "  }\n"
+                 "}\n"),
+            &failure);
+        utassert(failure.len == 0 && reused.len > 0);
+        utassert(StrFind(reused, StrL("text \"one\"")) >= 0);
+        utassert(StrFind(reused, StrL("text \"two\"")) >= 0);
+        ArenaDelete(a);
+    }
+
+    // A body that throws leaves the render it interrupted intact.
+    {
+        Arena* a = ArenaNew();
+        Str after = ShellTemplateTree(
+            a,
+            StrL("import { View } from 'gpui';\n"
+                 "import { v_flex } from 'gpui-base';\n"
+                 "const template = globalThis.__template;\n"
+                 "const Bad = template((value) => {\n"
+                 "  throw new Error('no ' + typeof value);\n"
+                 "});\n"
+                 "export default class Board extends View {\n"
+                 "  render() {\n"
+                 "    let caught = false;\n"
+                 "    try { Bad('x'); } catch (error) { caught = true; }\n"
+                 "    return v_flex().child(caught ? 'recovered' : 'lost');\n"
+                 "  }\n"
+                 "}\n"),
+            &failure);
+        utassert(failure.len == 0);
+        utassert(StrFind(after, StrL("text \"recovered\"")) >= 0);
+        ArenaDelete(a);
+    }
+}
+
+// A rebuild that produced the shape it replaced is counted, and one that did
+// not is counted separately. Nothing acts on the answer: it is the measurement
+// a template cache rests on.
+static void ShellStructureFingerprintsCountRepeatedShapes() {
+    App app;
+    Window window;
+    window.app = &app;
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+    ViewType* type = runtime->LoadSource(
+        StrL("structure.js"),
+        StrL("import { View } from 'gpui';\n"
+             "import { v_flex } from 'gpui-base';\n"
+             "globalThis.shellRows = 1;\n"
+             "globalThis.shellPrice = 'one';\n"
+             "export default class Board extends View {\n"
+             "  render() {\n"
+             "    let root = v_flex();\n"
+             "    for (let i = 0; i < globalThis.shellRows; i += 1)\n"
+             "      root = root.child(globalThis.shellPrice);\n"
+             "    return root;\n"
+             "  }\n"
+             "}\n"),
+        &error);
+    ViewObject* object =
+        type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+             : nullptr;
+    utassert(object != nullptr && !error.IsSet());
+
+    RenderSnapshot* first =
+        object
+            ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
+            : nullptr;
+    utassert(first != nullptr);
+    // The same shape with a different value in it.
+    runtime
+        ->Eval(StrL("globalThis.shellPrice = 'two'"), StrL("edit.js"), &error);
+    RenderSnapshot* second =
+        first
+            ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
+            : nullptr;
+    utassert(second != nullptr);
+    // A row added: a different shape.
+    runtime->Eval(StrL("globalThis.shellRows = 2"), StrL("grow.js"), &error);
+    RenderSnapshot* third =
+        second
+            ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
+            : nullptr;
+    utassert(third != nullptr);
+    if (first && second && third) {
+        utassert(first->Structure() == second->Structure());
+        utassert(second->Structure() != third->Structure());
+        // A first build has no predecessor and is not a data point.
+        runtime->RecordStructure(first->Structure() == second->Structure());
+        runtime->RecordStructure(second->Structure() == third->Structure());
+        RuntimeMetrics reading = runtime->ReadMetrics();
+        utassert(reading.structureRepeats == 1);
+        utassert(reading.structureChanges == 1);
+        double rate = 0;
+        utassert(reading.StructureRepeatRate(&rate) && rate == 0.5);
+        RuntimeMetrics empty = {};
+        utassert(!empty.StructureRepeatRate(&rate));
+        RuntimeMetrics delta = reading.Since(reading);
+        utassert(delta.structureRepeats == 0 && delta.structureChanges == 0);
+    }
+    delete third;
+    delete second;
+    delete first;
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+// A script states the one type size it has an opinion about and keeps the rest
+// of the scale, and cx.theme() reports what it got. Ported from the typography
+// half of crates/shell/src/tests/render.rs.
+static void ScriptThemesCarryATypeScale() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+#define SHELL_TEST_COLORS                                                  \
+    "const colors = { background:'#010203', foreground:'#fafafa', "        \
+    "surface:'#111111', surface_foreground:'#f0f0f0', primary:'#222222', " \
+    "primary_foreground:'#eeeeee', secondary:'#333333', "                  \
+    "secondary_foreground:'#dddddd', muted:'#444444', "                    \
+    "muted_foreground:'#cccccc', accent:'#555555', "                       \
+    "accent_foreground:'#bbbbbb', destructive:'#666666', "                 \
+    "destructive_foreground:'#aaaaaa', border:'#777777', "                 \
+    "input:'#888888', ring:'#999999' };\n"                                 \
+    "const scale = { colors, spacing:{xxs:1,xs:2,sm:3,md:13,lg:21,xl:34,"  \
+    "xxl:55}, radius:{none:0,sm:2,md:9,lg:12,xl:18,full:999} };\n"
+    ViewType* type = runtime->LoadSource(
+        StrL("typography.js"),
+        StrL("import { div, View } from 'gpui';\n"
+             "import { set_theme } from 'gpui-base';\n" SHELL_TEST_COLORS
+             "export default class Typed extends View {\n"
+             "  init() {\n"
+             "    set_theme({ appearance:'dark', tokens: { ...scale,\n"
+             "      typography: { sans:'Iosevka', md: { size: 12 } } } });\n"
+             "  }\n"
+             "  render(cx) {\n"
+             "    const t = cx.theme();\n"
+             "    if (t.typography.sans !== 'Iosevka') throw new "
+             "Error('family');\n"
+             "    if (t.typography.md.size !== 12) throw new Error('size');\n"
+             // Everything left out keeps the token it would have replaced.
+             "    if (t.typography.md.line_height !== 24) throw new "
+             "Error('lh');\n"
+             "    if (t.typography.lg.size !== 18) throw new Error('lg');\n"
+             "    return div().text_size(t.typography.md.size);\n"
+             "  }\n"
+             "}\n"),
+        &error);
+    ViewObject* object =
+        type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+             : nullptr;
+    utassert(object != nullptr && !error.IsSet());
+    Arena* output = ArenaNew();
+    Str spec = object ? runtime->RenderToSpec(output, object, &window, &app, {},
+                                              nullptr, &error)
+                      : Str{};
+    utassert(!error.IsSet() && StrContains(spec, StrL(".text_size(12)")));
+    const BaseTheme* theme = BaseThemeGlobal(&app);
+    utassert(theme && theme->tokens.typography.md.size == 12 &&
+             theme->tokens.typography.md.lineHeight == 24 &&
+             StrEq(theme->tokens.typography.sans, StrL("Iosevka")));
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+
+    // A size or a line height of zero is text that cannot be read, and it
+    // would be applied silently. The spacing and radius scales allow zero
+    // because a gap of zero is a real answer.
+    type = runtime->LoadSource(
+        StrL("bad-typography.js"),
+        StrL("import { div, View } from 'gpui';\n"
+             "import { set_theme } from 'gpui-base';\n" SHELL_TEST_COLORS
+             "export default class Bad extends View {\n"
+             "  init() {\n"
+             "    set_theme({ appearance:'light', tokens: { ...scale,\n"
+             "      typography: { md: { size: 0 } } } });\n"
+             "  }\n"
+             "  render() { return div(); }\n"
+             "}\n"),
+        &error);
+    object = type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+                  : nullptr;
+    utassert(object == nullptr && error.IsSet());
+    utassert(StrContains(error.message, StrL("md.size")) &&
+             StrContains(error.message, StrL("above zero")));
+    ViewObjectRelease(object);
+    ViewTypeRelease(type);
+    ArenaDelete(output);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+#undef SHELL_TEST_COLORS
+
+// A palette change reaches a view that nothing notified, and a palette that did
+// not change costs the view nothing. Ported from the theme half of
+// crates/shell/src/tests/{render,snapshot}.rs.
+static void ScriptViewsRebuildOnlyWhenThePaletteMoves() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+    ViewType* type = runtime->LoadSource(
+        StrL("theme-view.js"),
+        StrL("import { div, View } from 'gpui';\n"
+             "globalThis.themeRenders = 0;\n"
+             "export default class Themed extends View {\n"
+             "  render(cx) {\n"
+             "    globalThis.themeRenders += 1;\n"
+             "    return div().bg(cx.theme().colors.background);\n"
+             "  }\n"
+             "}\n"),
+        &error);
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    utassert(EntityRender(&app, &window, frame, view.id) != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.themeRenders !== 1) throw new Error('first')"),
+        StrL("theme-check.js"), &error));
+    // A clean frame replays the published snapshot without entering the VM.
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, view.id) != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.themeRenders !== 1) throw new Error('reused')"),
+        StrL("theme-reuse.js"), &error));
+    // A new palette does reach it, with nothing having notified the view.
+    BaseTheme base = BaseTheme::Global(&app);
+    base.tokens.colors.background = Rgba8(1, 2, 3, 255);
+    BaseThemeSet(&app, base);
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, view.id) != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.themeRenders !== 2) throw new Error('palette')"),
+        StrL("theme-move.js"), &error));
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, view.id) != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.themeRenders !== 2) throw new Error('settled')"),
+        StrL("theme-settle.js"), &error));
+    utassert(!error.IsSet());
+    EntityDrop(&app, view.id);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+// A dialog's content is a function over somebody else's state, so the root
+// rebuilds it whenever the root itself draws. Ported from
+// `a_dialog_rebuilds_from_the_state_it_closes_over`.
+static void ScriptOverlaysRebuildFromTheStateTheyCloseOver() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+    ViewType* type = runtime->LoadSource(
+        StrL("overlay-state.js"),
+        StrL("import { div, View } from 'gpui';\n"
+             "globalThis.overlayLabel = 'first';\n"
+             "globalThis.overlayRenders = 0;\n"
+             "export default class Host extends View {\n"
+             "  init(props, cx) {\n"
+             "    window.open_dialog(() => {\n"
+             "      globalThis.overlayRenders += 1;\n"
+             "      return div().child(globalThis.overlayLabel);\n"
+             "    });\n"
+             "  }\n"
+             "  render() { return div().child('host'); }\n"
+             "}\n"),
+        &error);
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Entity<ShellRoot> root = ShellRoot::New(&app, view.id);
+    window.root = root.id;
+    Arena* frame = ArenaNew();
+    utassert(EntityRender(&app, &window, frame, root.id) != nullptr);
+    utassert(!error.IsSet());
+    utassert(runtime->Eval(
+        StrL("if (globalThis.overlayRenders < 1) throw new Error('opened')"),
+        StrL("overlay-open.js"), &error));
+    // The state the dialog closes over moves, and nothing notifies the dialog:
+    // the root rebuilds it whenever the root itself draws.
+    utassert(runtime->Eval(StrL("globalThis.overlayLabel = 'second'; "
+                                "globalThis.overlayRenders = 0"),
+                           StrL("overlay-edit.js"), &error));
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, root.id) != nullptr);
+    utassert(runtime->Eval(
+        StrL("if (globalThis.overlayRenders !== 1) throw new Error('rebuilt')"),
+        StrL("overlay-check.js"), &error));
+    utassert(!error.IsSet());
+    EntityDrop(&app, root.id);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+// The performance HUD is the root's: the script says whether and where, and
+// what it renders can neither move the HUD nor rebuild it. Ported from
+// crates/shell/src/engine/quickjs/overlay.rs's own tests.
+static void ScriptsSwitchOnARootOwnedPerformanceHud() {
+    App app;
+    Window window;
+    window.app = &app;
+    VecAppend(app.windows, &window);
+    component::Init(&app);
+    ExecInit();
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+    ViewType* type = runtime->LoadSource(
+        StrL("hud.js"),
+        StrL(
+            "import { div, View } from 'gpui';\n"
+            "import { show_fps_monitor, hide_fps_monitor, fps_monitor_visible }"
+            " from 'gpui-fps';\n"
+            "globalThis.hudShow = () => show_fps_monitor(\n"
+            "  { anchor: 'bottom_left', frame_budget: 8.33 });\n"
+            "globalThis.hudHide = () => hide_fps_monitor();\n"
+            "globalThis.hudVisible = () => fps_monitor_visible();\n"
+            "export default class Host extends View {\n"
+            "  render() { return div().child('host'); }\n"
+            "}\n"),
+        &error);
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Entity<ShellRoot> root = ShellRoot::New(&app, view.id);
+    window.root = root.id;
+    Arena* frame = ArenaNew();
+    utassert(EntityRender(&app, &window, frame, root.id) != nullptr);
+
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = &window;
+    cx.a = frame;
+    cx.self = root.id;
+    utassert(!ShellRootFpsMonitorVisible(&cx));
+    FpsHudRequest request = {};
+    request.anchor = FpsAnchor::BottomLeft;
+    request.continuous = false;
+    request.hasFrameBudget = true;
+    request.frameBudget = 1.f / 120.f;
+    utassert(ShellRootShowFpsMonitor(&cx, request));
+    utassert(ShellRootFpsMonitorVisible(&cx));
+    ShellRoot* state = root.Get(&app);
+    utassert(state && state->fpsHud.anchor == FpsAnchor::BottomLeft &&
+             state->fpsHud.hasFrameBudget && !state->fpsHud.continuous);
+    // Up means drawn: the root's own layer carries the HUD, not the script's.
+    frame->Reset();
+    utassert(EntityRender(&app, &window, frame, root.id) != nullptr);
+    utassert(ShellRootHideFpsMonitor(&cx));
+    utassert(!ShellRootFpsMonitorVisible(&cx));
+    // Nothing was up to take down.
+    utassert(!ShellRootHideFpsMonitor(&cx));
+
+    // Every anchor a script can name resolves, and one it cannot is refused
+    // rather than falling back to a corner — which is what lets the binding
+    // list the valid ones back at the author.
+    FpsAnchor named = FpsAnchor::TopRight;
+    utassert(!FpsAnchorFromName(StrL("middle"), &named));
+    int offset = 0;
+    int anchors = 0;
+    SeqStrings all = FpsAnchorNames();
+    while (offset >= 0) {
+        Str name = SeqStrAt(all, offset);
+        if (!name) break;
+        utassert(FpsAnchorFromName(name, &named));
+        anchors++;
+        SeqStrAdvance(all, offset);
+    }
+    utassert(anchors == 8);
+    utassert(!ShellRootFpsMonitorVisible(&cx));
+
+    // The monitor the HUD drew through samples resources on the executor, and
+    // its completion reaches back for the App that spawned it. Both die with
+    // this frame, so the job is drained and the monitor dropped while they are
+    // still here rather than left for whichever suite drains next.
+    ExecWaitIdle(5000);
+    auto* monitor = KeyedState<Entity<FpsMonitor>>(
+        &cx, (uint32_t)HashClickId(StrL("gpui-fps-monitor")));
+    utassert(monitor && monitor->IsValid());
+    if (monitor && monitor->IsValid()) {
+        EntityDrop(&app, monitor->id);
+        *monitor = {};
+    }
+    EntityDrop(&app, root.id);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
+// A right press on a virtual list row reports the row's key and the press
+// itself, with local_position measured from the row's own box. Ported from
+// the on_item_secondary_click half of crates/shell/src/tests/render.rs.
+static void VirtualListRowsReportASecondaryPress() {
+    App app;
+    Window window;
+    window.app = &app;
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (!runtime) return;
+    ViewType* type = runtime->LoadSource(
+        StrL("virtual-secondary.js"),
+        StrL("import { View, div } from 'gpui';\n"
+             "import { v_virtual_list } from 'gpui-base';\n"
+             "globalThis.pressKey = ''; globalThis.pressButton = '';\n"
+             "globalThis.pressLocalX = -1; globalThis.pressShift = false;\n"
+             "export default class Main extends View {\n"
+             "  render(cx) { return v_virtual_list('rows', 4, 24,\n"
+             "    index => 'row-' + index,\n"
+             "    range => { const out = [];\n"
+             "      for (let i = range.start; i < range.end; i++)\n"
+             "        out.push(div().child('row ' + i));\n"
+             "      return out; })\n"
+             "    .on_item_secondary_click((key, event) => {\n"
+             "      globalThis.pressKey = key;\n"
+             "      globalThis.pressButton = event.button;\n"
+             "      globalThis.pressLocalX = event.local_position.x;\n"
+             "      globalThis.pressShift = event.modifiers.shift;\n"
+             "    }); }\n"
+             "}\n"),
+        &error);
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    ViewTypeRelease(type);
+    Arena* frame = ArenaNew();
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
+    utassert(root != nullptr && !error.IsSet());
+    El* firstRow = root && root->first ? root->first->first : nullptr;
+    utassert(firstRow && firstRow->onMouseDown.IsValid());
+    if (firstRow && firstRow->onMouseDown.IsValid()) {
+        // A left press on the same row reports nothing: the row already
+        // reports its click through on_item_click.
+        MouseDownEvent left = {};
+        left.button = MouseButton::Left;
+        ListenerCall(&app, &window, firstRow->onMouseDown, &left);
+        utassert(runtime->Eval(
+            StrL("if (globalThis.pressKey !== '') throw new Error('left')"),
+            StrL("press-left.js"), &error));
+        MouseDownEvent press = {};
+        press.button = MouseButton::Right;
+        press.x = 30;
+        press.y = 12;
+        press.el = Bounds{10, 4, 100, 24};
+        press.modifiers.shift = true;
+        ListenerCall(&app, &window, firstRow->onMouseDown, &press);
+    }
+    utassert(runtime->Eval(
+        StrL(
+            "if (globalThis.pressKey !== 'row-0') throw new Error('key');\n"
+            "if (globalThis.pressButton !== 'right') throw new "
+            "Error('button');\n"
+            "if (globalThis.pressLocalX !== 20) throw new Error('local');\n"
+            "if (globalThis.pressShift !== true) throw new Error('modifiers')"),
+        StrL("press-check.js"), &error));
+    utassert(!error.IsSet());
+    EntityDrop(&app, view.id);
+    ArenaDelete(frame);
+    runtime->Release();
+    ShellErrorClear(&error);
+    AppGlobalClear(&app);
+}
+
 void TestShellCore() {
     TestSuite("shell_core");
     BridgedValuesMatchJavaScriptConversions();
@@ -2490,6 +3226,8 @@ void TestShellCore() {
     ScriptThemesAndOpenUrlsFollowHostScopeRules();
     RuntimeLoadsRendersAndRetiresCallbacks();
     RuntimeAbortsFailedSnapshotTransactions();
+    ShellTemplatesRecordOnceAndFillPerCall();
+    ShellStructureFingerprintsCountRepeatedShapes();
     RuntimeLoadsOnlyModulesInsideTheApplicationRoot();
     ShellSourceWatchReloadsAtomically();
     ShellHostModulesBridgePlainDataAndPromises();
@@ -2501,6 +3239,11 @@ void TestShellCore() {
     RetainedScriptStateSurvivesFramesAndDispatchesEvents();
     NestedScriptViewsRetainUpdateRollbackAndRelease();
     VirtualListsRenderOneVisibleBatch();
+    VirtualListRowsReportASecondaryPress();
+    ScriptThemesCarryATypeScale();
+    ScriptViewsRebuildOnlyWhenThePaletteMoves();
+    ScriptOverlaysRebuildFromTheStateTheyCloseOver();
+    ScriptsSwitchOnARootOwnedPerformanceHud();
     ShellSandboxWithholdsCompilersAndSharedPrototypeWrites();
     ShellSchedulerResumesPromisesInTaskScope();
     ShellStorageAndAuthorityFreeModulesWork();

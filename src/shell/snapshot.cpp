@@ -17,6 +17,10 @@ RenderSnapshot::~RenderSnapshot() {
     delete arena;
 }
 
+shell::StructureFingerprint RenderSnapshot::Structure() const {
+    return arena ? arena->Structure() : shell::StructureFingerprint{};
+}
+
 int RenderSnapshot::Len() const {
     return arena ? arena->Len() : 0;
 }

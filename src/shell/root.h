@@ -2,10 +2,31 @@
 #define GPUI_SHELL_ROOT_H_
 /* The window-level host for a shell application — crates/shell/src/root.rs. */
 
+#include "fps/fps.h"
 #include "shell/view.h"
 #include "ui/sheet.h"
 
 namespace gpui {
+
+// Where the performance HUD sits over the window and how it behaves.
+//
+// What a script's `show_fps_monitor(options)` names, with the same defaults the
+// HUD gets when a native host places one by hand — except `continuous`, which
+// is off: a HUD a script switches on is there to watch the application's own
+// frames, not to drive a redraw loop of its own.
+struct FpsHudRequest {
+    // Corner or edge of the window.
+    FpsAnchor anchor = FpsAnchor::TopRight;
+    // Whether the HUD requests another animation frame after every render.
+    bool continuous = false;
+    // The per-frame budget the HUD grades frame cost against, in seconds.
+    // Unset keeps the HUD's own default.
+    bool hasFrameBudget = false;
+    float frameBudget = 0;
+};
+
+bool FpsAnchorFromName(Str name, FpsAnchor* out);
+SeqStrings FpsAnchorNames();
 
 struct DialogOptions {
     bool escapeDismissable = true;
@@ -47,6 +68,9 @@ struct ShellRoot {
     App* app = nullptr;
     EntityId content = {};
     uint64_t nextToastOrdinal = 0;
+    // The performance HUD, while a script has asked for one.
+    bool fpsHudVisible = false;
+    FpsHudRequest fpsHud = {};
 
     ~ShellRoot();
 
@@ -67,6 +91,20 @@ bool ShellRootOpenSheet(Ctx* cx, Entity<ScriptView> content,
                             component::SheetPlacement::Right);
 bool ShellRootCloseSheet(Ctx* cx);
 bool ShellRootHasSheet(Ctx* cx);
+
+// Draws the performance HUD over the window, above every other layer, until
+// ShellRootHideFpsMonitor. Calling it again moves or reconfigures the HUD that
+// is already up.
+//
+// The root owns the HUD rather than the script's tree: the script says whether
+// and where, and what it renders can neither move the HUD nor rebuild it. The
+// monitor behind the overlay is the window's own — the same one the
+// `fps_monitor()` element form uses — so a HUD hidden and shown again keeps its
+// history. Refused, with false, from a render pass.
+bool ShellRootShowFpsMonitor(Ctx* cx, const FpsHudRequest& request);
+// Takes the performance HUD down. True if one was up.
+bool ShellRootHideFpsMonitor(Ctx* cx);
+bool ShellRootFpsMonitorVisible(Ctx* cx);
 
 bool ShellRootPushToast(Ctx* cx, const ToastRequest& toast);
 bool ShellRootRemoveToast(Ctx* cx, Str id);
