@@ -11565,3 +11565,73 @@ against Rust's own thousandth.
 MSVC release tests pass 22,390 checks, `bun cmd/build.ts -rel -all` and
 `bun cmd/build-no-amalgam.ts -rel` build clean under `/W4 /WX`, and all six
 story pages were screenshot and read against the Rust source's intent.
+
+## Upstream ingest after `6d07863f`: what the merge itself found
+
+The ten sections above were ported in parallel against the same base and
+then merged one at a time, each merge followed by `bun cmd/build.ts -rel
+-all` and the suite. The pin moved from `6d07863f` (2026-08-27) to
+`0c746dff` (2026-09-02), 54 checkins. None of the four ported crates moved:
+`Cargo.lock` still resolves taffy 0.13.0, markdown 1.0.0, lb-wry 0.53.3 and
+autocorrect 2.14.2, so `src/taffy`, `src/markdown`, `src/wry` and
+`src/autocorrect` needed no work. `src/shell/typings_data.cpp` was
+regenerated from the pinned crate with `bun cmd/update-shell-types.ts`; the
+declaration payload grew from 642,527 to 685,120 bytes.
+
+Six things only the integration could see, each fixed on the way in.
+
+`gpui::Timing` and the fps suite's own `Timing` helper landed in the same
+translation unit from two different packages. The test helper is the one
+that moved, to `FpsTiming`.
+
+NavStack was written while the motion core was being rewritten beside it,
+so it carried a private copy of `motion/presence.rs` and a stand-in
+`PresencePhase` behind an include guard. Both are gone: `NavSamplePresence`
+is now `Presence::New(key, present).Transition(t).Sample(cx)`, which is
+what the Rust calls.
+
+`FpsOverlayEl` grew an `FpsOverlayOpts` parameter in the fps package while
+the shell package was still passing a bare anchor and assigning
+`frameBudget` and `axisMax` to the monitor by hand. The options struct does
+exactly that, and `FpsMonitorSetFrameBudget` derives the axis maximum
+itself, so `ShellRoot` now fills the struct.
+
+The dock was the one place a double application was likely: base took
+ownership of the box (`kClosedBottomStrip`, `DockExtent`, `DockFrame`)
+while the shell skin was still sizing it too. The skin is chrome only now,
+and a screenshot confirms the docks are 200 and 220 wide — applied once.
+
+`FpsMonitor`'s resource probe carries a raw `App*` into its completion. The
+destructor deleted the job only when `ExecCancel` won the race; otherwise
+the job outlived the monitor holding a pointer to an `App` that `AppFree`
+was about to free, and a later `ExecDrain` followed it. `FpsResourceDone`
+already reads a null app as "nothing here is mine", so clearing it is the
+whole fix. It surfaced as a crash three tests away in an unrelated suite.
+
+`tests/ShellDependencyTests.cpp` reused one `TEMP/gsd_<name>` directory per
+fixture name, so its five `package.json` cases all built in the same place.
+On Windows a `git` child that has exited can still hold a handle for a
+moment, so the next construction's remove left part of the previous
+repository behind and the case read the wrong manifest. It failed about one
+run in six; each fixture now gets its own directory.
+
+Two structural gaps in the ledger, and one in the includes. Four UI modules
+(`color_picker`, `progress`, `radio`, `table`) gained an explicit
+accessible name in `a42a20de` but had no `testTargets` entry at all, so the
+audit called their upstream tests unported while
+`tests/AccessibilityTests.cpp` covered them. `async_util` moved from
+`crates/ui` to `crates/base` with TextView, and the ledger still looked for
+it under ui. And `src/shell/view.cpp` and `runtime.cpp` named
+`ThemeTokensSync`, `ShellActionOf`, `ShellPanelScript` and `ScriptPanelNew`
+without including the headers that declare them — concatenation order hid
+it, and `bun cmd/build-no-amalgam.ts` is what caught it.
+
+The six `surfacePins` digests were then re-recorded, which is the
+deliberate review event the audit exists to force: base is 424
+declarations, 129 re-exports and 739 tests; ui is 426, 156 and 438. Base
+grew by the TextView engine, the motion core, NavStack, `SelectableText`
+and `ScrollableMask`; ui grew by the six chat components and shrank where
+the text modules left for base. `bun cmd/audit-port.ts` reports 140 modules
+at `0c746dff` — 131 full, 0 partial, 8 adapters, 1 excluded — with no
+errors. MSVC release tests pass 23,277 checks and all 28 examples build
+under `/W4 /WX`, amalgamated and not.
