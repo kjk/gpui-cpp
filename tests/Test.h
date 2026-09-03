@@ -56,6 +56,7 @@ void TestScrollbar();
 void TestThemeSettings();
 void TestResizable();
 void TestTree();
+void TestNavStack();
 void TestCalendar();
 void TestColorPicker();
 void TestToast();

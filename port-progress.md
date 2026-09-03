@@ -10734,3 +10734,81 @@ in the same doc comments above.
 
 Verification: MSVC release story, showcase, dock and editor all build with
 `/W4 /WX`, and the release suite passes 22,164 checks.
+## Upstream ingest after `6d07863f`: NavStack
+
+`0c746dff` adds `crates/base/src/nav_stack.rs` — a stack of views, one visible
+at a time, built on `History`. It is ported whole as `src/base/nav_stack.h` and
+`nav_stack.cpp`, with the showcase page beside it and the crate's own tests in
+`tests/NavStackTests.cpp`.
+
+`History` moved first, because the checkin gives it what a navigation history
+needs. `Push` now clears the redo side — a push after an undo starts a new
+branch, as a browser drops its forward pages — and no longer retains against
+the redos under `unique`; `Current`, `ReplaceCurrent` and `Retain` are new.
+`Retain` takes a function pointer plus the user pointer Rust's `impl
+FnMut(&I) -> bool` would have captured. The three new upstream tests are
+ported, and the two existing ones follow the branch-dropping rewrite: the old
+C++ test that pinned "push does not clear redos" is gone with the behavior it
+pinned.
+
+`AnyView` is an `EntityId` here — `EntityRender` is the whole of what the stack
+needs a view for — so `NavEntry` is `{EntityId view; uint64_t version;}` with
+identity equality, which is the Rust struct exactly. `NavStackState` is a state
+entity (`NavStackStateNew` stamps its own handle on it so it can emit before
+anything has rendered it); `NavStackPush` / `Pop` / `PopToRoot` / `Forward` /
+`Replace` / `Clear` take `Ctx*` first and emit `NavStackEvent` to the stack's
+subscribers, notifying the stack rather than the view that called in, which is
+what `stack.update(cx, ..)` does over there. Rust's `Option<AnyView>` returns
+are an invalid `EntityId`; `Option<(AnyView, usize)>` is the `bool` plus
+out-params pair; `Vec<AnyView>` from `pop_to_root` is a `Vec<EntityId>`,
+reversed the same way.
+
+The element is `NavStack::New(cx, state)->Transition(..)->Item(fn, user)
+->IntoEl()`, and what `IntoEl` answers is the El the caller styles — size,
+clipping and border are the application's, as in Rust. A `NavPage` carries its
+view, index, phase, operation and eased progress plus the El the stack already
+built for it (absolute, filling the container, the view as its child); the item
+function refines that El and hands it back, which is `page.left(relative(..))`
+in the Rust showcase. Paint order is upstream's — a pushed or replacing page
+covers, a popped page reveals — and the item function is called in that order,
+not construction order. While a change runs an occluding box (`StopMouseDown`,
+which is gpui's `occlude()`) sits over both pages.
+
+**What had to be stubbed.** `nav_stack.rs` samples `motion::Presence`, which
+belongs to upstream's new layered motion core; `src/base/motion.*` is being
+rewritten from it in parallel and does not carry `Presence` or `PresencePhase`
+yet. So `PresencePhase` sits in `nav_stack.h` behind
+`#ifndef GPUI_MOTION_PRESENCE_PHASE_` — the guard lets the real one land in
+`motion.h` in either order — and `presence.rs`'s sampler is written out as a
+file-static `NavSamplePresence` in `nav_stack.cpp` over the existing
+`MotionSlot` / `MotionNow` / `MotionWantsFrame` seams. It is the Rust algorithm
+line for line, reversing factor included: a sample reports the presence *value*
+(1 present, 0 absent), an interrupted change reverses over a duration shortened
+by however far it had got, and a zero duration is finished on the frame that
+starts it — which is what makes an immediate change gone after the frame that
+draws it. The comment at the top of that block names what it should call once
+the motion rewrite lands, and nothing outside the file reads it.
+
+The showcase page is `examples/showcase/nav_stack.cpp`, a `SHOWCASE_PAGE`
+translation unit like its neighbours: `ScNavPage` is an entity per page holding
+its depth and the stack, so its own Push / Replace / Pop / Forward buttons act
+on the stack it lives in, and the trail is `Depth()` plus `ForwardCount()` with
+the pages ahead greyed. `ScNavSlide` is upstream's `slide` — a pushed page in
+from the right, the page underneath drifting `-0.3`. `nav-stack` is in the
+component enum and slug table, alphabetically after `link` as upstream orders
+it.
+
+**Deliberately not ported.** `crates/base/examples/showcase/mod.rs`'s shell
+rewrite — the checkin also rebuilds the showcase's own overview/component
+navigation on a second `NavStackState`, with a Back/Forward bar and a
+`ComponentPage` view per component. That is a restructure of the whole
+`showcase.cpp` render, and two other packages are editing the same file in this
+round; it is left for the integrator, and this hunk is only the page and its
+registration. `crates/base/src/styled.rs`'s one line is a Rust compile fix (a
+stray `centred` token) with no C++ counterpart, and `crates/fps`'s
+`instant` → `web-time` swap is another package's.
+
+Verification: MSVC release showcase and story build under `/W4 /WX`, the
+release suite passes 22,199 checks, and the page was shot at each of push, pop
+and forward — the trail, the alternating page fill and the conditional Pop and
+Forward buttons match the Rust page.

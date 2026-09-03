@@ -22,6 +22,7 @@ enum {
     CompHoverCard,
     CompInput,
     CompLink,
+    CompNavStack,
     CompNumberInput,
     CompOtpInput,
     CompPagination,
@@ -154,6 +155,10 @@ struct ShowcaseApp {
     // page, built once, since rebuilding it every frame would discard the
     // layout the viewer arranged.
     Entity<DockState> dock = {};
+    // The nav-stack page's state, which is the stack's own: the pages on it
+    // and the ones popped off it — `self.stack` in the Rust page, made once,
+    // since rebuilding it every frame would lose where the viewer navigated.
+    Entity<NavStackState> navStack = {};
     int selA = -1;
     int selB = -1;
     // `self.tooltip_visible`, set by the trigger's on_hover. A page is told
@@ -188,6 +193,7 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseInput(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseLink(ShowcaseApp* app, Ctx* cx);
+El* ShowcaseNavStack(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx);
 El* ShowcasePagination(ShowcaseApp* app, Ctx* cx);

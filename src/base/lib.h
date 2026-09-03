@@ -40,6 +40,7 @@
 #include "base/list_settings.h"
 #include "base/measure.h"
 #include "base/motion.h"
+#include "base/nav_stack.h"
 #include "base/number_input.h"
 #include "base/otp_input.h"
 #include "base/pagination.h"

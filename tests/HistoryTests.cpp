@@ -19,7 +19,7 @@ static TabIndex TabAt(int index) {
     return item;
 }
 
-static void HistoryMatchesUpstreamUndoRedoOrder() {
+static void HistoryDropsTheUndoneBranchOnPush() {
     History<TabIndex> history;
     history.MaxUndos(100);
     history.Push(TabAt(0));
@@ -34,15 +34,11 @@ static void HistoryMatchesUpstreamUndoRedoOrder() {
     changes = history.Undo();
     utassert(changes.len == 1 && changes[0].tabIndex == 2);
 
-    // This is intentionally unlike a conventional cursor history: push does
-    // not clear the redo stack in the Rust implementation.
     history.Push(TabAt(5));
-    changes = history.Redo();
-    utassert(changes.len == 1 && changes[0].tabIndex == 2);
-    changes = history.Redo();
-    utassert(changes.len == 1 && changes[0].tabIndex == 1);
+    // A push after undo starts a new branch; 2 and 1 are gone.
+    utassert(history.Redo().len == 0);
 
-    const int expected[] = {1, 2, 5, 3, 0};
+    const int expected[] = {5, 3, 0};
     for (int want : expected) {
         changes = history.Undo();
         utassert(changes.len == 1 && changes[0].tabIndex == want);
@@ -67,20 +63,72 @@ static void UniqueHistoryRetainsOnlyTheNewestEqualItem() {
     utassert(changes.len == 1 && changes[0].tabIndex == 1);
     utassert(history.Redos().len == 1);
 
+    // A revisit moves the item to the front and drops the undone branch.
     history.Push(TabAt(2));
     utassert(history.Undos().len == 2);
-    utassert(history.Redos().len == 1);
-    changes = history.Redo();
-    utassert(changes.len == 1 && changes[0].tabIndex == 1);
+    utassert(history.Undos()[1].tabIndex == 2);
+    utassert(history.Redos().len == 0);
+    utassert(history.Redo().len == 0);
 
     history.Push(TabAt(3));
     utassert(history.Version() == 7);
-    utassert(history.Undos().len == 4);
-    for (int i = 0; i < 4; i++) {
+    utassert(history.Undos().len == 3);
+    for (int i = 0; i < 3; i++) {
         history.Undo();
     }
     utassert(history.Undos().len == 0);
-    utassert(history.Redos().len == 4);
+    utassert(history.Redos().len == 3);
+}
+
+static void RevisitsKeepEveryStepWithoutUnique() {
+    History<TabIndex> history;
+    history.Push(TabAt(0));
+    history.Push(TabAt(1));
+    history.Push(TabAt(0));
+
+    utassert(history.Undos().len == 3);
+    Vec<TabIndex> changes = history.Undo();
+    utassert(changes.len == 1 && changes[0].tabIndex == 0);
+    changes = history.Undo();
+    utassert(changes.len == 1 && changes[0].tabIndex == 1);
+    utassert(history.Current() && history.Current()->tabIndex == 0);
+    utassert(history.Undo().len == 1);
+    utassert(history.Undo().len == 0);
+}
+
+static void ReplaceCurrentKeepsTheVersionAndTheLength() {
+    History<TabIndex> history;
+    history.ReplaceCurrent(TabAt(7));
+    utassert(history.Undos().len == 1);
+
+    history.Push(TabAt(1));
+    uint64_t version = history.Current()->version;
+    history.ReplaceCurrent(TabAt(2));
+
+    utassert(history.Undos().len == 2);
+    const TabIndex* current = history.Current();
+    utassert(current->tabIndex == 2);
+    utassert(current->version == version);
+}
+
+static bool KeepEvenTab(const TabIndex& item, void*) {
+    return item.tabIndex % 2 == 0;
+}
+
+static void RetainPrunesBothSidesOfTheCursor() {
+    History<TabIndex> history;
+    for (int tab = 0; tab < 4; tab++) {
+        history.Push(TabAt(tab));
+    }
+    history.Undo();
+    history.Undo();
+
+    history.Retain(&KeepEvenTab);
+
+    utassert(history.Current() && history.Current()->tabIndex == 0);
+    utassert(history.Redos().len == 1);
+    Vec<TabIndex> changes = history.Redo();
+    utassert(changes.len == 1 && changes[0].tabIndex == 2);
 }
 
 static void GroupingAndIntervalsShareVersions() {
@@ -138,8 +186,11 @@ static void MaximumIgnoreAndClearMatchTheRustState() {
 
 void TestHistory() {
     TestSuite("history");
-    HistoryMatchesUpstreamUndoRedoOrder();
+    HistoryDropsTheUndoneBranchOnPush();
     UniqueHistoryRetainsOnlyTheNewestEqualItem();
+    RevisitsKeepEveryStepWithoutUnique();
+    ReplaceCurrentKeepsTheVersionAndTheLength();
+    RetainPrunesBothSidesOfTheCursor();
     GroupingAndIntervalsShareVersions();
     MaximumIgnoreAndClearMatchTheRustState();
 }
