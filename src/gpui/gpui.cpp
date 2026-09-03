@@ -3046,10 +3046,9 @@ static taffy::Style ToTaffyStyle(const El* e) {
     // `max_w(relative(1.))` -- a hundred percent of what holds it, which is
     // how node.rs keeps a picture inside its column -- and a length of -2 is
     // a max of nothing at all, which collapses the box.
-    t.maxSize = {s.maxWFrac > 0
-                     ? taffy::Dimension::Percent(s.maxWFrac)
-                     : (s.maxW < 1e9f ? ToDim(s.maxW, 0)
-                                      : taffy::Dimension::Auto()),
+    t.maxSize = {s.maxWFrac > 0 ? taffy::Dimension::Percent(s.maxWFrac)
+                                : (s.maxW < 1e9f ? ToDim(s.maxW, 0)
+                                                 : taffy::Dimension::Auto()),
                  s.maxH < 1e9f ? ToDim(s.maxH, 0) : taffy::Dimension::Auto()};
 
     t.flexGrow = s.flexGrow;
@@ -5547,6 +5546,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.stopClick = e->stopClick;
         hr.stopMouseDown = e->stopMouseDown;
         hr.suppressTextSelection = e->suppressTextSelection;
+        hr.paintLayer = ctx->paintLayer;
         VecAppend(ctx->hits, hr);
         // Everything under this element names it as the ancestor its events
         // pass through, which is the chain the two phases walk.
@@ -5740,6 +5740,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         th.join = e->selJoin;
         th.atom = true;
         th.scope = e->style.trapId;
+        th.paintLayer = ctx->paintLayer;
         VecAppend(ctx->texts, th);
         ctx->textDocLen += 1;
     }
@@ -5770,6 +5771,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             // The trap this run sits in — a dialog, a sheet — which is the
             // TextSelectionScopeId a gesture inside it stays within.
             th.scope = e->style.trapId;
+            th.paintLayer = ctx->paintLayer;
             VecAppend(ctx->texts, th);
             ctx->textDocLen += e->text.len + 1;
             int a = ctx->selA;
@@ -6223,7 +6225,8 @@ static float DistToInterval(float v, float lo, float hi) {
 // every one of them. A drag that began inside a dialog cannot reach the page
 // behind it, which is what Rust's activate_scope arranges.
 static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
-                                  Point* outRel, int scope = -1) {
+                                  Point* outRel, int scope = -1,
+                                  int minLayer = 0) {
     if (!ctx) {
         return nullptr;
     }
@@ -6231,6 +6234,9 @@ static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
     float bestScore = 1e9f;
     for (int i = ctx->texts.len - 1; i >= 0; i--) {
         const TextHit& h = ctx->texts[i];
+        if (h.paintLayer < minLayer) {
+            continue;
+        }
         if (scope >= 0 && h.scope != scope) {
             continue;
         }
@@ -6291,9 +6297,9 @@ int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
 }
 
 int TextHitOffsetIn(PaintCtx* ctx, float x, float y, bool nearest, int scope,
-                    int* outScope) {
+                    int* outScope, int minLayer) {
     Point rel = {};
-    const TextHit* h = TextHitFind(ctx, x, y, nearest, &rel, scope);
+    const TextHit* h = TextHitFind(ctx, x, y, nearest, &rel, scope, minLayer);
     if (!h) {
         return -1;
     }

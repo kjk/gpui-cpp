@@ -1511,8 +1511,8 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     // frame's, measured where the symbol was painted.
     for (int i = 0; i < win->paint.inputs.len; i++) {
         InputState* f = win->paint.inputs[i];
-        if (f->hoverDef.locations.len > 0 && f->hoverDef.bounds
-                                                 .Contains({x, y})) {
+        if (f->hoverDef.locations.len > 0 &&
+            f->hoverDef.bounds.Contains({x, y})) {
             if (win->cursor != CursorKind::Pointer) {
                 win->cursor = CursorKind::Pointer;
                 PlatSetCursor(win, CursorKind::Pointer);
@@ -1534,10 +1534,16 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     // An element that named a shape of its own wins over the I-beam: a link
     // inside a selectable TextView asks for the hand, and in GPUI the
     // cursor_pointer the link pushes is the innermost one and so the one that
-    // takes. Anything that named nothing leaves the selectable text to say.
+    // takes. A control that suppresses selection (a button, a menu row) keeps
+    // the arrow rather than inheriting the I-beam of text behind it. Anything
+    // that named nothing leaves the selectable text on this stacking layer
+    // to say — not the page under a popup.
     if (under && under->cursor != CursorKind::Arrow) {
         want = under->cursor;
-    } else if (TextHitOffsetAt(&win->paint, x, y, false) >= 0) {
+    } else if (under && under->suppressTextSelection) {
+        want = CursorKind::Arrow;
+    } else if (TextHitOffsetIn(&win->paint, x, y, false, -1, nullptr,
+                               under ? under->paintLayer : 0) >= 0) {
         want = CursorKind::IBeam;
     }
     if (want != win->cursor) {

@@ -2483,6 +2483,9 @@ struct HitRect {
     bool stopClick = false;
     bool stopMouseDown = false;
     bool suppressTextSelection = false;
+    // PaintCtx::paintLayer when this box was recorded. A popup painted over
+    // the page must not pick up the I-beam of selectable text behind it.
+    int paintLayer = 0;
 };
 
 // One laid-out semantic element. `parent` is the nearest semantic ancestor,
@@ -2601,6 +2604,9 @@ struct TextHit {
     // page itself. A selection belongs to one scope, so a drag that started
     // in a dialog does not run on into the page behind it.
     int scope = 0;
+    // PaintCtx::paintLayer when this run was recorded. Cursor I-beam ignores
+    // runs behind the stacking layer the pointer is actually in.
+    int paintLayer = 0;
 };
 
 // Shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots. Entries stay
@@ -4717,9 +4723,10 @@ const HitRect* HitTestDrop(PaintCtx* ctx, float x, float y, Str kind);
 const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y);
 int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest);
 // The same, confined to one selection scope (-1 for any), and reporting the
-// scope the point landed in.
+// scope the point landed in. `minLayer` skips runs painted on a stacking
+// layer below it, so a popup does not inherit the I-beam of the page.
 int TextHitOffsetIn(PaintCtx* ctx, float x, float y, bool nearest, int scope,
-                    int* outScope);
+                    int* outScope, int minLayer = 0);
 int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
 // `fmt` is what each run contributes: its rendered text, or — where the run
 // carries a SelSource — the Markdown it was rendered from.

@@ -98,8 +98,8 @@ PopupMenu* PopupMenu::Link(Str label, Str href, IconName icon) {
 }
 PopupMenu* PopupMenu::Separator() {
     // Rust ignores a leading separator and coalesces consecutive ones.
-    if (items.len == 0 || items[items.len - 1]
-                                  .kind == MenuItemKind::Separator) {
+    if (items.len == 0 ||
+        items[items.len - 1].kind == MenuItemKind::Separator) {
         return this;
     }
     MenuAdd(this, MenuItemKind::Separator);
@@ -361,7 +361,11 @@ El* PopupMenu::IntoEl() {
                 ->Gap(4)
                 ->ItemsCenter()
                 ->JustifyBetween()
-                ->Radius(radius);
+                ->Radius(radius)
+                // Buttons do this so a click does not start a selection, and
+                // so the arrow stays over the row instead of the I-beam of
+                // selectable text on the page the menu covers.
+                ->SuppressTextSelection();
         if (lit) {
             row->Bg(th.tokens.accent);
         }
@@ -508,9 +512,9 @@ El* DropdownMenu::IntoEl() {
             // The menu as this frame has it goes with the handler, the way
             // Rust's Popover captures `open` at render time and hands it to
             // the trigger's press.
-            trigger
-                ->OnClick(ListenTo(menu->state, &PopupMenuState::OnTriggerClick,
-                                   (intptr_t)st->open));
+            trigger->OnClick(ListenTo(menu->state,
+                                      &PopupMenuState::OnTriggerClick,
+                                      (intptr_t)st->open));
         }
         wrap->Child(trigger);
     }
@@ -603,8 +607,8 @@ El* ContextMenu::IntoEl() {
     context->open = st->open;
     context->position = {st->x, st->y};
     // The element needs identity for the press to reach it.
-    box->PathClick(id)
-        ->OnMouseDown(ListenTo(state, &ContextMenuState::OnMouseDown));
+    box->PathClick(id)->OnMouseDown(
+        ListenTo(state, &ContextMenuState::OnMouseDown));
     if (st->open) {
         box->Child(
             menu->IntoEl()->Absolute()->Left(st->x)->Top(st->y)->Deferred());
