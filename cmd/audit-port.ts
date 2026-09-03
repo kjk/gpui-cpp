@@ -34,7 +34,7 @@ toggle toggle_group tooltip tree virtual_list
   .split(/\s+/);
 
 const uiModules = `
-async_util component_traits element_ext global_state icon index_path inspector
+component_traits element_ext global_state icon index_path inspector
 root sizing styled time title_bar virtual_list window_border window_ext
 accordion alert avatar badge breadcrumb button chart checkbox clipboard
 collapsible color_picker combobox command description_list dialog dock form
@@ -49,7 +49,7 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 const partialBase = new Set<string>();
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
 const partialUi = new Set<string>();
-const adapterUi = new Set(["async_util", "component_traits", "element_ext", "highlighter", "styled"]);
+const adapterUi = new Set(["component_traits", "element_ext", "highlighter", "styled"]);
 
 const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
@@ -107,7 +107,6 @@ const baseOverrides: Record<string, string[]> = {
 };
 
 const uiOverrides: Record<string, string[]> = {
-  async_util: [],
   component_traits: ["src/ui/component_traits.h", "src/base/component_traits.h"],
   element_ext: ["src/ui/element_ext.h", "src/base/element_ext.h"],
   global_state: ["src/ui/global_state.h", "src/ui/global_state.cpp"],
@@ -246,6 +245,7 @@ const testTargets: Record<string, string[]> = {
   ],
   "ui/checkbox": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/collapsible": ["tests/AccessibilityTests.cpp"],
+  "ui/color_picker": ["tests/ColorPickerTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/combobox": ["tests/SelectTests.cpp", "tests/SearchableListTests.cpp"],
   "ui/command": ["tests/CommandTests.cpp"],
   "ui/description_list": [
@@ -273,6 +273,8 @@ const testTargets: Record<string, string[]> = {
   "ui/notification": ["tests/NotificationTests.cpp"],
   "ui/plot": ["tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
   "ui/popover": ["tests/PopupTests.cpp"],
+  "ui/progress": ["tests/AccessibilityTests.cpp"],
+  "ui/radio": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/root": ["tests/RootTests.cpp"],
   "ui/scroll": ["tests/ScrollbarTests.cpp", "tests/AutoScrollTests.cpp"],
   "ui/select": ["tests/SelectTests.cpp"],
@@ -282,6 +284,7 @@ const testTargets: Record<string, string[]> = {
   "ui/spinner": ["tests/MotionTests.cpp"],
   "ui/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/tab": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/table": ["tests/DataTableTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/text": ["tests/TextViewTests.cpp", "tests/MarkdownTests.cpp"],
   "ui/theme": [
     "tests/ThemeColorTests.cpp",
