@@ -140,6 +140,9 @@ void HttpSetOnFetchDone(Func0 f);
 // AppFree calls it. The wasm main loop does not return to AppFree.
 void HttpFetchClear();
 
+// Release the downloaded body for a specific URL once it has been decoded.
+void HttpFetchDrop(Str url);
+
 // Whether fetching is allowed at all. On by default; the tests turn it off so
 // a suite never touches the network.
 void HttpSetEnabled(bool on);

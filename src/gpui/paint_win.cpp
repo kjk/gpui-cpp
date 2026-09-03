@@ -1394,10 +1394,36 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         hr = conv->GetSize(&w, &h);
     }
     if (SUCCEEDED(hr) && w > 0 && h > 0) {
+        IWICBitmapSource* source = conv;
+        IWICBitmapScaler* scaler = nullptr;
+        // Clamp maximum dimensions to 1920 (sufficient for 1080p display presentation)
+        // to prevent gigantic multi-megapixel screenshots from ballooning memory.
+        const UINT kMaxDim = 1920;
+        if (w > kMaxDim || h > kMaxDim) {
+            UINT targetW = w;
+            UINT targetH = h;
+            if (w >= h) {
+                targetW = kMaxDim;
+                targetH = (UINT)((uint64_t)h * kMaxDim / w);
+                if (targetH == 0) targetH = 1;
+            } else {
+                targetH = kMaxDim;
+                targetW = (UINT)((uint64_t)w * kMaxDim / h);
+                if (targetW == 0) targetW = 1;
+            }
+            if (SUCCEEDED(wic->CreateBitmapScaler(&scaler))) {
+                if (SUCCEEDED(scaler->Initialize(conv, targetW, targetH,
+                                                 WICBitmapInterpolationModeFant))) {
+                    source = scaler;
+                    w = targetW;
+                    h = targetH;
+                }
+            }
+        }
         UINT stride = w * 4;
         UINT size = stride * h;
         auto* px = (uint8_t*)Alloc(nullptr, (int)size);
-        if (px && SUCCEEDED(conv->CopyPixels(nullptr, stride, size, px))) {
+        if (px && SUCCEEDED(source->CopyPixels(nullptr, stride, size, px))) {
             img = new Image();
             img->generation = PaintResourceGenerationNew();
             img->w = (int)w;
@@ -1406,6 +1432,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         } else {
             Free(nullptr, px);
         }
+        Rel(&scaler);
     }
     Rel(&conv);
     Rel(&frame);
@@ -1462,8 +1489,8 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
         gpuw::ImageDraw(ctx, img, b, radius);
         return;
     }
-    if (!ctx || !ctx->rt || !ctx->rt->rt || !img || !img->bgra || b.w <= 0 ||
-        b.h <= 0) {
+    if (!ctx || !ctx->rt || !ctx->rt->rt || !img || (!img->bmp && !img->bgra) ||
+        b.w <= 0 || b.h <= 0) {
         return;
     }
     ID2D1RenderTarget* rt = ctx->rt->rt;
@@ -1471,6 +1498,9 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
         Rel(&img->bmp);
     }
     if (!img->bmp) {
+        if (!img->bgra) {
+            return;
+        }
         D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(
             DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
         D2D1_SIZE_U size = D2D1::SizeU((UINT32)img->w, (UINT32)img->h);
@@ -1480,6 +1510,8 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
             return;
         }
         img->bmpRt = rt;
+        Free(nullptr, img->bgra);
+        img->bgra = nullptr;
     }
     D2D1_RECT_F dst = D2D1::RectF(b.x, b.y, b.x + b.w, b.y + b.h);
     float op = ctx->opacity < 0 ? 0.f : ctx->opacity;

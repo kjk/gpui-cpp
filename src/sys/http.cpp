@@ -390,4 +390,17 @@ void HttpFetchClear() {
     gFetchLock.Unlock();
 }
 
+void HttpFetchDrop(Str url) {
+    gFetchLock.Lock();
+    for (int i = 0; i < kFetchSlots; i++) {
+        FetchSlot* s = &gFetch[i];
+        if (s->state != FetchState::None && s->state != FetchState::Pending &&
+            base::StrEq(s->url, url)) {
+            SlotDrop(s);
+            break;
+        }
+    }
+    gFetchLock.Unlock();
+}
+
 } // namespace gpui

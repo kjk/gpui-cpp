@@ -2406,8 +2406,41 @@ void TextMeasEndFrame(PaintCtx* ctx) {
         return;
     }
     uint32_t frame = c->frame;
-    TextMeasSlot* old = (TextMeasSlot*)c->slots;
-    int oldCap = c->cap;
+    TextMeasSlot* slots = (TextMeasSlot*)c->slots;
+    int cap = c->cap;
+
+    // DirectWrite IDWriteTextLayout COM objects consume ~20 KB each of private
+    // heap memory. Keeping thousands of them for off-screen rows wastes tens of
+    // megabytes. We keep at most 256 active layout objects and release any
+    // that have not been drawn in the last 30 frames (0.5s at 60 FPS).
+    // The slot itself (string text, width, and height) remains intact in the
+    // cache so MeasureText and subsequent layout passes continue to hit.
+    const uint32_t kLayoutKeepFrames = 30;
+    const int kMaxLiveLayouts = 256;
+    int liveLayouts = 0;
+    for (int i = 0; i < cap; i++) {
+        if (!slots[i].occupied || !slots[i].layout) {
+            continue;
+        }
+        if (frame > kLayoutKeepFrames && slots[i].lastUsed + kLayoutKeepFrames < frame) {
+            TextLayoutRelease(slots[i].layout);
+            slots[i].layout = nullptr;
+        } else {
+            liveLayouts++;
+        }
+    }
+    if (liveLayouts > kMaxLiveLayouts) {
+        for (int i = 0; i < cap && liveLayouts > kMaxLiveLayouts; i++) {
+            if (slots[i].occupied && slots[i].layout && slots[i].lastUsed < frame) {
+                TextLayoutRelease(slots[i].layout);
+                slots[i].layout = nullptr;
+                liveLayouts--;
+            }
+        }
+    }
+
+    TextMeasSlot* old = slots;
+    int oldCap = cap;
     // Do not rebuild the table until it is large. Compacting every frame
     // that aged one slot out of a 90-frame window was the hitch on editor
     // scroll-back: alloc, rehash, and Release of every line just left, then
@@ -2571,7 +2604,7 @@ Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
     TextMeasCache* c = &ctx->textCache;
     TextMeasSlot* hit = TextMeasFind(c, s, fontSize, maxW, wrap,
                                      (uint8_t)weight, lineH, nullptr);
-    if (hit && hit->layout) {
+    if (hit) {
         hit->lastUsed = c->frame;
         size.w = hit->w;
         size.h = hit->h;

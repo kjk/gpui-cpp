@@ -384,6 +384,9 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
     slot->ops = ops;
     slot->opsLen = opsLen;
     slot->tried = true;
+    if (HttpUrlIsRemote(src)) {
+        HttpFetchDrop(src);
+    }
     return slot;
 }
 
