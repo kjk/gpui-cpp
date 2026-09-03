@@ -64,6 +64,17 @@ struct ScalePoint {
 // with padding between them and at the ends. Rust's domain is a vector of
 // values; here it is a count, since a band is picked by index — which is what
 // a caller walking its data already has.
+//
+// That is also why upstream's two domain fixes have no code here. Rust kept
+// duplicate domain values, which halved the bands of a grouped bar chart and
+// left the repeated slots unaddressable, so `new` now drops them; it then
+// replaced the `Vec<T>` with a value-to-index map, making the dedupe a side
+// effect of building the map and `tick()` O(1) rather than a linear
+// `position()` scan. A count is already distinct and already an index, so
+// this port has nothing to deduplicate and nothing to look up: `Tick` is the
+// same band arithmetic on the index the caller hands it. A caller with a
+// repeating domain passes the number of distinct values, which is what the
+// dedupe leaves Rust with.
 struct ScaleBand {
     int domainLen = 0;
     float rangeDiff = 0;

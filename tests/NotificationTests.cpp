@@ -307,28 +307,96 @@ static void PerNotificationPlacementsBuildIndependentStableStacks() {
     EntityDropAll(&app);
 }
 
-static void InactiveWindowsAndExpandedStacksPauseOnlyTheTimeout() {
+// notification.rs after f001d800: an inactive window no longer pauses the
+// countdown. Activation says nothing about visibility — a toast raised on a
+// side-by-side or second-monitor window would otherwise stay up until the
+// window was clicked — and there is no occlusion state to ask instead. Only
+// hover or focus, which hold the stack expanded, pause it.
+static void AnInactiveWindowDoesNotPauseAutohide() {
     App app;
     Window* win = new Window();
     win->app = &app;
     Ctx cx = {&app, win, nullptr, {}};
     NotificationListState s;
-    int id = NotificationPush(&s, &cx, Notification::Info(StrL("pause")),
-                              100);
+    win->active = false;
+    int id =
+        NotificationPush(&s, &cx, Notification::Info(StrL("background")), 100);
     NotificationAdvance(&s, &cx, kToastTransitionMs);
     utassert(StatusOf(s, id) == ToastStatus::Present);
 
-    win->active = false;
-    NotificationAdvance(&s, &cx, 1000);
-    utassert(StatusOf(s, id) == ToastStatus::Present);
-    win->active = true;
-    s.stackHovered[(int)Anchor::TopRight] = true;
-    NotificationAdvance(&s, &cx, 1000);
-    utassert(StatusOf(s, id) == ToastStatus::Present);
-    s.stackHovered[(int)Anchor::TopRight] = false;
+    // The window is still inactive, and the toast retires anyway.
     NotificationAdvance(&s, &cx, 100);
     utassert(StatusOf(s, id) == ToastStatus::Ending);
 
+    delete win;
+}
+
+static void AnExpandedStackPausesOnlyTheTimeout() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {&app, win, nullptr, {}};
+    NotificationListState s;
+    int id = NotificationPush(&s, &cx, Notification::Info(StrL("pause")), 100);
+    NotificationAdvance(&s, &cx, kToastTransitionMs);
+    utassert(StatusOf(s, id) == ToastStatus::Present);
+
+    // Hover holds the stack open, and the countdown with it.
+    s.stackHovered[(int)Anchor::TopRight] = true;
+    NotificationAdvance(&s, &cx, 1000);
+    utassert(StatusOf(s, id) == ToastStatus::Present);
+    // Focus does the same.
+    s.stackHovered[(int)Anchor::TopRight] = false;
+    s.stackFocused[(int)Anchor::TopRight] = true;
+    NotificationAdvance(&s, &cx, 1000);
+    utassert(StatusOf(s, id) == ToastStatus::Present);
+    s.stackFocused[(int)Anchor::TopRight] = false;
+    NotificationAdvance(&s, &cx, 100);
+    utassert(StatusOf(s, id) == ToastStatus::Ending);
+
+    delete win;
+}
+
+// 52693f2e: the lifecycle clock runs only while something is mounted. A list
+// that has never shown anything arms no timer, `push` starts it, and the
+// tick that empties the manager stops it.
+static void TheLifecycleClockRunsOnlyWhileANotificationIsMounted() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<NotificationListState> entity =
+        EntityNewState<NotificationListState>(&app);
+    NotificationListState* s = entity.Get(&app);
+    utassert(s != nullptr);
+    if (!s) {
+        delete win;
+        return;
+    }
+    s->self = entity.id;
+    Ctx cx = {&app, win, nullptr, entity.id};
+
+    // A list that has never shown anything arms no timer.
+    utassert(!s->isAdvancing);
+
+    int id = NotificationPush(s, &cx, Notification::Info(StrL("tick")), 100);
+    utassert(s->isAdvancing);
+    utassert(s->advanceTimer != 0);
+
+    // Autohide expiry plus the exit transition stops the clock with it. The
+    // tick is what ends the loop, so it runs through OnTick rather than
+    // NotificationAdvance directly.
+    for (int i = 0; i < 100 && s->isAdvancing; i++) {
+        NotificationListState::OnTick(s, &cx, nullptr);
+    }
+    utassert(NotificationIndexOf(s, id) < 0);
+    utassert(!s->isAdvancing);
+    utassert(s->advanceTimer == 0);
+
+    // A later notification restarts it.
+    NotificationPush(s, &cx, Notification::Info(StrL("again")), 100);
+    utassert(s->isAdvancing);
+
+    EntityDropAll(&app);
     delete win;
 }
 
@@ -435,8 +503,8 @@ static void TypedIdentityReplacesAndRemovesLikeRust() {
     utassert(NotificationTypeOf<BuildNotice>() !=
              NotificationTypeOf<DeployNotice>());
 
-    NotificationDismissByTypeKey(&s, nullptr,
-                                 NotificationTypeOf<BuildNotice>(), 2);
+    NotificationDismissByTypeKey(&s, nullptr, NotificationTypeOf<BuildNotice>(),
+                                 2);
     utassert(StatusOf(s, secondId) == ToastStatus::Ending);
     utassert(StatusOf(s, firstId) != ToastStatus::Ending);
     utassert(StatusOf(s, broadId) != ToastStatus::Ending);
@@ -491,7 +559,9 @@ void TestNotification() {
     PushOwnsItsTextAndHonorsBuilderAutohide();
     CloseAndBodyClickFollowTheSourceLifecycle();
     PerNotificationPlacementsBuildIndependentStableStacks();
-    InactiveWindowsAndExpandedStacksPauseOnlyTheTimeout();
+    AnInactiveWindowDoesNotPauseAutohide();
+    AnExpandedStackPausesOnlyTheTimeout();
+    TheLifecycleClockRunsOnlyWhileANotificationIsMounted();
     SystemOnlyDeliveryShowsNoCard();
     AutohideExpiryDoesNotRetractTheSystemHalf();
     MaxItemsLimitsVisibilityWithoutEvictingMountedToasts();

@@ -107,6 +107,109 @@ static void StyledButtonsCanReplaceTheirVisibleAccessibleName() {
     FreeAccessibilityFrame(&f);
 }
 
+// checkbox.rs / color_picker.rs / radio.rs / switch.rs, mod tests:
+// an_explicit_accessibility_label_replaces_the_visible_one. The explicit name
+// wins over the visible label, and what is drawn does not change with it.
+static void AnExplicitAccessibilityLabelReplacesTheVisibleOne() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    component::Init(&f.app);
+
+    component::Checkbox* plainBox =
+        component::Checkbox::New(&f.cx, StrL("remember"))
+            ->Label(StrL("Remember me"));
+    utassert(!plainBox->accessibilityLabel.s);
+    component::Checkbox* namedBox =
+        component::Checkbox::New(&f.cx, StrL("remember"))
+            ->Label(StrL("Remember me"))
+            ->AccessibilityLabel(StrL("Remember this account"));
+    // ...and must not change what is drawn.
+    utassert(base::StrEq(namedBox->label, "Remember me"));
+    AccessibilityCollect(namedBox->IntoEl(), &f.win->accessibility);
+    const AccessibilityNode* box =
+        RoleNode(f.win->accessibility, AccessibilityRole::CheckBox);
+    utassert(box && base::StrEq(box->info.label, "Remember this account"));
+
+    component::Radio* namedRadio =
+        component::Radio::New(&f.cx, StrL("auto"))
+            ->Label(StrL("Automatic"))
+            ->AccessibilityLabel(StrL("Choose automatic mode"));
+    utassert(base::StrEq(namedRadio->label, "Automatic"));
+    AccessibilityCollect(namedRadio->IntoEl(), &f.win->accessibility);
+    const AccessibilityNode* radio =
+        RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
+    utassert(radio && base::StrEq(radio->info.label, "Choose automatic mode"));
+
+    component::Switch* namedSwitch =
+        component::Switch::New(&f.cx, StrL("wifi"))
+            ->Label(StrL("Wi-Fi"))
+            ->AccessibilityLabel(StrL("Toggle Wi-Fi"));
+    utassert(base::StrEq(namedSwitch->label, "Wi-Fi"));
+    AccessibilityCollect(namedSwitch->IntoEl(), &f.win->accessibility);
+    const AccessibilityNode* sw =
+        RoleNode(f.win->accessibility, AccessibilityRole::Switch);
+    utassert(sw && base::StrEq(sw->info.label, "Toggle Wi-Fi"));
+
+    component::ColorPicker* namedPicker =
+        component::ColorPicker::New(&f.cx, StrL("picker"))
+            ->Label(StrL("Color"))
+            ->AccessibilityLabel(StrL("Text color"));
+    utassert(base::StrEq(namedPicker->label, "Color"));
+    El* pickerEl = namedPicker->IntoEl();
+    IdsCollect(pickerEl);
+    AccessibilityCollect(pickerEl, &f.win->accessibility);
+    const AccessibilityNode* picker =
+        RoleNode(f.win->accessibility, AccessibilityRole::Button);
+    utassert(picker && base::StrEq(picker->info.label, "Text color"));
+
+    FreeAccessibilityFrame(&f);
+}
+
+// progress.rs / progress_circle.rs / table.rs, mod tests:
+// stores_an_explicit_accessibility_label. These four name explicitly only —
+// a progress value, a caption, a placeholder or a selected value describes
+// the current value rather than the control, so none is inferred as a name.
+static void ExplicitOnlyNamesReachTheAnnouncedControl() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    component::Init(&f.app);
+
+    utassert(!component::Progress::New(&f.cx)->accessibilityLabel.s);
+    El* bar = component::Progress::New(&f.cx)
+                  ->Id(StrL("upload"))
+                  ->Value(40)
+                  ->AccessibilityLabel(StrL("Upload progress"))
+                  ->IntoEl();
+    AccessibilityCollect(bar, &f.win->accessibility);
+    const AccessibilityNode* barNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator);
+    utassert(barNode && base::StrEq(barNode->info.label, "Upload progress"));
+
+    utassert(!component::ProgressCircle::New(&f.cx)->accessibilityLabel.s);
+    El* circle = component::ProgressCircle::New(&f.cx)
+                     ->Id(StrL("upload-circle"))
+                     ->Value(40)
+                     ->AccessibilityLabel(StrL("Upload progress"))
+                     ->IntoEl();
+    AccessibilityCollect(circle, &f.win->accessibility);
+    // Each collection replaces what the last one gathered, so this is the
+    // circle's own node rather than the bar's.
+    const AccessibilityNode* circleNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator);
+    utassert(circleNode &&
+             base::StrEq(circleNode->info.label, "Upload progress"));
+
+    utassert(!component::Table::New(&f.cx, StrL("t"))->accessibilityLabel.s);
+    El* table = component::Table::New(&f.cx, StrL("invoices"))
+                    ->AccessibilityLabel(StrL("Recent invoices"))
+                    ->IntoEl();
+    AccessibilityCollect(table, &f.win->accessibility);
+    const AccessibilityNode* tableNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::Table);
+    utassert(tableNode &&
+             base::StrEq(tableNode->info.label, "Recent invoices"));
+
+    FreeAccessibilityFrame(&f);
+}
+
 static void ExplicitAriaFieldsSurviveCollection() {
     AccessibilityFrame f = NewAccessibilityFrame();
     El* node = Div(f.arena)
@@ -244,7 +347,7 @@ static void ConditionalAndCompositeRolesMatchUpstream() {
         RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
     utassert(swatch && swatch->info.hasSelected && swatch->info.selected &&
              base::StrEq(swatch->info.label,
-                      ColorPickerHexString(f.arena, 0x12ab34)));
+                         ColorPickerHexString(f.arena, 0x12ab34)));
     const AccessibilityNode* date =
         RoleNode(f.win->accessibility, AccessibilityRole::ComboBox);
     utassert(date && date->info.hasExpanded && date->info.expanded);
@@ -292,13 +395,12 @@ static void BaseControlsProjectTheirControlledState() {
                        &f.cx, StrL("check"), CheckboxState::Indeterminate,
                        false, {}, nullptr, nullptr, StrL("Remember choice")))
                    ->Child(Radio::New(&f.cx, StrL("radio"), true))
-                   ->Child(Switch::New(&f.cx, StrL("switch"), true, false,
-                                      {}, nullptr, nullptr,
-                                      StrL("Airplane mode"), 3, false,
-                                      FocusHandle{-88}))
+                   ->Child(Switch::New(&f.cx, StrL("switch"), true, false, {},
+                                       nullptr, nullptr, StrL("Airplane mode"),
+                                       3, false, FocusHandle{-88}))
                    ->Child(Toggle::New(&f.cx, StrL("toggle"), true))
                    ->Child(Progress::New(&f.cx, StrL("done"), 120, false,
-                                        StrL("Downloading release")))
+                                         StrL("Downloading release")))
                    ->Child(Progress::New(&f.cx, StrL("busy"), 40, true))
                    ->Child(Tab::New(&f.cx, StrL("account"), false, {}, true,
                                     StrL("Account"), 2, 5));
@@ -339,8 +441,7 @@ static void BaseControlsProjectTheirControlledState() {
 
 static void TablesKeepCountsAndOneBasedIndices() {
     AccessibilityFrame f = NewAccessibilityFrame();
-    El* table = Table::New(&f.cx, StrL("table"), 12, 4,
-                           StrL("Open positions"));
+    El* table = Table::New(&f.cx, StrL("table"), 12, 4, StrL("Open positions"));
     El* body = TableBody::New(&f.cx, StrL("body"));
     El* row = TableRow::New(&f.cx, StrL("row"), 3);
     row->Child(TableCell::New(&f.cx, StrL("cell"), 2)
@@ -441,6 +542,8 @@ void TestAccessibility() {
     TestSuite("accessibility");
     TheTreeSkipsVisualBoxesButKeepsSemanticParents();
     StyledButtonsCanReplaceTheirVisibleAccessibleName();
+    AnExplicitAccessibilityLabelReplacesTheVisibleOne();
+    ExplicitOnlyNamesReachTheAnnouncedControl();
     ExplicitAriaFieldsSurviveCollection();
     BaseControlsProjectTheirControlledState();
     TablesKeepCountsAndOneBasedIndices();

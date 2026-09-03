@@ -18,6 +18,8 @@ struct ColorPicker {
     Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
+    // The announced name, when the visible label is not it.
+    Str accessibilityLabel = {};
     // icon(): the trigger is that icon rather than a square of the value.
     IconName icon = IconName::None;
     UiSize size = UiSize::Medium;
@@ -33,6 +35,10 @@ struct ColorPicker {
     static ColorPicker* New(Ctx* cx, Str id);
     static ColorPicker* New(Ctx* cx, Entity<ColorPickerState> state);
     ColorPicker* Label(Str s);
+    // Set the name a screen reader announces, when the visible label is not
+    // it. A color picker's name comes from its Label by default; setting
+    // this replaces the announced name without changing the visible label.
+    ColorPicker* AccessibilityLabel(Str s);
     ColorPicker* Icon(IconName v);
     ColorPicker* WithSize(UiSize s);
     ColorPicker* FeaturedColors(const uint32_t* colors, int n);

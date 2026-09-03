@@ -42,6 +42,13 @@ Edges WindowBorderInsets(float shadowSize, WindowTiling tiling);
 // installed, or the platform default before its first render.
 Edges WindowPaddings(Window* window);
 
+// window_content_insets: the per-side inset from the window bounds to the
+// visible frame's content area. This is WindowPaddings plus the frame's own
+// border, which the window wrapper draws on every side it is not tiled
+// against, and it is what lays an element flush against the inside of the
+// frame rather than a border's width out from it.
+Edges WindowContentInsets(Window* window);
+
 // ResizeEdge, numbered as _NET_WM_MOVERESIZE numbers its directions —
 // clockwise from the top-left corner — because that is what the X11 window
 // sends when one of them is grabbed. None is -1.

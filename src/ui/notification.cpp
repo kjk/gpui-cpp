@@ -455,6 +455,7 @@ static Notification NotificationOwnedCopy(const Notification& item) {
 }
 
 NotificationListState::~NotificationListState() {
+    NotificationStopAdvancing(this);
     for (int i = 0; i < items.len; i++) {
         NotificationFreeOwned(&items[i]);
     }
@@ -564,7 +565,9 @@ int NotificationPush(NotificationListState* s, Ctx* cx, Notification item,
     if (!ToastPush(&s->stack, item.id, timeoutMs)) {
         NotificationFreeOwned(&s->items[s->items.len - 1]);
         s->items.len--;
+        return item.id;
     }
+    NotificationStartAdvancing(s, cx);
     return item.id;
 }
 
@@ -634,9 +637,38 @@ void NotificationClear(NotificationListState* s, Ctx* cx) {
     }
 }
 
+void NotificationStartAdvancing(NotificationListState* s, Ctx* cx) {
+    if (s->isAdvancing || !cx || !cx->win || !s->self.IsValid()) {
+        return;
+    }
+    s->isAdvancing = true;
+    s->advanceWin = cx->win;
+    Entity<NotificationListState> self = {s->self};
+    s->advanceTimer =
+        WindowSetInterval(cx->win, kNotificationTickMs,
+                          ListenTo(self, &NotificationListState::OnTick));
+}
+
+void NotificationStopAdvancing(NotificationListState* s) {
+    if (!s->isAdvancing) {
+        return;
+    }
+    if (s->advanceWin && s->advanceTimer) {
+        WindowCancelTimer(s->advanceWin, s->advanceTimer);
+    }
+    s->isAdvancing = false;
+    s->advanceTimer = 0;
+    s->advanceWin = nullptr;
+}
+
 static bool NotificationAdvanceImpl(NotificationListState* s, Ctx* cx,
                                     int deltaMs) {
-    bool paused = s->IsExpanded() || (cx && !WindowIsActive(cx));
+    // Only stack expansion — hover or focus — holds the countdown. Window
+    // activation says nothing about visibility: a toast on a side-by-side or
+    // second-monitor window would otherwise stay up until the window was
+    // clicked, and there is no occlusion state to ask instead. A message
+    // that must not be missed already asks for no autohide.
+    bool paused = s->IsExpanded();
     bool changed = ToastStackAdvance(&s->stack, deltaMs, paused);
     // ToastAdvance reports phase boundaries and removals. Notification also
     // paints progress within Starting/Ending, so those ticks repaint too.
@@ -716,7 +748,14 @@ void NotificationListState::OnHover(NotificationListState* self, Ctx* cx,
 
 void NotificationListState::OnTick(NotificationListState* self, Ctx* cx,
                                    const TickEvent*) {
-    if (NotificationAdvance(self, cx, kNotificationTickMs)) {
+    bool changed = NotificationAdvance(self, cx, kNotificationTickMs);
+    // The loop ends itself once the manager is empty, and `push` is the only
+    // insertion point, so the clock only ever stops at an instant when
+    // nothing is mounted.
+    if (self->stack.entries.len == 0) {
+        NotificationStopAdvancing(self);
+    }
+    if (changed) {
         Notify(cx);
     }
 }

@@ -17,6 +17,10 @@ Radio* Radio::Label(Str s) {
     label = s;
     return this;
 }
+Radio* Radio::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 Radio* Radio::Hint(Str s) {
     hint = s;
     return this;
@@ -86,8 +90,11 @@ El* Radio::IntoEl() {
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
-    if (label.s) {
-        row->AriaLabel(label);
+    // The explicit name wins over the visible label, and only the name
+    // changes: what is drawn stays the label.
+    Str name = accessibilityLabel.s ? accessibilityLabel : label;
+    if (name.s) {
+        row->AriaLabel(name);
     }
     row->Child(dot);
     if (label.s || hint.s) {

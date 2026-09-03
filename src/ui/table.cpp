@@ -332,6 +332,10 @@ Table* Table::Bordered(bool v) {
     bordered = v;
     return this;
 }
+Table* Table::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 Table* Table::Child(TableGroup* g) {
     groups.Append(a, g);
     return this;
@@ -343,8 +347,12 @@ Table* Table::Child(TableCaption* c) {
 
 El* Table::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
-    El* t = gpui::Table::New(cx, id)->FlexCol()->W(kFill)->ClipY()->ClipX()->Bg(
-        th.tokens.tableBg);
+    El* t = gpui::Table::New(cx, id, -1, -1, accessibilityLabel)
+                ->FlexCol()
+                ->W(kFill)
+                ->ClipY()
+                ->ClipX()
+                ->Bg(th.tokens.tableBg);
     if (bordered) {
         t->Border(1, th.border)->Radius(th.radius);
     }
@@ -520,11 +528,39 @@ float DataTable::ColWidth(const TableState* s, int col) const {
     return s ? TableColWidth(s, col, declared) : declared;
 }
 
-// render_resize_handle: a two-pixel grab straddling the column's right edge
-// with a one-pixel line down it. Rust pulls the handle back over the edge with
-// ml(-HANDLE_SIZE) because the head's content is w_full; the content here
-// grows into whatever the handle leaves, which puts the same edge in the same
-// place — and that is what lets the drag work out where the column starts.
+// resize_handle_band: the interactive band that drags the boundary on the
+// right of column `col`, carrying no styling that places or paints it.
+//
+// Paint order decides which element is offered a drag first: later siblings
+// win, and a header cell starts a column reorder. So a single band straddling
+// the boundary would lose its outer half to the next column's cell. Each
+// boundary is covered by two bands instead, one in the head on either side,
+// each built after that head's own cell and so above everything it overlaps.
+// `leading` marks the band that reaches back over the boundary from the next
+// column's head, which the drag handler reads off the payload's data to know
+// which of its edges is the boundary.
+static El* ResizeHandleBand(Ctx* cx, Str id, int col, bool leading,
+                            Entity<TableState> state) {
+    Arena* a = cx->a;
+    El* e = Div(a)->PathClick(id)->FlexRow()->Cursor(CursorKind::ColResize);
+    // on_drag(ResizeColumn((entity_id, ix))): the press picks the column up,
+    // and every move afterwards carries it back to the handler.
+    e->OnDrag(kTableResizeDrag, col, leading ? (void*)e : nullptr);
+    e->OnDragMove(ListenTo(state, &TableState::OnResizeDrag));
+    // on_mouse_up_out ends the drag. A release back over the band it started
+    // on is not "out", so the handle listens for that one too — the handler
+    // does nothing when no drag is going on.
+    e->OnMouseUpOut(ListenTo(state, &TableState::OnResizeEnd));
+    e->OnMouseUp(ListenTo(state, &TableState::OnResizeEnd));
+    return e;
+}
+
+// render_resize_handle: the half of column `col`'s resize handle that lies
+// inside column `col`, along with the hairline that marks the boundary. It
+// is HANDLE_PADDING wide, like the half on the far side, so the grab area is
+// symmetric about the boundary. The negative margin keeps the band's net
+// contribution to the header row zero, and `justify_end` pins the hairline
+// to the column edge.
 static El* ResizeHandle(Ctx* cx, Str id, int col, Entity<TableState> state) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow(cx->app);
@@ -533,26 +569,31 @@ static El* ResizeHandle(Ctx* cx, Str id, int col, Entity<TableState> state) {
     // Nothing sets a height: a flex row stretches its children, so the handle
     // and the line down it are as tall as the head, which is what h_full says
     // in Rust.
-    El* e = Div(a)
-                ->PathClick(id)
-                ->FlexRow()
-                ->W(kTableResizeHandleW)
+    El* e = ResizeHandleBand(cx, id, col, false, state)
+                ->W(kTableResizeHandlePadding)
+                ->MarginL(-kTableResizeHandlePadding)
                 ->JustifyEnd()
-                ->Cursor(CursorKind::ColResize);
+                ->ItemsCenter();
     // group_hover: the line under the pointer, or under a drag, is the darker
-    // of the two borders.
-    e->Child(Div(a)->W(1)->Bg(on ? th.border : th.tableRowBorder));
+    // of the two borders, and runs the full height while it is.
+    e->Child(Div(a)->W(1)->H(kFill)->Bg(on ? th.border : th.tableRowBorder));
     e->HoverBg(th.border);
-    // on_drag(ResizeColumn((entity_id, ix))): the press picks the column up,
-    // and every move afterwards carries it back to the handler.
-    e->OnDrag(kTableResizeDrag, col);
-    e->OnDragMove(ListenTo(state, &TableState::OnResizeDrag));
-    // on_mouse_up_out ends the drag. A release back over the two pixels it
-    // started on is not "out", so the handle listens for that one too — the
-    // handler does nothing when no drag is going on.
-    e->OnMouseUpOut(ListenTo(state, &TableState::OnResizeEnd));
-    e->OnMouseUp(ListenTo(state, &TableState::OnResizeEnd));
     return e;
+}
+
+// render_leading_resize_handle: the other half of that band, for the
+// boundary on the *left* of the head it sits in — the one owned by the
+// column before it. It is positioned absolutely so that reaching back over
+// the boundary costs the header row no width, and it is built after this
+// column's own cell so that it, and not a column reorder, receives the drag.
+static El* LeadingResizeHandle(Ctx* cx, Str id, int prevCol,
+                               Entity<TableState> state) {
+    return ResizeHandleBand(cx, id, prevCol, true, state)
+        ->Absolute()
+        ->Top(0)
+        ->Left(0)
+        ->H(kFill)
+        ->W(kTableResizeHandlePadding);
 }
 
 // The pane a column is drawn in: the pinned one holds the leading columns
@@ -994,9 +1035,20 @@ El* DataTable::BuildEl() {
             content->Child(icon);
         }
         th_->Child(content);
+        // resize handle cell right side
         if (s && s->colResizable && col.resizable) {
             th_->Child(ResizeHandle(
                 cx, StrDup(a, fmt("resizable-handle-%d", c)), c, state));
+        }
+        // resize handle cell left side: is_col_resizable(ix - 1), the column
+        // shown before this one.
+        if (s && s->colResizable && d > 0) {
+            int prev = TableColAt(s, d - 1);
+            if (columns[prev].resizable) {
+                th_->Child(LeadingResizeHandle(
+                    cx, StrDup(a, fmt("resizable-handle-leading-%d", c)), prev,
+                    state));
+            }
         }
         (d < nFixed ? headFixed : headScroll)->Child(th_);
     }

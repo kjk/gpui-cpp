@@ -626,12 +626,12 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     // between them, which is a table where Rust has a stack.
     El* line = Div(a)->Id(id)->W(kFill)->Gap(12);
     if (it.layout == Axis::Horizontal) {
-        line->FlexRow()->ItemsStart()->JustifyBetween();
+        line->FlexRow()->ItemsCenter()->JustifyBetween();
     } else {
         line->FlexCol();
     }
     (void)first;
-    El* text = Div(a)->FlexCol()->Flex1()->Gap(4);
+    El* text = Div(a)->FlexCol()->Flex1();
     text->Child(TextEl(a, it.title)
                     ->Font(16)
                     ->Fg(it.disabled ? th.mutedFg : th.foreground));

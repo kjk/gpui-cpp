@@ -362,6 +362,14 @@ Button* Button::Toggled(bool v) {
     hasAccessibilityToggled = true;
     return this;
 }
+Button* Button::HoverGroup(bool v) {
+    hoverGroup = v;
+    return this;
+}
+Button* Button::HoverGroupHeld(bool v) {
+    hoverGroupHeld = v;
+    return this;
+}
 Button* Button::OnClick(Listener l) {
     onClick = l;
     return this;
@@ -529,14 +537,12 @@ El* Button::IntoEl() {
         }
     }
     if (selected) {
-        // ButtonVariant::selected: the variant's *own* active fill, not a
-        // secondary one for everybody. Ghost is the exception — it has no
-        // button family, so it takes `secondary_active` straight — and Link
-        // and Text stay transparent the way they are in every other state.
+        // ButtonVariant::selected: the variant's *own* active fill. Ghost
+        // used to take `secondary_active` straight, which sat too close to
+        // its hover to read as pressed, so it now selects with its active
+        // surface like everything else. Link and Text stay transparent the
+        // way they are in every other state.
         switch (variant) {
-            case ButtonVariant::Ghost:
-                bg = th.tokens.secondaryActive;
-                break;
             case ButtonVariant::Link:
             case ButtonVariant::Text:
                 bg = clear;
@@ -763,6 +769,18 @@ El* Button::IntoEl() {
         e->ActiveBg(press);
         if (hasFgHover) {
             e->HoverFg(fgHover);
+        }
+        // Registered beside hover and active, so it yields to selected,
+        // disabled and loading the way Rust's `when(!disabled && !selected)`
+        // and `when(interactive)` do. The paint asks the group only where the
+        // element's own hover and active have nothing to say, which is the
+        // order the two refinements are applied in.
+        if (hoverGroup) {
+            Background idle = BackgroundOpacity(hover, 0.5f);
+            if (hoverGroupHeld) {
+                e->Bg(idle);
+            }
+            e->GroupHoverBg(idle);
         }
     }
     if (interactive && onHover.IsValid()) e->OnHover(onHover);
@@ -1178,13 +1196,24 @@ El* DropdownButton::IntoEl() {
     // An inner selected state is the split's, rather than being cleared by the
     // DropdownButton's own default.
     bool isSelected = selected || (button && button->selected);
-    // A ghost split that is not selected keeps both ends rounded -- there is no
-    // filled block for a square corner to sit against -- so the pair is not
-    // joined at all.
-    bool attached = !(v == ButtonVariant::Ghost && !isSelected);
+    // The two halves stay visually joined for every variant. Only a ghost
+    // split has no surface at rest, so only it needs hovering one half to
+    // reveal the other, and the action half to stay revealed while the menu
+    // holds the trigger pressed.
+    bool isGhost = v == ButtonVariant::Ghost;
+    // Rust records the menu's open state in keyed state and follows it
+    // through `DropdownMenuPopover::on_open_change`; the menu's own state is
+    // that value, and it is already in hand here.
+    PopupMenuState* menuState = menu ? menu->state.Get(cx) : nullptr;
+    bool menuOpen = menuState && menuState->open;
 
     IdScope scope(cx, id);
     El* row = Div(a)->Id(id)->FlexRow()->ItemsCenter();
+    if (isGhost) {
+        // div().group(HALVES_GROUP): the row is what a half's group_hover is
+        // resolved against.
+        row->Group();
+    }
     if (button) {
         button->Selected(isSelected)
             ->Disabled(disabled || button->disabled)
@@ -1196,13 +1225,14 @@ El* DropdownButton::IntoEl() {
         if (outline) {
             button->Outline();
         }
-        if (attached) {
-            button->joined = true;
-        }
+        button->joined = true;
         button->cornerTL = true;
-        button->cornerTR = !attached;
+        button->cornerTR = false;
         button->cornerBL = true;
-        button->cornerBR = !attached;
+        button->cornerBR = false;
+        if (isGhost) {
+            button->HoverGroup()->HoverGroupHeld(menuOpen);
+        }
         row->Child(button->IntoEl());
     }
 
@@ -1222,14 +1252,15 @@ El* DropdownButton::IntoEl() {
         if (outline) {
             caret->Outline();
         }
-        if (attached) {
-            caret->joined = true;
-            caret->edgeL = false;
-        }
-        caret->cornerTL = !attached;
+        caret->joined = true;
+        caret->edgeL = false;
+        caret->cornerTL = false;
         caret->cornerTR = true;
-        caret->cornerBL = !attached;
+        caret->cornerBL = false;
         caret->cornerBR = true;
+        if (isGhost) {
+            caret->HoverGroup();
+        }
         El* trigger = caret->IntoEl();
         if (disabled) {
             row->Child(trigger);

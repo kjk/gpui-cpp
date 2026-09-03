@@ -87,8 +87,15 @@ extern const Str kTableResizeDrag;
 // in Rust.
 extern const Str kTableColDrag;
 
-// The resize handle's width, straddling the column's right edge.
+// HANDLE_SIZE: how far behind the pointer a resize drag trails the column
+// edge.
 const float kTableResizeHandleW = 2;
+// HANDLE_PADDING: grab room on each side of a resize handle's hairline, so
+// the divider can be caught without pixel-hunting. Both halves of the band
+// are this wide, so widening the grab area stays symmetric about the
+// boundary. `resizable`'s handle pads a hairline the same way, and by the
+// same amount.
+const float kTableResizeHandlePadding = 4;
 
 // TableVisibleRange: which rows and which columns the table last built, as
 // two half-open ranges. Rust keeps the pair on the state and hands each half
@@ -273,8 +280,13 @@ bool TableMoveColumn(TableState* s, int from, int to);
 void TableMoveColumnEvent(TableState* s, Ctx* cx, int from, int to);
 // drag_gap_at: the gap a head dropped at `x` would go into — the one after
 // the last column whose centre is left of `x` — or -1 when dropping there
-// would put the column back where it already is.
-int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol);
+// would put the column back where it already is. A column can only be
+// reordered within its own region: rendering pins the first `fixedCount`
+// columns, so a cross-region move would change which columns are pinned
+// without updating their `fixed` flags. The pointer is in the fixed region
+// when it is left of the last fixed column's right edge.
+int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol,
+                   int fixedCount = 0);
 // The three per-column arrays grown to hold `n` columns. Rust's col_groups is
 // one Vec of structs; these are three, since a column's width, its place in
 // the order and where its head was painted are written at different moments.

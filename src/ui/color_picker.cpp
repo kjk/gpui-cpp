@@ -36,6 +36,10 @@ ColorPicker* ColorPicker::Label(Str s) {
     label = s;
     return this;
 }
+ColorPicker* ColorPicker::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 ColorPicker* ColorPicker::Icon(IconName v) {
     icon = v;
     return this;
@@ -335,8 +339,10 @@ El* ColorPicker::IntoEl() {
     // the picker is the outer element and the popover is inside it, holding
     // the trigger and the panel. The port had the two the other way up, which
     // is what left the popover with nothing named above it.
+    // The explicit name wins over the visible label.
+    Str name = accessibilityLabel.s ? accessibilityLabel : label;
     El* root = gpui::ColorPicker::New(
-                   cx, id, s->open, false, label, AccessibilityRole::Button,
+                   cx, id, s->open, false, name, AccessibilityRole::Button,
                    ListenTo(st, &ColorPickerState::OnOpenChange), s->focus)
                    ->Child(Popup::New(cx, StrL("popover"), trigger)
                                ->Content(pop)

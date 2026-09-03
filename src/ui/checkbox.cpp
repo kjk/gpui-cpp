@@ -22,6 +22,10 @@ Checkbox* Checkbox::Label(Str s) {
     label = s;
     return this;
 }
+Checkbox* Checkbox::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 Checkbox* Checkbox::Hint(Str s) {
     hint = s;
     return this;
@@ -125,8 +129,11 @@ El* Checkbox::IntoEl() {
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
-    if (label.s) {
-        row->AriaLabel(label);
+    // The explicit name wins over the visible label, and only the name
+    // changes: what is drawn stays the label.
+    Str name = accessibilityLabel.s ? accessibilityLabel : label;
+    if (name.s) {
+        row->AriaLabel(name);
     }
     if (tooltip.s) {
         row->Tip(tooltip);

@@ -125,6 +125,36 @@ static void WindowPaddingsFollowDecorationAndStableInset() {
     utassertnear(none.right, 0.f);
 }
 
+// window_content_insets: the shadow padding plus the frame's own border on
+// every side it is not tiled against, which is what lays a sheet flush
+// against the inside of the frame.
+static void ContentInsetsAddTheFrameBorderToThePaddings() {
+    Window window;
+    window.clientInset = 20;
+    window.tiling.left = true;
+#if GPUI_OS_LINUX
+    // Without a native adapter this test window is server-decorated, and a
+    // server-decorated window has no frame of ours to inset from.
+    Edges e = WindowContentInsets(&window);
+    utassertnear(e.top, 0.f);
+    utassertnear(e.left, 0.f);
+#else
+    window.opts.clientTitleBar = true;
+    Edges pad = WindowPaddings(&window);
+    Edges e = WindowContentInsets(&window);
+    // A tiled side has neither shadow nor border; every other side is the
+    // padding plus one border.
+    utassertnear(e.left, 0.f);
+    utassertnear(pad.left, 0.f);
+    utassertnear(e.top, pad.top + kWindowBorderSize);
+    utassertnear(e.bottom, pad.bottom + kWindowBorderSize);
+    utassertnear(e.right, pad.right + kWindowBorderSize);
+#endif
+    Edges none = WindowContentInsets(nullptr);
+    utassertnear(none.top, 0.f);
+    utassertnear(none.right, 0.f);
+}
+
 static void BuilderPublishesPlatformResizeSettings() {
     App app;
     Window* window = new Window();
@@ -198,6 +228,7 @@ void TestWindowBorder() {
     ATiledSideIsNeverGrabbed();
     AWindowWithNoShadowIsGrabbedAtItsOwnEdges();
     WindowPaddingsFollowDecorationAndStableInset();
+    ContentInsetsAddTheFrameBorderToThePaddings();
     BuilderPublishesPlatformResizeSettings();
     BuilderCarriesTheExactTwoSourceShadows();
 }

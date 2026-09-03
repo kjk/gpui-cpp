@@ -140,6 +140,15 @@ struct Button {
     bool justifyStart = false;
     bool selected = false;
     bool dropdown = false;
+    // hover_group: while any member of the group is hovered, an idle member
+    // shows its hover surface at half strength, so a composite such as a
+    // split button reads as one control with the hovered part emphasized.
+    // Rust names its groups; the group here is the nearest ancestor that
+    // asked to be one, which is the DropdownButton's own row.
+    bool hoverGroup = false;
+    // hover_group_held: keep that idle surface up without a pointer, for as
+    // long as the group is held engaged — while a sibling's menu is open.
+    bool hoverGroupHeld = false;
     bool focusRing = true;
     int tabIndex = 0;
     bool tabStop = true;
@@ -199,6 +208,9 @@ struct Button {
     Button* SelectedStyle(const StateStyle& s);
     Button* DisabledStyle(const StateStyle& s);
     Button* DropdownCaret(bool v = true);
+    // Crate-private in Rust: only DropdownButton joins its halves this way.
+    Button* HoverGroup(bool v = true);
+    Button* HoverGroupHeld(bool v);
     Button* Custom(Rgba c);
     Button* Custom(const ButtonCustomVariant& value);
     Button* Extra(El* e);

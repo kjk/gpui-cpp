@@ -76,7 +76,8 @@ static void AHeadingIsHiddenWhileItsGroupIsFilteredOut() {
 
 static void UngroupedItemsKeepTheirGivenRow() {
     CommandItem items[3] = {{StrL("Alpha")}, {StrL("Beta")}, {StrL("Gamma")}};
-    CommandEntry entries[3] = {CommandEntryOf(items[0]), CommandEntryOf(items[1]),
+    CommandEntry entries[3] = {CommandEntryOf(items[0]),
+                               CommandEntryOf(items[1]),
                                CommandEntryOf(items[2])};
     CommandState s;
     Install(&s, entries, 3, "gam");
@@ -221,6 +222,37 @@ static void AnUnfilterablePaletteKeepsEveryItem() {
     utassert(CommandMatchedCount(&s) == 1);
 }
 
+// state.rs after 466e6da8: a hover selection does not scroll, and neither
+// does the model reinstall the notify it causes — otherwise the list moves a
+// frame later and slides the next row under the resting cursor.
+static void AReinstalledModelDoesNotScrollAPreservedSelection() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, nullptr);
+    // The install seeds the highlight and asks for the scroll that goes with
+    // it; the frame that renders consumes it.
+    s.pendingScroll = -1;
+
+    // A pointer-style selection: the highlight moves, nothing scrolls.
+    HoverEvent hover = {};
+    hover.hovered = true;
+    CommandState::OnRowHover(&s, nullptr, &hover, 1);
+    IndexPath path = {};
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+    utassert(s.pendingScroll == -1);
+
+    // The host re-render that notify causes reinstalls the model with the
+    // selection preserved. That must not scroll either.
+    CommandInstall(&s, nullptr, entries, 1, true);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+    utassert(s.pendingScroll == -1);
+
+    // Keyboard navigation still reveals what it moves to.
+    CommandSelectBy(&s, nullptr, 1);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 0);
+    utassert(s.pendingScroll == s.matched[s.selected].row);
+}
+
 static void AQueryIsTrimmedBeforeItIsMatched() {
     CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
     CommandState s;
@@ -242,5 +274,6 @@ void TestCommand() {
     AClearedHighlightStaysCleared();
     AQueryChangeResetsTheHighlight();
     AnUnfilterablePaletteKeepsEveryItem();
+    AReinstalledModelDoesNotScrollAPreservedSelection();
     AQueryIsTrimmedBeforeItIsMatched();
 }
