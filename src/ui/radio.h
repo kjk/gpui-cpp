@@ -13,6 +13,8 @@ struct Radio {
     Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
+    // The announced name, when the visible label is not it.
+    Str accessibilityLabel = {};
     Str hint = {};
     bool checked = false;
     bool disabled = false;
@@ -24,6 +26,10 @@ struct Radio {
 
     static Radio* New(Ctx* cx, Str id);
     Radio* Label(Str s);
+    // Set the name a screen reader announces, when the visible label is not
+    // it. A radio's name comes from its Label by default; setting this
+    // replaces the announced name without changing what is displayed.
+    Radio* AccessibilityLabel(Str s);
     Radio* Hint(Str s);
     Radio* Checked(bool v);
     Radio* Disabled(bool v);

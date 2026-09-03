@@ -23,6 +23,10 @@ Switch* Switch::Label(Str s) {
     label = s;
     return this;
 }
+Switch* Switch::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 Switch* Switch::Checked(bool v) {
     checked = v;
     return this;
@@ -61,16 +65,18 @@ El* Switch::IntoEl() {
         thumb = 20;
     }
     // The unstyled parts own semantic-state priority. The unchecked fill is
-    // the instance baseline; checked replaces it and disabled replaces that
-    // only for the checked case, exactly as the conditional Rust style does.
+    // the instance baseline; checked replaces it and disabled replaces that.
+    //
+    // Element opacity multiplies each primitive's alpha instead of
+    // compositing the subtree as one group, so fading the whole control would
+    // let the track show through the thumb. Fading the track alone — either
+    // fill, not just the checked one — lands on the pixels a grouped fade
+    // would, because the thumb is the background colour.
+    Background trackBg = checked ? on : Background(th.tokens.secondary);
     SwitchTrackStyles trackStyles;
     trackStyles.Checked(StateStyle().Bg(on));
-    if (checked) {
-        trackStyles.Disabled(StateStyle().Bg(BackgroundOpacity(on, 0.5f)));
-    }
+    trackStyles.Disabled(StateStyle().Bg(BackgroundOpacity(trackBg, 0.5f)));
     SwitchThumbStyles thumbStyles;
-    thumbStyles.Disabled(
-        StateStyle().Bg(BackgroundOpacity(th.tokens.switchThumb, 0.35f)));
     // Rust builds the track's id from `(id, "track")`, so the part is named
     // apart from the switch it sits in.
     El* track = SwitchTrack::New(cx, StrDup(a, fmt("%s-track", id)), checked,
@@ -101,31 +107,39 @@ El* Switch::IntoEl() {
     }
     // Absolutely placed, since what moves is an offset rather than which end
     // of the track the thumb is packed against.
+    // The thumb keeps its own colour in every state; only the track fades.
     El* thumbEl = SwitchThumb::New(cx, checked, disabled, &thumbStyles)
                       ->Absolute()
                       ->Left(inset + x)
                       ->Top(inset)
                       ->W(thumb)
                       ->H(thumb)
-                      ->Radius(thumb * 0.5f);
-    if (!disabled) {
-        thumbEl->Bg(th.tokens.switchThumb);
-    }
+                      ->Radius(thumb * 0.5f)
+                      ->Bg(th.tokens.switchThumb);
     track->Child(thumbEl);
+    // The disabled root mutes the label, which is what Rust's
+    // `styles(|styles| styles.disabled(..))` on the switch itself puts there.
+    // Its other half, `cursor_not_allowed()`, has no seam: StateStyle carries
+    // fills, borders and radii, not a cursor, so a disabled switch keeps the
+    // arrow rather than showing the barred pointer.
+    SwitchStyles rootStyles;
+    rootStyles.Disabled(StateStyle().Fg(th.mutedFg));
     // gpui_base::Switch owns identity, focus and activation, and hands the
     // handler the value the activation produces.
-    El* root = gpui::Switch::New(cx, id, checked, disabled, onClick, nullptr,
-                                 nullptr, label)
+    Str name = accessibilityLabel.s ? accessibilityLabel : label;
+    El* root = gpui::Switch::New(cx, id, checked, disabled, onClick,
+                                 &rootStyles, nullptr, name)
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8);
     root->Child(track);
     if (label.s) {
-        // text_sm below Medium, text_base at and above it — and the label
-        // keeps its colour when the switch is disabled; only the track dims.
+        // text_sm below Medium, text_base at and above it. A disabled switch
+        // mutes the label along with the track it names.
         float labelFont =
             (size == UiSize::XSmall || size == UiSize::Small) ? 14.f : 16.f;
-        root->Child(TextEl(a, label)->Font(labelFont)->Fg(th.foreground));
+        root->Child(TextEl(a, label)->Font(labelFont)->Fg(
+            disabled ? th.mutedFg : th.foreground));
     }
     return root;
 }

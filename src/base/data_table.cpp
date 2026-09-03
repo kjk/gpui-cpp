@@ -573,10 +573,30 @@ bool TableMoveColumn(TableState* s, int from, int to) {
     return true;
 }
 
-int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol) {
+int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol,
+                   int fixedCount) {
+    if (fixedCount < 0) {
+        fixedCount = 0;
+    }
+    if (fixedCount > n) {
+        fixedCount = n;
+    }
+    // A column can only be reordered within its own region: rendering pins
+    // the first `fixedCount` columns, so a cross-region move would change
+    // which columns are pinned without updating their `fixed` flags.
+    bool dragInFixed = dragCol < fixedCount;
+    bool pointerInFixed = fixedCount > 0 && x < colBounds[fixedCount - 1]
+                                                    .Right();
+    if (dragInFixed != pointerInFixed) {
+        return -1;
+    }
+    // The candidates are the columns of that region alone: the fixed ones
+    // when the pointer is over them, the scrollable ones otherwise.
+    int first = pointerInFixed ? 0 : fixedCount;
+    int end = pointerInFixed ? fixedCount : n;
     // The gap sits after the last column whose centre is left of `x`.
-    int gap = 0;
-    for (int i = 0; i < n; i++) {
+    int gap = first;
+    for (int i = first; i < end; i++) {
         if (x < colBounds[i].x + colBounds[i].w * 0.5f) {
             break;
         }
@@ -723,10 +743,13 @@ void TableState::OnResizeDrag(TableState* self, Ctx* cx,
     }
     TableEnsureCols(self, col + 1);
     self->resizingCol = col;
-    // col_group.bounds.left(). The handle straddles the column's right edge,
-    // so where the column starts is that edge less the width it has now — and
-    // the width it has now is what laid the handle out where it is.
-    float left = ev->el.Right() - self->colWidth[col];
+    // col_group.bounds.left(). Each boundary is covered by two bands: the
+    // trailing one ends at the column's right edge, and the leading one — in
+    // the next column's head, marked by its payload data — starts there. So
+    // where the column starts is that edge less the width it has now, and
+    // the width it has now is what laid the band out where it is.
+    float boundary = ev->drag.data ? ev->el.x : ev->el.Right();
+    float left = boundary - self->colWidth[col];
     TableResizeCol(self, cx, col, ev->event.x - kTableResizeHandleW - left);
 }
 
@@ -769,7 +792,8 @@ void TableState::OnColDragMove(TableState* self, Ctx* cx,
     }
     TableEnsureCols(self, self->colCount);
     int n = self->colCount;
-    int gap = TableDragGapAt(self->colBounds.els, n, ev->event.x, ev->drag.ix);
+    int gap = TableDragGapAt(self->colBounds.els, n, ev->event.x, ev->drag.ix,
+                             self->fixedCols);
     if (self->draggingCol == ev->drag.ix && self->dropGap == gap) {
         return;
     }
@@ -784,7 +808,8 @@ void TableState::OnColDrop(TableState* self, Ctx* cx, const DropEvent* ev) {
     }
     TableEnsureCols(self, self->colCount);
     int n = self->colCount;
-    int gap = TableDragGapAt(self->colBounds.els, n, ev->x, ev->drag.ix);
+    int gap = TableDragGapAt(self->colBounds.els, n, ev->x, ev->drag.ix,
+                             self->fixedCols);
     self->draggingCol = -1;
     self->dropGap = -1;
     if (gap >= 0) {

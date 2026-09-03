@@ -782,8 +782,13 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
         pango_layout_get_pixel_size(tl->layout, &pw, &ph);
         int w = pango_layout_get_width(tl->layout);
         float boxW = w > 0 ? (float)w / PANGO_SCALE : (float)pw;
+        // The width is the cut; the height is not. A descender's ink runs
+        // below a line box of relative 1.0, and clipping to it is what hid
+        // the tails of "g" and "y" — the `overflow_hidden` upstream dropped
+        // while keeping the ellipsis.
+        float boxH = tl->box * (float)tl->lines;
         cairo_save(cr);
-        cairo_rectangle(cr, x, y, boxW, tl->box * (float)tl->lines);
+        cairo_rectangle(cr, x, y - boxH, boxW, boxH * 3.f);
         cairo_clip(cr);
     }
     SetColor(ctx, cr, c);

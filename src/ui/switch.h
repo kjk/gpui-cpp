@@ -13,6 +13,8 @@ struct Switch {
     Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
+    // The announced name, when the visible label is not it.
+    Str accessibilityLabel = {};
     bool checked = false;
     bool disabled = false;
     UiSize size = UiSize::Medium;
@@ -22,6 +24,10 @@ struct Switch {
 
     static Switch* New(Ctx* cx, Str id);
     Switch* Label(Str s);
+    // Set the name a screen reader announces, when the visible label is not
+    // it. A switch's name comes from its Label by default; setting this
+    // replaces the announced name without changing what is displayed.
+    Switch* AccessibilityLabel(Str s);
     Switch* Checked(bool v);
     Switch* Disabled(bool v);
     Switch* WithSize(UiSize s);

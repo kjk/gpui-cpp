@@ -84,18 +84,17 @@ static void AResizeIsClamped() {
 }
 
 static void SourceColumnBuildersKeepEveryField() {
-    component::Column col =
-        component::Column::New(StrL("cpu"), StrL("CPU"))
-            .Ascending()
-            .TextCenter()
-            .Paddings(Edges::New(1, 2, 3, 4))
-            .Width(140)
-            .FixedLeft()
-            .Resizable(false)
-            .Movable(false)
-            .Selectable(false)
-            .MinWidth(150)
-            .MaxWidth(145);
+    component::Column col = component::Column::New(StrL("cpu"), StrL("CPU"))
+                                .Ascending()
+                                .TextCenter()
+                                .Paddings(Edges::New(1, 2, 3, 4))
+                                .Width(140)
+                                .FixedLeft()
+                                .Resizable(false)
+                                .Movable(false)
+                                .Selectable(false)
+                                .MinWidth(150)
+                                .MaxWidth(145);
     utassert(StrEqI(col.key, "cpu"));
     utassert(StrEqI(col.name, "CPU"));
     utassert(StrEqI(col.title, "CPU"));
@@ -180,8 +179,8 @@ static El* DelegateTd(Ctx* cx, void* data, int, int) {
     return Div(cx->a);
 }
 static void DelegateGroups(Ctx*, void*, component::DataTable* table) {
-    component::ColumnGroup* group =
-        (component::ColumnGroup*)Alloc(table->a, sizeof(component::ColumnGroup));
+    component::ColumnGroup* group = (component::ColumnGroup*)Alloc(
+        table->a, sizeof(component::ColumnGroup));
     group[0] = component::ColumnGroup::New(StrL("All"), 2);
     table->GroupHeader(group, 1);
 }
@@ -271,6 +270,33 @@ static void TheGapIsAfterTheLastCentreLeftOfThePointer() {
     // The two gaps either side of the dragged column are both a no-op.
     utassert(TableDragGapAt(b, 4, 210, 2) == -1);
     utassert(TableDragGapAt(b, 4, 260, 2) == -1);
+}
+
+// state.rs drag_gap_at after f1539a3b: a column is reordered only within its
+// own region, so a drag across the fixed-columns boundary shows no gap and
+// drops nowhere.
+static void AHeadDragNeverCrossesTheFixedBoundary() {
+    TableState s;
+    Bounds b[4];
+    SeedCols(&s, b, 4);
+    // The first two columns are pinned; the boundary is column 1's right
+    // edge, at 200.
+    // A fixed column dragged into the scrollable region has no gap.
+    utassert(TableDragGapAt(b, 4, 260, 0, 2) == -1);
+    utassert(TableDragGapAt(b, 4, 380, 0, 2) == -1);
+    // It still reorders within the fixed region.
+    utassert(TableDragGapAt(b, 4, 160, 0, 2) == 2);
+    utassert(TableDragGapAt(b, 4, 10, 1, 2) == 0);
+    // A scrollable column dragged over the fixed region has no gap either,
+    // even where the unpinned table would have found one.
+    utassert(TableDragGapAt(b, 4, 10, 2, 2) == -1);
+    utassert(TableDragGapAt(b, 4, 120, 3, 2) == -1);
+    // And within the scrollable region the gaps are the scrollable ones: the
+    // first of them is the boundary itself, never a slot among the pinned.
+    utassert(TableDragGapAt(b, 4, 210, 3, 2) == 2);
+    utassert(TableDragGapAt(b, 4, 380, 2, 2) == 4);
+    // Without pinned columns nothing changes.
+    utassert(TableDragGapAt(b, 4, 380, 0, 0) == 4);
 }
 
 static void AMovedColumnLandsInTheGap() {
@@ -665,6 +691,7 @@ void TestDataTable() {
     AColumnKeepsItsWidthOnceItHasOne();
     AResizeIsClamped();
     TheGapIsAfterTheLastCentreLeftOfThePointer();
+    AHeadDragNeverCrossesTheFixedBoundary();
     AMovedColumnLandsInTheGap();
     LoadMoreAsksNearTheEnd();
     TheKeyTable();

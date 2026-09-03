@@ -41,6 +41,10 @@ Progress* Progress::Id(Str v) {
     id = v;
     return this;
 }
+Progress* Progress::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
+    return this;
+}
 
 El* Progress::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
@@ -82,9 +86,9 @@ El* Progress::IntoEl() {
                               MotionNew(kProgressMotionMs));
         indicator->WFrac(v / 100.f);
     }
-    El* root =
-        gpui::Progress::New(cx, id.s ? id : StrL("progress"), value, loading)
-            ->W(w);
+    El* root = gpui::Progress::New(cx, id.s ? id : StrL("progress"), value,
+                                   loading, accessibilityLabel)
+                   ->W(w);
     return root->Child(gpui::ProgressTrack::New(cx)
                            ->W(w)
                            ->H(h)
@@ -123,6 +127,10 @@ ProgressCircle* ProgressCircle::Loading(bool v) {
 }
 ProgressCircle* ProgressCircle::Id(Str v) {
     id = v;
+    return this;
+}
+ProgressCircle* ProgressCircle::AccessibilityLabel(Str s) {
+    accessibilityLabel = s;
     return this;
 }
 
@@ -197,6 +205,9 @@ El* ProgressCircle::IntoEl() {
                 ->JustifyCenter();
     if (!loading) {
         e->AriaNumericValue(ProgressClampValue(accessibilityValue));
+    }
+    if (accessibilityLabel.s) {
+        e->AriaLabel(accessibilityLabel);
     }
     e->customPaint = PaintCircleProgress;
     e->customUser = this;

@@ -329,9 +329,14 @@ struct Table {
     // reason: a name only has to be unique among its siblings, and the table
     // is what makes two rows called `row-0` two different rows.
     Str id = {};
+    // The accessible name. A TableCaption is visible descriptive content and
+    // is not used automatically as the table's accessible name.
+    Str accessibilityLabel = {};
 
     static Table* New(Ctx* cx, Str id);
     Table* WithSize(UiSize s);
+    // Set the name a screen reader announces for the table.
+    Table* AccessibilityLabel(Str s);
     // `.border_1().border_color(..).rounded(..)`, which the story's second
     // table asks for by hand. Kept as one flag rather than as a style
     // refinement, since a frame is the only refinement anything makes.

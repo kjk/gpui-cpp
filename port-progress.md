@@ -10468,3 +10468,151 @@ VmRSS`. `ignores_frames_from_other_windows` still has no counterpart (ours is
 already per-window) and neither does lib.rs' `FrameTraceGuard` test, since the
 trace is always on here. 22155 checks pass, and the HUD shot shows the seven
 rows: the headline, INTERVAL, FRAME, P95, DROP/INV, GPU, CPU/MEM.
+## Upstream ingest after `6d07863f`: UI fixes
+
+`aa7def67` stops the table header lagging a frame behind arrow-key column
+navigation. Rust's `scroll_to_col` only recorded a deferred `scroll_to_item`
+on the horizontal handle the header and the rows share, and only the rows are
+a `VirtualList` that resolves it — the header prepainted first and read the
+stale offset. It now resolves the offset up front from the column widths and
+the viewport, keeping the deferred path as a pre-layout fallback. The C++
+already had that behavior structurally: `TableScrollToCol` writes
+`TableState::scrollX` at the call, through `VirtualListScrollToItem` on the
+scrollable columns' widths, and both the header row and the body read that one
+settled field while the frame is built. No C++ logic changed for this checkin.
+
+`a42a20de` exposes an accessibility label on the eight styled wrappers whose
+Base primitives already accepted an accessible name. Checkbox, ColorPicker,
+Radio and Switch fall back to their visible label and the explicit name
+replaces it; Progress, ProgressCircle, Select and Table name explicitly only,
+since a progress value, a caption, a placeholder and a selected value each
+describe the current value rather than the control. Nothing about what is
+drawn changes: the label field is untouched and only the announced name moves.
+The ported tests are in `tests/AccessibilityTests.cpp`, which collects each
+built element and reads the name off the semantic node rather than off the
+builder alone — `AccessibilityCollect` replaces what the previous call
+gathered, so each control is asserted against its own collection.
+
+`52693f2e` stops ticking the toast clock while nothing is mounted. The list
+armed its 50 ms interval when it was created, so every window paid twenty
+wakeups a second for the whole process whether or not a notification was ever
+shown, and `advance` had nothing to do in that state. `NotificationListState`
+now owns the clock — `isAdvancing`, the timer id and the window it is armed
+on — `NotificationPush` starts it and the tick that empties the manager stops
+it. `WindowNotifications` no longer arms anything, and
+`WindowLayers::notifyTimer` stays only for source compatibility. `push` is the
+only insertion point and the loop only ends at an instant when nothing is
+mounted, so a mounted toast always has a running clock; timing, interval and
+ordering are untouched.
+
+`ed6cd349` and `c6a68e0c` deduplicate the `ScaleBand` domain and then index it
+by value: Rust kept repeated domain entries, which halved the bands of a
+grouped bar chart and left the duplicate slots unaddressable, and the
+follow-up replaced the `Vec<T>` with a value-to-index map so the dedupe falls
+out of building it and `tick()` stops being a linear `position()` scan. This
+port's domain is a count, not a vector of values — a band is picked by index,
+which is what a caller walking its data already has — so there is nothing to
+deduplicate and nothing to look up, and the band arithmetic the two checkins
+deliberately left alone is the whole of what we have. `plot.h` says so at the
+type, and `test_scale_band_dedup` is ported in `tests/ScaleTests.cpp` against
+the three distinct values the dedupe leaves Rust with: the same ticks at 0, 30
+and 60, the same band width, and no index past the domain that answers.
+
+`d9c6a69e` fades the disabled switch's track instead of its thumb. Element
+opacity multiplies each primitive's alpha rather than compositing the subtree
+as one group, so fading the whole control lets the track show through the
+thumb; fading the track alone lands on the pixels a grouped fade would,
+because the thumb is the background colour. Both track fills now dim, not just
+the checked one, the thumb keeps its colour in every state, and the disabled
+switch mutes its label. The other half of upstream's disabled style,
+`cursor_not_allowed()`, has no seam here — `StateStyle` carries fills, borders
+and radii, not a cursor — so a disabled switch keeps the arrow; the comment at
+the spot says so.
+
+`19c21d7d` makes the column resize handle symmetric and big enough to catch.
+The handle was two pixels wide and sat entirely inside the column. Each
+boundary is now covered by two four-pixel bands, one in the head on either
+side, each built after that head's own cell so it sits above everything it
+overlaps — paint order decides which element is offered a drag, and a single
+straddling band would lose its outer half to the next column's cell, which
+starts a reorder. The trailing band keeps the negative margin that makes its
+net contribution to the header row zero and pins the hairline to the column
+edge; the leading one is absolute, so reaching back over the boundary costs
+the row no width. `OnResizeDrag` reads which of its edges is the boundary off
+the drag payload, since the two bands meet there from opposite sides.
+
+`f1539a3b` stops a column header drag crossing the fixed-columns boundary.
+`move_column` reorders `col_groups` without touching `fixed`, while rendering
+pins the first `fixed_left_cols_count()` columns as a prefix, so a
+cross-region drag left an unrelated column pinned and the dragged one carrying
+a stale flag. `TableDragGapAt` now takes the pinned count, resolves the
+dragged column's region from its index and the drop region from the pointer,
+and answers no gap when they differ; within a region the candidates are that
+region's columns alone. The ported regression is in
+`tests/DataTableTests.cpp`.
+
+`466e6da8` stops hover selection from scrolling the command list. Hover reused
+the keyboard path's `select`, which always revealed the selected row, and
+reinstalling the model scrolled to the preserved selection on every host
+re-render — so hovering a half-clipped edge row revealed it, slid the next row
+under the resting cursor, and scrolled in a loop. `SelectMatch` no longer
+records a pending scroll and neither does the preserved-selection branch of
+`CommandInstall`; `CommandSelectBy` asks for it on a real move, and
+`CommandSetSelectedIndex` still does. The ported regression in
+`tests/CommandTests.cpp` drives a pointer-style selection, reinstalls the
+model, and checks that nothing was queued while keyboard navigation still
+queues.
+
+`f001d800` keeps the autohide countdown running while the window is inactive.
+Activation says nothing about visibility — a toast raised on a side-by-side or
+second-monitor window stayed up until the window was clicked — and there is no
+occlusion state to ask instead; a message that must not be missed already asks
+for no autohide. Only stack expansion, hover or focus, pauses now. The test
+that locked the pause is replaced by one asserting an inactive window retires
+the toast, with the expansion pause kept on its own.
+
+`731e33c7` and `8be1a3b9` surface the whole ghost DropdownButton when either
+half is hovered and keep it surfaced while its menu is open. The two halves
+are now joined for every variant rather than rendering as two rounded buttons
+when a ghost split is unselected, and a crate-private hover group carries the
+rest: while any member is hovered an idle member shows its hover surface at
+half strength, and `hoverGroupHeld` holds that surface without a pointer.
+Rust names its groups; the group here is the nearest ancestor that asked to be
+one, which is the DropdownButton's own row, and the paint already consults a
+group only where the element's own hover and active have nothing to say —
+which is the order the two refinements are applied in, so it yields to
+selected, disabled and loading. A ghost button also now selects with its
+active surface instead of `secondary_active`, which sat too close to its hover
+to read as pressed. Rust reaches the menu's open state through new keyed state
+and a new `DropdownMenuPopover::on_open_change`; the C++ dropdown already owns
+that state in its `PopupMenuState`, so the split reads it directly and the
+callback has no counterpart here.
+
+`a75ba7d2` fixes sheet alignment against a client-decorated frame. A sheet was
+offset by the shadow padding alone, so it hung into the shadow on one side and
+left a border's gap on the other. `WindowContentInsets` is the new seam —
+`WindowPaddings` plus the frame's own border on every side it is not tiled
+against — and the sheet offsets and sizes itself to that instead. The C++
+sheet already placed itself with explicit `Top`/`Left` rather than the
+`anchored()` wrapper the checkin removes, so only the insets changed. The
+inset regression is in `tests/WindowBorderTests.cpp`.
+
+`29fbc4f5` aligns a settings field with its label: a horizontal item centers
+its two columns instead of starting them, and the text column drops the gap
+that pushed the description away from the title.
+
+`20f8a450` stops descenders being hidden on button and tab labels. GPUI's
+`truncate()` is `overflow_hidden` *and* `text_ellipsis`, and the first cut the
+ink of "g" and "y" at the line box, because a line box of relative 1.0 is the
+font size while a descender runs below it; upstream dropped the
+`overflow_hidden` and kept the ellipsis. Here the two were one flag:
+`Truncate` drives both the ellipsis and a paint-time clip, in the element
+paint and again inside each backend's `TextLayoutDraw`. All four now cut
+horizontally only — the width still ends the run, with a line box of slack
+above and below for the ink to finish in, and Direct2D drops
+`DRAW_TEXT_OPTIONS_CLIP` in favour of the trimming sign it already sets. Both
+the button label and the tab label go through that one path, so neither needed
+a change of its own.
+
+MSVC release tests pass 22,159 checks, and the release story and showcase
+targets build with `/W4 /WX`.

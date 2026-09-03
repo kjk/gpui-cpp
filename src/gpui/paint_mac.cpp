@@ -887,9 +887,13 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
         return;
     }
     if (clip) {
+        // Horizontally only: a descender's ink runs below a line box of
+        // relative 1.0, so clipping to that box cut the tails of "g" and "y"
+        // — the `overflow_hidden` upstream dropped while keeping the
+        // ellipsis.
+        float boxH = tl->box * (float)tl->nLines;
         CGContextSaveGState(cg);
-        CGContextClipToRect(
-            cg, CGRectMake(x, y, tl->width, tl->box * (float)tl->nLines));
+        CGContextClipToRect(cg, CGRectMake(x, y - boxH, tl->width, boxH * 3.f));
     }
     SetFill(ctx, cg, c);
     CGContextSetTextMatrix(cg, CGAffineTransformMakeScale(1, -1));

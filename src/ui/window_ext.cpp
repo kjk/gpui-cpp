@@ -147,13 +147,12 @@ Entity<component::NotificationListState> WindowNotifications(Ctx* cx) {
             // before the list has ever drawn.
             st->self = l->notifications.id;
         }
-        // Rust spawns a task that advances the list every 50 ms; a window
-        // timer is the same clock, and it is armed here rather than by an
-        // application because the list is the window's.
-        l->notifyTimer = WindowSetInterval(
-            cx->win, component::kNotificationTickMs,
-            ListenTo(l->notifications,
-                     &component::NotificationListState::OnTick));
+        // The clock is not armed here. Rust used to spawn its 50 ms task from
+        // `NotificationList::new`, so every window paid twenty wakeups a
+        // second for the whole process whether or not a notification was ever
+        // shown; it now starts the loop from `push` and ends it once the last
+        // toast is unmounted. NotificationPush arms and the tick cancels, so
+        // an idle window arms no timer.
     }
     return l->notifications;
 }

@@ -363,9 +363,11 @@ void CommandInstall(CommandState* s, Ctx* cx, const CommandEntry* entries,
         }
     }
     if (preserved >= 0) {
+        // Preserving the selection is not a navigation: the model reinstalls
+        // on every host re-render, so scrolling here would move the list one
+        // frame after a hover selection.
         s->selected = preserved;
         s->preserveNoSelection = false;
-        s->pendingScroll = s->matched[preserved].row;
     } else if (s->preserveNoSelection) {
         s->selected = -1;
         s->pendingScroll = -1;
@@ -423,6 +425,10 @@ void CommandSetLoading(CommandState* s, Ctx* cx, bool loading) {
 }
 
 // select(): the highlight moves to one match, and the caller hears about it.
+// It does not scroll — hover goes through here, and revealing a half-clipped
+// edge row would slide the next row under the resting cursor, hover-selecting
+// and scrolling in a loop. Keyboard navigation, a query change and the public
+// SetSelectedIndex ask for the scroll themselves.
 static void SelectMatch(CommandState* s, Ctx* cx, int matchIx) {
     if (s->selected == matchIx) {
         return;
@@ -431,8 +437,6 @@ static void SelectMatch(CommandState* s, Ctx* cx, int matchIx) {
     bool hadPrev = CommandSelectedIndex(s, &prev);
     s->selected = matchIx;
     s->preserveNoSelection = false;
-    s->pendingScroll =
-        matchIx >= 0 && matchIx < s->matched.len ? s->matched[matchIx].row : -1;
     FireSelect(s, cx, hadPrev, prev);
     Notify(cx);
 }
@@ -450,6 +454,10 @@ void CommandSelectBy(CommandState* s, Ctx* cx, int step) {
     for (int i = 0; i < len; i++) {
         next = ((next + step) % len + len) % len;
         if (!s->matched[next].disabled) {
+            // Only a real move scrolls, and only the keyboard path asks.
+            if (s->selected != next) {
+                s->pendingScroll = s->matched[next].row;
+            }
             SelectMatch(s, cx, next);
             return;
         }

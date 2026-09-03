@@ -13,6 +13,8 @@ struct Checkbox {
     Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
+    // The announced name, when the visible label is not it.
+    Str accessibilityLabel = {};
     Str hint = {};
     // ParentElement: the element Rust's `.child(..)` puts under the label,
     // which the story fills with muted text or a markdown line.
@@ -30,6 +32,9 @@ struct Checkbox {
 
     static Checkbox* New(Ctx* cx, Str id);
     Checkbox* Label(Str s);
+    // Set the name a screen reader announces, overriding the visible label.
+    // This does not change the label drawn on screen.
+    Checkbox* AccessibilityLabel(Str s);
     Checkbox* Hint(Str s);
     Checkbox* Child(El* e);
     Checkbox* Checked(bool v);
