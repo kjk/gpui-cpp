@@ -17,6 +17,7 @@
 #include "shell/standard.h"
 #include "shell/theme_tokens.h"
 #include "shell/view.h"
+#include "sys/task.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -426,9 +427,16 @@ static bool TakeNestedView(ShellRuntimeImpl* impl, uint32_t token,
     return true;
 }
 
-struct ProcessJob {
+// What every background job begins with, so that one guard and one lease
+// serve all of them rather than a preamble per `done` callback.
+struct ShellJobHeader {
     ShellRuntimeControl* control = nullptr;
     uint32_t task = 0;
+    ShellTaskKind kind = ShellTaskKind::Spawn;
+};
+
+struct ProcessJob {
+    ShellJobHeader head;
     shell::ProcessCancellation cancellation;
     Str command;
     Vec<Str> args;
@@ -445,8 +453,7 @@ struct ProcessJob {
 };
 
 struct FsJob {
-    ShellRuntimeControl* control = nullptr;
-    uint32_t task = 0;
+    ShellJobHeader head;
     shell::FsOperation operation = shell::FsOperation::Read;
     CapabilityPath path;
     Str input;
@@ -465,8 +472,7 @@ struct FsJob {
 };
 
 struct ShellFetchJob {
-    ShellRuntimeControl* control = nullptr;
-    uint32_t task = 0;
+    ShellJobHeader head;
     shell::FetchRequest request;
     Capabilities capabilities;
     shell::FetchResult result;
@@ -498,8 +504,7 @@ struct StorageWriteJob {
 };
 
 struct HostAsyncJob {
-    ShellRuntimeControl* control = nullptr;
-    uint32_t task = 0;
+    ShellJobHeader head;
     HostArguments arguments;
     Func1<HostCall*> work;
     Func0 release;
@@ -642,71 +647,168 @@ static void ProcessJobWork(ProcessJob* job) {
                              &job->cancellation, &job->output, &job->error);
 }
 
-static void ProcessJobDone(ProcessJob* job) {
-    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
-    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
-    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
-    if (task && task->kind == ShellTaskKind::Process && TaskWindowLive(task) &&
-        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
-        Window* window = task->window;
-        App* app = task->app;
-        EntityId owner = task->owner;
-        Policy* policy = PolicyRetain(task->policy);
-        AppModule* application = task->application;
-        JSValue settle = JS_DupValue(
-            impl->context, job->error ? task->reject : task->callback);
-        task->processJob = nullptr;
-        ForgetTask(impl, task->id, false);
-
-        shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime, application);
-        PolicyRelease(policy);
-        BeginExecution(impl);
-        JSValue value = JS_UNDEFINED;
-        if (job->error) {
-            value = JS_NewError(impl->context);
-            JS_SetPropertyStr(impl->context, value, "message",
-                              JS_NewStringLen(impl->context, job->error.s,
-                                              (size_t)job->error.len));
-        } else {
-            value = JS_NewObject(impl->context);
-            JS_SetPropertyStr(impl->context, value, "code",
-                              JS_NewInt32(impl->context, job->output.code));
-            JS_SetPropertyStr(
-                impl->context, value, "stdout",
-                JS_NewStringLen(impl->context,
-                                job->output.out.s ? job->output.out.s : "",
-                                (size_t)job->output.out.len));
-            JS_SetPropertyStr(
-                impl->context, value, "stderr",
-                JS_NewStringLen(impl->context,
-                                job->output.err.s ? job->output.err.s : "",
-                                (size_t)job->output.err.len));
-        }
-        JSValue settled =
-            JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
-        JS_FreeValue(impl->context, value);
-        JS_FreeValue(impl->context, settle);
-        if (JS_IsException(settled)) {
-            Arena* arena = ArenaNew();
-            log(ExceptionText(arena, impl->context));
-            ArenaDelete(arena);
-        } else {
-            JS_FreeValue(impl->context, settled);
-            ShellError error = {};
-            runtime->DrainJobs(kMaxJobBatch, &error);
-            if (error.IsSet()) {
-                log(error.message);
-                ShellErrorClear(&error);
-            }
-        }
-    } else if (task) {
-        task->processJob = nullptr;
-        ForgetTask(impl, task->id, false);
+// A task record points back at its job so that cancelling can reach it. The
+// coroutine frees the job, so the pointer is cleared first, on every path.
+// Which of the three it is follows from the kind.
+static void DetachTaskJob(ShellTask* task) {
+    if (!task) {
+        return;
     }
-    job->Free();
-    ControlRelease(job->control);
-    delete job;
+    switch (task->kind) {
+        case ShellTaskKind::Process:
+            task->processJob = nullptr;
+            break;
+        case ShellTaskKind::Filesystem:
+            task->fsJob = nullptr;
+            break;
+        case ShellTaskKind::StorageFlush:
+            task->storageFlush = nullptr;
+            break;
+        default:
+            break;
+    }
+}
+
+static bool ShellTaskOwnerAlive(void* user) {
+    ShellJobHeader* head = (ShellJobHeader*)user;
+    ShellRuntime* runtime = head->control ? head->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, head->task) : nullptr;
+    return task && task->kind == head->kind && TaskWindowLive(task) &&
+           (!task->owner.IsValid() || EntityGet(task->app, task->owner));
+}
+
+// Holds the task record and the runtime lease for as long as the coroutine
+// frame lives. A frame dropped because its owner went away destroys this on
+// the way out, which is the `else if (task) ForgetTask` arm the done callbacks
+// carried; a frame that settles clears `settled` first, because the record has
+// to be gone before the script can see it.
+struct ShellTaskLease {
+    ShellJobHeader* head = nullptr;
+    // The job the header sits in, and how to free it. The lease owns it so
+    // that the order is not something a coroutine body can get wrong: freeing
+    // the job before the lease goes out of scope leaves this destructor
+    // reading freed memory, which is what ASan reported the first time this
+    // was written the other way around.
+    void* job = nullptr;
+    void (*destroy)(void* job) = nullptr;
+    bool settled = false;
+
+    ~ShellTaskLease() {
+        if (head) {
+            if (!settled) {
+                ShellRuntime* runtime =
+                    head->control ? head->control->runtime : nullptr;
+                ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+                if (impl && head->task) {
+                    DetachTaskJob(FindTask(impl, head->task));
+                    ForgetTask(impl, head->task, false);
+                }
+            }
+            ControlRelease(head->control);
+        }
+        if (destroy) {
+            destroy(job);
+        }
+    }
+};
+
+// Settling a promise from a background result, which was written out once per
+// job kind and is the same every time: take the resolve or the reject, drop
+// the task record before the script runs, enter the scope the task was created
+// under, hand over the value and drain what the callback queued.
+//
+// `makeValue` builds the resolved value inside that scope, because building it
+// needs the context. It is not called on the failing path, where the value is
+// an Error carrying `message`.
+static void SettleShellTask(ShellTaskLease* lease, bool failed, Str message,
+                            JSValue (*makeValue)(ShellRuntimeImpl*, void*),
+                            void* user) {
+    ShellJobHeader* head = lease->head;
+    ShellRuntime* runtime = head->control ? head->control->runtime : nullptr;
+    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
+    ShellTask* task = impl ? FindTask(impl, head->task) : nullptr;
+    if (!task) {
+        return;
+    }
+    Window* window = task->window;
+    App* app = task->app;
+    EntityId owner = task->owner;
+    Policy* policy = PolicyRetain(task->policy);
+    AppModule* application = task->application;
+    JSValue settle =
+        JS_DupValue(impl->context, failed ? task->reject : task->callback);
+    DetachTaskJob(task);
+    ForgetTask(impl, task->id, false);
+    lease->settled = true;
+
+    shell::CallScopeGuard scope = shell::ScopeEnter(
+        window, app, ScopePhase::Task, owner, policy, runtime, application);
+    PolicyRelease(policy);
+    BeginExecution(impl);
+    JSValue value = JS_UNDEFINED;
+    if (failed) {
+        value = JS_NewError(impl->context);
+        JS_SetPropertyStr(
+            impl->context, value, "message",
+            JS_NewStringLen(impl->context, message.s ? message.s : "",
+                            (size_t)(message.s ? message.len : 0)));
+    } else {
+        value = makeValue(impl, user);
+    }
+    JSValue settled = JS_IsException(value) ? JS_EXCEPTION
+                                            : JS_Call(impl->context, settle,
+                                                      JS_UNDEFINED, 1, &value);
+    JS_FreeValue(impl->context, value);
+    JS_FreeValue(impl->context, settle);
+    if (JS_IsException(settled)) {
+        Arena* arena = ArenaNew();
+        log(ExceptionText(arena, impl->context));
+        ArenaDelete(arena);
+        return;
+    }
+    JS_FreeValue(impl->context, settled);
+    ShellError error = {};
+    runtime->DrainJobs(kMaxJobBatch, &error);
+    if (error.IsSet()) {
+        log(error.message);
+        ShellErrorClear(&error);
+    }
+}
+
+static JSValue ProcessJobResolved(ShellRuntimeImpl* impl, void* user) {
+    ProcessJob* job = (ProcessJob*)user;
+    JSValue value = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, value, "code",
+                      JS_NewInt32(impl->context, job->output.code));
+    JS_SetPropertyStr(
+        impl->context, value, "stdout",
+        JS_NewStringLen(impl->context,
+                        job->output.out.s ? job->output.out.s : "",
+                        (size_t)job->output.out.len));
+    JS_SetPropertyStr(
+        impl->context, value, "stderr",
+        JS_NewStringLen(impl->context,
+                        job->output.err.s ? job->output.err.s : "",
+                        (size_t)job->output.err.len));
+    return value;
+}
+
+static void ProcessJobDestroy(void* user) {
+    ProcessJob* self = (ProcessJob*)user;
+    self->Free();
+    delete self;
+}
+
+// process.run, awaited. The bounded runner is still the one doing the work on
+// the pool; what has gone is the preamble that proved the caller was still
+// there and the four copies of settling a promise from a background result.
+static Task ShellProcessTask(TaskGuard guard, ProcessJob* job) {
+    (void)guard;
+    ShellTaskLease lease{&job->head, job, ProcessJobDestroy};
+    co_await BackgroundSpawn(MkFunc0(ProcessJobWork, job));
+    SettleShellTask(&lease, job->error.s != nullptr, job->error,
+                    ProcessJobResolved, job);
 }
 
 static void FsJobWork(FsJob* job) {
@@ -768,62 +870,25 @@ static JSValue FsJobValue(JSContext* context, FsJob* job) {
     return array;
 }
 
-static void FsJobDone(FsJob* job) {
-    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
-    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
-    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
-    if (task && task->kind == ShellTaskKind::Filesystem &&
-        TaskWindowLive(task) &&
-        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
-        Window* window = task->window;
-        App* app = task->app;
-        EntityId owner = task->owner;
-        Policy* policy = PolicyRetain(task->policy);
-        AppModule* application = task->application;
-        JSValue settle = JS_DupValue(
-            impl->context, job->error ? task->reject : task->callback);
-        task->fsJob = nullptr;
-        ForgetTask(impl, task->id, false);
+static JSValue FsJobResolved(ShellRuntimeImpl* impl, void* user) {
+    return FsJobValue(impl->context, (FsJob*)user);
+}
 
-        shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime, application);
-        PolicyRelease(policy);
-        BeginExecution(impl);
-        JSValue value = JS_UNDEFINED;
-        if (job->error) {
-            value = JS_NewError(impl->context);
-            JS_SetPropertyStr(impl->context, value, "message",
-                              JS_NewStringLen(impl->context, job->error.s,
-                                              (size_t)job->error.len));
-        } else {
-            value = FsJobValue(impl->context, job);
-        }
-        JSValue settled =
-            JS_IsException(value)
-                ? JS_EXCEPTION
-                : JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
-        JS_FreeValue(impl->context, value);
-        JS_FreeValue(impl->context, settle);
-        if (JS_IsException(settled)) {
-            Arena* arena = ArenaNew();
-            log(ExceptionText(arena, impl->context));
-            ArenaDelete(arena);
-        } else {
-            JS_FreeValue(impl->context, settled);
-            ShellError error = {};
-            runtime->DrainJobs(kMaxJobBatch, &error);
-            if (error.IsSet()) {
-                log(error.message);
-                ShellErrorClear(&error);
-            }
-        }
-    } else if (task) {
-        task->fsJob = nullptr;
-        ForgetTask(impl, task->id, false);
-    }
-    job->Free();
-    ControlRelease(job->control);
-    delete job;
+static void FsJobDestroy(void* user) {
+    FsJob* self = (FsJob*)user;
+    self->Free();
+    delete self;
+}
+
+// fs/promises, awaited rather than continued into. What used to be FsJobWork
+// plus FsJobDone: the owner check is the guard's, the task record and the job
+// are the lease's, and settling is shared with every other background path.
+static Task ShellFsTask(TaskGuard guard, FsJob* job) {
+    (void)guard;
+    ShellTaskLease lease{&job->head, job, FsJobDestroy};
+    co_await BackgroundSpawn(MkFunc0(FsJobWork, job));
+    SettleShellTask(&lease, job->error.s != nullptr, job->error, FsJobResolved,
+                    job);
 }
 
 static JSValue FetchJobValue(JSContext* context, ShellFetchJob* job) {
@@ -845,61 +910,30 @@ static JSValue FetchJobValue(JSContext* context, ShellFetchJob* job) {
     return value;
 }
 
-static void FetchJobDone(ShellFetchJob* job) {
-    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
-    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
-    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
-    if (task && task->kind == ShellTaskKind::Fetch && TaskWindowLive(task) &&
-        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
-        Window* window = task->window;
-        App* app = task->app;
-        EntityId owner = task->owner;
-        Policy* policy = PolicyRetain(task->policy);
-        AppModule* application = task->application;
-        bool failed = job->result.error.s != nullptr;
-        JSValue settle =
-            JS_DupValue(impl->context, failed ? task->reject : task->callback);
-        ForgetTask(impl, task->id, false);
+// The preamble every `done` callback used to write out: the runtime is still
+// there, the task is still registered under its own kind, its window is still
+// open, and the entity that asked for the work has not gone stale. As a
+// TaskGuard it runs once, on sys/task.h's single resume path, and a false
+// answer drops the continuation instead of running it.
+static JSValue FetchJobResolved(ShellRuntimeImpl* impl, void* user) {
+    return FetchJobValue(impl->context, (ShellFetchJob*)user);
+}
 
-        shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime, application);
-        PolicyRelease(policy);
-        BeginExecution(impl);
-        JSValue value = JS_UNDEFINED;
-        if (failed) {
-            value = JS_NewError(impl->context);
-            JS_SetPropertyStr(
-                impl->context, value, "message",
-                JS_NewStringLen(impl->context, job->result.error.s,
-                                (size_t)job->result.error.len));
-        } else {
-            value = FetchJobValue(impl->context, job);
-        }
-        JSValue settled =
-            JS_IsException(value)
-                ? JS_EXCEPTION
-                : JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
-        JS_FreeValue(impl->context, value);
-        JS_FreeValue(impl->context, settle);
-        if (JS_IsException(settled)) {
-            Arena* arena = ArenaNew();
-            log(ExceptionText(arena, impl->context));
-            ArenaDelete(arena);
-        } else {
-            JS_FreeValue(impl->context, settled);
-            ShellError error = {};
-            runtime->DrainJobs(kMaxJobBatch, &error);
-            if (error.IsSet()) {
-                log(error.message);
-                ShellErrorClear(&error);
-            }
-        }
-    } else if (task) {
-        ForgetTask(impl, task->id, false);
-    }
-    job->Free();
-    ControlRelease(job->control);
-    delete job;
+// `cx.background_spawn(fetch).await`, and the whole of what used to be
+// FetchJobWork plus FetchJobDone. The job is deleted by this frame however it
+// ends: settled, cancelled, or dropped because its view went away.
+static void ShellFetchJobDestroy(void* job) {
+    ShellFetchJob* self = (ShellFetchJob*)job;
+    self->Free();
+    delete self;
+}
+
+static Task ShellFetchTask(TaskGuard guard, ShellFetchJob* job) {
+    (void)guard;
+    ShellTaskLease lease{&job->head, job, ShellFetchJobDestroy};
+    co_await BackgroundSpawn(MkFunc0(FetchJobWork, job));
+    bool failed = job->result.error.s != nullptr;
+    SettleShellTask(&lease, failed, job->result.error, FetchJobResolved, job);
 }
 
 static void StorageFlushDone(StorageFlushState* state,
@@ -1415,9 +1449,9 @@ static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
                 // materialized; no second file test can improve on that.
                 StrCopyZ(candidate, kMaxPath, named->entry.s);
                 char entryTagged[kMaxPath + 32] = {};
-                int entryLen = snprintf(entryTagged, sizeof(entryTagged),
-                                        "%s?v=%u", candidate,
-                                        application->generation);
+                int entryLen =
+                    snprintf(entryTagged, sizeof(entryTagged), "%s?v=%u",
+                             candidate, application->generation);
                 if (entryLen <= 0 || entryLen >= (int)sizeof(entryTagged))
                     return nullptr;
                 char* out = (char*)js_malloc(ctx, (size_t)entryLen + 1);
@@ -5662,60 +5696,26 @@ static void HostAsyncWork(HostAsyncJob* job) {
     call.error = {};
 }
 
-static void HostAsyncDone(HostAsyncJob* job) {
-    ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
-    ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
-    ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
-    if (task && task->kind == ShellTaskKind::HostAsync &&
-        TaskWindowLive(task) &&
-        (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
-        Window* window = task->window;
-        App* app = task->app;
-        EntityId owner = task->owner;
-        Policy* policy = PolicyRetain(task->policy);
-        AppModule* application = task->application;
-        JSValue settle = JS_DupValue(
-            impl->context, job->error.IsSet() ? task->reject : task->callback);
-        ForgetTask(impl, task->id, false);
-        shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime, application);
-        PolicyRelease(policy);
-        BeginExecution(impl);
-        JSValue value = JS_UNDEFINED;
-        if (job->error.IsSet()) {
-            value = JS_NewError(impl->context);
-            JS_SetPropertyStr(
-                impl->context, value, "message",
-                JS_NewStringLen(impl->context, job->error.message.s,
-                                (size_t)job->error.message.len));
-        } else {
-            value = HostIntoJs(impl->context, job->result);
-        }
-        JSValue settled =
-            JS_IsException(value)
-                ? JS_EXCEPTION
-                : JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
-        JS_FreeValue(impl->context, value);
-        JS_FreeValue(impl->context, settle);
-        if (JS_IsException(settled)) {
-            Arena* text = ArenaNew();
-            log(ExceptionText(text, impl->context));
-            ArenaDelete(text);
-        } else {
-            JS_FreeValue(impl->context, settled);
-            ShellError error = {};
-            runtime->DrainJobs(kMaxJobBatch, &error);
-            if (error.IsSet()) {
-                log(error.message);
-                ShellErrorClear(&error);
-            }
-        }
-    } else if (task) {
-        ForgetTask(impl, task->id, false);
-    }
-    job->Free();
-    ControlRelease(job->control);
-    delete job;
+static JSValue HostAsyncResolved(ShellRuntimeImpl* impl, void* user) {
+    HostAsyncJob* job = (HostAsyncJob*)user;
+    return HostIntoJs(impl->context, job->result);
+}
+
+static void HostAsyncDestroy(void* user) {
+    HostAsyncJob* self = (HostAsyncJob*)user;
+    self->Free();
+    delete self;
+}
+
+// A host module's asynchronous half, awaited. The registry stays retained for
+// the length of the call by the job itself, which the lease frees on every
+// path out.
+static Task ShellHostAsyncTask(TaskGuard guard, HostAsyncJob* job) {
+    (void)guard;
+    ShellTaskLease lease{&job->head, job, HostAsyncDestroy};
+    co_await BackgroundSpawn(MkFunc0(HostAsyncWork, job));
+    SettleShellTask(&lease, job->error.IsSet(), job->error.message,
+                    HostAsyncResolved, job);
 }
 
 static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
@@ -5794,15 +5794,16 @@ static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowRangeError(
             ctx, "the runtime reached its outstanding host task limit");
     }
-    job->control = ShellRuntimeAccess::Control(impl->owner);
-    ControlRetain(job->control);
-    job->task = task;
-    if (!ExecSpawn(MkFunc0(HostAsyncWork, job), MkFunc0(HostAsyncDone, job))) {
-        ForgetTask(impl, task, false);
-        ControlRelease(job->control);
+    job->head.control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->head.control);
+    job->head.task = task;
+    job->head.kind = ShellTaskKind::HostAsync;
+    TaskGuard guard;
+    guard.alive = ShellTaskOwnerAlive;
+    guard.user = &job->head;
+    Task work = ShellHostAsyncTask(guard, job);
+    if (!work.IsRunning()) {
         JS_FreeValue(ctx, promise);
-        job->Free();
-        delete job;
         return JS_ThrowInternalError(
             ctx, "asynchronous HostModule work could not start");
     }
@@ -6001,14 +6002,14 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
     bool release = false;
     Policy* policy = CurrentPolicy(&release);
     Str authorizationError;
-    bool allowed = shell::FetchAuthorize(request.url, request.method,
-                                         PolicyCapabilities(policy),
-                                         &authorizationError);
+    bool allowed =
+        shell::FetchAuthorize(request.url, request.method,
+                              PolicyCapabilities(policy), &authorizationError);
     if (!allowed) {
-        JSValue result = JS_ThrowTypeError(
-            ctx, "%.*s", authorizationError.len,
-            authorizationError.s ? authorizationError.s
-                                 : "fetch URL is not granted");
+        JSValue result = JS_ThrowTypeError(ctx, "%.*s", authorizationError.len,
+                                           authorizationError.s
+                                               ? authorizationError.s
+                                               : "fetch URL is not granted");
         StrFree(authorizationError);
         if (release) PolicyRelease(policy);
         request.Free();
@@ -6056,15 +6057,19 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowRangeError(
             ctx, "the runtime reached its outstanding host task limit");
     }
-    job->control = ShellRuntimeAccess::Control(impl->owner);
-    ControlRetain(job->control);
-    job->task = task;
-    if (!ExecSpawn(MkFunc0(FetchJobWork, job), MkFunc0(FetchJobDone, job))) {
-        ForgetTask(impl, task, false);
-        ControlRelease(job->control);
+    job->head.control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->head.control);
+    job->head.task = task;
+    job->head.kind = ShellTaskKind::Fetch;
+    TaskGuard guard;
+    guard.alive = ShellTaskOwnerAlive;
+    guard.user = &job->head;
+    // The coroutine runs to its first await before this returns, so a spawn
+    // the pool refused has already unwound: the lease forgot the task and the
+    // job is gone.
+    Task work = ShellFetchTask(guard, job);
+    if (!work.IsRunning()) {
         JS_FreeValue(ctx, promise);
-        job->Free();
-        delete job;
         return JS_ThrowInternalError(ctx,
                                      "fetch could not start background work");
     }
@@ -6185,20 +6190,19 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowRangeError(
             ctx, "the runtime reached its outstanding host task limit");
     }
-    job->control = ShellRuntimeAccess::Control(impl->owner);
-    ControlRetain(job->control);
-    job->task = task;
+    job->head.control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->head.control);
+    job->head.task = task;
+    job->head.kind = ShellTaskKind::Filesystem;
     ShellTask* shellTask = FindTask(impl, task);
     shellTask->fsJob = job;
-    if (!ExecSpawn(MkFunc0(FsJobWork, job), MkFunc0(FsJobDone, job))) {
-        shellTask->fsJob = nullptr;
-        ForgetTask(impl, task, false);
-        ControlRelease(job->control);
+    TaskGuard guard;
+    guard.alive = ShellTaskOwnerAlive;
+    guard.user = &job->head;
+    Task work = ShellFsTask(guard, job);
+    if (!work.IsRunning()) {
         JS_FreeValue(ctx, promise);
-        job->Free();
-        delete job;
-        return JS_ThrowInternalError(
-            ctx, "filesystem operation could not start background work");
+        return JS_ThrowInternalError(ctx, "fs could not start background work");
     }
     return promise;
 }
@@ -6300,19 +6304,18 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowRangeError(
             ctx, "the runtime reached its outstanding host task limit");
     }
-    job->control = ShellRuntimeAccess::Control(impl->owner);
-    ControlRetain(job->control);
-    job->task = task;
+    job->head.control = ShellRuntimeAccess::Control(impl->owner);
+    ControlRetain(job->head.control);
+    job->head.task = task;
+    job->head.kind = ShellTaskKind::Process;
     ShellTask* shellTask = FindTask(impl, task);
     shellTask->processJob = job;
-    if (!ExecSpawn(MkFunc0(ProcessJobWork, job),
-                   MkFunc0(ProcessJobDone, job))) {
-        shellTask->processJob = nullptr;
-        ForgetTask(impl, task, false);
-        ControlRelease(job->control);
+    TaskGuard guard;
+    guard.alive = ShellTaskOwnerAlive;
+    guard.user = &job->head;
+    Task work = ShellProcessTask(guard, job);
+    if (!work.IsRunning()) {
         JS_FreeValue(ctx, promise);
-        job->Free();
-        delete job;
         return JS_ThrowInternalError(
             ctx, "process.run could not start background work");
     }
@@ -9348,18 +9351,18 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeConsole, 1, 3);
     SetGlobalMagicFunction(impl->context, global, "__console_error",
                            NativeConsole, 1, 4);
-    SetGlobalFunction(impl->context, global, "__crypto_sha256",
-                      NativeSha256, 1);
-    SetGlobalFunction(impl->context, global, "__crypto_random",
-                      NativeRandom, 1);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_deflate",
-                           NativeZlib, 1, 0);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_inflate",
-                           NativeZlib, 1, 1);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_gzip",
-                           NativeZlib, 1, 2);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip",
-                           NativeZlib, 1, 3);
+    SetGlobalFunction(impl->context, global, "__crypto_sha256", NativeSha256,
+                      1);
+    SetGlobalFunction(impl->context, global, "__crypto_random", NativeRandom,
+                      1);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_deflate", NativeZlib,
+                           1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_inflate", NativeZlib,
+                           1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_gzip", NativeZlib, 1,
+                           2);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip", NativeZlib,
+                           1, 3);
     SetGlobalFunction(impl->context, global, "__fetch_send", NativeFetch, 4);
     SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
                            (int)shell::FsOperation::Read);

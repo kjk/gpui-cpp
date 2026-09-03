@@ -11708,3 +11708,44 @@ release passes 23,338 checks, `bun cmd/build.ts -rel -all` and
 What is still not here, and still wants a bigger reason than tidiness: a
 session, a cookie jar, a connection kept alive, a socket, a WebSocket, and a
 TLS stack of ours.
+
+## The shell's background paths await instead of continuing
+
+`src/sys/task.h` earns its place or it does not, and the four paths that go
+through `ExecSpawn` are where that was decided: `fetch`, `fs/promises`,
+`process.run` and a host module's asynchronous half. Each was a job struct, a
+`work` callback and a `done` callback whose first ten lines proved the caller
+was still there before touching anything it owned.
+
+Three things collapse into one copy each. `ShellTaskOwnerAlive` is the
+preamble — the runtime is still there, the task is still registered under its
+own kind, its window is still open, the entity that asked has not gone stale —
+and as a `TaskGuard` it runs on `sys/task.h`'s single resume path rather than
+at the top of four callbacks. `SettleShellTask` is the tail, which was
+duplicated just as widely: take the resolve or the reject, drop the task
+record before the script can see it, enter the scope the task was created
+under, settle, drain what the callback queued. `ShellTaskLease` is the
+cleanup, and it is the part a callback chain could not do: a frame dropped
+because its view went away destroys the lease on the way out, which forgets
+the task and frees the job, so the `else if (task) ForgetTask` arm and the
+three-line epilogue after it are gone from every path.
+
+The liveness preamble goes from five copies to two and the settle tail from
+seven to four. What is left of each is not duplication: `StorageFlushDone` is
+woken by a storage waiter rather than by the pool, and the other two are the
+timer and spawn resumes. Neither awaits background work, so neither is a
+`BackgroundSpawn`. Total line count is a wash, because the shared helpers cost
+about what the four copies did; the win is that there is one of each now.
+
+Two bugs, both caught by a tool rather than by reading. ASan reported a
+heap-use-after-free in `~ShellTaskLease` from the first version, where the
+coroutine body freed the job and the lease destructor then read the header
+inside it: the lease owns the job now, so the order is not something a body
+can get wrong. And `bun cmd/build-no-amalgam.ts` caught `runtime.cpp` naming
+`Task` and `TaskGuard` without including `sys/task.h`, which concatenation had
+been supplying — the same class of thing that build exists for.
+
+MSVC release and debug both pass 23,355 checks, release under ASan too. The
+amalgam syntax-checks clean under g++, clang++ with libstdc++, Apple clang
+with libc++ and emscripten; `bun cmd/clang-tidy.ts` is clean over 250 sources;
+and `gpui_shell check` passes on both `js_todolist` and `js_dock`.
