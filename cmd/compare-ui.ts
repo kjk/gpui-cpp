@@ -38,7 +38,8 @@
 //   shot:NAME            capture both windows as <slug>-NN-NAME-{rust,cpp}.png
 //
 // A step list with no shot: gets one at the end anyway, so the common case is
-// just the clicks. Shots land in out/compare-ui/.
+// just the clicks. Shots land in out/compare-ui/, or the directory named by
+// -out. The parity suite uses the latter to keep each case self-contained.
 //
 // Both windows are the same size (the halves cmd/compare-story.ts uses), so a
 // client coordinate means the same thing in both -- which is the whole point:
@@ -107,7 +108,7 @@ function die(msg?: string): never {
   if (msg) {
     console.error(msg);
   }
-  console.error("Usage: bun cmd/compare-ui.ts [-dbg] [-nobuild] <slug> [step ...]");
+  console.error("Usage: bun cmd/compare-ui.ts [-dbg] [-nobuild] [-out=DIR] <slug> [step ...]");
   process.exit(1);
 }
 
@@ -307,11 +308,13 @@ function rustStoryArg(slug: string): string {
 const argv = Bun.argv.slice(2);
 let debug = false;
 let nobuild = false;
+let outDir = join(root, "out", "compare-ui");
 const rest: string[] = [];
 for (const a of argv) {
   if (a === "-dbg") debug = true;
   else if (a === "-rel") debug = false;
   else if (a === "-nobuild") nobuild = true;
+  else if (a.startsWith("-out=")) outDir = resolve(root, a.slice(5));
   else if (a.startsWith("-")) die(`Unknown flag: ${a}`);
   else rest.push(a);
 }
@@ -345,7 +348,6 @@ const cppExe = join(root, "out", debug ? "dbg" : "rel", "story.exe");
 if (!existsSync(rustExe)) die(`Missing ${rustExe}. Build with: cargo build -p gpui-component-story`);
 if (!existsSync(cppExe)) die(`Missing ${cppExe}`);
 
-const outDir = join(root, "out", "compare-ui");
 mkdirSync(outDir, { recursive: true });
 
 const half = workAreaHalfRect("right");

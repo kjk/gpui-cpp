@@ -49,6 +49,28 @@ bun cmd/build-no-amalgam.ts -clang -rel   # Windows: clang-cl
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
 
+## Rust/C++ parity suite
+
+On Windows, the parity suite builds the pinned Rust story application and this
+port, drives identical native input through both, and compares screenshots at
+each checkpoint:
+
+```powershell
+bun cmd/parity.ts
+bun cmd/parity.ts -nobuild input-edit select-open
+bun cmd/parity.ts -list
+```
+
+The default cases cover static composition, toggles, text input, overlays,
+scrolling, pointer capture and retained tree state. Each checkpoint has a
+checked-in percentage budget for ordinary renderer and text-antialiasing
+differences; interactive checkpoints must also prove that both applications
+changed. Captures plus machine-readable JSON and Markdown reports are written
+to `out/parity/`. `-report` records results without failing on an exceeded
+visual budget, for deliberately investigating a known difference.
+`-nobuild` assumes both existing executables were built from the current pin;
+run the default command after moving an upstream pin.
+
 To lint every source translation unit under `src/` with LLVM's clang-tidy (using
 the repository's `.clang-tidy` configuration):
 

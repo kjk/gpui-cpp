@@ -25,9 +25,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { basename, join } from "node:path";
 
-type Image = { w: number; h: number; ch: number; px: Uint8Array };
+export type Image = { w: number; h: number; ch: number; px: Uint8Array };
 
-function decodePng(buf: Buffer): Image {
+export function decodePng(buf: Buffer): Image {
   if (buf.readUInt32BE(0) !== 0x89504e47) {
     throw new Error("not a PNG");
   }
@@ -102,9 +102,20 @@ function decodePng(buf: Buffer): Image {
   return { w, h, ch, px };
 }
 
-type Result = { any: number; big: number; total: number; box: number[] | null };
+export type ImageDiff = {
+  any: number;
+  big: number;
+  total: number;
+  box: number[] | null;
+};
 
-function compare(a: Image, b: Image, skip: number, tol: number): Result {
+export function compareImages(a: Image, b: Image, skip: number, tol: number): ImageDiff {
+  if (a.w !== b.w || a.h !== b.h) {
+    throw new Error(`image size differs: ${a.w}x${a.h} vs ${b.w}x${b.h}`);
+  }
+  if (skip < 0 || skip >= a.h) {
+    throw new Error(`invalid skipped row count ${skip} for ${a.h}-row image`);
+  }
   let anyN = 0;
   let bigN = 0;
   let x0 = a.w;
@@ -138,76 +149,85 @@ function compare(a: Image, b: Image, skip: number, tol: number): Result {
   return { any: anyN, big: bigN, total, box: x1 < 0 ? null : [x0, x1, y0, y1] };
 }
 
-const argv = Bun.argv.slice(2);
-let skip = 0;
-let tol = 90;
-let wantBox = false;
-const rest: string[] = [];
-for (const arg of argv) {
-  if (arg.startsWith("-skip=")) {
-    skip = Number(arg.slice(6));
-  } else if (arg.startsWith("-tol=")) {
-    tol = Number(arg.slice(5));
-  } else if (arg === "-bbox") {
-    wantBox = true;
-  } else {
-    rest.push(arg);
-  }
+export function comparePngFiles(aPath: string, bPath: string, skip = 0, tol = 90): ImageDiff {
+  return compareImages(decodePng(readFileSync(aPath)), decodePng(readFileSync(bPath)), skip, tol);
 }
-if (rest.length !== 2) {
-  console.error("usage: bun cmd/imgdiff.ts <a> <b> [-skip=N] [-tol=N] [-bbox]");
-  process.exit(2);
-}
-const [aPath, bPath] = rest as [string, string];
-const isDir = statSync(aPath).isDirectory();
-const names = isDir
-  ? readdirSync(aPath)
-      .filter((f) => f.endsWith(".png"))
-      .sort()
-  : [""];
 
-let differing = 0;
-let identical = 0;
-let missing = 0;
-for (const name of names) {
-  const fa = isDir ? join(aPath, name) : aPath;
-  const fb = isDir ? join(bPath, name) : bPath;
-  const label = isDir ? name : `${basename(fa)} vs ${basename(fb)}`;
-  let bufB: Buffer;
-  try {
-    bufB = readFileSync(fb);
-  } catch {
-    console.log(`${label.padEnd(26)} MISSING on the other side`);
-    missing++;
-    continue;
+function main(argv: string[]): number {
+  let skip = 0;
+  let tol = 90;
+  let wantBox = false;
+  const rest: string[] = [];
+  for (const arg of argv) {
+    if (arg.startsWith("-skip=")) {
+      skip = Number(arg.slice(6));
+    } else if (arg.startsWith("-tol=")) {
+      tol = Number(arg.slice(5));
+    } else if (arg === "-bbox") {
+      wantBox = true;
+    } else {
+      rest.push(arg);
+    }
   }
-  const bufA = readFileSync(fa);
-  // The encoder is deterministic, so identical renders are identical files.
-  // This is the case that matters: it is most of them, and it costs nothing.
-  if (bufA.equals(bufB)) {
-    identical++;
-    continue;
+  if (rest.length !== 2) {
+    console.error("usage: bun cmd/imgdiff.ts <a> <b> [-skip=N] [-tol=N] [-bbox]");
+    return 2;
   }
-  const ia = decodePng(bufA);
-  const ib = decodePng(bufB);
-  if (ia.w !== ib.w || ia.h !== ib.h) {
-    console.log(`${label.padEnd(26)} SIZE ${ia.w}x${ia.h} vs ${ib.w}x${ib.h}`);
+  const [aPath, bPath] = rest as [string, string];
+  const isDir = statSync(aPath).isDirectory();
+  const names = isDir
+    ? readdirSync(aPath)
+        .filter((f) => f.endsWith(".png"))
+        .sort()
+    : [""];
+
+  let differing = 0;
+  let identical = 0;
+  let missing = 0;
+  for (const name of names) {
+    const fa = isDir ? join(aPath, name) : aPath;
+    const fb = isDir ? join(bPath, name) : bPath;
+    const label = isDir ? name : `${basename(fa)} vs ${basename(fb)}`;
+    let bufB: Buffer;
+    try {
+      bufB = readFileSync(fb);
+    } catch {
+      console.log(`${label.padEnd(26)} MISSING on the other side`);
+      missing++;
+      continue;
+    }
+    const bufA = readFileSync(fa);
+    // The encoder is deterministic, so identical renders are identical files.
+    // This is the case that matters: it is most of them, and it costs nothing.
+    if (bufA.equals(bufB)) {
+      identical++;
+      continue;
+    }
+    const ia = decodePng(bufA);
+    const ib = decodePng(bufB);
+    if (ia.w !== ib.w || ia.h !== ib.h) {
+      console.log(`${label.padEnd(26)} SIZE ${ia.w}x${ia.h} vs ${ib.w}x${ib.h}`);
+      differing++;
+      continue;
+    }
+    const r = compareImages(ia, ib, skip, tol);
+    if (r.any === 0) {
+      // Byte-different, pixel-identical: only the skipped rows moved.
+      identical++;
+      continue;
+    }
     differing++;
-    continue;
+    const pct = (n: number) => ((n / r.total) * 100).toFixed(2) + "%";
+    let line = `${label.padEnd(26)} any=${String(r.any).padEnd(8)} (${pct(r.any)})  big=${String(r.big).padEnd(8)} (${pct(r.big)})`;
+    if (wantBox && r.box) {
+      line += `  bbox x ${r.box[0]}..${r.box[1]} y ${r.box[2]}..${r.box[3]}`;
+    }
+    console.log(line);
   }
-  const r = compare(ia, ib, skip, tol);
-  if (r.any === 0) {
-    // Byte-different, pixel-identical: only the skipped rows moved.
-    identical++;
-    continue;
-  }
-  differing++;
-  const pct = (n: number) => ((n / r.total) * 100).toFixed(2) + "%";
-  let line = `${label.padEnd(26)} any=${String(r.any).padEnd(8)} (${pct(r.any)})  big=${String(r.big).padEnd(8)} (${pct(r.big)})`;
-  if (wantBox && r.box) {
-    line += `  bbox x ${r.box[0]}..${r.box[1]} y ${r.box[2]}..${r.box[3]}`;
-  }
-  console.log(line);
+  console.log(`-- ${identical} identical, ${differing} differing${missing ? `, ${missing} missing` : ""}`);
+  return differing > 0 ? 1 : 0;
 }
-console.log(`-- ${identical} identical, ${differing} differing${missing ? `, ${missing} missing` : ""}`);
-process.exit(differing > 0 ? 1 : 0);
+
+if (import.meta.main) {
+  process.exit(main(Bun.argv.slice(2)));
+}
