@@ -754,6 +754,104 @@ static void LoadingAnApplicationFetchesAndResolvesItsGitDependencies() {
     StrFree(url);
 }
 
+// A reload inherits the checkouts the running application materialized. The
+// watcher only scans .js and .mjs, so a reload cannot follow a manifest
+// change, and re-materializing meant a `git fetch` per dependency on the UI
+// thread every time a source file was saved.
+//
+// What makes this a test rather than an assertion about intent: the remote is
+// deleted before the reload. A reload that still fetched would fail, because
+// the URL it was resolved from no longer exists.
+static void ReloadingAnApplicationReusesItsMaterializedDependencies() {
+    if (!GitIsInstalled()) return;
+    GitFixture fixture("reload");
+    utassert(fixture.ok);
+    utassert(fixture.Write("dist/public.js",
+                           StrL("export const label = 'first';")) &&
+             fixture.Write("package.json",
+                           StrL("{ \"main\": \"dist/public.js\" }")) &&
+             fixture.Commit("dependency"));
+    Str url = fixture.Url();
+    Str application = DepJoin(fixture.root, StrL("application"));
+    utassert(DependencyMakeDirectories(application, nullptr));
+    Str manifestPath = DepJoin(application, Str(kShellManifestFile));
+    utassert(DepWrite(manifestPath,
+                      fmt("{\"id\":\"com.example.reload\",\"name\":\"Reload\","
+                          "\"entry\":\"main.js\",\"dependencies\":"
+                          "{\"omarchy-ui\":\"file:///%s#main\"}}",
+                          url)));
+    Str entryPath = DepJoin(application, StrL("main.js"));
+    utassert(DepWrite(
+        entryPath, StrL("import { View, div } from 'gpui';\n"
+                        "import { label } from 'omarchy-ui';\n"
+                        "export default class Main extends View {\n"
+                        "  render(cx) { return div().child(`one:${label}`); }\n"
+                        "}\n")));
+
+    App app;
+    Window window;
+    window.app = &app;
+    VecAppend(app.windows, &window);
+    component::Init(&app);
+    ShellError error = {};
+    ShellRuntime* runtime = ShellRuntime::New(&app, &error);
+    utassert(runtime != nullptr);
+    if (runtime) runtime->SetDependencyCacheRoot(fixture.cache);
+    ViewType* type =
+        runtime ? runtime->LoadApp(application, StrL("main.js"), &error)
+                : nullptr;
+    utassert(type != nullptr && !error.IsSet());
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
+    utassert(view.IsValid());
+    ViewTypeRelease(type);
+
+    Arena* frame = ArenaNew();
+    window.frameArena = frame;
+    El* root = EntityRender(&app, &window, frame, view.id);
+    utassert(root != nullptr);
+
+    // The remote goes away, and the source changes. A reload that re-fetched
+    // would have nothing to fetch from.
+    DependencyRemoveTree(fixture.remote);
+    utassert(DepWrite(
+        entryPath, StrL("import { View, div } from 'gpui';\n"
+                        "import { label } from 'omarchy-ui';\n"
+                        "export default class Main extends View {\n"
+                        "  render(cx) { return div().child(`two:${label}`); }\n"
+                        "}\n")));
+
+    ScriptView* self = view.Get(&app);
+    utassert(self != nullptr);
+    Ctx cx = {&app, &window, frame, view.id};
+    ShellErrorClear(&error);
+    utassert(
+        ScriptView::Reload(self, &cx, application, StrL("main.js"), &error));
+    utassert(!error.IsSet());
+
+    // The new source is live and the dependency still resolves, from the
+    // checkout the first load left behind.
+    Arena* output = ArenaNew();
+    ScriptView* reloaded = view.Get(&app);
+    ViewObject* object = reloaded ? reloaded->object : nullptr;
+    Str rendered = object ? runtime->RenderToSpec(output, object, &window, &app,
+                                                  {}, nullptr, &error)
+                          : Str{};
+    utassert(!error.IsSet() && StrContains(rendered, StrL("two:first")));
+    ArenaDelete(output);
+
+    EntityDrop(&app, view.id);
+    app.windows.len = 0;
+    ArenaDelete(frame);
+    if (runtime) runtime->Release();
+    AppGlobalClear(&app);
+    ShellErrorClear(&error);
+    StrFree(manifestPath);
+    StrFree(entryPath);
+    StrFree(application);
+    StrFree(url);
+}
+
 // --- the fetch method --------------------------------------------------
 
 static void FetchNamesAMethodAndRefusesWhatIsNotOne() {
@@ -778,4 +876,5 @@ void TestShellDependencies() {
     ATagDependencyStaysAtTheTaggedCommit();
     PackageDependenciesReadPackageMainAndRefuseWhatEscapes();
     LoadingAnApplicationFetchesAndResolvesItsGitDependencies();
+    ReloadingAnApplicationReusesItsMaterializedDependencies();
 }

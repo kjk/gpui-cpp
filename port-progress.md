@@ -11749,3 +11749,32 @@ MSVC release and debug both pass 23,355 checks, release under ASan too. The
 amalgam syntax-checks clean under g++, clang++ with libstdc++, Apple clang
 with libc++ and emscripten; `bun cmd/clang-tidy.ts` is clean over 250 sources;
 and `gpui_shell check` passes on both `js_todolist` and `js_dock`.
+
+## Hot reload no longer fetches its dependencies again
+
+Reloading an application ran `git fetch --force --depth 1` for every
+dependency it declares, unconditionally, on the UI thread. `ScriptView::Reload`
+called `LoadApp`, which called `MaterializeAll`, and the whole of that sits
+inside `SourceScanDone` — the main-thread completion of the watcher's scan,
+which touches the window's frame arena. So saving a source file stalled the
+window on a network round trip per dependency, with a 30-second per-command
+timeout behind it and a 120-second lock timeout behind that. Only applications
+that declare Git dependencies were affected, which is why neither shipped
+example showed it.
+
+The materialization was not merely slow, it was unnecessary. The watcher scans
+`.js` and `.mjs` and nothing else, so a reload can never have been triggered by
+a change to `gpui-shell.json`: the manifest is provably the same one the
+running application was loaded from, and so are its checkouts. `ReloadApp`
+takes the set the running application already materialized and
+`MaterializedDependencies::CopyFrom` hands the replacement its own copy, since
+each `AppModule` frees the strings it holds. `LoadApp` is that function with
+nothing to reuse, so first load is unchanged and still fetches.
+
+The regression test deletes the remote repository before reloading. A reload
+that still fetched would fail outright, because the URL it resolved from is
+gone; reverting the fix turns three assertions red, including the reload
+itself.
+
+Release passes 23,369 checks, and again under ASan; `bun cmd/build.ts -rel
+-all` and `bun cmd/build-no-amalgam.ts -rel` are clean.

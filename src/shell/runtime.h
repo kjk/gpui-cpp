@@ -13,6 +13,11 @@ struct ViewObject;
 struct ShellRuntimeImpl;
 struct ShellRuntimeControl;
 struct ShellRuntimeAccess;
+} // namespace gpui
+namespace gpui::shell {
+struct MaterializedDependencies;
+}
+namespace gpui {
 struct ShellTaskDriver;
 
 class ShellRuntime {
@@ -28,6 +33,15 @@ class ShellRuntime {
                       ShellError* error = nullptr);
     ViewType* LoadApp(Str directory, Str entry, Policy* policy,
                       ShellError* error = nullptr);
+    // Reload's entry point. `reuse` is the running application's already
+    // materialized dependencies, handed to its replacement instead of being
+    // fetched again: the watcher only scans .js and .mjs, so a reload cannot
+    // have been triggered by a manifest change and the set is provably the
+    // same. Fetching it again meant a `git fetch` per dependency on the UI
+    // thread, once per keystroke-triggered reload.
+    ViewType* ReloadApp(Str directory, Str entry, Policy* policy,
+                        const shell::MaterializedDependencies* reuse,
+                        ShellError* error = nullptr);
     // Rust's `new_isolated_with_dependency_store`: an empty root is the
     // per-user Git dependency cache, and a test points this at its own.
     void SetDependencyCacheRoot(Str root);
@@ -107,8 +121,8 @@ class ShellRuntime {
                            shell::DockChromeSlot slot, uint64_t key,
                            shell::CallbackId handler, Str payload);
     void DispatchItemSecondaryClick(shell::CallbackId callback, Str key,
-                                    const MouseDownEvent& event,
-                                    Window* window, App* app);
+                                    const MouseDownEvent& event, Window* window,
+                                    App* app);
     void DispatchInputEvent(shell::EntityHandle handle, const InputEvent& event,
                             Window* window, App* app);
     void DispatchSliderEvent(shell::EntityHandle handle,
@@ -116,8 +130,7 @@ class ShellRuntime {
                              App* app);
     void DispatchOtpEvent(shell::EntityHandle handle, const OtpEvent& event,
                           Window* window, App* app);
-    void RenderVirtualItems(shell::CallbackId render,
-                            shell::CallbackId getKey,
+    void RenderVirtualItems(shell::CallbackId render, shell::CallbackId getKey,
                             shell::CallbackId onItemClick,
                             shell::CallbackId onItemSecondaryClick, int first,
                             int end, Ctx* cx, El** out);
@@ -137,6 +150,10 @@ class ShellRuntime {
 
 ViewType* ViewTypeRetain(ViewType* type);
 void ViewTypeRelease(ViewType* type);
+
+// The dependencies the application this type came from materialized. Reload
+// hands them to the replacement rather than fetching them again.
+const shell::MaterializedDependencies* ViewTypeDependencies(ViewType* type);
 ViewObject* ViewObjectRetain(ViewObject* object);
 void ViewObjectRelease(ViewObject* object);
 void ShellSetDevelopmentMode(bool enabled);

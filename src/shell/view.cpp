@@ -97,8 +97,13 @@ bool ScriptView::Reload(ScriptView* self, Ctx* cx, Str directory, Str entry,
         ShellErrorSet(error, StrL("reload needs the live ScriptView context"));
         return false;
     }
-    ViewType* nextType = self->runtime
-                             ->LoadApp(directory, entry, self->policy, error);
+    // The replacement inherits the dependencies the running application
+    // materialized. Re-fetching them here put a `git fetch` per dependency on
+    // the UI thread every time a source file was saved.
+    const shell::MaterializedDependencies* reuse =
+        ViewTypeDependencies(self->type);
+    ViewType* nextType =
+        self->runtime->ReloadApp(directory, entry, self->policy, reuse, error);
     if (!nextType) return false;
     ViewObject* nextObject = self->runtime->Instantiate(
         nextType, cx->win, cx->app, self->policy, error, cx->self);

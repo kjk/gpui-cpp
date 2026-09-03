@@ -36,6 +36,10 @@ struct MaterializedDependencies {
     Vec<MaterializedDependency> items;
 
     const MaterializedDependency* Find(Str name) const;
+    // A deep copy, because each AppModule frees the strings it holds. Reload
+    // hands the running application's set to its replacement rather than
+    // fetching it again.
+    bool CopyFrom(const MaterializedDependencies& other);
     void Free();
 };
 

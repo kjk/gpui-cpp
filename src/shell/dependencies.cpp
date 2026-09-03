@@ -365,6 +365,27 @@ const MaterializedDependency* MaterializedDependencies::Find(Str name) const {
     return nullptr;
 }
 
+bool MaterializedDependencies::CopyFrom(const MaterializedDependencies& other) {
+    Free();
+    for (int i = 0; i < other.items.len; i++) {
+        MaterializedDependency copy;
+        copy.name = StrDup(other.items[i].name);
+        copy.root = StrDup(other.items[i].root);
+        copy.entry = StrDup(other.items[i].entry);
+        if (!copy.name.s || !copy.root.s || !copy.entry.s) {
+            copy.Free();
+            Free();
+            return false;
+        }
+        if (!VecAppend(items, copy)) {
+            copy.Free();
+            Free();
+            return false;
+        }
+    }
+    return true;
+}
+
 void MaterializedDependencies::Free() {
     for (int i = 0; i < items.len; i++) items[i].Free();
     VecReset(items);

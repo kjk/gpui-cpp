@@ -365,6 +365,11 @@ struct ShellRuntimeAccess {
     }
 };
 
+const shell::MaterializedDependencies* ViewTypeDependencies(ViewType* type) {
+    return type && type->application ? &type->application->dependencies
+                                     : nullptr;
+}
+
 static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
                                      Window* window, App* app, Policy* policy,
                                      JSValueConst props, ShellError* error,
@@ -9677,6 +9682,12 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, ShellError* error) {
 
 ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
                                 ShellError* error) {
+    return ReloadApp(directory, entry, policy, nullptr, error);
+}
+
+ViewType* ShellRuntime::ReloadApp(Str directory, Str entry, Policy* policy,
+                                  const shell::MaterializedDependencies* reuse,
+                                  ShellError* error) {
     ShellErrorClear(error);
     char dir[kMaxPath] = {};
     if (directory.len <= 0 || directory.len >= kMaxPath) {
@@ -9705,9 +9716,20 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
     // the same checkouts are linked where an editor finds them. The link is
     // best effort — a read-only directory is not a reason to refuse to run.
     shell::MaterializedDependencies dependencies;
+    if (reuse) {
+        // A reload. The manifest cannot have changed — the watcher does not
+        // scan it — so the replacement inherits the checkouts the running
+        // application is already using, and nothing touches the network on
+        // the UI thread.
+        if (!dependencies.CopyFrom(*reuse)) {
+            SetError(error, StrL("copying the application dependencies "
+                                 "failed"));
+            return nullptr;
+        }
+    }
     Str manifestPath =
         StrDup(fmt("%s/%s", Str(dir), Str(shell::kShellManifestFile)));
-    if (PlatFileExists(manifestPath.s)) {
+    if (!reuse && PlatFileExists(manifestPath.s)) {
         shell::PluginManifest manifest;
         if (!shell::PluginManifestRead(Str(dir), &manifest, error)) {
             StrFree(manifestPath);
