@@ -1,240 +1,99 @@
-# Upstream pins
+# Ingesting a later upstream checkin
 
-**Source of truth for which checkin we are porting: the pin block at the top of [`cmd/run.ts`](cmd/run.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`, `wry.version`, `autocorrect.version`). `bun cmd/build.ts` and `bun cmd/run.ts -versions` clone or reset `.work/gpui-component` to that SHA.
+**Which checkin we port is the pin block at the top of [`cmd/run.ts`](cmd/run.ts)**
+— `gpuiComponent.sha`, `zedGpui.sha`, and `taffy` / `markdown` / `wry` /
+`autocorrect` versions. `bun cmd/run.ts -versions` prints them and resets
+`.work/gpui-component` to that SHA. Always diff from the pinned SHA, never from
+`HEAD`.
 
-This file is the ingest playbook. Diff Rust from the pinned SHA, not `HEAD`.
+## gpui-component
 
-When bumping a pin: change `gpuiComponent.sha` (and `zedGpui` if `Cargo.lock` moved) in `cmd/run.ts`, run `bun cmd/run.ts -versions`, `git log OLD..NEW` on the crates we ported, apply the C++ equivalent.
+Trees we translate, and the naming rule: a file under `src/base/` or `src/ui/`
+is named after the Rust module it ports, so the map is mechanical both ways. A
+Rust *directory* becomes one C++ file however many modules it holds
+(`crates/base/src/input/` → `src/base/input.cpp`); `lib.rs` is `lib.h`. Code we
+have that the crate has no module for takes the nearest name
+(`element_ext.h`, `sizing.h`).
 
-## gpui-component (what we port)
-
-See `gpuiComponent` in `cmd/run.ts` for repo, SHA, date, subject, and crate versions; `bun cmd/run.ts -versions` prints them.
-
-| | |
+| Rust | C++ |
 | --- | --- |
-| Repo | `gpuiComponent.repo` |
-| Local clone | `gpuiComponent.dir` (gitignored) |
-| Commit | `gpuiComponent.sha` |
+| `crates/base` | `src/base/` |
+| `crates/ui` | `src/ui/` |
+| `crates/story` | `examples/story/` |
+| `crates/base/examples/showcase` | `examples/showcase/` |
+| `crates/fps` | `src/fps/` |
+| `crates/webview` | `src/webview/` |
+| `crates/shell` | `src/shell/` (JS engine: `src/quickjs/`) |
+| `examples/*` | `examples/*.cpp` |
 
-Trees we actually translate:
-
-- `crates/base` → `src/base/`
-- `crates/ui` → `src/ui/`
-- `crates/story` → `examples/story/`
-- `crates/base/examples/showcase` → `examples/showcase/`
-- `examples/*` → `examples/*.cpp`
-
-A file under `src/base/` or `src/ui/` is named after the Rust module it ports,
-so the map is mechanical in both directions:
-
-- a file: `crates/base/src/actions.rs` → `src/base/actions.cpp`
-- a directory: `crates/base/src/input/` → `src/base/input.cpp`
-
-A Rust directory is one C++ file, however many modules it holds; `lib.rs` is
-`lib.h`, the umbrella header. Where we have code the crate has no module for,
-it takes the name of the nearest one (`element_ext.h`, `sizing.h`).
-
-One upstream file is checked in verbatim rather than translated:
-`README.md` → `assets/story/README.md`, which is what the Introduction page
-renders (`markdown(include_str!("README.md"))` in `welcome_story.rs`). Copy it
-again when the pin moves: `cp .work/gpui-component/README.md assets/story/`.
-
-Ingest a newer checkin:
+`README.md` is the one file checked in verbatim rather than translated — the
+Introduction page renders it. Re-copy when the pin moves:
+`cp .work/gpui-component/README.md assets/story/`.
 
 ```
 bun cmd/run.ts -versions
-cd .work/gpui-component
-git fetch origin
-git log --oneline <gpuiComponent.sha>..origin/main -- crates/base crates/ui crates/story crates/base/examples/showcase examples
-git diff <gpuiComponent.sha> origin/main -- <path>
+cd .work/gpui-component && git fetch origin
+git log --oneline <pinned-sha>..origin/main -- crates examples
+git diff <pinned-sha> origin/main -- <path>
 ```
 
-## Zed GPUI (reference only — not a crate we port)
+Then `bun cmd/audit-port.ts` (see `port-map.md`) — its content hashes fail on
+any added, removed or renamed public declaration, re-export or test, which is
+how a pin bump turns into an explicit decision list rather than a silent gap.
 
-`Cargo.lock` pins GPUI from Zed. Fields live in `zedGpui` in `cmd/run.ts`. Read that snapshot when matching runtime behavior (text measure cache, DirectWrite shaping, window). Do **not** treat later Zed `main` as the spec.
+## The four ported crates
 
-Local cargo checkout (after a rust build): `%USERPROFILE%\.cargo\git\checkouts\zed-*\<zedGpui.sha prefix>\`
-
-We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Blade, entity/observer, cosmic-text, font-kit. Taffy, `markdown` and `wry` *are* ported — see below.
-
-## taffy (a crate we port)
-
-`src/taffy/` is a C++ port of [taffy](https://github.com/DioxusLabs/taffy) at
-the version `gpui-component`'s `Cargo.lock` resolves for `gpui` — currently
-`0.13.0`. It is the layout engine, not
-a reference: every box in this tree goes through it.
-
-**It moves when the gpui-component pin moves.** After bumping
-`gpuiComponent.sha`, check whether the resolved taffy changed:
+`src/taffy/`, `src/markdown/`, `src/wry/` and `src/autocorrect/` are full
+ports, not references, at the version gpui-component resolves. **They move when
+the gpui-component pin moves.** After bumping `gpuiComponent.sha`, check each:
 
 ```
-grep -A3 'name = "taffy"' .work/gpui-component/Cargo.lock
+grep -A3 'name = "taffy"' .work/gpui-component/Cargo.lock   # also: markdown, lb-wry, autocorrect
 ```
 
-If it did, set `taffy.version` in `cmd/run.ts` to the new one and diff the
-crate between the two versions:
+If a version changed, set it in `cmd/run.ts` and diff the crate. Each crate's
+`readme.md` has the file-for-file map and the deliberate-omission list — read
+that first, since a diff that only touches an omitted area needs no work here.
+Every ported function keeps its Rust name in CamelCase (taffy), its `StateName`
+spelling (markdown), or its module's (wry, autocorrect), so a diff applies
+mechanically.
 
-```
-git clone https://github.com/DioxusLabs/taffy .work/taffy   # once
-git -C .work/taffy log --oneline v0.13.0..vNEW -- src
-git -C .work/taffy diff v0.13.0 vNEW -- src/compute/flexbox.rs
-```
+| Crate | Upstream | How to diff |
+| --- | --- | --- |
+| taffy | `DioxusLabs/taffy` | git tags: `git -C .work/taffy diff vOLD vNEW -- src` |
+| markdown | `wooorm/markdown-rs` | git tags: `git -C .work/markdown-rs diff OLD NEW -- src` |
+| wry | `lb-wry` (longbridge fork) | crate tarball from `static.crates.io` — published from a fork, so no useful tag |
+| autocorrect | `huacnlee/autocorrect` | crate tarball; git tags carry the whole workspace. Diff `src/` **and** `grammar/` |
 
-`src/taffy/readme.md` has the file-for-file map from the Rust modules to the
-C++ files, and every ported function keeps its Rust name in CamelCase, so a
-diff applies mechanically. The crate's own unit tests are ported in
-`tests/TaffyTests.cpp`; a version bump that changes behaviour should show up
-there first.
+Both taffy and markdown keep their upstream test suites in a `tests/`
+directory the *published crate does not carry*, and taffy its `benches/`, so
+those need the git clone rather than the tarball. `tests/TaffyTests.cpp`,
+`tests/MarkdownTests.cpp`, `tests/AutocorrectTests.cpp` and `bench/` are the
+ports; a behaviour-changing bump should show up there first.
 
-Two things we port are in the repository but not in the published crate, whose
-`include` covers only `src/` and `examples/`: the `#[cfg(test)]` modules'
-larger generated suite in `tests/`, and the benchmarks in `benches/`. Both
-need the clone above. `bench/` is the port of `benches/benches/flexbox.rs`,
-`grid.rs` and `tree_creation.rs` plus the tree builders in `benches/src/`;
-`benches/benches/mixed.rs` is not ported, because it measures text through
-`parley`.
+Two crate-specific notes a bump never touches: the WebView2 declaration block
+in `wry_win.cpp` moves when the *SDK* does, not when wry does; and
+`src/markdown-mini/` is ours, not upstream — do not mechanically ingest new
+markdown-rs constructs into it (`src/markdown-mini/readme.md`).
 
-## markdown (a crate we port)
+## Zed GPUI — reference only
 
-`src/markdown/` is a C++ port of
-[markdown-rs](https://github.com/wooorm/markdown-rs) at the version
-`crates/ui/Cargo.toml` asks for — currently `markdown = { version = "1.0.0",
-features = ["serde"] }`. It is the parser, not a reference: every
-`TextView` in this tree reads its mdast, the way
-`crates/base/src/text/format/markdown.rs` reads the crate's. The renderer
-moved to `src/base/text.cpp` with the Rust module; `src/ui/text.h` is the
-façade that keeps `component::TextView` naming it.
+`Cargo.lock` pins GPUI from Zed (`zedGpui` in `cmd/run.ts`). Read that snapshot
+when matching runtime behaviour (text measure cache, platform shaping, window);
+do **not** treat later Zed `main` as the spec. After a rust build the checkout
+is at `%USERPROFILE%\.cargo\git\checkouts\zed-*\<sha prefix>\`. We reimplement a
+subset in `src/gpui/`; Blade, the entity/observer graph, cosmic-text and
+font-kit are not ported.
 
-`src/markdown-mini/` is the size-oriented alternative selected by
-`GPUI_MARKDOWN=mini`. It shares `markdown.h` and `mdast.*` with the port but is
-not itself an upstream crate: do not mechanically ingest new markdown-rs
-constructs into it. Keep its deliberately smaller feature contract in
-`src/markdown-mini/readme.md` and add a basic construct only when an
-application that chooses the mini parser needs it.
+## Dependencies we replace rather than port
 
-**It moves when the gpui-component pin moves.** After bumping
-`gpuiComponent.sha`, check whether the resolved `markdown` changed:
-
-```
-grep -A3 'name = "markdown"' .work/gpui-component/Cargo.lock
-```
-
-If it did, set `markdown.version` in `cmd/run.ts` to the new one and diff
-the crate between the two versions:
-
-```
-git clone https://github.com/wooorm/markdown-rs .work/markdown-rs   # once
-git -C .work/markdown-rs log --oneline 1.0.0..NEW -- src
-git -C .work/markdown-rs diff 1.0.0 NEW -- src/construct/gfm_table.rs
-```
-
-`src/markdown/readme.md` has the file-for-file map from the Rust modules to
-the C++ files, and every state function keeps the name the crate's `StateName`
-enum gives it, so a diff applies mechanically.
-
-As with taffy, the crate's own test suite is in its `tests/` directory, which
-the published crate does not carry (`include` covers `src/` only); it needs the
-clone above. `tests/MarkdownTests.cpp` ports the `#[cfg(test)]` modules inside
-`src/` and adds an end-to-end check per construct. The readme records the
-differential run the port was checked with — 3283 documents, both parsers'
-event streams and trees compared — and how to repeat it.
-
-MDX and `to_html` are not ported, for reasons the readme gives.
-
-## wry (a crate we port)
-
-`src/wry/` is a C++ port of [wry](https://github.com/tauri-apps/wry) at the
-version `crates/webview/Cargo.toml` asks for — currently `wry = { version =
-"0.53.3", package = "lb-wry" }`, longbridge's fork of the crate. It is the
-webview, not a reference: `src/webview/` is the port of `crates/webview`
-itself and drives this one exactly as `gpui-wry` drives the crate.
-
-**It moves when the gpui-component pin moves.** After bumping
-`gpuiComponent.sha`, check whether the resolved `lb-wry` changed:
-
-```
-grep -A3 'name = "lb-wry"' .work/gpui-component/Cargo.lock
-```
-
-If it did, set `wry.version` in `cmd/run.ts` to the new one and diff the
-crate between the two versions. `lb-wry` is published from a fork, so the
-crate tarball is the thing to compare rather than a git tag:
-
-```
-curl -sL -o .work/lb-wry.crate https://static.crates.io/crates/lb-wry/lb-wry-NEW.crate
-tar xzf .work/lb-wry.crate -C .work            # unpacks lb-wry-NEW/
-diff -ru .work/wry/src .work/lb-wry-NEW/src
-```
-
-`src/wry/readme.md` has the file-for-file map, and — more to the point when
-reading a diff — the list of what is deliberately not ported (cookies,
-downloads, drag and drop, the `NewWindowResponse::Create` arm, Android and
-iOS) so a change to one of those needs no work here.
-
-**Two platforms have a backend.** `src/wry/wry_win.cpp` is
-`src/webview2/mod.rs` and `src/wry/wry_mac.cpp` is `src/wkwebview/`; the
-other two files are stubs that answer "there is no webview here", and each
-says what a real one would take. A wry release that only touches
-`webkitgtk/` changes nothing in this tree.
-
-The WebView2 declaration block in `wry_win.cpp` is transcribed from the SDK
-header and is the one thing a wry bump never touches — it moves when the
-*SDK* does, and only to reach an interface we do not already declare.
-
-## autocorrect (a crate we port)
-
-`src/autocorrect/` is a C++ port of
-[autocorrect](https://github.com/huacnlee/autocorrect) at the version
-`crates/story/Cargo.toml` asks for — currently `autocorrect = "2.14.2"`. It
-is the editor example's linter, not a reference: `examples/editor.cpp` lints
-every open document through it and walks its file tree with its `Ignorer`.
-
-**It moves when the gpui-component pin moves.** After bumping
-`gpuiComponent.sha`, check whether the resolved `autocorrect` changed:
-
-```
-grep -A3 'name = "autocorrect"' .work/gpui-component/Cargo.lock
-```
-
-If it did, set `autocorrect.version` in `cmd/run.ts` to the new one and diff
-the crate between the two versions. The crate tarball is the thing to
-compare (its git tags carry the whole workspace):
-
-```
-curl -sL -o .work/autocorrect.crate https://static.crates.io/crates/autocorrect/autocorrect-NEW.crate
-tar xzf .work/autocorrect.crate -C .work      # unpacks autocorrect-NEW/
-diff -ru .work/autocorrect-2.14.2/src .work/autocorrect-NEW/src
-diff -ru .work/autocorrect-2.14.2/grammar .work/autocorrect-NEW/grammar
-```
-
-`src/autocorrect/readme.md` has the file-for-file map, and — more to the
-point when reading a diff — the list of what is deliberately not ported
-(spellcheck, `.autocorrectrc` loading, six grammars, the CLI and its
-serializers) so a change to one of those needs no work here. A grammar diff
-lands in the matching scanner (`markdown.cpp`, `html.cpp`, `source.cpp`); a
-`rule/` diff lands in the matching rule file. The crate's own tests are
-ported in `tests/AutocorrectTests.cpp`, and the whole-document Markdown
-fixture in `tests/AutocorrectMarkdownFormatTests.cpp` is extracted verbatim
-from the crate — re-extract it when the fixture changes.
-
-`autocorrect-derive` is not ported: the two functions its macro generates
-per language are written out in `code.cpp`'s dispatch table. Neither are the
-crate's dependencies — pest (the grammars are hand-written scanners), regex
-(the rules are scanners too), `ignore` (the gitignore half is written out in
-`ignorer.cpp`), serde, lazy_static, owo-colors.
-
-## Not ported (do not pin / do not chase)
-
-`sysinfo`, `battery`, `smol`, `reqwest` (zed fork), ropey, tree-sitter, syntect, html5ever, resvg — C++ uses Win32 / our own code instead.
-
-taffy's own transitive dependencies — `arrayvec`, `grid`, `slotmap`,
-`cssparser` — are not ported either; the C++ port uses `Vec`, a flat occupancy
-matrix, its own generational slots, and no CSS parser. `markdown`'s one
-dependency, `unicode-id`, belongs to MDX, which is not ported.
-
-wry's own dependencies are not ported either: `webview2-com` and
-`webview2-com-sys` (the SDK bindings and Microsoft's loader) are written out
-in `wry_win.cpp` instead, `http` and `cookie` are a pair of small structs and
-a feature we skipped, and `raw-window-handle` is one `void*`.
+`sysinfo`, `battery`, `smol`, `reqwest`, ropey, tree-sitter, syntect,
+html5ever, resvg — OS APIs or our own code instead. taffy's `arrayvec`, `grid`,
+`slotmap`, `cssparser` — `Vec`, a flat occupancy matrix, our own generational
+slots, no CSS parser. markdown's `unicode-id` belongs to MDX, not ported.
+wry's `webview2-com` / `-sys` are written out in `wry_win.cpp`, `http` and
+`cookie` are a pair of structs, `raw-window-handle` is one `void*`.
+`autocorrect-derive` is a dispatch table in `code.cpp`; pest, regex and
+`ignore` are hand-written scanners and `ignorer.cpp`.
 
 `src/base.h` / `src/base.cpp` are SumatraPDF, not gpui-component.

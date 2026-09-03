@@ -2770,7 +2770,7 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 //     taffy measure function the way Rust's `request_measured_layout` does.
 //
 // Two deliberate differences from what `Style::to_taffy` does in Rust, both
-// noted in port-progress.md:
+// of them recorded in port-status.md:
 //
 //   - `border` is not given to taffy, so a border still paints over the box
 //     rather than reserving space inside it. That is what this tree's widgets
@@ -3141,8 +3141,8 @@ static float TextMeasureWidth(const El* e, taffy::SizeFOpt known,
 // the engine this port replaced, over all 65 story pages, doing so moved
 // every one of them further away and tripled the pixels that differ, because
 // it quantises text boxes while the padding, gaps and borders around them
-// stay where they were. Whole model or none of it; port-progress.md has the
-// numbers.
+// stay where they were. Whole model or none of it; the numbers are in the
+// paragraph above.
 static taffy::SizeF LayoutMeasure(taffy::SizeFOpt known, taffy::SizeAvail avail,
                                   taffy::NodeId node, void* nodeContext,
                                   const taffy::Style* nodeStyle,

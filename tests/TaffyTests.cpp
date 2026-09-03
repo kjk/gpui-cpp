@@ -7,11 +7,11 @@
    generated WPT-derived fixtures live in the crate's `tests/` directory,
    which is not part of the published crate and so is not ported here.
 
-   Tests that only pin Rust-specific facts are left out and named in
-   port-progress.md: the `style_sizes` size-of assertions (the C++ structs are
-   laid out differently), the `parse`/`serde` cases (neither feature is
-   ported), and `new_should_allocate_default_capacity` (the C++ tree's slot
-   vector has no capacity to assert on before a node is added). */
+   Tests that only pin Rust-specific facts are left out and named here: the
+   `style_sizes` size-of assertions (the C++ structs are laid out
+   differently), the `parse`/`serde` cases (neither feature is ported), and
+   `new_should_allocate_default_capacity` (the C++ tree's slot vector has no
+   capacity to assert on before a node is added). */
 
 // These tests reach the crate's internals (MaybeMin/MaybeMax and friends in
 // taffy_math.h), which the amalgam hides from ordinary consumers.

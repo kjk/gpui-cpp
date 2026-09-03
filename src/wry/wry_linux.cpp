@@ -10,7 +10,7 @@
  * anywhere, so a real backend here is not "port the file": it is a GtkPlug /
  * XEmbed bridge between an X11 window and a GTK container, plus webkit2gtk
  * through pkg-config as a second soft dependency. That is a project of its
- * own and it belongs in port-progress.md before it belongs here.
+ * own and it belongs in port-status.md before it belongs here.
  */
 #include "wry/wry.h"
 

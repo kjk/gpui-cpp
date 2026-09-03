@@ -314,7 +314,7 @@ struct Theme {
     // the component was written with — the token layer came first and the
     // components follow it one at a time — so a file that names one of these
     // changes the viewer and whatever has been moved over, and no more. Said
-    // where it matters in port-progress.md.
+    // where it matters in the token comments below.
     //
     // button.*: the four families a Button has, each with its own foreground,
     // hover and active. The plain one is the input border mixed toward

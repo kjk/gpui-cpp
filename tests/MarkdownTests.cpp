@@ -8,10 +8,9 @@
    stands in for them here is the second half of this file: an end-to-end
    check of each construct, reading the mdast the way TextView does.
 
-   Not ported, and named in port-progress.md: the `Debug`/`serde` cases in
-   `mdast.rs`, `unist.rs` and `configuration.rs` (neither trait is ported),
-   and everything in `util/mdx.rs` and `util/location.rs` (MDX is not
-   ported). */
+   Not ported, and named here: the `Debug`/`serde` cases in `mdast.rs`,
+   `unist.rs` and `configuration.rs` (neither trait is ported), and
+   everything in `util/mdx.rs` and `util/location.rs` (MDX is not ported). */
 
 // These tests reach the crate's internals (the tokenizer, CharKind, the
 // event stream), which the amalgam hides from ordinary consumers.
