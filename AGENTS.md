@@ -231,8 +231,10 @@ Where a page is not a desktop: one window; `AppRun` never returns
 (`emscripten_set_main_loop` unwinds the stack, so nothing after it runs); no
 threads (`ExecSpawn` queues on the main thread, `ExecHasThreads()` tells —
 but rule 1 still holds, write the job as if it were elsewhere); no blocking
-`HttpGet`, so a remote image renders as alt text; `ImageDecode` answers before
-decoding and the load repaints (SVG never goes through it — `src/gpui/svg.h`
+`HttpGet`, but `HttpSendAsync` uses browser `fetch()` for remote images and
+the shell (subject to CORS, and an opaque manual redirect is refused because
+its target cannot be capability-checked); `ImageDecode` answers before
+decoding and both loads repaint (SVG never goes through it — `src/gpui/svg.h`
 turns SVG into draw ops); the clipboard is a DOM-`paste`-kept mirror and the
 paste chord is driven by that event; `sysinfo` reports the tab; an arena
 reserves 4 MB, not 64 (`PlatArenaReserveSize()` is the seam).

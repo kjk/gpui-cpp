@@ -57,6 +57,19 @@ bool FetchAuthorize(Str url, Str method, const Capabilities& capabilities,
 bool FetchSend(const FetchRequest& request, const Capabilities& capabilities,
                FetchResult* out);
 
+struct FetchAsyncResult {
+    bool ok = false;
+    // Borrowed for the callback. Move or copy the fields before returning.
+    FetchResult* result = nullptr;
+};
+
+// The same policy-carrying redirect walk as FetchSend, one asynchronous
+// HttpSendAsync at a time. `request` and `capabilities` are copied before
+// returning. False means it could not start and no callback will arrive.
+bool FetchSendAsync(const FetchRequest& request,
+                    const Capabilities& capabilities,
+                    Func1<FetchAsyncResult> done);
+
 // ─── the redirect rules, exposed because they are what the tests pin ──────
 
 // `follows_location`: 301, 302, 303, 307 and 308, and nothing else in 3xx.

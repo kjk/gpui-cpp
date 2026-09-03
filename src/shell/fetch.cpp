@@ -1,5 +1,6 @@
 #include "shell/fetch.h"
 
+#include "sys/executor.h"
 #include "sys/http.h"
 
 namespace gpui::shell {
@@ -473,6 +474,226 @@ bool FetchSend(const FetchRequest& request, const Capabilities& capabilities,
         walk.Free();
         return true;
     }
+}
+
+// ─── asynchronous redirect walk ──────────────────────────────────────────
+
+struct FetchAsyncState {
+    FetchWalk walk;
+    Capabilities capabilities;
+    FetchResult result;
+    Vec<HttpHeader> wire;
+    Func1<FetchAsyncResult> done;
+    int redirects = 0;
+
+    // The test transport has the blocking signature on purpose: the redirect
+    // rule tests use it directly too. Its async adapter fills these on an
+    // executor worker, exactly as a hosted HttpSendAsync does.
+    HttpRsp testResponse;
+    bool testOk = false;
+};
+
+static void FetchAsyncStateFree(FetchAsyncState* state) {
+    if (!state) return;
+    state->walk.Free();
+    state->result.Free();
+    VecReset(state->wire);
+    HttpRspFree(&state->testResponse);
+    delete state;
+}
+
+static bool FetchAsyncInit(FetchAsyncState* state, const FetchRequest& request,
+                           const Capabilities& capabilities) {
+    state->walk.url = StrDup(request.url);
+    state->walk
+        .method = StrDup(request.method.len > 0 ? request.method : StrL("GET"));
+    state->walk.body = StrDup(request.body);
+    bool allocated = state->walk.url.s && state->walk.method.s &&
+                     (state->walk.body.s || request.body.len == 0);
+    for (int i = 0; i < request.headers.len && allocated; i++) {
+        FetchHeader copy;
+        copy.name = StrDup(request.headers[i].name);
+        copy.value = StrDup(request.headers[i].value);
+        if (!copy.name.s || !copy.value.s ||
+            !VecAppend(state->walk.headers, copy)) {
+            StrFree(copy.name);
+            StrFree(copy.value);
+            allocated = false;
+        }
+    }
+    if (!allocated) {
+        FetchError(&state->result.error,
+                   StrL("allocating the fetch request failed"));
+        return false;
+    }
+    if (state->walk.body.len > kFetchMaxRequestBody) {
+        FetchError(&state->result.error,
+                   fmt("fetch request body exceeded the %d byte limit",
+                       kFetchMaxRequestBody));
+        return false;
+    }
+    state->capabilities = capabilities;
+    return FetchAuthorize(state->walk.url, state->walk.method,
+                          state->capabilities, &state->result.error);
+}
+
+static void FetchAsyncFinish(FetchAsyncState* state, bool ok) {
+    FetchAsyncResult result = {ok, &state->result};
+    state->done.Call(result);
+    FetchAsyncStateFree(state);
+}
+
+static bool FetchAsyncStart(FetchAsyncState* state);
+
+static void FetchAsyncResponse(FetchAsyncState* state, HttpAsyncResult landed) {
+    HttpRsp* response = landed.response;
+    if (!landed.ok || !response) {
+        FetchError(&state->result.error,
+                   fmt("fetching %s failed", state->walk.url));
+        FetchAsyncFinish(state, false);
+        return;
+    }
+
+    if (FetchFollowsLocation(response->status)) {
+        bool ok = true;
+        if (!response->redirectUrl) {
+            FetchError(&state->result.error,
+                       fmt("redirect from %s has no valid Location header",
+                           state->walk.url));
+            ok = false;
+        } else if (state->redirects >= kFetchMaxRedirects) {
+            FetchError(&state->result.error,
+                       fmt("fetch exceeded the %d redirect limit",
+                           kFetchMaxRedirects));
+            ok = false;
+        }
+        if (ok) {
+            FetchRewriteRedirect(response->status, &state->walk.method,
+                                 &state->walk.headers, &state->walk.body);
+            ok = FetchAuthorizeRedirect(state->capabilities, state->walk.method,
+                                        state->walk.url, response->redirectUrl,
+                                        state->walk.headers,
+                                        &state->result.error);
+        }
+        Str next = ok ? StrDup(response->redirectUrl) : Str{};
+        if (ok && !next.s) {
+            FetchError(&state->result.error,
+                       StrL("allocating the redirect URL failed"));
+            ok = false;
+        }
+        if (!ok) {
+            StrFree(next);
+            FetchAsyncFinish(state, false);
+            return;
+        }
+        StrFree(state->walk.url);
+        state->walk.url = next;
+        state->redirects++;
+        if (!FetchAsyncStart(state)) {
+            FetchAsyncFinish(state, false);
+        }
+        return;
+    }
+
+    if (response->body.len > kFetchMaxBody) {
+        FetchError(&state->result.error,
+                   fmt("response body from %s exceeded the %d byte limit",
+                       state->walk.url, kFetchMaxBody));
+        FetchAsyncFinish(state, false);
+        return;
+    }
+    state->result.status = response->status;
+    state->result.body =
+        StrDup(Str((const char*)response->body.els, response->body.len));
+    if (!state->result.body.s && response->body.len != 0) {
+        state->result.status = 0;
+        FetchError(&state->result.error,
+                   StrL("allocating the fetch response failed"));
+        FetchAsyncFinish(state, false);
+        return;
+    }
+    state->result.url = state->walk.url;
+    state->walk.url = {};
+    FetchAsyncFinish(state, true);
+}
+
+static void FetchAsyncTestWork(FetchAsyncState* state) {
+    state->testOk =
+        gFetchHttpSendForTests
+            ? gFetchHttpSendForTests(
+                  HttpReq{state->walk.url, state->walk.method, state->wire.els,
+                          state->wire.len, state->walk.body, true},
+                  &state->testResponse)
+            : false;
+}
+
+static void FetchAsyncTestDone(FetchAsyncState* state) {
+    HttpRsp response;
+    response.status = state->testResponse.status;
+    response.body.els = state->testResponse.body.els;
+    response.body.len = state->testResponse.body.len;
+    response.body.cap = state->testResponse.body.cap;
+    response.contentType = state->testResponse.contentType;
+    response.redirectUrl = state->testResponse.redirectUrl;
+    state->testResponse.status = 0;
+    state->testResponse.body.els = nullptr;
+    state->testResponse.body.len = 0;
+    state->testResponse.body.cap = 0;
+    state->testResponse.contentType = {};
+    state->testResponse.redirectUrl = {};
+    HttpAsyncResult landed = {state->testOk, &response};
+    FetchAsyncResponse(state, landed);
+    HttpRspFree(&response);
+}
+
+static bool FetchAsyncStart(FetchAsyncState* state) {
+    VecReset(state->wire);
+    for (int i = 0; i < state->walk.headers.len; i++) {
+        HttpHeader header;
+        header.name = state->walk.headers[i].name;
+        header.value = state->walk.headers[i].value;
+        if (!VecAppend(state->wire, header)) {
+            FetchError(&state->result.error,
+                       StrL("allocating the fetch headers failed"));
+            return false;
+        }
+    }
+    HttpReq request;
+    request.url = state->walk.url;
+    request.method = state->walk.method;
+    request.headers = state->wire.len ? state->wire.els : nullptr;
+    request.nHeaders = state->wire.len;
+    request.body = state->walk.body;
+    request.noRedirect = true;
+    if (gFetchHttpSendForTests) {
+        if (!ExecSpawn(MkFunc0(FetchAsyncTestWork, state),
+                       MkFunc0(FetchAsyncTestDone, state))) {
+            FetchError(&state->result.error,
+                       StrL("the fetch test transport could not start"));
+            return false;
+        }
+        return true;
+    }
+    if (!HttpSendAsync(request, MkFunc1(FetchAsyncResponse, state))) {
+        FetchError(&state->result.error,
+                   fmt("fetching %s could not start", state->walk.url));
+        return false;
+    }
+    return true;
+}
+
+bool FetchSendAsync(const FetchRequest& request,
+                    const Capabilities& capabilities,
+                    Func1<FetchAsyncResult> done) {
+    if (!done.IsValid()) return false;
+    FetchAsyncState* state = new FetchAsyncState();
+    state->done = done;
+    if (!FetchAsyncInit(state, request, capabilities) ||
+        !FetchAsyncStart(state)) {
+        FetchAsyncStateFree(state);
+        return false;
+    }
+    return true;
 }
 
 } // namespace gpui::shell

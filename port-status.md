@@ -43,9 +43,11 @@ and wasm. The work left is depth, not breadth.
 - **Icons fall back.** `assets/icons/*.svg` are Lucide's own files; where the
   folder is missing, `DrawIcon`'s stroke sketches cover every `IconName`.
 - **wasm is not a desktop** — one window, `AppRun` never returns, no threads,
-  no blocking `HttpGet`, async image decode, clipboard mirror, no semantic DOM
-  projection for the canvas, and `sysinfo` reports the tab. See the browser
-  section of AGENTS.md.
+  no blocking `HttpGet`, browser-async HTTP subject to CORS, async image
+  decode, clipboard mirror, no semantic DOM projection for the canvas, and
+  `sysinfo` reports the tab. An opaque manual redirect is refused because the
+  browser hides the target that the shell must capability-check. See the
+  browser section of AGENTS.md.
 - **No webview on Linux or wasm.** `src/wry/wry_linux.cpp` and `wry_wasm.cpp`
   are stubs; `src/wry/readme.md` says what a real one would take.
 

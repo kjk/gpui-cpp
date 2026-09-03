@@ -821,10 +821,6 @@ static void FsJobWork(FsJob* job) {
                  job->recursive, &job->result, &job->error);
 }
 
-static void FetchJobWork(ShellFetchJob* job) {
-    shell::FetchSend(job->request, job->capabilities, &job->result);
-}
-
 static void StorageWriteWork(StorageWriteJob* job) {
     job->ok = shell::StoragePersist(job->write, &job->error);
 }
@@ -924,15 +920,35 @@ static JSValue FetchJobResolved(ShellRuntimeImpl* impl, void* user) {
     return FetchJobValue(impl->context, (ShellFetchJob*)user);
 }
 
-// `cx.background_spawn(fetch).await`, and the whole of what used to be
-// FetchJobWork plus FetchJobDone. The job is deleted by this frame however it
-// ends: settled, cancelled, or dropped because its view went away.
+#if !GPUI_OS_WASM
+static void FetchJobWork(ShellFetchJob* job) {
+    shell::FetchSend(job->request, job->capabilities, &job->result);
+}
+#endif
+
 static void ShellFetchJobDestroy(void* job) {
     ShellFetchJob* self = (ShellFetchJob*)job;
     self->Free();
     delete self;
 }
 
+#if GPUI_OS_WASM
+// HttpSendAsync already returns on the main thread, including when the browser
+// resolves fetch(). Keep the same lease the coroutine path used: if the view
+// or runtime disappeared while the request was in flight, SettleShellTask
+// declines to enter it and the lease only releases the retained job.
+static void ShellFetchDone(ShellFetchJob* job, shell::FetchAsyncResult landed) {
+    if (landed.result) {
+        job->result = *landed.result;
+        *landed.result = {};
+    }
+    ShellTaskLease lease{&job->head, job, ShellFetchJobDestroy};
+    bool failed = !landed.ok || job->result.error.s != nullptr;
+    SettleShellTask(&lease, failed, job->result.error, FetchJobResolved, job);
+}
+#else
+// The hosted clients are blocking. Keep them behind the executor-backed Task
+// whose frame owns the job even when shutdown drops a late completion.
 static Task ShellFetchTask(TaskGuard guard, ShellFetchJob* job) {
     (void)guard;
     ShellTaskLease lease{&job->head, job, ShellFetchJobDestroy};
@@ -940,6 +956,7 @@ static Task ShellFetchTask(TaskGuard guard, ShellFetchJob* job) {
     bool failed = job->result.error.s != nullptr;
     SettleShellTask(&lease, failed, job->result.error, FetchJobResolved, job);
 }
+#endif
 
 static void StorageFlushDone(StorageFlushState* state,
                              shell::StorageOutcome outcome) {
@@ -6066,18 +6083,28 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
     ControlRetain(job->head.control);
     job->head.task = task;
     job->head.kind = ShellTaskKind::Fetch;
+#if GPUI_OS_WASM
+    if (!shell::FetchSendAsync(job->request, job->capabilities,
+                               MkFunc1(ShellFetchDone, job))) {
+        ForgetTask(impl, task, false);
+        ControlRelease(job->head.control);
+        job->Free();
+        delete job;
+        JS_FreeValue(ctx, promise);
+        return JS_ThrowInternalError(ctx,
+                                     "fetch could not start asynchronous work");
+    }
+#else
     TaskGuard guard;
     guard.alive = ShellTaskOwnerAlive;
     guard.user = &job->head;
-    // The coroutine runs to its first await before this returns, so a spawn
-    // the pool refused has already unwound: the lease forgot the task and the
-    // job is gone.
     Task work = ShellFetchTask(guard, job);
     if (!work.IsRunning()) {
         JS_FreeValue(ctx, promise);
         return JS_ThrowInternalError(ctx,
                                      "fetch could not start background work");
     }
+#endif
     return promise;
 }
 

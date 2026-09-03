@@ -16,9 +16,10 @@
    Linux, which is the same place X11, cairo and Pango come from.
 
    `HttpSend` and `HttpGet` block, so nothing on the UI thread may call them.
-   `HttpFetch` is the half that does: it hands the URL to a worker thread and
-   answers what the cache holds now, so a paint asks every frame and never
-   waits. */
+   `HttpSendAsync` adapts those clients through the executor and is the native
+   shape of browser fetch(). `HttpFetch` uses the browser seam on wasm and the
+   established worker path on hosted targets, so a paint asks every frame and
+   never waits. */
 
 #include "base.h"
 
@@ -87,12 +88,27 @@ constexpr int kHttpTimeoutMs = 15000;
 // else. Every other scheme — data:, file:, ftp: — belongs to someone else.
 bool HttpUrlIsRemote(Str url);
 
+// ─── one request without waiting ─────────────────────────────────────────
+
+struct HttpAsyncResult {
+    bool ok = false;
+    // Borrowed for the callback. A receiver that needs the fields afterwards
+    // moves or copies them before returning.
+    HttpRsp* response = nullptr;
+};
+
+// Copies `req` before returning and calls `done` on the main thread after the
+// response lands. Hosted targets run HttpSend on the executor; wasm uses the
+// browser's asynchronous fetch(). False means the request could not be copied
+// or started and no callback will arrive.
+bool HttpSendAsync(const HttpReq& req, Func1<HttpAsyncResult> done);
+
 // ─── fetching without waiting ─────────────────────────────────────────────
 
 enum class FetchState : uint8_t {
     // Nothing has been asked for this URL, or the table has forgotten it.
     None = 0,
-    // A worker thread has it.
+    // An asynchronous transfer has it.
     Pending,
     // The bytes are here.
     Done,
@@ -101,7 +117,7 @@ enum class FetchState : uint8_t {
 };
 
 // What the table holds for `url`, starting the fetch if it holds nothing.
-// Pending on the first call and for as long as the thread runs; Done with
+// Pending on the first call and for as long as the transfer runs; Done with
 // `*bytes` / `*len` pointing at the body, which belongs to the table and
 // lives until the entry is evicted or the table is cleared.
 //
@@ -119,8 +135,9 @@ int HttpFetchPending();
 // still answers Done — nothing would think to look.
 void HttpSetOnFetchDone(Func0 f);
 
-// Forget every fetched body, waiting for the workers to finish first.
-// AppFree calls it.
+// Forget every fetched body. On hosted targets this waits briefly for worker
+// requests; a still-pending request owns its slot through process teardown.
+// AppFree calls it. The wasm main loop does not return to AppFree.
 void HttpFetchClear();
 
 // Whether fetching is allowed at all. On by default; the tests turn it off so

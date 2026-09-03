@@ -1,9 +1,8 @@
 /* The portable half of the network: what a URL is, and the table that lets a
    paint ask for one without waiting for it.
 
-   The fetching itself is `HttpGet` in http_win.cpp / http_mac.cpp /
-   http_linux.cpp, one per platform's own library. Everything here is the same
-   on all three. */
+   Hosted platforms adapt their blocking client through the executor. The
+   browser starts fetch() directly and reports through the same callback. */
 
 #include "sys/http.h"
 #include "sys/executor.h"
@@ -30,6 +29,117 @@ bool HttpUrlIsRemote(Str url) {
     }
     return base::StrStartsWithI(url, "http://") ||
            base::StrStartsWithI(url, "https://");
+}
+
+// ─── one request without waiting ─────────────────────────────────────────
+
+// Owns the request fields while a hosted worker uses them. wasm copies them
+// into JavaScript before HttpWasmSendAsync returns, but keeping the same
+// ownership on every target makes the public contract one thing.
+struct HttpAsyncJob {
+    HttpReq req;
+    Str url;
+    Str method;
+    Str body;
+    Vec<HttpHeader> headers;
+    HttpRsp response;
+    Func1<HttpAsyncResult> done;
+    bool ok = false;
+};
+
+static void HttpAsyncJobFree(HttpAsyncJob* job) {
+    if (!job) {
+        return;
+    }
+    StrFree(job->url);
+    StrFree(job->method);
+    StrFree(job->body);
+    for (int i = 0; i < job->headers.len; i++) {
+        StrFree(job->headers[i].name);
+        StrFree(job->headers[i].value);
+    }
+    VecReset(job->headers);
+    HttpRspFree(&job->response);
+    delete job;
+}
+
+static HttpAsyncJob* HttpAsyncJobNew(const HttpReq& req,
+                                     Func1<HttpAsyncResult> done) {
+    HttpAsyncJob* job = new HttpAsyncJob();
+    job->url = StrDup(req.url);
+    job->method = StrDup(req.method);
+    job->body = StrDup(req.body);
+    bool ok = (job->url.s || req.url.len == 0) &&
+              (job->method.s || req.method.len == 0) &&
+              (job->body.s || req.body.len == 0);
+    for (int i = 0; i < req.nHeaders && ok; i++) {
+        HttpHeader header;
+        header.name = StrDup(req.headers[i].name);
+        header.value = StrDup(req.headers[i].value);
+        if ((!header.name.s && req.headers[i].name.len != 0) ||
+            (!header.value.s && req.headers[i].value.len != 0) ||
+            !VecAppend(job->headers, header)) {
+            StrFree(header.name);
+            StrFree(header.value);
+            ok = false;
+        }
+    }
+    if (!ok) {
+        HttpAsyncJobFree(job);
+        return nullptr;
+    }
+    job->req.url = job->url;
+    job->req.method = job->method;
+    job->req.headers = job->headers.len ? job->headers.els : nullptr;
+    job->req.nHeaders = job->headers.len;
+    job->req.body = job->body;
+    job->req.noRedirect = req.noRedirect;
+    job->done = done;
+    return job;
+}
+
+#if GPUI_OS_WASM
+// http_wasm.cpp copies the request into JavaScript before returning and calls
+// `done` later, on the browser thread.
+bool HttpWasmSendAsync(const HttpReq& req, Func1<HttpAsyncResult> done);
+
+static void HttpAsyncWasmDone(HttpAsyncJob* job, HttpAsyncResult result) {
+    job->done.Call(result);
+    HttpAsyncJobFree(job);
+}
+#else
+static void HttpAsyncWork(HttpAsyncJob* job) {
+    job->ok = HttpSend(job->req, &job->response);
+}
+
+static void HttpAsyncDone(HttpAsyncJob* job) {
+    HttpAsyncResult result = {job->ok, &job->response};
+    job->done.Call(result);
+    HttpAsyncJobFree(job);
+}
+#endif
+
+bool HttpSendAsync(const HttpReq& req, Func1<HttpAsyncResult> done) {
+    if (!done.IsValid()) {
+        return false;
+    }
+    HttpAsyncJob* job = HttpAsyncJobNew(req, done);
+    if (!job) {
+        return false;
+    }
+#if GPUI_OS_WASM
+    if (!HttpWasmSendAsync(job->req, MkFunc1(HttpAsyncWasmDone, job))) {
+        HttpAsyncJobFree(job);
+        return false;
+    }
+    return true;
+#else
+    if (!ExecSpawn(MkFunc0(HttpAsyncWork, job), MkFunc0(HttpAsyncDone, job))) {
+        HttpAsyncJobFree(job);
+        return false;
+    }
+    return true;
+#endif
 }
 
 // ─── the table ────────────────────────────────────────────────────────────
@@ -83,11 +193,11 @@ int HttpFetchPending() {
     return n;
 }
 
-// What the worker is handed. Its own copy of the URL, because the slot's is
-// only stable while the slot is Pending and this outlives that by a hair.
 struct FetchJob {
     int slot = 0;
+#if !GPUI_OS_WASM
     Str url = {};
+#endif
 };
 
 static void SlotDrop(FetchSlot* s) {
@@ -103,23 +213,24 @@ static void SlotDrop(FetchSlot* s) {
     s->state = FetchState::None;
 }
 
-// Runs on a pool thread. The slot index is still ours: eviction skips
-// Pending.
-static void FetchWorker(FetchJob* job) {
-    HttpRsp r;
-    bool ok = HttpGet(job->url, &r);
-    bool got = ok && r.status >= 200 && r.status < 300 && r.body.len > 0;
+#if GPUI_OS_WASM
+// Runs on the browser thread after fetch() has landed. The slot index is still
+// ours: eviction skips Pending.
+static void FetchDone(FetchJob* job, HttpAsyncResult result) {
+    HttpRsp* response = result.response;
+    bool got = result.ok && response && response->status >= 200 &&
+               response->status < 300 && response->body.len > 0;
 
     gFetchLock.Lock();
     FetchSlot* s = &gFetch[job->slot];
     if (got) {
         // The body moves rather than copies: Vec's assignment is a deep copy
         // and this is the one place that would rather not pay for it.
-        s->body = r.body.els;
-        s->len = r.body.len;
-        r.body.els = nullptr;
-        r.body.len = 0;
-        r.body.cap = 0;
+        s->body = response->body.els;
+        s->len = response->body.len;
+        response->body.els = nullptr;
+        response->body.len = 0;
+        response->body.cap = 0;
         s->state = FetchState::Done;
     } else {
         s->state = FetchState::Failed;
@@ -127,10 +238,40 @@ static void FetchWorker(FetchJob* job) {
     gFetchPending--;
     gFetchLock.Unlock();
 
-    HttpRspFree(&r);
+    Free(nullptr, job);
+    gOnFetchDone.Call();
+}
+#else
+// Hosted clients block, so their established image path owns and updates the
+// slot on a pool thread. In particular, it does not leave a main-thread
+// callback holding heap state when ExecShutdown deliberately drops late
+// completions.
+static void FetchWorker(FetchJob* job) {
+    HttpRsp response;
+    bool ok = HttpGet(job->url, &response);
+    bool got = ok && response.status >= 200 && response.status < 300 &&
+               response.body.len > 0;
+
+    gFetchLock.Lock();
+    FetchSlot* s = &gFetch[job->slot];
+    if (got) {
+        s->body = response.body.els;
+        s->len = response.body.len;
+        response.body.els = nullptr;
+        response.body.len = 0;
+        response.body.cap = 0;
+        s->state = FetchState::Done;
+    } else {
+        s->state = FetchState::Failed;
+    }
+    gFetchPending--;
+    gFetchLock.Unlock();
+
+    HttpRspFree(&response);
     StrFree(job->url);
     Free(nullptr, job);
 }
+#endif
 
 // The lock is held. Null when every slot is either Pending or the table is
 // full of them.
@@ -196,19 +337,26 @@ FetchState HttpFetch(Str url, const uint8_t** bytes, int* len) {
     s->url = StrDup(url);
     s->state = FetchState::Pending;
     job->slot = (int)(s - gFetch);
+#if !GPUI_OS_WASM
     job->url = StrDup(url);
+#endif
     gFetchPending++;
     gFetchLock.Unlock();
 
-    // The pool, not a thread of its own: a document pointing at four pictures
-    // asks for four of these at once, and kMaxConcurrent is what keeps that
-    // from being four more threads every time.
-    if (!ExecSpawn(MkFunc0(FetchWorker, job), gOnFetchDone)) {
+#if GPUI_OS_WASM
+    HttpReq req;
+    req.url = url;
+    if (!HttpSendAsync(req, MkFunc1(FetchDone, job))) {
+#else
+    if (!job->url.s || !ExecSpawn(MkFunc0(FetchWorker, job), gOnFetchDone)) {
+#endif
         gFetchLock.Lock();
         gFetchPending--;
         SlotDrop(s);
         gFetchLock.Unlock();
+#if !GPUI_OS_WASM
         StrFree(job->url);
+#endif
         Free(nullptr, job);
         return FetchState::None;
     }

@@ -12,7 +12,7 @@
    What a src may name:
      - an asset path, resolved through gpui/assets.h the way an icon is
      - a `data:` URI, base64 or percent-encoded
-     - an http(s) URL, fetched by sys/http.h on a thread of its own
+     - an http(s) URL, fetched asynchronously by sys/http.h
 
    A remote src prefers a shipped asset over the network: `ImageAssetFor`
    looks the URL's last path segment up in the asset roots first, so an

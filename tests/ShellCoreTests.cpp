@@ -2026,6 +2026,24 @@ static Str gShellFetchMethod;
 static Str gShellFetchBody;
 static Str gShellFetchHeaders;
 
+struct ShellFetchAsyncCapture {
+    bool called = false;
+    bool ok = false;
+    FetchResult result;
+
+    void Free() { result.Free(); }
+};
+
+static void ShellFetchAsyncDone(ShellFetchAsyncCapture* capture,
+                                FetchAsyncResult landed) {
+    capture->called = true;
+    capture->ok = landed.ok;
+    if (landed.result) {
+        capture->result = *landed.result;
+        *landed.result = {};
+    }
+}
+
 static bool ShellFetchFixture(const HttpReq& req, HttpRsp* out) {
     gShellFetchCalls++;
     Str url = req.url;
@@ -2295,6 +2313,22 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     utassert(gShellFetchCalls == 2);
     result.Free();
 
+    // The callback walk is the path wasm's fetch() uses. Pin that it remains
+    // asynchronous and applies the same authorization at every redirect.
+    ExecInit();
+    gShellFetchCalls = 0;
+    ShellFetchAsyncCapture asynchronous;
+    utassert(FetchSendAsync(request, both,
+                            MkFunc1(ShellFetchAsyncDone, &asynchronous)));
+    utassert(!asynchronous.called);
+    utassert(ExecWaitIdle(5000));
+    utassert(
+        asynchronous.called && asynchronous.ok &&
+        asynchronous.result.status == 201 &&
+        StrEq(asynchronous.result.url, "https://cdn.example.test/result") &&
+        StrEq(asynchronous.result.body, "redirected") && gShellFetchCalls == 2);
+    asynchronous.Free();
+
     Capabilities initialOnly;
     initialOnly.AddNetworkHost(StrL("api.example.test"));
     gShellFetchCalls = 0;
@@ -2351,7 +2385,6 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     window.app = &app;
     VecAppend(app.windows, &window);
     component::Init(&app);
-    ExecInit();
     PolicyUpdateDefaultCapabilities(initialOnly);
     gShellFetchMode = 0;
     gShellFetchCalls = 0;
