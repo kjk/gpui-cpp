@@ -21,6 +21,13 @@ static Str DepJoin(Str left, Str right) {
 // `std::env::temp_dir()`. A cache path carries a 64 character remote key and a
 // 40 character commit, and Git then writes its own tree below that, so these
 // fixtures cannot live under a deep working directory on Windows.
+// Every fixture gets a directory of its own. Reusing one path per name was
+// enough on POSIX, where the tree is gone the moment it is unlinked, but on
+// Windows a git child that has exited can still hold a handle for a moment,
+// so the remove at the next construction silently leaves part of the old
+// repository behind and the next case reads its package.json.
+static int gDepFixtureSerial = 0;
+
 static Str DepTempDir() {
     const char* names[] = {"TMPDIR", "TEMP", "TMP"};
     for (int i = 0; i < 3; i++) {
@@ -313,7 +320,8 @@ struct LinkFixture {
 
     explicit LinkFixture(const char* name) {
         Str temp = DepTempDir();
-        root = StrDup(fmt("%s/gsd_%s", temp, Str(name)));
+        root =
+            StrDup(fmt("%s/gsd_%s_%d", temp, Str(name), ++gDepFixtureSerial));
         StrFree(temp);
         cache = DepJoin(root, StrL("c"));
         app = DepJoin(root, StrL("app"));
@@ -436,7 +444,8 @@ struct GitFixture {
 
     explicit GitFixture(const char* name) {
         Str temp = DepTempDir();
-        root = StrDup(fmt("%s/gsd_%s", temp, Str(name)));
+        root =
+            StrDup(fmt("%s/gsd_%s_%d", temp, Str(name), ++gDepFixtureSerial));
         StrFree(temp);
         remote = DepJoin(root, StrL("remote"));
         cache = DepJoin(root, StrL("c"));
