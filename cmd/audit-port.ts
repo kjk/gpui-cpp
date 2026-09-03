@@ -24,7 +24,7 @@ accordion actions alert_dialog animation async_util auto_scroll avatar button
 calendar checkbox collapsible color_picker combobox component_traits
 date_picker dialog dock element_ext event focus_trap geometry global_state
 history hover_card index_path input link list_settings macos_accessibility
-measure motion number_input otp_input pagination popover popup positioner
+measure motion nav_stack number_input otp_input pagination popover popup positioner
 progress radio radio_group resizable scrollbar select sheet slider state_style
 styled switch table tabs text_boundary text_selection theme theme_tokens toast
 toggle toggle_group tooltip tree virtual_list
@@ -197,6 +197,7 @@ const testTargets: Record<string, string[]> = {
   ],
   "base/link": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/motion": ["tests/MotionTests.cpp"],
+  "base/nav_stack": ["tests/NavStackTests.cpp"],
   "base/number_input": ["tests/NumberInputTests.cpp"],
   "base/otp_input": ["tests/OtpInputTests.cpp"],
   "base/pagination": ["tests/PaginationTests.cpp"],

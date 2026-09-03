@@ -66,6 +66,7 @@ int GpuiMain(int argc, char** argv) {
     TestThemeSettings();
     TestResizable();
     TestTree();
+    TestNavStack();
     TestCalendar();
     TestColorPicker();
     TestToast();
