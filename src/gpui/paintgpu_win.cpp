@@ -282,6 +282,7 @@ struct GpuTarget {
     int pxW = 0;
     int pxH = 0;
     int samples = 1;
+    uint64_t generation = 0;
 };
 
 // ─── process-wide GPU state ──────────────────────────────────────────────
@@ -436,9 +437,12 @@ struct D12Target {
     int pxW = 0;
     int pxH = 0;
     int samples = 1;
+    uint64_t generation = 0;
 };
 
 static D12Gpu gD12;
+static uint64_t gDeviceGeneration = 1;
+static int gPresentedFrames = 0;
 
 // What is being accumulated right now. Painter order is preserved by
 // flushing whenever the pipeline or a bound texture has to change, so the
@@ -461,6 +465,8 @@ struct Batch {
 
 static Batch gB;
 static FrameStats gLastStats;
+
+static void RecoverDevice(PaintCtx* ctx, bool removed);
 
 const FrameStats& LastFrameStats() {
     return gLastStats;
@@ -1093,7 +1099,8 @@ static bool EnsureTriBuf(Gpu* g, int n) {
 }
 
 static void D12Wait(UINT64 value) {
-    if (!value || gD12.fence->GetCompletedValue() >= value) {
+    if (!value || !gD12.fence || !gD12.fenceEvent ||
+        gD12.fence->GetCompletedValue() >= value) {
         return;
     }
     if (SUCCEEDED(gD12.fence->SetEventOnCompletion(value, gD12.fenceEvent))) {
@@ -1130,11 +1137,13 @@ static bool D12MakeFrames(D12Target* t) {
     return true;
 }
 
-static void D12FreeSurfaces(D12Target* t) {
+static void D12FreeSurfaces(D12Target* t, bool wait = true) {
     if (!t) {
         return;
     }
-    D12WaitTarget(t);
+    if (wait) {
+        D12WaitTarget(t);
+    }
     for (int i = 0; i < kD12FrameCount; i++) {
         Rel(&t->back[i]);
     }
@@ -1146,11 +1155,11 @@ static void D12FreeSurfaces(D12Target* t) {
     Rel(&t->dsvHeap);
 }
 
-static void D12FreeTarget(D12Target* t) {
+static void D12FreeTarget(D12Target* t, bool wait = true) {
     if (!t) {
         return;
     }
-    D12FreeSurfaces(t);
+    D12FreeSurfaces(t, wait);
     for (int i = 0; i < kD12FrameCount; i++) {
         if (t->frames[i].upload && t->frames[i].mapped) {
             t->frames[i].upload->Unmap(0, nullptr);
@@ -1741,7 +1750,7 @@ static void FreeSurfaces(GpuTarget* t) {
 void PaintTargetFree(PaintCtx* ctx) {
     if (PaintD3d12On()) {
         D12Target* t = ctx ? (D12Target*)ctx->rt : nullptr;
-        D12FreeTarget(t);
+        D12FreeTarget(t, !t || t->generation == gDeviceGeneration);
         if (ctx) {
             ctx->rt = nullptr;
         }
@@ -1885,6 +1894,12 @@ static bool D12PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         return false;
     }
     D12Target* t = (D12Target*)ctx->rt;
+    if (t && t->generation != gDeviceGeneration) {
+        scene::Reset(ctx);
+        D12FreeTarget(t, false);
+        ctx->rt = nullptr;
+        t = nullptr;
+    }
     if (t && (t->hwnd != hwnd || t->offscreen)) {
         D12FreeTarget(t);
         ctx->rt = nullptr;
@@ -1896,6 +1911,7 @@ static bool D12PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         t->pxW = pxW;
         t->pxH = pxH;
         t->samples = PaintGpuSamples();
+        t->generation = gDeviceGeneration;
         DXGI_SWAP_CHAIN_DESC1 desc = {};
         desc.Width = (UINT)pxW;
         desc.Height = (UINT)pxH;
@@ -1972,9 +1988,14 @@ static bool D12PaintTargetEnd(PaintCtx* ctx) {
     }
     HRESULT hr = t->swap->Present(0, 0);
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
-        D12FreeTarget(t);
-        ctx->rt = nullptr;
+        RecoverDevice(ctx, true);
         return false;
+    }
+    if (SUCCEEDED(hr)) {
+        int every = WinPaintOptionsGet().gpuResetEvery;
+        if (every > 0 && ++gPresentedFrames >= every) {
+            RecoverDevice(ctx, false);
+        }
     }
     return SUCCEEDED(hr);
 }
@@ -1991,6 +2012,7 @@ static bool D12PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
     t->offscreen = true;
     t->pxW = pxW;
     t->pxH = pxH;
+    t->generation = gDeviceGeneration;
     if (!D12MakeFrames(t) || !D12MakeOffscreenSurfaces(t)) {
         D12FreeTarget(t);
         return false;
@@ -2059,6 +2081,11 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     }
     Gpu* g = &gGpu;
     GpuTarget* t = T11(ctx);
+    if (t && t->generation != gDeviceGeneration) {
+        scene::Reset(ctx);
+        gpuw::PaintTargetFree(ctx);
+        t = nullptr;
+    }
     if (t && (t->hwnd != hwnd || t->offscreen)) {
         gpuw::PaintTargetFree(ctx);
         t = nullptr;
@@ -2069,6 +2096,7 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         t->pxW = pxW;
         t->pxH = pxH;
         t->samples = PaintGpuSamples();
+        t->generation = gDeviceGeneration;
         // The same chain the D2D path presents through — three buffers,
         // flip-sequential — so the two are compared on the same terms and a
         // screenshot still comes off the redirection surface.
@@ -2139,10 +2167,14 @@ bool PaintTargetEnd(PaintCtx* ctx) {
     // between the drawing and nothing else.
     HRESULT hr = t->swap->Present(0, 0);
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
-        gpuw::PaintTargetFree(ctx);
+        RecoverDevice(ctx, true);
         return false;
     }
-    return true;
+    int every = WinPaintOptionsGet().gpuResetEvery;
+    if (every > 0 && ++gPresentedFrames >= every) {
+        RecoverDevice(ctx, false);
+    }
+    return SUCCEEDED(hr);
 }
 
 bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
@@ -2161,6 +2193,7 @@ bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
     // One sample: the pixels are read straight back, so there is nothing to
     // resolve them into.
     t->samples = 1;
+    t->generation = gDeviceGeneration;
     D3D11_TEXTURE2D_DESC td = {};
     td.Width = (UINT)pxW;
     td.Height = (UINT)pxH;
@@ -2699,6 +2732,115 @@ struct ImageSlot {
 
 static ImageSlot gImages[kImageSlots];
 static int gImageNext = 0;
+
+static void FreeD3d11Gpu(bool removed) {
+    Gpu* g = &gGpu;
+    if (g->ctx && !removed) {
+        g->ctx->ClearState();
+        g->ctx->Flush();
+    }
+    for (int i = 0; i < kImageSlots; i++) {
+        Rel(&gImages[i].srv);
+        gImages[i].img = nullptr;
+    }
+    gImageNext = 0;
+    Rel(&g->white);
+    Rel(&g->atlas.srv);
+    Rel(&g->atlas.tex);
+    Rel(&g->dsCover);
+    Rel(&g->dsNonZero);
+    Rel(&g->dsEvenOdd);
+    Rel(&g->dsOff);
+    Rel(&g->samp);
+    Rel(&g->rasterMsaa);
+    Rel(&g->raster);
+    Rel(&g->blend);
+    Rel(&g->triBuf);
+    Rel(&g->instSrv);
+    Rel(&g->instBuf);
+    Rel(&g->cb);
+    Rel(&g->triLayout);
+    Rel(&g->psTri);
+    Rel(&g->vsTri);
+    Rel(&g->psQuad);
+    Rel(&g->vsQuad);
+    Rel(&g->ctx);
+    memset(g, 0, sizeof(*g));
+    g->clearTypeLevel = 1.f;
+}
+
+static void FreeD3d12Gpu(bool removed) {
+    D12Gpu* g = &gD12;
+    if (!removed && g->queue && g->fence) {
+        UINT64 value = g->nextFence++;
+        if (SUCCEEDED(g->queue->Signal(g->fence, value))) {
+            D12Wait(value);
+        }
+    }
+    for (int i = 0; i < g->imageCount; i++) {
+        Rel(&g->images[i].tex);
+    }
+    for (int i = 0; i < 4; i++) {
+        Rel(&g->pipes[i].nonZero);
+        Rel(&g->pipes[i].evenOdd);
+        Rel(&g->pipes[i].tri);
+        Rel(&g->pipes[i].cover);
+        Rel(&g->pipes[i].quad);
+    }
+    Rel(&g->atlas);
+    Rel(&g->fence);
+    if (g->fenceEvent) {
+        CloseHandle(g->fenceEvent);
+    }
+    Rel(&g->srvHeap);
+    Rel(&g->root);
+    Rel(&g->list);
+    Rel(&g->queue);
+    Rel(&g->factory);
+    Rel(&g->dev);
+    memset(g, 0, sizeof(*g));
+    g->nextFence = 1;
+    // D3D12 shares the CPU atlas index and DirectWrite rendering parameters
+    // stored in gGpu, even though none of gGpu's D3D11 objects were made.
+    memset(&gGpu, 0, sizeof(gGpu));
+    gGpu.clearTypeLevel = 1.f;
+}
+
+static void RecoverDevice(PaintCtx* ctx, bool removed) {
+    if (ctx) {
+        scene::Reset(ctx);
+    }
+    if (PaintD3d12On()) {
+        D12Target* t = ctx ? (D12Target*)ctx->rt : nullptr;
+        D12FreeTarget(t, !removed);
+        if (ctx) {
+            ctx->rt = nullptr;
+        }
+        FreeD3d12Gpu(removed);
+    } else {
+        if (ctx) {
+            gpuw::PaintTargetFree(ctx);
+        }
+        FreeD3d11Gpu(removed);
+        PaintSharedD3dDeviceReset(ctx ? ctx->pa : nullptr);
+    }
+    gB.target = nullptr;
+    gB.image = nullptr;
+    gB.image12 = -1;
+    gB.insts.len = 0;
+    gB.tris.len = 0;
+    gPresentedFrames = 0;
+    gDeviceGeneration++;
+    if (gDeviceGeneration == 0) {
+        gDeviceGeneration++;
+    }
+    Str backend = PaintD3d12On() ? StrL("d3d12") : StrL("d3d11");
+    Str reason = removed ? StrL("DXGI") : StrL("injected");
+    logf("paint/%s: %s device recovery", backend, reason);
+    if (ctx && ctx->window) {
+        AppInvalidate(ctx->window);
+    }
+}
 
 static int D12ImageDescriptor(const Image* img) {
     for (int i = 0; i < gD12.imageCount; i++) {

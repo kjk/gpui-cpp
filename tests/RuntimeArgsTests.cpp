@@ -23,9 +23,11 @@ void TestRuntimeArgs() {
 #endif
     char msaa[] = "__msaa=8";
     char scene[] = "__scene=damage";
-    char* argv[] = {app, first, paint, msaa, scene, reuse, second, nullptr};
+    char reset[] = "__gpu_reset_every=7";
+    char* argv[] = {app,   first, paint,  msaa,   scene,
+                    reset, reuse, second, nullptr};
 
-    int argc = GpuiTakeRuntimeArgs(7, argv);
+    int argc = GpuiTakeRuntimeArgs(8, argv);
     const WinPaintOptions& options = WinPaintOptionsGet();
     utassert(argc == 3);
     utassert(base::StrEq(Str(argv[0]), "tests"));
@@ -35,6 +37,7 @@ void TestRuntimeArgs() {
     utassert(options.backend == expected);
     utassert(options.msaa == WinPaintMsaa::X8);
     utassert(options.scene == WinSceneMode::Damage);
+    utassert(options.gpuResetEvery == 7);
 #else
     char* argv[] = {app, first, reuse, second, nullptr};
     int argc = GpuiTakeRuntimeArgs(4, argv);
@@ -49,7 +52,8 @@ void TestRuntimeArgs() {
     // Later layout-reuse tests need the cache on; argv is how this process
     // set it, so argv is how it is put back.
     char on[] = "__layout_reuse=on";
-    char* restore[] = {app, on, nullptr};
-    GpuiTakeRuntimeArgs(2, restore);
+    char noReset[] = "__gpu_reset_every=0";
+    char* restore[] = {app, on, noReset, nullptr};
+    GpuiTakeRuntimeArgs(3, restore);
     utassert(LayoutReuseOn());
 }

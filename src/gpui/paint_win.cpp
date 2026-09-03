@@ -42,6 +42,7 @@ static WinPaintOptions gWinPaintOptions = {
 #endif
     WinPaintMsaa::X4,
     WinSceneMode::Skip,
+    0,
 };
 
 const WinPaintOptions& WinPaintOptionsGet() {
@@ -91,22 +92,36 @@ bool WinPaintOptionsTakeArg(Str arg) {
     }
 
     const Str scene = StrL("__scene=");
-    if (!base::StrStartsWith(arg, scene)) {
-        return false;
+    if (base::StrStartsWith(arg, scene)) {
+        Str value(arg.s + scene.len, arg.len - scene.len);
+        if (base::StrEqI(value, "off")) {
+            gWinPaintOptions.scene = WinSceneMode::Off;
+        } else if (base::StrEqI(value, "replay")) {
+            gWinPaintOptions.scene = WinSceneMode::Replay;
+        } else if (base::StrEqI(value, "cache")) {
+            gWinPaintOptions.scene = WinSceneMode::Cache;
+        } else if (base::StrEqI(value, "skip")) {
+            gWinPaintOptions.scene = WinSceneMode::Skip;
+        } else if (base::StrEqI(value, "damage")) {
+            gWinPaintOptions.scene = WinSceneMode::Damage;
+        }
+        return true;
     }
-    Str value(arg.s + scene.len, arg.len - scene.len);
-    if (base::StrEqI(value, "off")) {
-        gWinPaintOptions.scene = WinSceneMode::Off;
-    } else if (base::StrEqI(value, "replay")) {
-        gWinPaintOptions.scene = WinSceneMode::Replay;
-    } else if (base::StrEqI(value, "cache")) {
-        gWinPaintOptions.scene = WinSceneMode::Cache;
-    } else if (base::StrEqI(value, "skip")) {
-        gWinPaintOptions.scene = WinSceneMode::Skip;
-    } else if (base::StrEqI(value, "damage")) {
-        gWinPaintOptions.scene = WinSceneMode::Damage;
+
+    const Str reset = StrL("__gpu_reset_every=");
+    if (base::StrStartsWith(arg, reset)) {
+        Str value(arg.s + reset.len, arg.len - reset.len);
+        bool valid = value.len > 0;
+        for (int i = 0; i < value.len; i++) {
+            valid = valid && value.s[i] >= '0' && value.s[i] <= '9';
+        }
+        int n = valid ? StrToIntUnchecked(value) : -1;
+        if (n >= 0 && n <= 1000000) {
+            gWinPaintOptions.gpuResetEvery = n;
+        }
+        return true;
     }
-    return true;
+    return false;
 }
 
 static inline D2D1_COLOR_F ToD2D(Rgba c) {
@@ -648,6 +663,16 @@ void* PaintSharedDxgiFactory(PaintApp* pa) {
         return nullptr;
     }
     return pa->dxgiFactory;
+}
+
+void PaintSharedD3dDeviceReset(PaintApp* pa) {
+    if (!pa) {
+        return;
+    }
+    Rel(&pa->d2dDevice);
+    Rel(&pa->dxgiFactory);
+    Rel(&pa->dxgi);
+    Rel(&pa->d3d);
 }
 
 void* PaintSharedDwrite(PaintApp* pa) {

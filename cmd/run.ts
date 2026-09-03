@@ -94,8 +94,9 @@ const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
   -port N     -wasm: listen on N (default 8000; the next free port if taken)
   --          pass every remaining argument unchanged to the selected binary;
               the runtime consumes __layout_reuse=off|on before GpuiMain;
-              Windows also consumes __paint=d2d|d3d11|d3d12, __msaa=1|2|4|8
-              and __scene=off|replay|cache|skip|damage
+              Windows also consumes __paint=d2d|d3d11|d3d12, __msaa=1|2|4|8,
+              __scene=off|replay|cache|skip|damage and the test-only
+              __gpu_reset_every=N
 
 The target name is the last argument before --. -all is not accepted — pick one binary.`;
 

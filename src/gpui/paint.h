@@ -107,12 +107,17 @@ struct WinPaintOptions {
     WinPaintBackend backend = WinPaintBackend::Direct2D;
     WinPaintMsaa msaa = WinPaintMsaa::X4;
     WinSceneMode scene = WinSceneMode::Skip;
+    // Test seam: after this many presented custom-GPU frames, tear down the
+    // same device-local state a DXGI device-removal result invalidates. Zero
+    // is inert. Kept in the typed options so the stress runner reaches the
+    // production recovery path without a second renderer control channel.
+    int gpuResetEvery = 0;
 };
 
 // Process-start renderer options. WinPaintOptionsTakeArg consumes the
-// reserved __paint=, __msaa= and __scene= arguments before GpuiMain sees
-// argv; invalid values are still consumed and leave the current/default
-// choice unchanged.
+// reserved __paint=, __msaa=, __scene= and __gpu_reset_every= arguments
+// before GpuiMain sees argv; invalid values are still consumed and leave the
+// current/default choice unchanged.
 const WinPaintOptions& WinPaintOptionsGet();
 bool WinPaintOptionsTakeArg(Str arg);
 #endif

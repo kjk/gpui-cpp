@@ -188,7 +188,8 @@ formats, the `IDWriteTextLayout` behind `TextLayout*` (so shaping, measurement,
 hit-testing and range rects are one implementation), WIC decode — and Direct2D
 and the D3D11 half also share the device. Read `src/gpui/paintgpu.h` before
 touching either: it has the measured numbers, why it is not the default, and
-the two gaps that would have to close first.
+the remaining dash gap. `bun cmd/gpu-parity.ts` compares all three backends and
+stress-tests resize plus injected device recovery on both custom ones.
 
 The four SM5 entry points are `src/gpui/paintgpu_win.hlsl` and are **not**
 compiled at startup. `bun cmd/update-win-shaders.ts` runs FXC with `/O3 /WX`
@@ -505,8 +506,9 @@ installed is an error carrying the install command, never a quiet fallback);
 
 Runtime flags every example understands, stripped from argv before the example
 parses it: `-gpui-window=X,Y,W,H`, `__layout_reuse`, and on Windows `__paint`,
-`__msaa`, `__scene`. `GPUI_LAYOUT_DUMP=lay.txt` dumps every frame's laid-out
-tree; `GPUI_TODAY=YYYY-MM-DD` pins `DateToday()` so a calendar screenshot is
+`__msaa`, `__scene`, plus the test-only `__gpu_reset_every=N` recovery seam.
+`GPUI_LAYOUT_DUMP=lay.txt` dumps every frame's laid-out tree;
+`GPUI_TODAY=YYYY-MM-DD` pins `DateToday()` so a calendar screenshot is
 reproducible.
 
 Linux prerequisites install with `bash cmd/ubuntu-install-deps.sh`

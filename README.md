@@ -71,6 +71,20 @@ visual budget, for deliberately investigating a known difference.
 `-nobuild` assumes both existing executables were built from the current pin;
 run the default command after moving an upstream pin.
 
+The Windows GPU suite compares the same showcase pages under Direct2D, D3D11
+and D3D12, requires the two custom backends to be pixel-identical, then repeats
+their captures after resize churn and deterministic device resets:
+
+```powershell
+bun cmd/gpu-parity.ts
+bun cmd/gpu-parity.ts -nobuild introduction text-view
+bun cmd/gpu-parity.ts -list
+```
+
+It builds `showcase` with `--win-backend=all` and writes PNGs plus JSON and
+Markdown results under `out/gpu-parity/`. The recovery run uses the reserved
+`__gpu_reset_every=N` diagnostic seam; zero, the default, is inert.
+
 To lint every source translation unit under `src/` with LLVM's clang-tidy (using
 the repository's `.clang-tidy` configuration):
 
@@ -96,11 +110,13 @@ compiles all three and retains the process-start
 `__paint=d2d|d3d11|d3d12` selector. A fixed build ignores unavailable backend
 choices. `__msaa=1|2|4|8` controls the custom renderers' sample count (4 by
 default). `__scene=off|replay|cache|skip|damage` selects how much scene work is
-enabled, with `skip` as the default. `__layout_reuse=off|on` rebuilds the
-taffy tree every frame when off (default on); `GPUI_LAYOUT_REUSE` is the same
-switch if argv did not set it. The runtime consumes those reserved arguments
-before calling `GpuiMain`, so application argument parsing never sees them.
-See `src/gpui/paint.h` for the quality, cost and caching tradeoffs.
+enabled, with `skip` as the default. `__gpu_reset_every=N` is the custom-GPU
+recovery test seam used by `cmd/gpu-parity.ts`; normal runs leave it at zero.
+`__layout_reuse=off|on` rebuilds the taffy tree every frame when off (default
+on); `GPUI_LAYOUT_REUSE` is the same switch if argv did not set it. The runtime
+consumes those reserved arguments before calling `GpuiMain`, so application
+argument parsing never sees them. See `src/gpui/paint.h` for the quality, cost
+and caching tradeoffs.
 
 The custom renderers use checked-in FXC bytecode rather than compiling HLSL at
 application startup. After editing `src/gpui/paintgpu_win.hlsl`, regenerate it

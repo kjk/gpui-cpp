@@ -4,8 +4,7 @@
    renderer does. A default build contains Direct2D only; define
    WIN_BACKEND_D3D11 or WIN_BACKEND_D3D12 to compile one of these instead, or
    WIN_BACKEND_ALL to compile all three and retain the runtime selector. See
-   the note at the end for what they are worth and what they are still short
-   of.
+   the note at the end for what they are worth and the remaining dash gap.
 
    The default Windows backend is already on the GPU: Direct2D on a D3D11
    device, presenting through a DXGI flip-model swap chain. What it is not is
@@ -69,6 +68,9 @@ int PaintGpuSamples();
 void* PaintSharedD3dDevice(PaintApp* pa);
 // IDXGIFactory2*, the one the shared device's adapter belongs to.
 void* PaintSharedDxgiFactory(PaintApp* pa);
+// Drop the D3D11/DXGI/D2D device group after device removal. DirectWrite and
+// its device-independent text formats stay alive.
+void PaintSharedD3dDeviceReset(PaintApp* pa);
 // IDWriteFactory*.
 void* PaintSharedDwrite(PaintApp* pa);
 // The premultiplied BGRA WIC decoded, which is what ImageDecode keeps. False
@@ -174,6 +176,12 @@ const FrameStats& LastFrameStats();
 // the remaining differences are raster/compositing noise rather than moved
 // geometry. D3D11 and D3D12 consume the same atlas and shader inputs; their
 // captures are byte-identical.
+//
+// `bun cmd/gpu-parity.ts` owns those comparisons. It also churns window sizes
+// and uses __gpu_reset_every=N to repeatedly discard the swap chain, shaders,
+// pipelines, image textures and glyph atlas through the same recovery routine
+// used after DXGI_ERROR_DEVICE_REMOVED / RESET, then requires the recovered
+// frame to be pixel-identical to a fresh one on both submission APIs.
 
 } // namespace gpui
 
