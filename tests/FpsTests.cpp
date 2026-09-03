@@ -462,6 +462,20 @@ void TestFrameSampler() {
     FormatsMemoryByMagnitude();
     FormatsCpuOnTheSingleCoreScale();
 
+    TestSuite("fps/gpu");
+    // crates/fps/src/gpu.rs: a_reading_is_a_percentage. Whether a probe
+    // exists at all is the platform's answer, and a headless CI machine may
+    // well have no accelerator to report; what must hold is that a probe
+    // which does exist reports a percentage rather than a raw counter or a
+    // fraction. The first sample is the baseline and answers nothing.
+    if (GpuAvailable()) {
+        (void)GpuUsagePercent();
+        float percent = GpuUsagePercent();
+        if (percent >= 0) {
+            utassert(percent <= 100.f);
+        }
+    }
+
     TestSuite("fps/memory");
     AReadingFollowsWhatTheProcessAllocatesInBytes();
 #if GPUI_OS_LINUX

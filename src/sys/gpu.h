@@ -20,7 +20,7 @@ namespace gpui {
 
 // Whether this build can read a GPU figure. False on the platforms whose
 // probe is not written (see src/sys/gpu_posix.cpp), which is Rust's
-// `gpu/unsupported.rs`.
+// `gpu/unsupported.rs`. Windows and macOS both have one.
 bool GpuAvailable();
 
 // This process' GPU utilization, 0..100, or -1 when there is nothing to read.
