@@ -144,26 +144,44 @@ bool NativeMenu::Show(float x, float y) {
         return false;
     }
     int nextId = 1;
+    int nItems = items.len;
     PlatMenuItem* plat = ToPlat(a, this, &nextId);
     bool dark = ThemeGet(cx->app) == ThemeMode::Dark;
-    // The OS runs its own tracking loop, so this comes back once the menu is
-    // gone and the answer is in hand.
-    int chosen = PlatShowMenu(cx->win, plat, items.len, x, y, dark);
-    if (chosen <= 0) {
-        return true;
+    Listener select = onSelect;
+    App* app = cx->app;
+    Window* win = cx->win;
+
+    // Snapshot ids before PlatShowMenu: the OS tracking loop can paint, which
+    // resets the frame arena this menu lives on.
+    int count = NativeMenuSelectable(this, nullptr, 1 << 20);
+    intptr_t* ids = nullptr;
+    if (count > 0) {
+        auto** table =
+            (const NativeMenuItem**)malloc((size_t)count * sizeof(void*));
+        ids = (intptr_t*)malloc((size_t)count * sizeof(intptr_t));
+        if (!table || !ids) {
+            free(table);
+            free(ids);
+            return false;
+        }
+        NativeMenuSelectable(this, table, count);
+        for (int i = 0; i < count; i++) {
+            ids[i] = table[i] ? table[i]->id : 0;
+        }
+        free(table);
     }
-    // As many rows as the whole tree can offer, counted first so the table
-    // that flattens it is exactly big enough.
-    int cap = NativeMenuSelectable(this, nullptr, 1 << 20);
-    auto** table =
-        (const NativeMenuItem**)Alloc(a, (int)sizeof(void*) * (cap + 1));
-    int count = NativeMenuSelectable(this, table, cap);
-    if (chosen > count || !table[chosen - 1]) {
+
+    int chosen = PlatShowMenu(win, plat, nItems, x, y, dark);
+    intptr_t command = 0;
+    if (chosen > 0 && chosen <= count && ids) {
+        command = ids[chosen - 1];
+    }
+    free(ids);
+    if (command == 0) {
         return true;
     }
     ClickEvent ev = {};
-    ListenerCall(cx->app, cx->win,
-                 ListenerFill(onSelect, table[chosen - 1]->id), &ev);
+    ListenerCall(app, win, ListenerFill(select, command), &ev);
     return true;
 }
 
