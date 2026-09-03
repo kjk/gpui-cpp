@@ -4,6 +4,7 @@
 #include "shell/process.h"
 #include "shell/standard.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,11 +31,31 @@ static Str JoinPath(Str left, Str right) {
                             : fmt("%s%c%s", left, kSeparator, right));
 }
 
+static bool PathEq(Str a, Str b) {
+    if (a.len != b.len) return false;
+#if GPUI_OS_WINDOWS
+    for (int i = 0; i < a.len; i++) {
+        char ca = a.s[i];
+        char cb = b.s[i];
+        if (IsSeparator(ca) && IsSeparator(cb)) continue;
+        if (tolower((unsigned char)ca) != tolower((unsigned char)cb)) return false;
+    }
+    return true;
+#else
+    return StrEq(a, b);
+#endif
+}
+
 // A path prefix test that also refuses `<root>x`.
 static bool WithinPath(Str root, Str path) {
     if (!root || !path || path.len < root.len) return false;
 #if GPUI_OS_WINDOWS
-    if (StrCmpNI(root.s, path.s, root.len) != 0) return false;
+    for (int i = 0; i < root.len; i++) {
+        char a = root.s[i];
+        char b = path.s[i];
+        if (IsSeparator(a) && IsSeparator(b)) continue;
+        if (tolower((unsigned char)a) != tolower((unsigned char)b)) return false;
+    }
 #else
     if (memcmp(root.s, path.s, (size_t)root.len) != 0) return false;
 #endif
@@ -716,7 +737,7 @@ bool GitDependencyStore::LinkForEditor(
         bool replaced = false;
         Str target = {};
         if (DependencyReadDirectoryLink(link, &target)) {
-            if (StrEq(target, dependency.root)) {
+            if (PathEq(target, dependency.root)) {
                 StrFree(target);
                 continue;
             }
@@ -772,7 +793,7 @@ void GitDependencyStore::Prune(Str modules, const Vec<Str>& declared) {
             Str path = JoinPath(directory.path, Str(item.name));
             bool isDeclared = false;
             for (int d = 0; d < declared.len; d++)
-                if (StrEq(declared[d], path)) isDeclared = true;
+                if (PathEq(declared[d], path)) isDeclared = true;
             if (isDeclared) {
                 StrFree(path);
                 continue;
