@@ -7,6 +7,10 @@
 namespace gpui::shell {
 
 constexpr const char* kShellTypesFile = "gpui.d.ts";
+// The editor configuration, in the spelling a JavaScript project uses, and
+// the TypeScript one it is written beside and defers to.
+constexpr const char* kShellConfigFile = "jsconfig.json";
+constexpr const char* kShellTypeScriptConfigFile = "tsconfig.json";
 constexpr int kShellTypesMaxDepth = 8;
 constexpr int kShellTypesMaxFiles = 4096;
 

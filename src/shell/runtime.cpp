@@ -3,6 +3,7 @@
 #include "base/theme.h"
 #include "quickjs/quickjs.h"
 #include "shell/a11y.h"
+#include "shell/dependencies.h"
 #include "shell/fetch.h"
 #include "shell/filesystem.h"
 #include "shell/host_modules.h"
@@ -48,6 +49,9 @@ struct ShellRuntimeControl {
 struct AppModule {
     Str root;
     uint32_t generation = 0;
+    // The Git-backed packages the manifest declared, materialized before the
+    // entry module was compiled. Rust keeps them on `ApplicationModules`.
+    shell::MaterializedDependencies dependencies;
 };
 
 struct ScriptViewRegistration {
@@ -287,6 +291,9 @@ struct ShellRuntimeImpl {
     uint32_t nextTask = 1;
     uint32_t nextNestedView = 1;
     uint32_t nextModuleGeneration = 1;
+    // Empty: the per-user cache. A test points it at a scratch directory the
+    // way Rust hands `new_isolated_with_dependency_store` a store.
+    Str dependencyCacheRoot;
     uint64_t detachedExecution = 0;
     uint64_t interruptIdentity = UINT64_MAX;
     double interruptStarted = 0;
@@ -1348,24 +1355,75 @@ static char* ModuleNormalize(JSContext* ctx, const char* base,
             name, base);
         return nullptr;
     }
+    // `AppModules::candidate`. A relative specifier stays inside whichever
+    // tree the importing module lives in — the application, or the dependency
+    // checkout — and a bare one names a dependency, its subpath, or nothing.
+    char basePath[kMaxPath] = {};
+    Untag(base, basePath, kMaxPath);
+    const shell::MaterializedDependency* importing = nullptr;
+    for (int i = 0; i < application->dependencies.items.len; i++) {
+        const shell::MaterializedDependency& dependency =
+            application->dependencies.items[i];
+        if (WithinRoot(dependency.root, Str(basePath))) importing = &dependency;
+    }
     char start[kMaxPath] = {};
+    char candidate[kMaxPath] = {};
+    Str boundary = application->root;
+    const char* tail = name;
     if (name[0] == '.') {
-        Untag(base, start, kMaxPath);
+        StrCopyZ(start, kMaxPath, basePath);
         DirectoryName(start);
+        if (importing) boundary = importing->root;
     } else {
-        StrCopyZ(start, kMaxPath, application->root.s);
+        const shell::MaterializedDependency* named = nullptr;
+        for (int i = 0; i < application->dependencies.items.len; i++) {
+            const shell::MaterializedDependency& dependency =
+                application->dependencies.items[i];
+            Str dependencyName = dependency.name;
+            if (!StrStartsWith(Str(name), dependencyName)) continue;
+            char after = name[dependencyName.len];
+            if (after != 0 && after != '/') continue;
+            if (!named || dependencyName.len > named->name.len)
+                named = &dependency;
+        }
+        if (named) {
+            if (name[named->name.len] == 0) {
+                // The entry was resolved and confined when it was
+                // materialized; no second file test can improve on that.
+                StrCopyZ(candidate, kMaxPath, named->entry.s);
+                char entryTagged[kMaxPath + 32] = {};
+                int entryLen = snprintf(entryTagged, sizeof(entryTagged),
+                                        "%s?v=%u", candidate,
+                                        application->generation);
+                if (entryLen <= 0 || entryLen >= (int)sizeof(entryTagged))
+                    return nullptr;
+                char* out = (char*)js_malloc(ctx, (size_t)entryLen + 1);
+                if (out) memcpy(out, entryTagged, (size_t)entryLen + 1);
+                return out;
+            }
+            StrCopyZ(start, kMaxPath, named->root.s);
+            boundary = named->root;
+            tail = name + named->name.len + 1;
+        } else if (importing) {
+            // A dependency imports nothing but its own files and the
+            // dependencies the application declared.
+            JS_ThrowReferenceError(ctx, "cannot resolve module `%s` from `%s`",
+                                   name, base);
+            return nullptr;
+        } else {
+            StrCopyZ(start, kMaxPath, application->root.s);
+        }
     }
     char joined[kMaxPath] = {};
-    int written = snprintf(joined, sizeof(joined), "%s/%s", start, name);
+    int written = snprintf(joined, sizeof(joined), "%s/%s", start, tail);
     if (written <= 0 || written >= kMaxPath) {
         JS_ThrowReferenceError(ctx, "module path `%s` is too long", name);
         return nullptr;
     }
-    char candidate[kMaxPath] = {};
     bool found = PlatCanonicalPath(joined, candidate, kMaxPath) &&
                  PlatFileExists(candidate);
     if (!found) {
-        int n = snprintf(joined, sizeof(joined), "%s/%s.js", start, name);
+        int n = snprintf(joined, sizeof(joined), "%s/%s.js", start, tail);
         found = n > 0 && n < kMaxPath &&
                 PlatCanonicalPath(joined, candidate, kMaxPath) &&
                 PlatFileExists(candidate);
@@ -1376,10 +1434,10 @@ static char* ModuleNormalize(JSContext* ctx, const char* base,
         return nullptr;
     }
     Str canonical(candidate);
-    if (!WithinRoot(application->root, canonical)) {
+    if (!WithinRoot(boundary, canonical)) {
         JS_ThrowReferenceError(
             ctx, "module `%s` resolves outside the application directory `%s`",
-            name, application->root.s);
+            name, boundary.s);
         return nullptr;
     }
     char tagged[kMaxPath + 32] = {};
@@ -4735,6 +4793,31 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
     Arena* arena = ArenaNew();
     Str url;
     bool converted = argc >= 1 && JsString(ctx, argv[0], arena, &url);
+    // `parse_method`. Upstream parses any HTTP method here and leaves what may
+    // be sent to the capability policy, which already takes the method. This
+    // port keeps the token check and its refusal, and then refuses every
+    // method but GET: the repository's network boundary is one system-backed
+    // GET, so a granted PUT has nothing to carry it.
+    Str method = StrL("GET");
+    if (converted && argc >= 2 && !JS_IsUndefined(argv[1])) {
+        converted = JsString(ctx, argv[1], arena, &method);
+    }
+    if (converted && !shell::FetchIsHttpMethod(method)) {
+        JSValue thrown = JS_ThrowTypeError(
+            ctx, "fetch(url, options).method `%.*s` is not an HTTP method",
+            method.len, method.s ? method.s : "");
+        ArenaDelete(arena);
+        return thrown;
+    }
+    if (converted && !StrEqI(method, StrL("GET"))) {
+        JSValue thrown = JS_ThrowTypeError(
+            ctx,
+            "fetch(url, options).method `%.*s` is outside this port's network "
+            "boundary, which is GET only",
+            method.len, method.s ? method.s : "");
+        ArenaDelete(arena);
+        return thrown;
+    }
     bool release = false;
     Policy* policy = CurrentPolicy(&release);
     Str authorizationError;
@@ -5757,6 +5840,7 @@ R"JS(
     json: () => Promise.resolve().then(() => JSON.parse(body)),
   });
   globalThis.fetch = (url, options) => {
+    let method = "GET";
     if (options !== undefined && options !== null) {
       if (typeof options !== "object" || Array.isArray(options)) {
         throw new TypeError("fetch(url, options) expects an options object");
@@ -5766,9 +5850,8 @@ R"JS(
           throw new TypeError("unknown option `" + key + "` for fetch(url, options)");
         }
       }
-      const method = options.method === undefined ? "GET" : String(options.method).toUpperCase();
-      if (method !== "GET") {
-        throw new TypeError("this port permits GET only; POST is outside the repository network boundary");
+      if (options.method !== undefined && options.method !== null) {
+        method = String(options.method);
       }
       if (options.body !== undefined && options.body !== null) {
         throw new TypeError("a GET fetch may not carry a request body");
@@ -5778,7 +5861,7 @@ R"JS(
         throw new TypeError("custom fetch headers are outside the repository network boundary");
       }
     }
-    return __fetch_get(new URL(String(url)).href);
+    return __fetch_get(new URL(String(url)).href, method);
   };
 
   globalThis.__shell_os = Object.freeze({
@@ -6101,7 +6184,7 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeZlib, 1, 2);
     SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip",
                            NativeZlib, 1, 3);
-    SetGlobalFunction(impl->context, global, "__fetch_get", NativeFetch, 1);
+    SetGlobalFunction(impl->context, global, "__fetch_get", NativeFetch, 2);
     SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
                            (int)shell::FsOperation::Read);
     SetGlobalMagicFunction(impl->context, global, "__fs_write", NativeFs, 2,
@@ -6249,8 +6332,10 @@ ShellRuntime::~ShellRuntime() {
             impl->callbacks.Clear(impl->context);
         }
         delete impl->scratch;
+        StrFree(impl->dependencyCacheRoot);
         for (int i = 0; i < impl->modules.len; i++) {
             StrFree(impl->modules[i]->root);
+            impl->modules[i]->dependencies.Free();
             delete impl->modules[i];
         }
         VecReset(impl->modules);
@@ -6371,6 +6456,11 @@ ViewType* ShellRuntime::LoadSource(Str name, Str source, Policy* policy,
     return result;
 }
 
+void ShellRuntime::SetDependencyCacheRoot(Str root) {
+    StrFree(impl->dependencyCacheRoot);
+    impl->dependencyCacheRoot = StrDup(root);
+}
+
 ViewType* ShellRuntime::LoadApp(Str directory, Str entry, ShellError* error) {
     return LoadApp(directory, entry, nullptr, error);
 }
@@ -6400,8 +6490,37 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
                             directory));
         return nullptr;
     }
+    // Manifest dependencies are fetched before the entry module compiles, and
+    // the same checkouts are linked where an editor finds them. The link is
+    // best effort — a read-only directory is not a reason to refuse to run.
+    shell::MaterializedDependencies dependencies;
+    Str manifestPath =
+        StrDup(fmt("%s/%s", Str(dir), Str(shell::kShellManifestFile)));
+    if (PlatFileExists(manifestPath.s)) {
+        shell::PluginManifest manifest;
+        if (!shell::PluginManifestRead(Str(dir), &manifest, error)) {
+            StrFree(manifestPath);
+            return nullptr;
+        }
+        shell::GitDependencyStore store(impl->dependencyCacheRoot);
+        Str dependencyError = {};
+        if (!store.MaterializeAll(manifest, &dependencies, &dependencyError)) {
+            SetError(error, dependencyError);
+            StrFree(dependencyError);
+            StrFree(manifestPath);
+            dependencies.Free();
+            return nullptr;
+        }
+        StrFree(dependencyError);
+        Str linkError = {};
+        store.LinkForEditor(Str(dir), dependencies, nullptr, &linkError);
+        StrFree(linkError);
+    }
+    StrFree(manifestPath);
+
     AppModule* application = new AppModule();
     application->root = StrDup(Str(dir));
+    application->dependencies = dependencies;
     application->generation = impl->nextModuleGeneration++;
     if (application->generation == 0) {
         application->generation = impl->nextModuleGeneration++;

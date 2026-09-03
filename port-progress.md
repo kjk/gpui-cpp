@@ -10369,3 +10369,142 @@ for mdast's tab arithmetic, caught by the probe. readme-dist.md documents
 each pair with crate versions filled from the cmd/run.ts pins
 (<taffy-version>, <markdown-version>, <wry-version> beside
 <autocorrect-version>).
+
+## Upstream ingest after `6d07863f`: shell dependencies and fetch methods
+
+`3b6890aa` gives a manifest Git-backed JavaScript packages, and this is the
+first thing in `src/shell` that runs a program the host already has rather than
+one this tree wrote. It is `git`, through the existing capability-gated process
+runner: `src/shell/dependencies.cpp` is the port of
+`crates/shell/src/dependencies.rs`, and every command it issues goes through
+`ProcessRunBounded`, which already clears the environment, isolates the child in
+a POSIX process group or a kill-on-close Job Object, caps each stream at 8 MiB
+and kills the tree after 30 seconds — the same 30 seconds upstream spells
+`GIT_TIMEOUT`. No network client is involved and `src/sys/http.h` is untouched;
+a dependency fetch is a subprocess, and the bytes come down git's own transport.
+
+The runner grew exactly what git needs and nothing more. `ProcessOptions` adds
+a working directory, extra `NAME=VALUE` pairs, and an `inheritEnvironment` flag
+that is false everywhere except here — `process.run`'s empty-environment
+contract is unchanged, and the dependency fetcher inherits the host environment
+the way Rust's `Command` does, plus `GIT_TERMINAL_PROMPT=0` and
+`GCM_INTERACTIVE=Never` so a credential prompt cannot block a background fetch.
+
+The store follows upstream's shape exactly. `<home>/.gpui-shell/cache/dependencies`
+from `HOME` or `USERPROFILE`, each of which must be absolute; per-remote mirrors
+keyed by the SHA-256 of `("git", url)` written the way `digest` writes it (an
+8-byte little-endian length before each field); `clone --mirror` into a
+`.tmp-<pid>-<n>` directory published by a rename that fails when another process
+got there first; the configured `remote.origin.url` read back with `--null` and
+compared to the manifest's, so a cache cannot silently change repository
+identity; `fetch --force --depth 1` of `refs/heads/<branch>`, `refs/tags/<tag>`,
+the shorthand's `#ref`, or `HEAD`; `rev-parse FETCH_HEAD` validated as 40 or 64
+hex digits; and an immutable commit-addressed checkout published the same way,
+so a branch that moves gives the next load a new directory and leaves the one an
+older module generation is still executing alone. `CacheLock` is a real
+cross-process advisory lock — `LockFileEx` with `LOCKFILE_FAIL_IMMEDIATELY` on
+Windows, `flock` on POSIX — polled at 25 ms up to the two-minute `LOCK_TIMEOUT`.
+The four things std::fs and fs2 answer that one expression cannot are the new
+platform seam, `dependencies_win.cpp` and `dependencies_posix.cpp`: a whole-file
+lock, a directory symlink, its removal, and reading it back (Windows reads the
+reparse point itself, since `GetFinalPathNameByHandle` would answer for a link
+this store does not own).
+
+Manifest validation is `plugin.rs`'s and lands in `plugin.cpp` beside the
+capability block: `dependencies` is the seventh recognized field, a value is
+either the string shorthand — a Git URL or an scp-style remote with at most one
+`#ref`, or a strict GitHub `owner/repository` that expands to
+`https://github.com/owner/repository` and defaults to `main` — or the object
+form with a Git URL, exactly one non-empty `branch` or `tag`, and an optional
+repository-relative `entry`. `valid_git_ref_name` is ported whole, so
+`"branch": "main:refs/heads/injected"` is refused as a refspec rather than
+passed to git; a name that is not a bare module name, or one
+`HostIsReservedSpecifier` already claims, is refused before anything runs; and
+the vector is kept sorted by name because Rust's `BTreeMap` order is what the
+store, the resolver and the editor links all walk. The entry a package
+dependency uses comes from its own `package.json` `main`, canonicalized and
+confined to the checkout, or `index.js`.
+
+Module resolution is the `AppModules::candidate` rewrite. An `AppModule` now
+carries its materialized dependencies; a relative specifier stays inside
+whichever tree the importing module lives in — the application, or the
+dependency checkout — a bare specifier matches the longest declared dependency
+name and resolves to its entry or to a subpath under its root, a module imported
+from inside a dependency may reach nothing else, and the "resolves outside"
+check is against that boundary rather than always the application root.
+`LoadApp` materializes the manifest's dependencies before the entry module
+compiles, so a fetch failure is a load failure and not a missing import later.
+`ShellRuntime::SetDependencyCacheRoot` is Rust's
+`new_isolated_with_dependency_store`, and it is how the tests point the store at
+a scratch cache instead of the user's.
+
+`ad216356` is the editor half. `link_for_editor` writes
+`<app>/node_modules/<name>` pointing at the checkout the runtime is about to
+execute, so an editor resolves `import { style } from "omarchy-ui"` from the
+same files and its JSDoc cannot drift from what runs; only entries this store
+owns — a symlink into its own cache, or a directory carrying `.gpui-shell-link`
+— are ever replaced or removed, an installed package of the same name is left
+alone, and pruning is bounded at the one level a scoped name needs. Where
+Windows refuses a symlink to an unprivileged process, the re-export package is
+written instead, exactly as upstream does; the visible consequence is that a
+stub is rewritten on every load, because a marker file says who wrote a
+directory and not what it currently names. Every load links best effort — a
+read-only directory is not a reason to refuse to run — while `gpui-shell types`
+reports the failure, through `ShellWriteDependencyLinks` (Rust's
+`write_dependency_links`). `write_editor_config` scaffolds a `jsconfig.json` at
+the application root when there is neither that nor a `tsconfig.json`, byte for
+byte upstream's, so an inferred `moduleResolution` cannot land on the one that
+never looks in `node_modules` and the browser's default `lib` cannot collide
+with `gpui.d.ts`. The `crates/story/js/motion/jsconfig.json` the checkin also
+adds is the file this tree already carries as
+`examples/js_todolist/jsconfig.json`, unchanged, so there was nothing to copy.
+The `Placement` import this checkin drops from `declare module "gpui-base"` is
+inside the generated declaration payload, which is already at the new pin.
+
+`9a64d865` makes `fetch(url, { method })` a token check rather than a two-name
+list, and this is where the standing boundary bites. `parse_method` is ported as
+`FetchIsHttpMethod`, RFC 7230's `token` — which is what
+`reqwest::Method::from_bytes` judges — and a string that is not a method at all
+is refused with upstream's message, before the policy and before anything
+reaches the network. What is **not** ported is the point of the checkin: this
+repository's network surface is one bounded system GET, and POST, sockets and
+WebSockets are excluded, so a method that is a method but is not GET is refused
+too, by its own message naming the boundary rather than by pretending the grant
+does not exist. Upstream's argument — that a second list here is a second policy
+to keep in step with `Capabilities::may_request` — is answered by keeping the
+refusal one step later than the token check, so the shape of the error tells an
+author which of the two stopped them. Method validation moved from the
+JavaScript wrapper into `NativeFetch`, where Rust's `parse_method` lives, and
+`__fetch_get` now takes the method as its second argument.
+`tests/http_request.rs` is upstream's pair of tests: the refusal of a non-method
+is ported as written, and `fetch_sends_any_http_method` is ported as the refusal
+it becomes here.
+
+`a8d1d265` fixes a race in
+`tests::network::websocket_reads_and_writes_text_and_binary_messages`, where the
+fixture server closed the socket before the client had drained its two messages.
+WebSockets are not ported — no `src/shell` file implements one, and the only
+occurrence of the word is `"websocket"` in the reserved-specifier list — and the
+C++ suite has no test that waits on a fixture server, so there is no equivalent
+race here. Nothing changed for this checkin.
+
+Two things a reader should know. A cache path carries a 64-character remote key
+and a 40-character commit, and git then writes its own tree below that, so on
+Windows the whole path can approach `MAX_PATH`; the user cache under a home
+directory has room, but the tests keep their fixtures in the system temp
+directory rather than the working directory because a deep checkout does not.
+And the new suite reaches no network: it creates a repository in a scratch
+directory and clones it through the same `git` the runtime uses, the editor-link
+tests fabricate checkouts under the store's own cache without running git at
+all, and every git-backed test is skipped rather than failed where
+`git --version` does not answer. `tests/ShellDependencyTests.cpp` is registered
+beside the other suites; MSVC release passes 22,326 checks and `gpui_shell`
+builds with `/W4 /WX`.
+
+One note for whoever merges this. The four new files are clang-format output,
+but `runtime.cpp`, `plugin.cpp`, `typings.cpp`, `runtime.h`, `fetch.cpp`, the
+two `process_*.cpp` and `ShellCoreTests.cpp` are not reformatted: this
+machine's clang-format disagrees with what is checked in by several hundred
+lines in `runtime.cpp` alone, and reflowing files that other Shell work also
+edits would turn every one of those lines into a conflict. The hunks here are
+the ones this ingest actually needed.
