@@ -541,14 +541,14 @@ function declarationSourceText(targets: string[]): string {
 // hash and forces this ledger to be reviewed with the pin update.
 const surfacePins: Record<CrateName, Record<SurfaceKind, { count: number; sha256: string }>> = {
   base: {
-    declaration: { count: 361, sha256: "e8778d5cd847813474e820293aa4d3a1ccadeb37665bc9e4b5a66e40e552e3e0" },
-    "pub-use": { count: 113, sha256: "d2445f6f501a6d6616338b1e978653652c75ac46dab37ca6ba52e37b21399cca" },
-    test: { count: 587, sha256: "9d917e105997005c52de376aefeee06203e1d2f456452f6983c9bcfb86b75f51" },
+    declaration: { count: 424, sha256: "4bfb054e59bf63dae352de1845a46f1f0a44add79f38ac2124c9212767126303" },
+    "pub-use": { count: 129, sha256: "7c2d33421862385b6f7c3a9c1b28e55d4e675d7d3954d08701ef2710260a269d" },
+    test: { count: 739, sha256: "148a5a9c99aa03c7b106ca3030b5e5e8cc4dc659a1b9cdef47a2ab91248cf33b" },
   },
   ui: {
-    declaration: { count: 404, sha256: "16466eaf31ca3349f021b528c1b57b0f67ec75f38a9a233bdd9b329703d376fb" },
-    "pub-use": { count: 159, sha256: "a83b63627ebbedaed902d73a8e7af23ccb67ef6dcf4a1dac1f9ba2eff28619dd" },
-    test: { count: 486, sha256: "4bae9b82f01cbb0e1a05aea368da8814fe8ef00954321a41c56cb806af16a85b" },
+    declaration: { count: 426, sha256: "e5138aa5e62871e1daf3759d46e05a45f47cd2e2038deeed50a857a066f00634" },
+    "pub-use": { count: 156, sha256: "87576c90e9384243efa76690bede17a558f8da6288d0ca98a9cdc28024edcfd5" },
+    test: { count: 438, sha256: "1a2bf85a678dee39d900cad783c6a65e772d4398c3c3f07b936fb318e7d305e2" },
   },
 };
 
