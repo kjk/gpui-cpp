@@ -1145,9 +1145,8 @@ async function runWasm(a: RunArgs): Promise<never> {
 // ensureRustTree, and an import must not parse *their* command line.
 if (import.meta.main) {
   const args = parseArgs(Bun.argv.slice(2));
-  if (args.plat === "wasm") {
-    await runWasm(args);
-  } else {
-    await runNative(args);
-  }
+  (args.plat === "wasm" ? runWasm(args) : runNative(args)).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
