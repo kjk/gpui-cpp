@@ -138,4 +138,5 @@ void TestChart();
 void TestForm();
 void TestQuickJs();
 void TestShellCore();
+void TestShellDependencies();
 void TestRuntimeArgs();

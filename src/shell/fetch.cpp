@@ -139,6 +139,21 @@ static bool ParseFetchUrl(Str url, FetchUrl* parsed, Str* error) {
     return true;
 }
 
+// RFC 7230's `token`, which is what `reqwest::Method::from_bytes` accepts.
+bool FetchIsHttpMethod(Str method) {
+    if (!method.s || method.len <= 0) return false;
+    for (int i = 0; i < method.len; i++) {
+        char c = method.s[i];
+        bool token = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                     (c >= '0' && c <= '9') || c == '!' || c == '#' ||
+                     c == '$' || c == '%' || c == '&' || c == '\'' ||
+                     c == '*' || c == '+' || c == '-' || c == '.' ||
+                     c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+        if (!token) return false;
+    }
+    return true;
+}
+
 bool FetchAuthorizeGet(Str url, const Capabilities& capabilities,
                        Str* error) {
     if (error) {

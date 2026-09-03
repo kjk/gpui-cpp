@@ -28,6 +28,9 @@ class ShellRuntime {
                       ShellError* error = nullptr);
     ViewType* LoadApp(Str directory, Str entry, Policy* policy,
                       ShellError* error = nullptr);
+    // Rust's `new_isolated_with_dependency_store`: an empty root is the
+    // per-user Git dependency cache, and a test points this at its own.
+    void SetDependencyCacheRoot(Str root);
     ViewObject* Instantiate(ViewType* type, Window* window, App* app,
                             Policy* policy = nullptr,
                             ShellError* error = nullptr,

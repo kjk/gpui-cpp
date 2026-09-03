@@ -794,6 +794,7 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
 
     const char* rootName = "shell_types_test_root";
     remove("shell_types_test_root/gpui.d.ts");
+    remove("shell_types_test_root/jsconfig.json");
     remove("shell_types_test_root/nested/gpui.d.ts");
     remove("shell_types_test_root/nested/main.js");
 #if GPUI_OS_WINDOWS
@@ -813,7 +814,11 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
     int written = 0;
     utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
                                         &error));
-    utassert(!error.IsSet() && written == 2);
+    // ad216356: the root also gets a jsconfig.json, scaffolded once, so an
+    // inferred moduleResolution cannot land on the one that never looks in
+    // node_modules and the browser's default `lib` cannot collide with
+    // gpui.d.ts.
+    utassert(!error.IsSet() && written == 3);
     FsResult result;
     Str fsError;
     utassert(FsRun(FsOperation::Read, Str(rootName), StrL("gpui.d.ts"), {},
@@ -837,6 +842,28 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
                             StrL("nested/main.js")));
     utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
                             StrL("gpui.d.ts")));
+    // `an_existing_editor_configuration_is_never_replaced`: the scaffold is
+    // written once and then belongs to whoever opens it.
+    utassert(FsRun(FsOperation::Read, Str(rootName), StrL("jsconfig.json"), {},
+                   false, &result, &fsError));
+    utassert(StrContains(result.bytes,
+                         StrL("\"moduleResolution\": \"bundler\"")) &&
+             StrContains(result.bytes, StrL("\"strictNullChecks\": false")));
+    result.Free();
+    utassert(ShellFixtureFs(FsOperation::Write, Str(rootName),
+                            StrL("jsconfig.json"), StrL("{}")));
+    written = -1;
+    utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
+                                        &error) &&
+             written == 1);
+    utassert(FsRun(FsOperation::Read, Str(rootName), StrL("jsconfig.json"), {},
+                   false, &result, &fsError));
+    utassert(StrEq(result.bytes, "{}"));
+    result.Free();
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
+                            StrL("gpui.d.ts")));
+    utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
+                            StrL("jsconfig.json")));
     utassert(ShellFixtureFs(FsOperation::RemoveDirectory, Str(rootName),
                             StrL("nested")));
 #if GPUI_OS_WINDOWS
@@ -2081,8 +2108,19 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     Str source = StrL(
         "import { View, div } from 'gpui';\n"
         "globalThis.fetchResult = 'pending';\n"
+        // 9a64d865 makes `method` a token check rather than a two-name list.
+        // The token check and its refusal are ported; a method that is a
+        // method but is not GET is still outside this repository's network
+        // boundary, and is refused for that reason instead.
         "let postRefused = false; try { fetch('https://api.example.test/data', { method: 'POST' }); } catch (error) { postRefused = error.message.includes('GET only'); }\n"
         "if (!postRefused) throw new Error('POST was not refused');\n"
+        "let putRefused = false; try { fetch('https://api.example.test/data', { method: 'put' }); } catch (error) { putRefused = error.message.includes('`put` is outside'); }\n"
+        "if (!putRefused) throw new Error('PUT was not refused as a boundary');\n"
+        "for (const bad of ['', 'a method', '\"GET\"', 'GET/1']) {\n"
+        "  let refused = false;\n"
+        "  try { fetch('https://api.example.test/data', { method: bad }); } catch (error) { refused = error.message.includes('is not an HTTP method'); }\n"
+        "  if (!refused) throw new Error(`\\`${bad}\\` was not refused as a non-method`);\n"
+        "}\n"
         "export default class Main extends View {\n"
         "  init(props, cx) { cx.spawn(async cx => {\n"
         "    const response = await fetch('https://api.example.test/data');\n"

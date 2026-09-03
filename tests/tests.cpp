@@ -148,6 +148,7 @@ int GpuiMain(int argc, char** argv) {
     TestForm();
     TestQuickJs();
     TestShellCore();
+    TestShellDependencies();
     // Last because it deliberately changes the process-wide paint options.
     TestRuntimeArgs();
 
