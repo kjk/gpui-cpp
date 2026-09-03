@@ -398,9 +398,25 @@ static void ParticipantAutoScroll(Window* window, Point point, bool stopping) {
     TextSelectionParticipantState* state =
         ParticipantAt(window, window->sel->anchorPoint, &id);
     if (!state) return;
+    // The visible region a drag scrolls is the nearest clipping viewport, not
+    // the participant's own box: it stays put while the anchor text itself
+    // scrolls out of view. Rust reads it off the registration's content mask;
+    // the registration's hitbox is that here, since the runtime intersects
+    // every hit rectangle with the content mask on the way down the tree.
+    Bounds visible = state->registration.hitbox;
+    if (visible.w <= 0 || visible.h <= 0) {
+        visible = state->registration.bounds;
+    }
+    // A collapsed mask — a scrollable ancestor clipped away mid-drag — leaves
+    // an empty clamp range, so the drag stops scrolling rather than running
+    // at whatever the last delta was. `HIT_TEST_INSET` is Rust's, the margin
+    // its synthesized wheel event has to stay inside.
+    const float kHitTestInset = 1.f;
+    bool collapsed =
+        visible.w < kHitTestInset * 2.f || visible.h < kHitTestInset * 2.f;
     float delta = 0;
-    bool has = !stopping && AutoScrollComputeDelta(
-                                point.y, state->registration.bounds, &delta);
+    bool has = !stopping && !collapsed &&
+               AutoScrollComputeDelta(point.y, visible, &delta);
     TextSelectionEvent event;
     event.kind = TextSelectionEventKind::AutoScroll;
     event.autoScroll = delta;

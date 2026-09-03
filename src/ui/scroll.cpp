@@ -104,48 +104,8 @@ Scrollable* ScrollableElement::OverflowYScrollbar(Ctx* cx, El* element) {
     return Scrollable::New(cx, element, ScrollAxis::Vertical);
 }
 
-ScrollableMask* ScrollableMask::New(Ctx* cx, Axis axis, El* element) {
-    ScrollableMask* mask = ArenaNew<ScrollableMask>(cx->a);
-    mask->a = cx->a;
-    mask->axis = axis;
-    mask->element = element;
-    return mask;
-}
-
-El* ScrollableMask::Apply(El* element, Axis axis) {
-    if (!element) {
-        return nullptr;
-    }
-    element->ScrollMask(axis);
-    if (!element->scrollId && !element->scrollFromPath) {
-        element->ScrollFromPath();
-    }
-    return element;
-}
-
-ScrollableMask* ScrollableMask::Id(Str v) {
-    id = v;
-    return this;
-}
-
-ScrollableMask* ScrollableMask::Debug(bool v) {
-    debug = v;
-    return this;
-}
-
-El* ScrollableMask::IntoEl() {
-    El* result = Apply(element, axis);
-    if (!result) {
-        return Div(a);
-    }
-    if (id.s) {
-        result->PathId(id)->ScrollFromPath();
-    }
-    if (debug) {
-        result->Border(1, Rgb(0xff, 0xff, 0));
-    }
-    return result;
-}
+// ScrollableMask itself now lives in base/scrollable_mask.cpp; scroll/mod.rs
+// keeps only the re-export.
 
 } // namespace component
 } // namespace gpui

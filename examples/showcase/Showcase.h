@@ -39,6 +39,7 @@ enum {
     CompTable,
     CompTabs,
     CompTextSelection,
+    CompTextView,
     CompTextarea,
     CompToast,
     CompToggle,
@@ -154,8 +155,16 @@ struct ShowcaseApp {
     // page, built once, since rebuilding it every frame would discard the
     // layout the viewer arranged.
     Entity<DockState> dock = {};
-    int selA = -1;
-    int selB = -1;
+    // The TextView page's document, which is the view's own state: made on
+    // the page's first frame and kept, so scrolling and selection survive.
+    Entity<TextViewState> textView = {};
+    // `text_selection_active` / `text_selection_text`: what the window says
+    // is selected, kept on the page the way Rust keeps it — Rust fills these
+    // from a TextSelectionEvent subscription; the window's selection here is
+    // copied out of the frame that painted it, so the page takes it from the
+    // mouse seams below rather than while it is building its tree.
+    bool selActive = false;
+    char selText[2048] = {};
     // `self.tooltip_visible`, set by the trigger's on_hover. A page is told
     // what the pointer is doing; it does not ask the window.
     bool tooltipVisible = false;
@@ -205,6 +214,7 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTable(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx);
+El* ShowcaseTextView(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseToast(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseToggle(ShowcaseApp* app, Ctx* cx);
