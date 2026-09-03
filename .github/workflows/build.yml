@@ -125,6 +125,8 @@ jobs:
         if: matrix.name == 'linux-clang-mini'
         run: bash cmd/ubuntu-install-deps.sh --build-only
 
+      # Compile every Windows backend into the examples. The suite does not
+      # paint, so tests stay on the default backend — same as the MSVC job.
       - name: Build and test (clang-cl)
         if: matrix.name == 'windows-clang-mini-all-backends'
         shell: cmd
@@ -136,7 +138,7 @@ jobs:
           set GPUI_MARKDOWN=mini
           bun cmd/build.ts -clang -rel --win-backend=all -all || exit /b 1
           set GPUI_MARKDOWN=full
-          bun cmd/test.ts -clang -rel --win-backend=all
+          bun cmd/test.ts -clang -rel
 
       - name: Build and test (clang++)
         if: matrix.name == 'linux-clang-mini'

@@ -1273,11 +1273,17 @@ function quickjsCflagsFor(tc: Toolchain, f: BuildFlags, fail: (msg: string) => n
 }
 
 // The amalgam holds the mac half, which is Objective-C++, so that one
-// translation unit is compiled as Objective-C++. The examples are plain C++.
+// translation unit is compiled as Objective-C++. Non-amalgam compiles each
+// *_mac.cpp on its own, and those files #import Foundation/AppKit — clang
+// will not parse that as C++. Examples stay plain C++.
 const objcFlags = ["-x", "objective-c++", "-fobjc-arc"];
 
-function isMacAmalgam(srcFile: string): boolean {
-  return srcFile === amalgamPath("gpui.cpp");
+function needsMacObjC(srcFile: string): boolean {
+  const n = srcFile.replaceAll("\\", "/");
+  if (n === amalgamPath("gpui.cpp")) {
+    return true;
+  }
+  return /_mac\.cpp$/.test(n);
 }
 
 /**
@@ -1500,7 +1506,7 @@ function buildOne(name: string, tc: Toolchain, f: BuildFlags, fail: (msg: string
       const obj = join(dir, "obj", objGroup(srcFile), basename(srcFile).replace(/\.(cpp|c)$/i, `.${tc.objExt}`));
       const isQuickJs = objGroup(srcFile) === "quickjs";
       const flags = isQuickJs ? quickjsCflags : cflags;
-      const extra = !isQuickJs && tc.plat === "mac" && isMacAmalgam(srcFile) ? objcFlags : [];
+      const extra = !isQuickJs && tc.plat === "mac" && needsMacObjC(srcFile) ? objcFlags : [];
       spawnOrExit(tc, [tc.exe, ...flags, ...extra, "-c", srcFile, "-o", obj]);
     }
   }

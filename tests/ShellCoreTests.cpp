@@ -10,6 +10,26 @@
 
 using namespace gpui::shell;
 
+// ExecWaitIdle drains the C++ pool. cx.spawn's Promise.then lives on the
+// QuickJS job queue, so a host call that settled on a worker can leave the
+// script's live tasks queued until those jobs run.
+static bool ShellSettle(ShellRuntime* runtime, int timeoutMs) {
+    for (int waited = 0; waited <= timeoutMs; waited++) {
+        ExecDrain();
+        if (runtime) {
+            ShellError jobs = {};
+            runtime->DrainJobs(1024, &jobs);
+            ShellErrorClear(&jobs);
+        }
+        if (ExecPending() == 0 && ExecQueued() == 0 &&
+            (!runtime || runtime->LiveTasks() == 0)) {
+            return true;
+        }
+        PlatSleepMs(1);
+    }
+    return false;
+}
+
 static void BridgedValuesMatchJavaScriptConversions() {
     utassert(!BridgedIsTruthy(Bridged::Nil()));
     utassert(!BridgedIsTruthy(Bridged::Bool(false)));
@@ -133,8 +153,8 @@ static void FilesystemGrantsReturnRootRelativeAuthority() {
     capabilities.AddReadRoot(root).AddWriteRoot(root);
     CapabilityPath path = {};
     CapabilityError error = {};
-    utassert(capabilities
-                 .ResolvePath(absolute, CapabilityAccess::Read, &path, &error));
+    utassert(capabilities.ResolvePath(absolute, CapabilityAccess::Read, &path,
+                                      &error));
     utassert(StrEq(path.root, root));
     utassert(StrEq(path.relative, "dir/file.txt"));
     path.Free();
@@ -333,26 +353,38 @@ static void RenderContextExposesFrozenGenerationBoundTheme() {
     component::Init(&app);
     ShellError error = {};
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
-    ViewType* type = runtime ? runtime->LoadSource(
-        StrL("context-theme.js"),
-        StrL("import { div, View } from 'gpui'; export default class Themed extends View { render(cx) { const theme = cx.theme(); if (!Object.isFrozen(theme) || !Object.isFrozen(theme.colors) || !Object.isFrozen(theme.spacing) || !Object.isFrozen(theme.radius)) throw new Error('theme snapshot must be deeply frozen'); if (this.savedTheme) this.savedTheme(); else this.savedTheme = cx.theme; return div().text_color(theme.foreground).bg(theme.colors.surface).p(theme.spacing.md).rounded(theme.radius.md).child('semantic'); } }"),
-        &error) : nullptr;
-    ViewObject* object = type && runtime
-                             ? runtime->Instantiate(type, &window, &app,
-                                                    nullptr, &error)
-                             : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadSource(
+                      StrL("context-theme.js"),
+                      StrL("import { div, View } from 'gpui'; export default "
+                           "class Themed extends View { render(cx) { const "
+                           "theme = cx.theme(); if (!Object.isFrozen(theme) || "
+                           "!Object.isFrozen(theme.colors) || "
+                           "!Object.isFrozen(theme.spacing) || "
+                           "!Object.isFrozen(theme.radius)) throw new "
+                           "Error('theme snapshot must be deeply frozen'); if "
+                           "(this.savedTheme) this.savedTheme(); else "
+                           "this.savedTheme = cx.theme; return "
+                           "div().text_color(theme.foreground).bg(theme.colors."
+                           "surface).p(theme.spacing.md).rounded(theme.radius."
+                           "md).child('semantic'); } }"),
+                      &error)
+                : nullptr;
+    ViewObject* object =
+        type && runtime
+            ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+            : nullptr;
     Arena* output = ArenaNew();
     Str first = object && runtime
-                    ? runtime->RenderToSpec(output, object, &window, &app,
-                                            {}, nullptr, &error)
+                    ? runtime->RenderToSpec(output, object, &window, &app, {},
+                                            nullptr, &error)
                     : Str{};
-    utassert(!error.IsSet() &&
-             StrContains(first, StrL(".text_color(\"#")) &&
+    utassert(!error.IsSet() && StrContains(first, StrL(".text_color(\"#")) &&
              StrContains(first, StrL(".p(12)")));
     output->Reset();
     Str second = object && runtime
-                     ? runtime->RenderToSpec(output, object, &window, &app,
-                                             {}, nullptr, &error)
+                     ? runtime->RenderToSpec(output, object, &window, &app, {},
+                                             nullptr, &error)
                      : Str{};
     (void)second;
     utassert(StrContains(error.message, StrL("cx is no longer valid")));
@@ -371,24 +403,43 @@ static void ScriptThemesAndOpenUrlsFollowHostScopeRules() {
     component::Init(&app);
     ShellError error = {};
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
-    ViewType* type = runtime ? runtime->LoadSource(
-        StrL("set-theme.js"),
-        StrL("import { div, View } from 'gpui'; import { set_theme } from 'gpui-base';\n"
-             "const colors = { background:'#010203', foreground:'#fafafa', surface:'#111111', surface_foreground:'#f0f0f0', primary:'#222222', primary_foreground:'#eeeeee', secondary:'#333333', secondary_foreground:'#dddddd', muted:'#444444', muted_foreground:'#cccccc', accent:'#555555', accent_foreground:'#bbbbbb', destructive:'#666666', destructive_foreground:'#aaaaaa', border:'#777777', input:'#888888', ring:'#999999' };\n"
-             "export default class Themed extends View {\n"
-             "  init() { set_theme({ appearance:'dark', tokens:{ colors, spacing:{xxs:1,xs:2,sm:3,md:13,lg:21,xl:34,xxl:55}, radius:{none:0,sm:2,md:9,lg:12,xl:18,full:999} } }); }\n"
-             "  render(cx) { const t = cx.theme(); if (t.appearance !== 'dark' || t.background !== '#010203' || t.spacing.md !== 13 || t.radius.md !== 9) throw new Error('installed theme was not returned'); return div().p(t.spacing.md).rounded(t.radius.md); }\n"
-             "}"),
-        &error) : nullptr;
-    ViewObject* object = type && runtime
-                             ? runtime->Instantiate(type, &window, &app,
-                                                    nullptr, &error)
-                             : nullptr;
+    ViewType* type =
+        runtime
+            ? runtime->LoadSource(
+                  StrL("set-theme.js"),
+                  StrL(
+                      "import { div, View } from 'gpui'; import { set_theme } "
+                      "from 'gpui-base';\n"
+                      "const colors = { background:'#010203', "
+                      "foreground:'#fafafa', surface:'#111111', "
+                      "surface_foreground:'#f0f0f0', primary:'#222222', "
+                      "primary_foreground:'#eeeeee', secondary:'#333333', "
+                      "secondary_foreground:'#dddddd', muted:'#444444', "
+                      "muted_foreground:'#cccccc', accent:'#555555', "
+                      "accent_foreground:'#bbbbbb', destructive:'#666666', "
+                      "destructive_foreground:'#aaaaaa', border:'#777777', "
+                      "input:'#888888', ring:'#999999' };\n"
+                      "export default class Themed extends View {\n"
+                      "  init() { set_theme({ appearance:'dark', tokens:{ "
+                      "colors, "
+                      "spacing:{xxs:1,xs:2,sm:3,md:13,lg:21,xl:34,xxl:55}, "
+                      "radius:{none:0,sm:2,md:9,lg:12,xl:18,full:999} } }); }\n"
+                      "  render(cx) { const t = cx.theme(); if (t.appearance "
+                      "!== 'dark' || t.background !== '#010203' || "
+                      "t.spacing.md !== 13 || t.radius.md !== 9) throw new "
+                      "Error('installed theme was not returned'); return "
+                      "div().p(t.spacing.md).rounded(t.radius.md); }\n"
+                      "}"),
+                  &error)
+            : nullptr;
+    ViewObject* object =
+        type && runtime
+            ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+            : nullptr;
     const BaseTheme* theme = BaseThemeGlobal(&app);
     utassert(!error.IsSet() && theme &&
              theme->appearance == BaseThemeAppearance::Dark &&
-             theme->tokens.spacing.md == 13 &&
-             theme->tokens.radius.md == 9 &&
+             theme->tokens.spacing.md == 13 && theme->tokens.radius.md == 9 &&
              theme->tokens.colors.background.r == 1 &&
              theme->tokens.colors.background.g == 2 &&
              theme->tokens.colors.background.b == 3);
@@ -402,10 +453,16 @@ static void ScriptThemesAndOpenUrlsFollowHostScopeRules() {
     ViewObjectRelease(object);
     ViewTypeRelease(type);
 
-    type = runtime ? runtime->LoadSource(
-        StrL("theme-in-render.js"),
-        StrL("import { div, View } from 'gpui'; import { set_theme } from 'gpui-base'; export default class BadTheme extends View { render() { set_theme({}); return div(); } }"),
-        &error) : nullptr;
+    type =
+        runtime
+            ? runtime->LoadSource(
+                  StrL("theme-in-render.js"),
+                  StrL(
+                      "import { div, View } from 'gpui'; import { set_theme } "
+                      "from 'gpui-base'; export default class BadTheme extends "
+                      "View { render() { set_theme({}); return div(); } }"),
+                  &error)
+            : nullptr;
     object = type && runtime
                  ? runtime->Instantiate(type, &window, &app, nullptr, &error)
                  : nullptr;
@@ -414,16 +471,20 @@ static void ScriptThemesAndOpenUrlsFollowHostScopeRules() {
         runtime->RenderToSpec(output, object, &window, &app, {}, nullptr,
                               &error);
     }
-    utassert(StrContains(error.message,
-                         StrL("cannot run during render or layout")));
+    utassert(
+        StrContains(error.message, StrL("cannot run during render or layout")));
     ViewObjectRelease(object);
     ViewTypeRelease(type);
     ShellErrorClear(&error);
 
-    type = runtime ? runtime->LoadSource(
-        StrL("bad-url.js"),
-        StrL("import { div, View } from 'gpui'; export default class BadUrl extends View { render(cx) { cx.open_url('file:///tmp/no'); return div(); } }"),
-        &error) : nullptr;
+    type = runtime
+               ? runtime->LoadSource(
+                     StrL("bad-url.js"),
+                     StrL("import { div, View } from 'gpui'; export default "
+                          "class BadUrl extends View { render(cx) { "
+                          "cx.open_url('file:///tmp/no'); return div(); } }"),
+                     &error)
+               : nullptr;
     object = type && runtime
                  ? runtime->Instantiate(type, &window, &app, nullptr, &error)
                  : nullptr;
@@ -472,23 +533,22 @@ static void RuntimeLoadsRendersAndRetiresCallbacks() {
         "    return v_flex().id('root').p(12).items_center()\n"
         "      .child('hello')\n"
         "      .child(Button.new('save')\n"
-        "        .on_click((event) => { globalThis.shellClicks = event.click_count; })\n"
+        "        .on_click((event) => { globalThis.shellClicks = "
+        "event.click_count; })\n"
         "        .child('Save'));\n"
         "  }\n"
         "}\n");
-    ViewType* type = runtime->LoadSource(StrL("runtime-test.js"), source,
-                                         &error);
+    ViewType* type =
+        runtime->LoadSource(StrL("runtime-test.js"), source, &error);
     utassert(type != nullptr && !error.IsSet());
-    ViewObject* object = type
-                             ? runtime->Instantiate(type, &window, &app,
-                                                    nullptr, &error)
-                             : nullptr;
+    ViewObject* object =
+        type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+             : nullptr;
     utassert(object != nullptr && !error.IsSet());
-    RenderSnapshot* snapshot = object
-                                   ? runtime->BuildSnapshot(
-                                         object, &window, &app, {}, nullptr,
-                                         &error)
-                                   : nullptr;
+    RenderSnapshot* snapshot =
+        object
+            ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
+            : nullptr;
     utassert(snapshot != nullptr && !error.IsSet());
     if (snapshot) {
         Arena* arena = ArenaNew();
@@ -506,9 +566,10 @@ static void RuntimeLoadsRendersAndRetiresCallbacks() {
             ClickEvent event = {};
             event.clickCount = 3;
             runtime->DispatchClick(callback, event, &window, &app);
-            utassert(runtime->Eval(
-                StrL("if (globalThis.shellClicks !== 3) throw new Error('callback did not run')"),
-                StrL("callback-check.js"), &error));
+            utassert(
+                runtime->Eval(StrL("if (globalThis.shellClicks !== 3) throw "
+                                   "new Error('callback did not run')"),
+                              StrL("callback-check.js"), &error));
             utassert(!error.IsSet());
         }
         delete snapshot;
@@ -538,17 +599,15 @@ static void RuntimeAbortsFailedSnapshotTransactions() {
         "    return div().on_click(() => {}).child(child).child(child);\n"
         "  }\n"
         "}\n");
-    ViewType* type = runtime->LoadSource(StrL("failed-render.js"), source,
-                                         &error);
-    ViewObject* object = type
-                             ? runtime->Instantiate(type, &window, &app,
-                                                    nullptr, &error)
-                             : nullptr;
-    RenderSnapshot* snapshot = object
-                                   ? runtime->BuildSnapshot(
-                                         object, &window, &app, {}, nullptr,
-                                         &error)
-                                   : nullptr;
+    ViewType* type =
+        runtime->LoadSource(StrL("failed-render.js"), source, &error);
+    ViewObject* object =
+        type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+             : nullptr;
+    RenderSnapshot* snapshot =
+        object
+            ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
+            : nullptr;
     utassert(snapshot == nullptr);
     utassert(error.IsSet());
     utassert(StrFind(error.message, StrL("already added to a parent")) >= 0);
@@ -578,7 +637,8 @@ static void ShellSourceWatchReloadsAtomically() {
     remove(notesName);
     utassert(WriteTestModule(
         mainName,
-        "import { View, div } from 'gpui'; export default class Main extends View { render() { return div().child('old'); } }\n"));
+        "import { View, div } from 'gpui'; export default class Main extends "
+        "View { render() { return div().child('old'); } }\n"));
 
     SourceWatcher watcher;
     ShellError error = {};
@@ -590,7 +650,8 @@ static void ShellSourceWatchReloadsAtomically() {
     utassert(!changed);
     utassert(WriteTestModule(
         mainName,
-        "import { View, div } from 'gpui'; export default class Main extends View { render() { return div().child('old but changed'); } }\n"));
+        "import { View, div } from 'gpui'; export default class Main extends "
+        "View { render() { return div().child('old but changed'); } }\n"));
     utassert(watcher.PollAt(2, &changed, &error));
     utassert(changed);
     utassert(watcher.PollAt(3, &changed, &error));
@@ -601,8 +662,8 @@ static void ShellSourceWatchReloadsAtomically() {
     window.app = &app;
     component::Init(&app);
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
-    ViewType* type = runtime ? runtime->LoadApp(StrL("."), Str(mainName), &error)
-                             : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadApp(StrL("."), Str(mainName), &error) : nullptr;
     Entity<ScriptView> entity =
         type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
@@ -614,7 +675,8 @@ static void ShellSourceWatchReloadsAtomically() {
     ScriptView* view = entity.Get(&app);
     Arena* text = ArenaNew();
     utassert(view && view->snapshot);
-    utassert(StrFind(view->snapshot->DebugTree(text), StrL("old but changed")) >= 0);
+    utassert(
+        StrFind(view->snapshot->DebugTree(text), StrL("old but changed")) >= 0);
 
     utassert(WriteTestModule(mainName, "export default class { render( {\n"));
     Ctx cx = {&app, &window, frame, entity.id};
@@ -622,17 +684,20 @@ static void ShellSourceWatchReloadsAtomically() {
     utassert(error.IsSet());
     utassert(view->snapshot != nullptr);
     text->Reset();
-    utassert(StrFind(view->snapshot->DebugTree(text), StrL("old but changed")) >= 0);
+    utassert(
+        StrFind(view->snapshot->DebugTree(text), StrL("old but changed")) >= 0);
 
     utassert(WriteTestModule(
         mainName,
-        "import { View, div } from 'gpui'; export default class Main extends View { render() { return div().child('new live view'); } }\n"));
+        "import { View, div } from 'gpui'; export default class Main extends "
+        "View { render() { return div().child('new live view'); } }\n"));
     utassert(ScriptView::Reload(view, &cx, StrL("."), Str(mainName), &error));
     utassert(!error.IsSet());
     frame->Reset();
     utassert(EntityRender(&app, &window, frame, entity.id) != nullptr);
     text->Reset();
-    utassert(StrFind(view->snapshot->DebugTree(text), StrL("new live view")) >= 0);
+    utassert(StrFind(view->snapshot->DebugTree(text), StrL("new live view")) >=
+             0);
 
     EntityDrop(&app, entity.id);
     if (runtime) runtime->Release();
@@ -716,15 +781,18 @@ static void ShellHostModulesBridgePlainDataAndPromises() {
         "import { View, div } from 'gpui';\n"
         "import { increment, echo, double } from 'calculator';\n"
         "globalThis.hostAsync = 'pending';\n"
-        "globalThis.hostSync = JSON.stringify(echo({answer:[increment(41), true, 'ok']}));\n"
+        "globalThis.hostSync = JSON.stringify(echo({answer:[increment(41), "
+        "true, 'ok']}));\n"
         "export default class Main extends View {\n"
-        "  init(props, cx) { cx.spawn(async cx => { hostAsync = String(await double(21)); cx.notify(); }); }\n"
-        "  render(cx) { let live; try { live = increment(1); } catch (e) { live = 'refused:' + e.message; } return div().child(hostSync + '|' + hostAsync + '|' + live); }\n"
+        "  init(props, cx) { cx.spawn(async cx => { hostAsync = String(await "
+        "double(21)); cx.notify(); }); }\n"
+        "  render(cx) { let live; try { live = increment(1); } catch (e) { "
+        "live = 'refused:' + e.message; } return div().child(hostSync + '|' + "
+        "hostAsync + '|' + live); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("host-module.js"), source,
-                                               &error)
-                         : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("host-module.js"), source, &error)
+                : nullptr;
     Entity<ScriptView> view =
         type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
@@ -733,14 +801,16 @@ static void ShellHostModulesBridgePlainDataAndPromises() {
     utassert(view.IsValid() &&
              EntityRender(&app, &window, frame, view.id) != nullptr);
     utassert(!error.IsSet());
-    utassert(runtime && runtime->Eval(
-        StrL("if (hostSync !== '{\"answer\":[42,true,\"ok\"]}') throw new Error(hostSync)"),
-        StrL("host-sync-check.js"), &error));
-    utassert(ExecWaitIdle(5000));
-    utassert(runtime && runtime->Eval(
-        StrL("if (hostAsync !== '42') throw new Error(hostAsync)"),
-        StrL("host-async-check.js"), &error));
-    utassert(runtime->LiveTasks() == 0);
+    utassert(
+        runtime &&
+        runtime->Eval(StrL("if (hostSync !== '{\"answer\":[42,true,\"ok\"]}') "
+                           "throw new Error(hostSync)"),
+                      StrL("host-sync-check.js"), &error));
+    utassert(ShellSettle(runtime, 5000));
+    utassert(runtime &&
+             runtime->Eval(
+                 StrL("if (hostAsync !== '42') throw new Error(hostAsync)"),
+                 StrL("host-async-check.js"), &error));
 
     ShellClearExportedModules();
     ScriptView* live = view.Get(&app);
@@ -750,10 +820,9 @@ static void ShellHostModulesBridgePlainDataAndPromises() {
     utassert(EntityRender(&app, &window, frame, view.id) != nullptr);
     Arena* text = ArenaNew();
     utassert(live && live->snapshot &&
-             StrFind(live->snapshot->DebugTree(text),
-                     StrL("refused:")) >= 0);
-    utassert(StrFind(live->snapshot->DebugTree(text),
-                     StrL("registered none")) >= 0);
+             StrFind(live->snapshot->DebugTree(text), StrL("refused:")) >= 0);
+    utassert(
+        StrFind(live->snapshot->DebugTree(text), StrL("registered none")) >= 0);
 
     EntityDrop(&app, view.id);
     app.windows.len = 0;
@@ -783,9 +852,13 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
              StrContains(text, StrL("declare module \"gpui-base\"")) &&
              StrContains(text, StrL("declare module \"gpui-shell\"")) &&
              StrContains(text, StrL("declare module \"gpui-fps\"")));
-    utassert(StrContains(text, StrL("declare module \"workspace\"")) &&
-             StrContains(text, StrL("export function open(...args: HostValue[]): HostValue;")) &&
-             StrContains(text, StrL("export function search(...args: HostValue[]): Promise<HostValue>;")));
+    utassert(
+        StrContains(text, StrL("declare module \"workspace\"")) &&
+        StrContains(
+            text,
+            StrL("export function open(...args: HostValue[]): HostValue;")) &&
+        StrContains(text, StrL("export function search(...args: HostValue[]): "
+                               "Promise<HostValue>;")));
 
 #if GPUI_OS_WASM
     // Browsers have no writable application directory to refresh. The
@@ -815,8 +888,8 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
 
     ShellError error = {};
     int written = 0;
-    utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
-                                        &error));
+    utassert(
+        ShellWriteTypeDeclarations(Str(rootName), modules, &written, &error));
     // ad216356: the root also gets a jsconfig.json, scaffolded once, so an
     // inferred moduleResolution cannot land on the one that never looks in
     // node_modules and the browser's default `lib` cannot collide with
@@ -828,13 +901,13 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
                    false, &result, &fsError));
     utassert(StrEq(result.bytes, text));
     result.Free();
-    utassert(FsRun(FsOperation::Read, Str(rootName),
-                   StrL("nested/gpui.d.ts"), {}, false, &result, &fsError));
+    utassert(FsRun(FsOperation::Read, Str(rootName), StrL("nested/gpui.d.ts"),
+                   {}, false, &result, &fsError));
     utassert(StrEq(result.bytes, text));
     result.Free();
     written = -1;
-    utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
-                                        &error));
+    utassert(
+        ShellWriteTypeDeclarations(Str(rootName), modules, &written, &error));
     utassert(written == 0);
     StrFree(fsError);
     ShellErrorClear(&error);
@@ -849,16 +922,16 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
     // written once and then belongs to whoever opens it.
     utassert(FsRun(FsOperation::Read, Str(rootName), StrL("jsconfig.json"), {},
                    false, &result, &fsError));
-    utassert(StrContains(result.bytes,
-                         StrL("\"moduleResolution\": \"bundler\"")) &&
-             StrContains(result.bytes, StrL("\"strictNullChecks\": false")));
+    utassert(
+        StrContains(result.bytes, StrL("\"moduleResolution\": \"bundler\"")) &&
+        StrContains(result.bytes, StrL("\"strictNullChecks\": false")));
     result.Free();
     utassert(ShellFixtureFs(FsOperation::Write, Str(rootName),
                             StrL("jsconfig.json"), StrL("{}")));
     written = -1;
-    utassert(ShellWriteTypeDeclarations(Str(rootName), modules, &written,
-                                        &error) &&
-             written == 1);
+    utassert(
+        ShellWriteTypeDeclarations(Str(rootName), modules, &written, &error) &&
+        written == 1);
     utassert(FsRun(FsOperation::Read, Str(rootName), StrL("jsconfig.json"), {},
                    false, &result, &fsError));
     utassert(StrEq(result.bytes, "{}"));
@@ -888,43 +961,43 @@ static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
     const char* mainName = "shell_runtime_main.js";
     const char* badName = "shell_runtime_bad.js";
     const char* outsideName = "../shell_runtime_outside.js";
-    utassert(WriteTestModule(depName, "export const label = 'from dependency';\n"));
-    utassert(WriteTestModule(
-        mainName,
-        "import { View, div } from 'gpui';\n"
-        "import { label } from './shell_runtime_dep.js';\n"
-        "export default class Main extends View { render(cx) { return div().child(label); } }\n"));
+    utassert(
+        WriteTestModule(depName, "export const label = 'from dependency';\n"));
+    utassert(WriteTestModule(mainName,
+                             "import { View, div } from 'gpui';\n"
+                             "import { label } from './shell_runtime_dep.js';\n"
+                             "export default class Main extends View { "
+                             "render(cx) { return div().child(label); } }\n"));
     utassert(WriteTestModule(outsideName, "export const escaped = true;\n"));
     utassert(WriteTestModule(
         badName,
         "import { View, div } from 'gpui';\n"
         "import { escaped } from '../shell_runtime_outside.js';\n"
-        "export default class Main extends View { render(cx) { return div(); } }\n"));
+        "export default class Main extends View { render(cx) { return div(); } "
+        "}\n"));
 
     App app;
     Window window;
     window.app = &app;
     ShellError error = {};
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
-    ViewType* type = runtime
-                         ? runtime->LoadApp(StrL("."), Str(mainName), &error)
-                         : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadApp(StrL("."), Str(mainName), &error) : nullptr;
     utassert(type != nullptr && !error.IsSet());
-    ViewObject* object = type
-                             ? runtime->Instantiate(type, &window, &app,
-                                                    nullptr, &error)
-                             : nullptr;
+    ViewObject* object =
+        type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+             : nullptr;
     Arena* arena = ArenaNew();
-    Str tree = object ? runtime->RenderToSpec(arena, object, &window, &app,
-                                              {}, nullptr, &error)
+    Str tree = object ? runtime->RenderToSpec(arena, object, &window, &app, {},
+                                              nullptr, &error)
                       : Str{};
     utassert(StrEq(tree, "div\n  text \"from dependency\"\n"));
 
-    ViewType* escaped = runtime
-                            ? runtime->LoadApp(StrL("."), Str(badName), &error)
-                            : nullptr;
+    ViewType* escaped =
+        runtime ? runtime->LoadApp(StrL("."), Str(badName), &error) : nullptr;
     utassert(escaped == nullptr && error.IsSet());
-    utassert(StrFind(error.message, StrL("outside the application directory")) >= 0);
+    utassert(
+        StrFind(error.message, StrL("outside the application directory")) >= 0);
 
     ViewTypeRelease(escaped);
     ViewObjectRelease(object);
@@ -950,28 +1023,26 @@ static void PublishedSnapshotsMaterializeToNativeElements() {
         "import { View } from 'gpui';\n"
         "import { v_flex, Button } from 'gpui-base';\n"
         "export default class Main extends View { render(cx) {\n"
-        "  return v_flex().role('list_box').aria_active_descendant().w(320).h(80).gap_2().p(12).bg('#123456').rounded(8)\n"
+        "  return "
+        "v_flex().role('list_box').aria_active_descendant().w(320).h(80).gap_2("
+        ").p(12).bg('#123456').rounded(8)\n"
         "    .child('native')\n"
         "    .child(Button.new('disabled').disabled(true).child('No'));\n"
         "} }\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("materialize.js"), source,
-                                               &error)
-                         : nullptr;
-    ViewObject* object = type
-                             ? runtime->Instantiate(type, &window, &app,
-                                                    nullptr, &error)
-                             : nullptr;
-    RenderSnapshot* snapshot = object
-                                   ? runtime->BuildSnapshot(object, &window,
-                                                            &app, {}, nullptr,
-                                                            &error)
-                                   : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("materialize.js"), source, &error)
+                : nullptr;
+    ViewObject* object =
+        type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
+             : nullptr;
+    RenderSnapshot* snapshot =
+        object
+            ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
+            : nullptr;
     Arena* frame = ArenaNew();
     Ctx cx = {&app, &window, frame, {}};
-    El* root = snapshot
-                   ? ShellMaterialize(&cx, runtime, snapshot, &error)
-                   : nullptr;
+    El* root =
+        snapshot ? ShellMaterialize(&cx, runtime, snapshot, &error) : nullptr;
     utassert(root != nullptr && !error.IsSet());
     if (root) {
         utassert(root->style.display == Display::Flex);
@@ -1011,17 +1082,29 @@ static void ShellMaterializesStateTemplatesInputsAndPaths() {
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
     Str source = StrL(
         "import { View, div, PathBuilder, Background } from 'gpui';\n"
-        "import { InputState, NumberInput, OtpState, OtpInput } from 'gpui-base';\n"
+        "import { InputState, NumberInput, OtpState, OtpInput } from "
+        "'gpui-base';\n"
         "globalThis.numberStep = '';\n"
         "export default class Main extends View {\n"
-        "  init() { this.number = InputState.new({ value: '4' }); this.number.set_step(2); this.otp = OtpState.new(3, { value: '1' }); }\n"
+        "  init() { this.number = InputState.new({ value: '4' }); "
+        "this.number.set_step(2); this.otp = OtpState.new(3, { value: '1' }); "
+        "}\n"
         "  render(cx) {\n"
-        "    const path = PathBuilder.fill().move_to(0, 0).line_to('100%', 0).curve_to('100%', '100%', '50%', '50%').close().build();\n"
+        "    const path = PathBuilder.fill().move_to(0, 0).line_to('100%', "
+        "0).curve_to('100%', '100%', '50%', '50%').close().build();\n"
         "    return div().children([\n"
-        "      div().id('states').w(100).transition('width', { duration: 0 }).hover(s => s.bg('#112233').p(4)).active(s => s.bg('#223344')).focus(s => s.opacity(0.5)),\n"
-        "      NumberInput.new(this.number).controls_right().decrement_button(div().size(10).child('-')).increment_button(div().size(10).child('+')).on_step(action => { globalThis.numberStep = action; }),\n"
-        "      OtpInput.new(this.otp).cell_style(cell => cell.size(20).bg('#334455')).cell_active_style(cell => cell.border(2)),\n"
-        "      window.paint_path(path, Background.linear_gradient(90, Background.stop('#000000', 0.25), '#ffffff')).w(100).h(80),\n"
+        "      div().id('states').w(100).transition('width', { duration: 0 "
+        "}).hover(s => s.bg('#112233').p(4)).active(s => "
+        "s.bg('#223344')).focus(s => s.opacity(0.5)),\n"
+        "      "
+        "NumberInput.new(this.number).controls_right().decrement_button(div()."
+        "size(10).child('-')).increment_button(div().size(10).child('+')).on_"
+        "step(action => { globalThis.numberStep = action; }),\n"
+        "      OtpInput.new(this.otp).cell_style(cell => "
+        "cell.size(20).bg('#334455')).cell_active_style(cell => "
+        "cell.border(2)),\n"
+        "      window.paint_path(path, Background.linear_gradient(90, "
+        "Background.stop('#000000', 0.25), '#ffffff')).w(100).h(80),\n"
         "    ]);\n"
         "  }\n"
         "}\n");
@@ -1034,9 +1117,8 @@ static void ShellMaterializesStateTemplatesInputsAndPaths() {
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
     El* states = root ? root->first : nullptr;
     El* number = states ? states->next : nullptr;
@@ -1047,17 +1129,18 @@ static void ShellMaterializesStateTemplatesInputsAndPaths() {
     utassert(states && states->activeSet & StyleFieldBg);
     utassert(states && states->focusSet & StyleFieldOpacity);
     utassert(states && states->style.width == 100);
-    utassert(number && number->accessibility.role ==
-                           AccessibilityRole::SpinButton);
+    utassert(number &&
+             number->accessibility.role == AccessibilityRole::SpinButton);
     El* controls = number && number->first ? number->first->next : nullptr;
     El* increment = controls ? controls->first : nullptr;
     utassert(increment && increment->onClick.IsValid());
     if (increment && increment->onClick.IsValid()) increment->onClick.Call();
-    utassert(runtime && runtime->Eval(
-        StrL("if (globalThis.numberStep !== 'increment') throw new Error('number step was not dispatched')"),
-        StrL("number-step-check.js"), &error));
-    utassert(otp && otp->first && otp->first->next &&
-             otp->first->next->next);
+    utassert(
+        runtime &&
+        runtime->Eval(StrL("if (globalThis.numberStep !== 'increment') throw "
+                           "new Error('number step was not dispatched')"),
+                      StrL("number-step-check.js"), &error));
+    utassert(otp && otp->first && otp->first->next && otp->first->next->next);
     utassert(otp && otp->first && otp->first->style.hasBg);
     utassert(path && path->customPaint != nullptr);
     utassert(path && path->style.width == 100 && path->style.height == 80);
@@ -1080,18 +1163,24 @@ static void ShellRootHostsDialogsSheetsAndToasts() {
         "import { Button } from 'gpui-base';\n"
         "export default class Main extends View {\n"
         "  render() { return div().children([\n"
-        "    Button.new('open-dialog').on_click(() => window.open_dialog(() => div().id('dialog-content').child('Dialog'))),\n"
-        "    Button.new('close-dialog').on_click(() => window.close_dialog()),\n"
-        "    Button.new('open-sheet').on_click(() => window.open_sheet_at('left', () => div().id('sheet-content').child('Sheet'))),\n"
+        "    Button.new('open-dialog').on_click(() => window.open_dialog(() => "
+        "div().id('dialog-content').child('Dialog'))),\n"
+        "    Button.new('close-dialog').on_click(() => "
+        "window.close_dialog()),\n"
+        "    Button.new('open-sheet').on_click(() => "
+        "window.open_sheet_at('left', () => "
+        "div().id('sheet-content').child('Sheet'))),\n"
         "    Button.new('close-sheet').on_click(() => window.close_sheet()),\n"
-        "    Button.new('toast').on_click(() => window.push_toast({ title: 'Saved', description: 'One file', level: 'success', id: 'save', timeout: null })),\n"
-        "    Button.new('remove-toast').on_click(() => window.remove_toast('save')),\n"
+        "    Button.new('toast').on_click(() => window.push_toast({ title: "
+        "'Saved', description: 'One file', level: 'success', id: 'save', "
+        "timeout: null })),\n"
+        "    Button.new('remove-toast').on_click(() => "
+        "window.remove_toast('save')),\n"
         "  ]); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("shell-root.js"), source,
-                                               &error)
-                         : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("shell-root.js"), source, &error)
+                : nullptr;
     Entity<ScriptView> view =
         type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
@@ -1170,13 +1259,11 @@ static void ScriptViewsReuseSnapshotsUntilNotified() {
         "  globalThis.scriptRenderCount += 1;\n"
         "  return div().child(String(globalThis.scriptRenderCount));\n"
         "} }\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("cached-view.js"), source,
-                                               &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("cached-view.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     El* first = EntityRender(&app, &window, frame, view.id);
@@ -1184,16 +1271,16 @@ static void ScriptViewsReuseSnapshotsUntilNotified() {
     frame->Reset();
     El* second = EntityRender(&app, &window, frame, view.id);
     utassert(second != nullptr);
-    utassert(runtime->Eval(
-        StrL("if (globalThis.scriptRenderCount !== 1) throw new Error('snapshot was rebuilt')"),
-        StrL("cached-check.js"), &error));
+    utassert(runtime->Eval(StrL("if (globalThis.scriptRenderCount !== 1) throw "
+                                "new Error('snapshot was rebuilt')"),
+                           StrL("cached-check.js"), &error));
     runtime->InvalidateScriptView(view.id);
     frame->Reset();
     El* third = EntityRender(&app, &window, frame, view.id);
     utassert(third != nullptr);
-    utassert(runtime->Eval(
-        StrL("if (globalThis.scriptRenderCount !== 2) throw new Error('dirty view was not rebuilt')"),
-        StrL("dirty-check.js"), &error));
+    utassert(runtime->Eval(StrL("if (globalThis.scriptRenderCount !== 2) throw "
+                                "new Error('dirty view was not rebuilt')"),
+                           StrL("dirty-check.js"), &error));
     EntityDrop(&app, view.id);
     ArenaDelete(frame);
     runtime->Release();
@@ -1210,34 +1297,38 @@ static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
     ShellRuntime* runtime = ShellRuntime::New(&app, &error);
     Str source = StrL(
         "import { View } from 'gpui';\n"
-        "import { v_flex, InputState, Input, SliderState, Slider, OtpState, OtpInput } from 'gpui-base';\n"
+        "import { v_flex, InputState, Input, SliderState, Slider, OtpState, "
+        "OtpInput } from 'gpui-base';\n"
         "globalThis.retainedEvents = 0;\n"
         "export default class Main extends View {\n"
         "  init(props, cx) {\n"
-        "    this.input = InputState.new({ value: 'first', placeholder: 'type' });\n"
-        "    this.slider = SliderState.new({ min: 0, max: 10, step: 1, value: 3 });\n"
+        "    this.input = InputState.new({ value: 'first', placeholder: 'type' "
+        "});\n"
+        "    this.slider = SliderState.new({ min: 0, max: 10, step: 1, value: "
+        "3 });\n"
         "    this.otp = OtpState.new(6, { value: '12' });\n"
-        "    this.input.on('change', () => { globalThis.retainedEvents += 1; this.input.set_value('second'); });\n"
-        "    this.slider.on('release', () => { globalThis.retainedEvents += 10; });\n"
-        "    this.otp.on('complete', () => { globalThis.retainedEvents += 100; });\n"
+        "    this.input.on('change', () => { globalThis.retainedEvents += 1; "
+        "this.input.set_value('second'); });\n"
+        "    this.slider.on('release', () => { globalThis.retainedEvents += "
+        "10; });\n"
+        "    this.otp.on('complete', () => { globalThis.retainedEvents += 100; "
+        "});\n"
         "    globalThis.retainedInput = this.input;\n"
         "  }\n"
         "  render(cx) { return v_flex().children([\n"
-        "    Input.new(this.input), Slider.new(this.slider), OtpInput.new(this.otp)\n"
+        "    Input.new(this.input), Slider.new(this.slider), "
+        "OtpInput.new(this.otp)\n"
         "  ]); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("retained-state.js"),
-                                               source, &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("retained-state.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
     utassert(runtime && runtime->LiveEntities() == 3);
     InputState* input = root && root->first ? root->first->input : nullptr;
@@ -1247,9 +1338,10 @@ static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
         InputEvent changed = {InputEventKind::Change};
         ListenerCall(&app, &window, input->onChange, &changed);
     }
-    utassert(runtime->Eval(
-        StrL("if (globalThis.retainedEvents !== 1) throw new Error('retained event was not dispatched')"),
-        StrL("retained-event-check.js"), &error));
+    utassert(
+        runtime->Eval(StrL("if (globalThis.retainedEvents !== 1) throw new "
+                           "Error('retained event was not dispatched')"),
+                      StrL("retained-event-check.js"), &error));
     utassert(input && StrEq(InputValue(input), "second"));
     utassert(runtime->Eval(StrL("globalThis.retainedInput.release()"),
                            StrL("retained-release.js"), &error));
@@ -1276,7 +1368,8 @@ static void NestedScriptViewsRetainUpdateRollbackAndRelease() {
         "globalThis.nestedNext = undefined;\n"
         "class Leaf extends View {\n"
         "  init(props) { this.label = props.label; }\n"
-        "  render(cx) { globalThis.nestedLeafRendered = this.label; return div().child(this.label); }\n"
+        "  render(cx) { globalThis.nestedLeafRendered = this.label; return "
+        "div().child(this.label); }\n"
         "}\n"
         "class Child extends View {\n"
         "  init(props, cx) {\n"
@@ -1309,31 +1402,32 @@ static void NestedScriptViewsRetainUpdateRollbackAndRelease() {
         "    ]);\n"
         "  }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("nested-view.js"), source,
-                                               &error)
-                         : nullptr;
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("nested-view.js"), source, &error)
+                : nullptr;
     Entity<ScriptView> parent =
         type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = parent.IsValid()
-                   ? EntityRender(&app, &window, frame, parent.id)
-                   : nullptr;
+    El* root = parent.IsValid() ? EntityRender(&app, &window, frame, parent.id)
+                                : nullptr;
     ScriptView* parentView = parent.Get(&app);
     shell::CallbackId callback =
         parentView ? FirstCallback(parentView->snapshot) : UINT64_MAX;
     utassert(root != nullptr && !error.IsSet());
     utassert(runtime && runtime->LiveNestedViews() == 2);
     utassert(callback != UINT64_MAX);
-    utassert(runtime && runtime->Eval(
-        StrL("if (globalThis.nestedRendered !== 'one' || globalThis.nestedLeafRendered !== 'leaf') throw new Error('nested init props were not rendered')"),
-        StrL("nested-init-check.js"), &error));
+    utassert(
+        runtime &&
+        runtime->Eval(StrL("if (globalThis.nestedRendered !== 'one' || "
+                           "globalThis.nestedLeafRendered !== 'leaf') throw "
+                           "new Error('nested init props were not rendered')"),
+                      StrL("nested-init-check.js"), &error));
 
-    utassert(runtime && runtime->Eval(
-        StrL("globalThis.nestedNext = { label: 'two' }"),
-        StrL("nested-update-input.js"), &error));
+    utassert(runtime &&
+             runtime->Eval(StrL("globalThis.nestedNext = { label: 'two' }"),
+                           StrL("nested-update-input.js"), &error));
     if (callback != UINT64_MAX) {
         ClickEvent click = {};
         runtime->DispatchClick(callback, click, &window, &app);
@@ -1343,22 +1437,25 @@ static void NestedScriptViewsRetainUpdateRollbackAndRelease() {
     window.frameArena = frame;
     root = EntityRender(&app, &window, frame, parent.id);
     utassert(root != nullptr);
-    utassert(runtime && runtime->Eval(
-        StrL("if (globalThis.nestedRendered !== 'two') throw new Error('set_props did not rebuild only the child')"),
-        StrL("nested-update-check.js"), &error));
+    utassert(
+        runtime &&
+        runtime->Eval(StrL("if (globalThis.nestedRendered !== 'two') throw new "
+                           "Error('set_props did not rebuild only the child')"),
+                      StrL("nested-update-check.js"), &error));
 
-    utassert(runtime && runtime->Eval(
-        StrL("globalThis.nestedNext = { label: 'bad', fail: true }"),
-        StrL("nested-failure-input.js"), &error));
+    utassert(runtime &&
+             runtime->Eval(
+                 StrL("globalThis.nestedNext = { label: 'bad', fail: true }"),
+                 StrL("nested-failure-input.js"), &error));
     if (callback != UINT64_MAX) {
         ClickEvent click = {};
         runtime->DispatchClick(callback, click, &window, &app);
     }
     utassert(runtime && runtime->LiveEntities() == 0);
     utassert(runtime && runtime->LiveNestedViews() == 2);
-    utassert(runtime && runtime->Eval(
-        StrL("globalThis.nestedNext = { append: '!' }"),
-        StrL("nested-rollback-probe.js"), &error));
+    utassert(runtime &&
+             runtime->Eval(StrL("globalThis.nestedNext = { append: '!' }"),
+                           StrL("nested-rollback-probe.js"), &error));
     if (callback != UINT64_MAX) {
         ClickEvent click = {};
         runtime->DispatchClick(callback, click, &window, &app);
@@ -1368,21 +1465,24 @@ static void NestedScriptViewsRetainUpdateRollbackAndRelease() {
     window.frameArena = frame;
     root = EntityRender(&app, &window, frame, parent.id);
     utassert(root != nullptr);
-    utassert(runtime && runtime->Eval(
-        StrL("if (globalThis.nestedRendered !== 'two!') throw new Error('failed update state was not restored')"),
-        StrL("nested-rollback-check.js"), &error));
+    utassert(
+        runtime &&
+        runtime->Eval(StrL("if (globalThis.nestedRendered !== 'two!') throw "
+                           "new Error('failed update state was not restored')"),
+                      StrL("nested-rollback-check.js"), &error));
 
-    utassert(runtime && runtime->Eval(
-        StrL("globalThis.nestedAction = 'release'"),
-        StrL("nested-release-input.js"), &error));
+    utassert(runtime &&
+             runtime->Eval(StrL("globalThis.nestedAction = 'release'"),
+                           StrL("nested-release-input.js"), &error));
     if (callback != UINT64_MAX) {
         ClickEvent click = {};
         runtime->DispatchClick(callback, click, &window, &app);
     }
     utassert(runtime && runtime->LiveNestedViews() == 0);
-    utassert(runtime && runtime->Eval(
-        StrL("if (globalThis.nestedReleased !== true) throw new Error('release failed')"),
-        StrL("nested-release-check.js"), &error));
+    utassert(runtime &&
+             runtime->Eval(StrL("if (globalThis.nestedReleased !== true) throw "
+                                "new Error('release failed')"),
+                           StrL("nested-release-check.js"), &error));
     EntityDrop(&app, parent.id);
     ArenaDelete(frame);
     runtime->Release();
@@ -1406,35 +1506,36 @@ static void VirtualListsRenderOneVisibleBatch() {
         "  render(cx) { return v_virtual_list('rows', 20, 24,\n"
         "    index => 'row-' + index,\n"
         "    range => { globalThis.virtualBatches += 1; const out = [];\n"
-        "      for (let i = range.start; i < range.end; i++) out.push(div().child('row ' + i));\n"
+        "      for (let i = range.start; i < range.end; i++) "
+        "out.push(div().child('row ' + i));\n"
         "      return out;\n"
-        "    }).track_scroll(this.scroll).on_item_click(key => { globalThis.virtualClick = key; }); }\n"
+        "    }).track_scroll(this.scroll).on_item_click(key => { "
+        "globalThis.virtualClick = key; }); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("virtual-list.js"), source,
-                                               &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("virtual-list.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
-    utassert(runtime->Eval(
-        StrL("if (globalThis.virtualBatches !== 1) throw new Error('virtual list did not render one range')"),
-        StrL("virtual-list-check.js"), &error));
+    utassert(
+        runtime->Eval(StrL("if (globalThis.virtualBatches !== 1) throw new "
+                           "Error('virtual list did not render one range')"),
+                      StrL("virtual-list-check.js"), &error));
     El* firstRow = root && root->first ? root->first->first : nullptr;
     utassert(firstRow && firstRow->listener.IsValid());
     if (firstRow && firstRow->listener.IsValid()) {
         ClickEvent click = {};
         ListenerCall(&app, &window, firstRow->listener, &click);
     }
-    utassert(runtime->Eval(
-        StrL("if (globalThis.virtualClick !== 'row-0') throw new Error('virtual item key was not dispatched')"),
-        StrL("virtual-list-click-check.js"), &error));
+    utassert(
+        runtime->Eval(StrL("if (globalThis.virtualClick !== 'row-0') throw new "
+                           "Error('virtual item key was not dispatched')"),
+                      StrL("virtual-list-click-check.js"), &error));
     utassert(runtime->LiveEntities() == 1);
     EntityDrop(&app, view.id);
     utassert(runtime->LiveEntities() == 0);
@@ -1449,23 +1550,26 @@ static void ShellSandboxWithholdsCompilersAndSharedPrototypeWrites() {
     ShellSetDevelopmentMode(false);
     ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
     utassert(runtime != nullptr && !error.IsSet());
-    utassert(runtime && runtime->Eval(
-        StrL("if (typeof eval !== 'undefined' || !Object.isFrozen(Object.prototype) || "
-             "typeof std !== 'undefined') throw new Error('sandbox surface is open')"),
-        StrL("sandbox-check.js"), &error));
-    utassert(runtime && !runtime->Eval(
-        StrL("new Function('return 1')()"), StrL("sandbox-function.js"),
-        &error));
+    utassert(runtime &&
+             runtime->Eval(StrL("if (typeof eval !== 'undefined' || "
+                                "!Object.isFrozen(Object.prototype) || "
+                                "typeof std !== 'undefined') throw new "
+                                "Error('sandbox surface is open')"),
+                           StrL("sandbox-check.js"), &error));
+    utassert(runtime && !runtime->Eval(StrL("new Function('return 1')()"),
+                                       StrL("sandbox-function.js"), &error));
     utassert(error.IsSet() && StrContains(error.message, StrL("disabled")));
     ShellErrorClear(&error);
     if (runtime) runtime->Release();
 
     ShellSetDevelopmentMode(true);
     runtime = ShellRuntime::New(nullptr, &error);
-    utassert(runtime && runtime->Eval(
-        StrL("if (eval('1 + 1') !== 2 || Function('return 3')() !== 3) "
-             "throw new Error('development compiler missing')"),
-        StrL("development-mode.js"), &error));
+    utassert(
+        runtime &&
+        runtime->Eval(
+            StrL("if (eval('1 + 1') !== 2 || Function('return 3')() !== 3) "
+                 "throw new Error('development compiler missing')"),
+            StrL("development-mode.js"), &error));
     if (runtime) runtime->Release();
     ShellSetDevelopmentMode(false);
     ShellErrorClear(&error);
@@ -1483,33 +1587,33 @@ static void ShellSchedulerResumesPromisesInTaskScope() {
         "globalThis.taskEvents = 0;\n"
         "export default class Main extends View {\n"
         "  init(props, cx) {\n"
-        "    this.once = cx.timer.after(1, cx => { taskEvents += 1; cx.notify(); });\n"
-        "    globalThis.every = cx.timer.every(1, () => { taskEvents += 10; });\n"
+        "    this.once = cx.timer.after(1, cx => { taskEvents += 1; "
+        "cx.notify(); });\n"
+        "    globalThis.every = cx.timer.every(1, () => { taskEvents += 10; "
+        "});\n"
         "    cx.sleep(1).then(() => { taskEvents += 100; });\n"
-        "    cx.spawn(async cx => { await cx.sleep(1); taskEvents += 1000; cx.notify(); });\n"
+        "    cx.spawn(async cx => { await cx.sleep(1); taskEvents += 1000; "
+        "cx.notify(); });\n"
         "  }\n"
         "  render(cx) { return div().child(String(taskEvents)); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("scheduler.js"), source,
-                                               &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("scheduler.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
     utassert(runtime && runtime->LiveTasks() == 5);
     for (int i = 0; i < window.timers.len; i++) window.timers[i].dueAt = 0;
     WindowTimerTick(&window);
-    utassert(runtime->Eval(
-        StrL("if (taskEvents !== 1111) throw new Error('task resumptions were not drained')"),
-        StrL("scheduler-result.js"), &error));
+    utassert(runtime->Eval(StrL("if (taskEvents !== 1111) throw new "
+                                "Error('task resumptions were not drained')"),
+                           StrL("scheduler-result.js"), &error));
     utassert(runtime->LiveTasks() == 1);
     utassert(runtime->Eval(StrL("globalThis.every.cancel()"),
                            StrL("scheduler-cancel.js"), &error));
@@ -1536,13 +1640,15 @@ static void ShellStorageAndAuthorityFreeModulesWork() {
     ShellError error = {};
     ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
     utassert(runtime != nullptr && !error.IsSet());
-    utassert(runtime && runtime->Eval(
-        StrL("sessionStorage.setItem('temporary', 'yes');"
-             "localStorage.setItem('theme', 'dark');"
-             "if (sessionStorage.getItem('temporary') !== 'yes' || "
-             "localStorage.getItem('theme') !== 'dark' || localStorage.length !== 1) "
-             "throw new Error('storage did not round trip')"),
-        StrL("storage.js"), &error));
+    utassert(runtime &&
+             runtime->Eval(
+                 StrL("sessionStorage.setItem('temporary', 'yes');"
+                      "localStorage.setItem('theme', 'dark');"
+                      "if (sessionStorage.getItem('temporary') !== 'yes' || "
+                      "localStorage.getItem('theme') !== 'dark' || "
+                      "localStorage.length !== 1) "
+                      "throw new Error('storage did not round trip')"),
+                 StrL("storage.js"), &error));
     utassert(ExecWaitIdle(5000));
 
     Str source = StrL(
@@ -1551,15 +1657,19 @@ static void ShellStorageAndAuthorityFreeModulesWork() {
         "import path from 'path';\n"
         "import { URL } from 'url';\n"
         "import os from 'os';\n"
-        "if (Buffer.from('hello').toString('hex') !== '68656c6c6f') throw new Error('buffer');\n"
-        "if (path.basename(path.join('a', 'b.txt')) !== 'b.txt') throw new Error('path');\n"
-        "if (new URL('https://example.com/a?q=1').searchParams.get('q') !== '1') throw new Error('url');\n"
-        "if (typeof os.platform() !== 'string' || !os.EOL) throw new Error('os');\n"
-        "export default class Main extends View { render(cx) { return div().child('standard'); } }\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("standard-modules.js"),
-                                               source, &error)
-                         : nullptr;
+        "if (Buffer.from('hello').toString('hex') !== '68656c6c6f') throw new "
+        "Error('buffer');\n"
+        "if (path.basename(path.join('a', 'b.txt')) !== 'b.txt') throw new "
+        "Error('path');\n"
+        "if (new URL('https://example.com/a?q=1').searchParams.get('q') !== "
+        "'1') throw new Error('url');\n"
+        "if (typeof os.platform() !== 'string' || !os.EOL) throw new "
+        "Error('os');\n"
+        "export default class Main extends View { render(cx) { return "
+        "div().child('standard'); } }\n");
+    ViewType* type = runtime ? runtime->LoadSource(StrL("standard-modules.js"),
+                                                   source, &error)
+                             : nullptr;
     utassert(type != nullptr && !error.IsSet());
     ViewTypeRelease(type);
     if (runtime) runtime->Release();
@@ -1600,8 +1710,8 @@ static void ShellStorageWritesRevisionsInOrderAndFlushes() {
     remove("shell_storage_queue_test.json");
     Storage storage(true);
     Str storageError;
-    utassert(storage.SetPath(StrL("shell_storage_queue_test.json"),
-                             &storageError));
+    utassert(
+        storage.SetPath(StrL("shell_storage_queue_test.json"), &storageError));
     utassert(storage.Set(StrL("revision"), StrL("one"), &storageError));
     StorageWrite first;
     utassert(storage.BeginWrite(&first, &storageError));
@@ -1642,8 +1752,7 @@ static void ShellStorageWritesRevisionsInOrderAndFlushes() {
                           &waiter, &immediate, &storageError));
     utassert(!immediate && waiter != nullptr);
     storage.FinishWrite(failed.revision, false, &ready);
-    SettleStorageTestWaiters(&ready,
-                             StorageOutcome{false, StrL("disk full")});
+    SettleStorageTestWaiters(&ready, StorageOutcome{false, StrL("disk full")});
     utassert(failedSettlement.calls == 1 && !failedSettlement.ok);
     failed.Free();
     StorageWrite parked;
@@ -1680,28 +1789,26 @@ static void ShellStorageWritesRevisionsInOrderAndFlushes() {
         "import { View, div } from 'gpui';\n"
         "globalThis.storageFlush = 'pending';\n"
         "export default class Main extends View {\n"
-        "  init(props, cx) { cx.spawn(async cx => { localStorage.setItem('revision', 'final'); await localStorage.flush(); storageFlush = 'flushed'; cx.notify(); }); }\n"
+        "  init(props, cx) { cx.spawn(async cx => { "
+        "localStorage.setItem('revision', 'final'); await "
+        "localStorage.flush(); storageFlush = 'flushed'; cx.notify(); }); }\n"
         "  render(cx) { return div().child(storageFlush); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("storage-flush.js"),
-                                               source, &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("storage-flush.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
-    utassert(ExecWaitIdle(5000));
-    utassert(runtime && runtime->Eval(
-        StrL("if (storageFlush !== 'flushed') throw new Error(storageFlush)"),
-        StrL("storage-flush-result.js"), &error));
-    utassert(runtime && runtime->LiveTasks() == 0);
+    utassert(ShellSettle(runtime, 5000));
+    utassert(runtime && runtime->Eval(StrL("if (storageFlush !== 'flushed') "
+                                           "throw new Error(storageFlush)"),
+                                      StrL("storage-flush-result.js"), &error));
     FILE* file = fopen(path, "rb");
     utassert(file != nullptr);
     if (file) fclose(file);
@@ -1724,8 +1831,8 @@ static void ShellProcessRunIsBoundedAndPromiseBased() {
     ProcessCancellation cancellation;
     ProcessOutput output;
     Str processError;
-    utassert(ProcessRunBounded(StrL("cmd.exe"), args, 3, &cancellation,
-                               &output, &processError));
+    utassert(ProcessRunBounded(StrL("cmd.exe"), args, 3, &cancellation, &output,
+                               &processError));
     utassert(!processError && output.code == 7);
     utassert(StrEq(StrTrimAscii(output.out), "out") &&
              StrEq(StrTrimAscii(output.err), "err"));
@@ -1751,30 +1858,30 @@ static void ShellProcessRunIsBoundedAndPromiseBased() {
         "globalThis.processResult = 'pending';\n"
         "export default class Main extends View {\n"
         "  init(props, cx) { cx.spawn(async cx => {\n"
-        "    const result = await process.run('cmd.exe', ['/D', '/C', 'echo jsout & echo jserr 1>&2 & exit /B 9']);\n"
-        "    processResult = `${result.code}|${result.stdout.trim()}|${result.stderr.trim()}`; cx.notify();\n"
+        "    const result = await process.run('cmd.exe', ['/D', '/C', 'echo "
+        "jsout & echo jserr 1>&2 & exit /B 9']);\n"
+        "    processResult = "
+        "`${result.code}|${result.stdout.trim()}|${result.stderr.trim()}`; "
+        "cx.notify();\n"
         "  }); }\n"
         "  render(cx) { return div().child(processResult); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("process-run.js"), source,
-                                               &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("process-run.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
-    utassert(ExecWaitIdle(5000));
-    utassert(runtime && runtime->Eval(
-        StrL("if (processResult !== '9|jsout|jserr') throw new Error(processResult)"),
-        StrL("process-result.js"), &error));
-    utassert(runtime && runtime->LiveTasks() == 0);
+    utassert(ShellSettle(runtime, 5000));
+    utassert(runtime &&
+             runtime->Eval(StrL("if (processResult !== '9|jsout|jserr') throw "
+                                "new Error(processResult)"),
+                           StrL("process-result.js"), &error));
     EntityDrop(&app, view.id);
     app.windows.len = 0;
     ArenaDelete(frame);
@@ -1790,11 +1897,9 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
 #if GPUI_OS_WASM
     FsResult unavailable;
     Str unavailableError;
-    utassert(!FsRun(FsOperation::Read, StrL("application"),
-                    StrL("note.txt"), {}, false, &unavailable,
-                    &unavailableError));
-    utassert(StrContains(unavailableError,
-                         StrL("unavailable in a browser")));
+    utassert(!FsRun(FsOperation::Read, StrL("application"), StrL("note.txt"),
+                    {}, false, &unavailable, &unavailableError));
+    utassert(StrContains(unavailableError, StrL("unavailable in a browser")));
     unavailable.Free();
     StrFree(unavailableError);
     return;
@@ -1810,8 +1915,8 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
     utassert(FsRun(FsOperation::MakeDirectory, Str(rootName),
                    StrL("nested/child"), {}, true, &result, &fsError));
     utassert(FsRun(FsOperation::Write, Str(rootName),
-                   StrL("nested/child/note.txt"), StrL("hello"), false,
-                   &result, &fsError));
+                   StrL("nested/child/note.txt"), StrL("hello"), false, &result,
+                   &fsError));
     utassert(FsRun(FsOperation::Read, Str(rootName),
                    StrL("nested/child/note.txt"), {}, false, &result,
                    &fsError));
@@ -1823,7 +1928,8 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
              !result.entries[0].isDirectory);
     utassert(FsRun(FsOperation::Exists, Str(rootName),
                    StrL("nested/child/note.txt"), {}, false, &result,
-                   &fsError) && result.exists);
+                   &fsError) &&
+             result.exists);
     utassert(FsRun(FsOperation::RemoveFile, Str(rootName),
                    StrL("nested/child/note.txt"), {}, false, &result,
                    &fsError));
@@ -1865,32 +1971,32 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
         "    await fs.mkdir('nested', { recursive: true });\n"
         "    await fs.writeFile('nested/note.txt', 'hello');\n"
         "    const text = await fs.readFile('nested/note.txt', 'utf8');\n"
-        "    const entries = await fs.readdir('nested', { withFileTypes: true });\n"
+        "    const entries = await fs.readdir('nested', { withFileTypes: true "
+        "});\n"
         "    const exists = await fs.exists('nested/note.txt');\n"
-        "    fsResult = `${text}|${entries[0].name}|${entries[0].isDirectory()}|${exists}`;\n"
-        "    await fs.unlink('nested/note.txt'); await fs.rmdir('nested'); cx.notify();\n"
+        "    fsResult = "
+        "`${text}|${entries[0].name}|${entries[0].isDirectory()}|${exists}`;\n"
+        "    await fs.unlink('nested/note.txt'); await fs.rmdir('nested'); "
+        "cx.notify();\n"
         "  }); }\n"
         "  render(cx) { return div().child(fsResult); }\n"
         "}\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("filesystem.js"), source,
-                                               &error)
-                         : nullptr;
-    Entity<ScriptView> view = type
-                                  ? ScriptView::New(&app, runtime, type)
-                                  : Entity<ScriptView>{};
+    ViewType* type =
+        runtime ? runtime->LoadSource(StrL("filesystem.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type ? ScriptView::New(&app, runtime, type) : Entity<ScriptView>{};
     ViewTypeRelease(type);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
-    utassert(ExecWaitIdle(10000));
-    utassert(runtime && runtime->Eval(
-        StrL("if (fsResult !== 'hello|note.txt|false|true') throw new Error(fsResult)"),
-        StrL("filesystem-result.js"), &error));
-    utassert(runtime && runtime->LiveTasks() == 0);
+    utassert(ShellSettle(runtime, 10000));
+    utassert(runtime &&
+             runtime->Eval(StrL("if (fsResult !== 'hello|note.txt|false|true') "
+                                "throw new Error(fsResult)"),
+                           StrL("filesystem-result.js"), &error));
     EntityDrop(&app, view.id);
     app.windows.len = 0;
     ArenaDelete(frame);
@@ -1920,19 +2026,17 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
 #endif
     FsResult fs;
     Str error;
-    utassert(FsRun(FsOperation::MakeDirectory, Str(rootName), StrL("icons"),
-                   {}, false, &fs, &error));
-    utassert(FsRun(FsOperation::Write, Str(rootName),
-                   StrL("icons/check.svg"), StrL("<svg/>"), false, &fs,
-                   &error));
+    utassert(FsRun(FsOperation::MakeDirectory, Str(rootName), StrL("icons"), {},
+                   false, &fs, &error));
+    utassert(FsRun(FsOperation::Write, Str(rootName), StrL("icons/check.svg"),
+                   StrL("<svg/>"), false, &fs, &error));
     AssetsClear();
     {
         AppAssets assets{Str(rootName)};
         utassert(assets.Install());
         Vec<uint8_t> bytes;
         utassert(AssetsLoad(StrL("icons/check.svg"), &bytes));
-        utassert(bytes.len == 6 &&
-                 memcmp(bytes.els, "<svg/>", 6) == 0);
+        utassert(bytes.len == 6 && memcmp(bytes.els, "<svg/>", 6) == 0);
         VecReset(bytes);
         Str relative;
         utassert(!assets.Resolve(StrL("../secret.svg"), &relative, &error));
@@ -1960,10 +2064,9 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
 
 static void ShellCryptoAndCompressionMatchStandardRuntime() {
     static const uint8_t expected[32] = {
-        0xce, 0x63, 0x5c, 0x4e, 0xab, 0xff, 0x5e, 0x4f,
-        0x56, 0xdb, 0xa8, 0xfb, 0x1e, 0x39, 0xca, 0x23,
-        0x55, 0x30, 0xaa, 0x2b, 0x6b, 0x18, 0x53, 0x3e,
-        0xef, 0x1a, 0xf3, 0x86, 0x20, 0x16, 0xc5, 0x77,
+        0xce, 0x63, 0x5c, 0x4e, 0xab, 0xff, 0x5e, 0x4f, 0x56, 0xdb, 0xa8,
+        0xfb, 0x1e, 0x39, 0xca, 0x23, 0x55, 0x30, 0xaa, 0x2b, 0x6b, 0x18,
+        0x53, 0x3e, 0xef, 0x1a, 0xf3, 0x86, 0x20, 0x16, 0xc5, 0x77,
     };
     uint8_t digest[32];
     Sha256(StrL("shell"), digest);
@@ -1973,16 +2076,16 @@ static void ShellCryptoAndCompressionMatchStandardRuntime() {
         Str compressed;
         Str inflated;
         Str compressionError;
-        utassert(ZlibDeflate(StrL("stored compression round trip"),
-                             gzip != 0, &compressed, &compressionError));
+        utassert(ZlibDeflate(StrL("stored compression round trip"), gzip != 0,
+                             &compressed, &compressionError));
         utassert(!compressionError && compressed.len > 0);
-        utassert(ZlibInflate(compressed, gzip != 0, &inflated,
-                             &compressionError));
+        utassert(
+            ZlibInflate(compressed, gzip != 0, &inflated, &compressionError));
         utassert(!compressionError &&
                  StrEq(inflated, "stored compression round trip"));
         compressed.s[compressed.len - 1] ^= 1;
-        utassert(!ZlibInflate(compressed, gzip != 0, &inflated,
-                              &compressionError));
+        utassert(
+            !ZlibInflate(compressed, gzip != 0, &inflated, &compressionError));
         utassert(compressionError);
         StrFree(compressionError);
         StrFree(inflated);
@@ -1994,26 +2097,61 @@ static void ShellCryptoAndCompressionMatchStandardRuntime() {
     Str source = StrL(
         "import { View, div } from 'gpui';\n"
         "import { Buffer } from 'buffer';\n"
-        "import { createHash, randomBytes, randomUUID, webcrypto } from 'crypto';\n"
-        "import { deflateSync, inflateSync, gzipSync, gunzipSync } from 'zlib';\n"
+        "import { createHash, randomBytes, randomUUID, webcrypto } from "
+        "'crypto';\n"
+        "import { deflateSync, inflateSync, gzipSync, gunzipSync } from "
+        "'zlib';\n"
         "const input = Buffer.from('shell', 'utf8');\n"
-        "if (inflateSync(deflateSync(input)).toString() !== 'shell') throw new Error('deflate');\n"
-        "if (gunzipSync(gzipSync(input)).toString() !== 'shell') throw new Error('gzip');\n"
-        "if (createHash('sha256').update(input).digest('hex') !== 'ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577') throw new Error('sha256');\n"
-        "if (Buffer.from(await webcrypto.subtle.digest('SHA-256', input)).toString('hex') !== 'ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577') throw new Error('subtle.digest');\n"
-        "if (inflateSync(Buffer.from('7801cb48cdc9c957c8402701680308b1', 'hex')).toString() !== 'hello hello hello hello') throw new Error('fixed Huffman');\n"
-        "const words = ['alpha','bravo','charlie','delta','echo','foxtrot','golf','hotel','india','juliet','kilo','lima','mike','november','oscar','papa','quebec','romeo','sierra','tango','uniform','victor','whiskey','xray','yankee','zulu'];\n"
-        "let seed = 1, text = ''; for (let i = 0; i < 1000; i++) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; text += words[seed % words.length] + ' '; } text = text.slice(0, 1000);\n"
-        "const dynamic = Buffer.from('789c6d526d76843008bc0a57635d5c53a3d818eddad3f795011b7dfd978f61981998d2283468954c6b9252983eb69ca4523770c949e85df820e906c5e9e07914a19c2626cecbc0f4bde58dbe86b48e72d09ebaaa2550bdbe6bd11ad75977991e52e8a5b90fe836a75ecb4495e797a211e404e5c20b539a9fc95bb9cce6d9c404fc5178d700798fcf4d1ed20137fd1a0e6161d27171f5080cfa945cbdaae824da1e43bb119b29a021ebb43ba61ca674edb8c087bd426d680f5940c5cd320110895bbbd0fa7fcd657a21131c1e8669009fbb3703a7687c612a4110ec4e716f76d1854ae36cb523a030ec41fb7ed848a357933bea83b89982b9b31ced84d82fcb7cddc76a9a5c3d70f7d5345e9785488dba19ae1dcdaad7de01defa9eced9c2ffadeccf8693c1dd75996d01cef208c806d8ca85fd7b5b9fe00f0fa876ce', 'hex');\n"
-        "if (inflateSync(dynamic).toString() !== text) throw new Error('dynamic Huffman');\n"
-        "const random = randomBytes(32); if (random.length !== 32) throw new Error('randomBytes');\n"
-        "const values = new Uint32Array(4); if (webcrypto.getRandomValues(values) !== values) throw new Error('getRandomValues');\n"
-        "if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(randomUUID())) throw new Error('randomUUID');\n"
-        "export default class Main extends View { render(cx) { return div().child('standard'); } }\n");
-    ViewType* type = runtime
-                         ? runtime->LoadSource(StrL("standard-runtime.js"),
-                                               source, &error)
-                         : nullptr;
+        "if (inflateSync(deflateSync(input)).toString() !== 'shell') throw new "
+        "Error('deflate');\n"
+        "if (gunzipSync(gzipSync(input)).toString() !== 'shell') throw new "
+        "Error('gzip');\n"
+        "if (createHash('sha256').update(input).digest('hex') !== "
+        "'ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577') "
+        "throw new Error('sha256');\n"
+        "if (Buffer.from(await webcrypto.subtle.digest('SHA-256', "
+        "input)).toString('hex') !== "
+        "'ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577') "
+        "throw new Error('subtle.digest');\n"
+        "if (inflateSync(Buffer.from('7801cb48cdc9c957c8402701680308b1', "
+        "'hex')).toString() !== 'hello hello hello hello') throw new "
+        "Error('fixed Huffman');\n"
+        "const words = "
+        "['alpha','bravo','charlie','delta','echo','foxtrot','golf','hotel','"
+        "india','juliet','kilo','lima','mike','november','oscar','papa','"
+        "quebec','romeo','sierra','tango','uniform','victor','whiskey','xray','"
+        "yankee','zulu'];\n"
+        "let seed = 1, text = ''; for (let i = 0; i < 1000; i++) { seed = "
+        "(Math.imul(seed, 1664525) + 1013904223) >>> 0; text += words[seed % "
+        "words.length] + ' '; } text = text.slice(0, 1000);\n"
+        "const dynamic = "
+        "Buffer.from('"
+        "789c6d526d76843008bc0a57635d5c53a3d818eddad3f795011b7dfd978f61981998d2"
+        "283468954c6b9252983eb69ca4523770c949e85df820e906c5e9e07914a19c2626cecb"
+        "c0f4bde58dbe86b48e72d09ebaaa2550bdbe6bd11ad75977991e52e8a5b90fe836a75e"
+        "cb4495e797a211e404e5c20b539a9fc95bb9cce6d9c404fc5178d700798fcf4d1ed201"
+        "37fd1a0e6161d27171f5080cfa945cbdaae824da1e43bb119b29a021ebb43ba61ca674"
+        "edb8c087bd426d680f5940c5cd320110895bbbd0fa7fcd657a21131c1e8669009fbb37"
+        "03a7687c612a4110ec4e716f76d1854ae36cb523a030ec41fb7ed848a357933bea83b8"
+        "9982b9b31ced84d82fcb7cddc76a9a5c3d70f7d5345e9785488dba19ae1dcdaad7de01"
+        "defa9eced9c2ffadeccf8693c1dd75996d01cef208c806d8ca85fd7b5b9fe00f0fa876"
+        "ce', 'hex');\n"
+        "if (inflateSync(dynamic).toString() !== text) throw new "
+        "Error('dynamic Huffman');\n"
+        "const random = randomBytes(32); if (random.length !== 32) throw new "
+        "Error('randomBytes');\n"
+        "const values = new Uint32Array(4); if "
+        "(webcrypto.getRandomValues(values) !== values) throw new "
+        "Error('getRandomValues');\n"
+        "if "
+        "(!/"
+        "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/"
+        ".test(randomUUID())) throw new Error('randomUUID');\n"
+        "export default class Main extends View { render(cx) { return "
+        "div().child('standard'); } }\n");
+    ViewType* type = runtime ? runtime->LoadSource(StrL("standard-runtime.js"),
+                                                   source, &error)
+                             : nullptr;
     utassert(type != nullptr && !error.IsSet());
     ViewTypeRelease(type);
     if (runtime) runtime->Release();
@@ -2117,7 +2255,7 @@ static void ShellFetchRedirectsRewriteMethodAndBody() {
         const char* expected;
     };
     static const Case cases[] = {
-        {301, "POST", "GET"}, {302, "POST", "GET"},  {303, "PUT", "GET"},
+        {301, "POST", "GET"},  {302, "POST", "GET"},  {303, "PUT", "GET"},
         {307, "POST", "POST"}, {308, "POST", "POST"},
     };
     for (const Case& c : cases) {
@@ -2189,19 +2327,17 @@ static void ShellFetchRedirectsKeepCredentialsOnTheirOrigin() {
 
     // https_redirects_never_downgrade_to_plain_http
     Vec<FetchHeader> none;
-    utassert(!FetchAuthorizeRedirect(two, StrL("GET"),
-                                     StrL("https://api.example.test/start"),
-                                     StrL("http://api.example.test/continue"),
-                                     none, &error));
+    utassert(!FetchAuthorizeRedirect(
+        two, StrL("GET"), StrL("https://api.example.test/start"),
+        StrL("http://api.example.test/continue"), none, &error));
     utassert(StrContains(error, StrL("HTTPS downgrade")));
     StrFree(error);
     error = {};
 
     // a_post_is_never_replayed_across_origins
-    utassert(!FetchAuthorizeRedirect(two, StrL("POST"),
-                                     StrL("https://api.example.test/token"),
-                                     StrL("https://login.example.test/token"),
-                                     none, &error));
+    utassert(!FetchAuthorizeRedirect(
+        two, StrL("POST"), StrL("https://api.example.test/token"),
+        StrL("https://login.example.test/token"), none, &error));
     utassert(StrContains(error, StrL("POST")) &&
              StrContains(error, StrL("cross-origin")));
     StrFree(error);
@@ -2213,10 +2349,9 @@ static void ShellFetchRedirectsKeepCredentialsOnTheirOrigin() {
     key.name = StrDup(StrL("X-Api-Key"));
     key.value = StrDup(StrL("secret"));
     VecAppend(custom, key);
-    utassert(!FetchAuthorizeRedirect(two, StrL("GET"),
-                                     StrL("https://api.example.test/data"),
-                                     StrL("https://cdn.example.test/data"),
-                                     custom, &error));
+    utassert(!FetchAuthorizeRedirect(
+        two, StrL("GET"), StrL("https://api.example.test/data"),
+        StrL("https://cdn.example.test/data"), custom, &error));
     utassert(StrContains(error, StrL("request headers")));
     StrFree(error);
     error = {};
@@ -2229,10 +2364,9 @@ static void ShellFetchRedirectsKeepCredentialsOnTheirOrigin() {
     allowed.AddMethod(StrL("GET")).AddPath(StrL("/allowed"));
     Capabilities scoped;
     scoped.AddHttpRequest(allowed);
-    utassert(!FetchAuthorizeRedirect(scoped, StrL("GET"),
-                                     StrL("https://api.example.test/allowed"),
-                                     StrL("https://api.example.test/admin"),
-                                     none, &error));
+    utassert(!FetchAuthorizeRedirect(
+        scoped, StrL("GET"), StrL("https://api.example.test/allowed"),
+        StrL("https://api.example.test/admin"), none, &error));
     utassert(StrContains(error, StrL("HTTP request")));
     StrFree(error);
 }
@@ -2255,25 +2389,22 @@ static void ShellFetchGrantsBindMethodSchemePortAndPath() {
     prefixed.AddMethod(StrL("GET")).AddPathPrefix(StrL("/v1/account"));
     Capabilities scoped;
     scoped.AddHttpRequest(prefixed);
-    utassert(FetchAuthorize(
-        StrL("https://api.example.test/v1/account/profile"), StrL("GET"),
-        scoped));
-    utassert(!FetchAuthorize(
-        StrL("http://api.example.test/v1/account/profile"), StrL("GET"),
-        scoped));
+    utassert(FetchAuthorize(StrL("https://api.example.test/v1/account/profile"),
+                            StrL("GET"), scoped));
+    utassert(!FetchAuthorize(StrL("http://api.example.test/v1/account/profile"),
+                             StrL("GET"), scoped));
     utassert(!FetchAuthorize(
         StrL("https://api.example.test:8443/v1/account/profile"), StrL("GET"),
         scoped));
-    utassert(!FetchAuthorize(
-        StrL("https://api.example.test/v1/accounts-delete"), StrL("GET"),
-        scoped));
+    utassert(
+        !FetchAuthorize(StrL("https://api.example.test/v1/accounts-delete"),
+                        StrL("GET"), scoped));
 }
 
 static void ShellFetchProhibitsTheHeadersTheClientOwns() {
-    for (const char* name :
-         {"Host", "content-length", "Connection", "Expect",
-          "Proxy-Authenticate", "proxy-authorization", "TE", "Trailer",
-          "Transfer-Encoding", "upgrade"}) {
+    for (const char* name : {"Host", "content-length", "Connection", "Expect",
+                             "Proxy-Authenticate", "proxy-authorization", "TE",
+                             "Trailer", "Transfer-Encoding", "upgrade"}) {
         utassert(FetchHeaderIsProhibited(Str(name)));
     }
     for (const char* name :
@@ -2288,9 +2419,9 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     Capabilities scoped;
     scoped.AddHttpRequest(exact);
     Str fetchError;
-    utassert(FetchAuthorize(
-        StrL("https://api.example.test/v1/quote?currency=usd"), StrL("GET"),
-        scoped, &fetchError));
+    utassert(
+        FetchAuthorize(StrL("https://api.example.test/v1/quote?currency=usd"),
+                       StrL("GET"), scoped, &fetchError));
     utassert(!fetchError);
     utassert(!FetchAuthorize(StrL("https://api.example.test/v1/private"),
                              StrL("GET"), scoped, &fetchError));
@@ -2360,9 +2491,8 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     utassert(!result.error && result.status == 200 &&
              StrEq(gShellFetchMethod, "POST") &&
              StrEq(gShellFetchBody, "grant_type=client_credentials") &&
-             StrContains(gShellFetchHeaders,
-                         StrL("Content-Type:application/"
-                              "x-www-form-urlencoded;")));
+             StrContains(gShellFetchHeaders, StrL("Content-Type:application/"
+                                                  "x-www-form-urlencoded;")));
     result.Free();
 
     // A 303 answering that POST continues as a GET with no body, and the
@@ -2398,48 +2528,65 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
         // already takes the method.
         "for (const bad of ['', 'a method', '\"GET\"', 'GET/1']) {\n"
         "  let refused = false;\n"
-        "  try { fetch('https://api.example.test/data', { method: bad }); } catch (error) { refused = error.message.includes('is not an HTTP method'); }\n"
-        "  if (!refused) throw new Error(`\\`${bad}\\` was not refused as a non-method`);\n"
+        "  try { fetch('https://api.example.test/data', { method: bad }); } "
+        "catch (error) { refused = error.message.includes('is not an HTTP "
+        "method'); }\n"
+        "  if (!refused) throw new Error(`\\`${bad}\\` was not refused as a "
+        "non-method`);\n"
         "}\n"
         "let ownedRefused = false;\n"
-        "try { fetch('https://api.example.test/data', { headers: { 'Content-Length': '3' } }); } catch (error) { ownedRefused = error.message.includes('may not set'); }\n"
-        "if (!ownedRefused) throw new Error('a client-owned header was not refused');\n"
+        "try { fetch('https://api.example.test/data', { headers: { "
+        "'Content-Length': '3' } }); } catch (error) { ownedRefused = "
+        "error.message.includes('may not set'); }\n"
+        "if (!ownedRefused) throw new Error('a client-owned header was not "
+        "refused');\n"
         "let shapeRefused = false;\n"
-        "try { fetch('https://api.example.test/data', { body: 42 }); } catch (error) { shapeRefused = error.message.includes('string or Uint8Array'); }\n"
-        "if (!shapeRefused) throw new Error('a body that is neither string nor bytes was not refused');\n"
+        "try { fetch('https://api.example.test/data', { body: 42 }); } catch "
+        "(error) { shapeRefused = error.message.includes('string or "
+        "Uint8Array'); }\n"
+        "if (!shapeRefused) throw new Error('a body that is neither string nor "
+        "bytes was not refused');\n"
         "let unknownRefused = false;\n"
-        "try { fetch('https://api.example.test/data', { mode: 'cors' }); } catch (error) { unknownRefused = error.message.includes('unknown option'); }\n"
-        "if (!unknownRefused) throw new Error('an unknown option was not refused');\n"
+        "try { fetch('https://api.example.test/data', { mode: 'cors' }); } "
+        "catch (error) { unknownRefused = error.message.includes('unknown "
+        "option'); }\n"
+        "if (!unknownRefused) throw new Error('an unknown option was not "
+        "refused');\n"
         "export default class Main extends View {\n"
         "  init(props, cx) { cx.spawn(async cx => {\n"
-        "    const posted = await fetch('https://api.example.test/data', { method: 'post', headers: { 'X-Api-Key': 'k' }, body: 'hello' });\n"
+        "    const posted = await fetch('https://api.example.test/data', { "
+        "method: 'post', headers: { 'X-Api-Key': 'k' }, body: 'hello' });\n"
         "    const response = await fetch('https://api.example.test/data');\n"
         "    const text = response.text(), json = response.json();\n"
-        "    fetchResult = `${posted.status}|${response.status}|${response.ok}|${response.url}|${text instanceof Promise}|${await text}|${(await json).answer}`; cx.notify();\n"
+        "    fetchResult = "
+        "`${posted.status}|${response.status}|${response.ok}|${response.url}|${"
+        "text instanceof Promise}|${await text}|${(await json).answer}`; "
+        "cx.notify();\n"
         "  }); }\n"
         "  render(cx) { return div().child(fetchResult); }\n"
         "}\n");
-    ViewType* type2 = runtime
-                          ? runtime->LoadSource(StrL("fetch.js"), source,
-                                                &error)
-                          : nullptr;
-    Entity<ScriptView> view = type2
-                                  ? ScriptView::New(&app, runtime, type2)
-                                  : Entity<ScriptView>{};
+    ViewType* type2 =
+        runtime ? runtime->LoadSource(StrL("fetch.js"), source, &error)
+                : nullptr;
+    Entity<ScriptView> view =
+        type2 ? ScriptView::New(&app, runtime, type2) : Entity<ScriptView>{};
     ViewTypeRelease(type2);
     Arena* frame = ArenaNew();
     window.frameArena = frame;
-    El* root = view.IsValid()
-                   ? EntityRender(&app, &window, frame, view.id)
-                   : nullptr;
+    El* root =
+        view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
-    utassert(ExecWaitIdle(5000));
-    utassert(runtime && runtime->Eval(
-        StrL("if (fetchResult !== '200|200|true|https://api.example.test/data|true|{\"answer\":42}|42') throw new Error(fetchResult)"),
-        StrL("fetch-result.js"), &error));
+    utassert(ShellSettle(runtime, 5000));
+    utassert(
+        runtime &&
+        runtime->Eval(
+            StrL("if (fetchResult !== "
+                 "'200|200|true|https://api.example.test/"
+                 "data|true|{\"answer\":42}|42') throw new Error(fetchResult)"),
+            StrL("fetch-result.js"), &error));
     // The lowercase `post` reached the policy and the wire upper-cased.
     utassert(StrEq(gShellFetchMethod, "GET"));
-    utassert(runtime && runtime->LiveTasks() == 0 && gShellFetchCalls == 2);
+    utassert(gShellFetchCalls == 2);
     EntityDrop(&app, view.id);
     app.windows.len = 0;
     ArenaDelete(frame);
@@ -2475,7 +2622,6 @@ static void ShellAccessibilityRolesMirrorUpstream() {
              AccessibilityRole::None);
     utassert(AccessibilityRoleFromName(StrL("Button")) ==
              AccessibilityRole::None);
-
 }
 
 static ShellRuntime* gDockRuntime = nullptr;
@@ -2485,9 +2631,8 @@ static Str gDockRestored = {};
 static bool gDockChromeSawLayout = false;
 
 static Entity<ScriptView> BuildDockProbe(Window*, App* app, void*) {
-    return gDockBuildFails
-               ? Entity<ScriptView>{}
-               : ScriptView::New(app, gDockRuntime, gDockViewType);
+    return gDockBuildFails ? Entity<ScriptView>{}
+                           : ScriptView::New(app, gDockRuntime, gDockViewType);
 }
 
 static bool SerializeDockProbe(Entity<ScriptView>, App*, void*,
@@ -2496,16 +2641,15 @@ static bool SerializeDockProbe(Entity<ScriptView>, App*, void*,
     return true;
 }
 
-static void DeserializeDockProbe(Entity<ScriptView>, Str json, Window*,
-                                 App*, void*) {
+static void DeserializeDockProbe(Entity<ScriptView>, Str json, Window*, App*,
+                                 void*) {
     StrFree(gDockRestored);
     gDockRestored = StrDup(json);
 }
 
-static El* RenderDockProbeChrome(Ctx* cx, void*, const DockCtx*,
-                                 El* content) {
-    gDockChromeSawLayout = ScopeHasCurrent() &&
-                           ScopeCurrentPhase() == ScopePhase::Layout;
+static El* RenderDockProbeChrome(Ctx* cx, void*, const DockCtx*, El* content) {
+    gDockChromeSawLayout =
+        ScopeHasCurrent() && ScopeCurrentPhase() == ScopePhase::Layout;
     return Div(cx->a)->Child(content);
 }
 
@@ -2524,12 +2668,14 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     component::Init(&app);
     ShellError error = {};
     gDockRuntime = ShellRuntime::New(&app, &error);
-    gDockViewType = gDockRuntime
-                        ? gDockRuntime->LoadSource(
-                              StrL("dock-panel.js"),
-                              StrL("import { View, div } from 'gpui'; export default class Panel extends View { render() { return div().child('panel'); } }"),
-                              &error)
-                        : nullptr;
+    gDockViewType =
+        gDockRuntime ? gDockRuntime->LoadSource(
+                           StrL("dock-panel.js"),
+                           StrL("import { View, div } from 'gpui'; export "
+                                "default class Panel extends View { render() { "
+                                "return div().child('panel'); } }"),
+                           &error)
+                     : nullptr;
     utassert(gDockRuntime && gDockViewType && !error.IsSet());
 
     Str name = ShellPanelName(StrL("mail"), StrL("inbox"));
@@ -2547,8 +2693,8 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     DockState* state = area.Get(&app);
     Entity<ScriptView> view =
         ScriptView::New(&app, gDockRuntime, gDockViewType);
-    int panel = DockAddPanelDef(
-        state, ScriptPanelNew(&app, name, view, &script));
+    int panel =
+        DockAddPanelDef(state, ScriptPanelNew(&app, name, view, &script));
     state->center = DockNewTabs(state);
     DockTabsAdd(state, state->center, panel);
     DockAreaState saved;
@@ -2560,8 +2706,8 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     StrBuilder written;
     DockAreaStateWrite(&saved, &written);
     Str layout = written.TakeStr();
-    utassert(StrContains(
-        layout, StrL("\"panel\":{\"filter\":\"unread\",\"sort\":2}")));
+    utassert(StrContains(layout,
+                         StrL("\"panel\":{\"filter\":\"unread\",\"sort\":2}")));
 
     Arena* persisted = ArenaNew();
     DockAreaState parsed;
@@ -2571,8 +2717,7 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     StrFree(gDockRestored);
     utassert(DockLoad(restored, &parsed, persisted, nullptr, &app, &window,
                       restoredArea));
-    utassert(StrEq(gDockRestored,
-                   "{\"filter\":\"unread\",\"sort\":2}"));
+    utassert(StrEq(gDockRestored, "{\"filter\":\"unread\",\"sort\":2}"));
     utassert(restored->panels.len == 1 && restored->panels[0].closable &&
              restored->panels[0].canZoom && restored->panels[0].visible);
 
@@ -2586,8 +2731,7 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     DockDump(failed, &failedSaved);
     const PanelStateNode* failedLeaf = FindPanelState(failedSaved, name);
     utassert(failedLeaf && failedLeaf->infoIsJson &&
-             StrEq(failedLeaf->info,
-                   "{\"filter\":\"unread\",\"sort\":2}"));
+             StrEq(failedLeaf->info, "{\"filter\":\"unread\",\"sort\":2}"));
     gDockBuildFails = false;
 
     Arena* frame = ArenaNew();
@@ -2602,14 +2746,15 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     dock.open = true;
     dock.collapsible = true;
     gDockChromeSawLayout = false;
-    El* wrapped = skin.Renderer()->dock(
-        &cx, skin.Renderer()->data, &dock, Div(frame));
+    El* wrapped =
+        skin.Renderer()->dock(&cx, skin.Renderer()->data, &dock, Div(frame));
     utassert(wrapped && gDockChromeSawLayout);
     StrBuilder dockData;
     ShellDockData(&dock, &dockData);
     Str dockJson = dockData.TakeStr();
     utassert(StrEq(dockJson,
-                   "{\"placement\":\"left\",\"size\":240,\"open\":true,\"collapsible\":true}"));
+                   "{\"placement\":\"left\",\"size\":240,\"open\":true,"
+                   "\"collapsible\":true}"));
 
     StrFree(dockJson);
     ArenaDelete(frame);
@@ -2630,8 +2775,8 @@ static bool ShellFixtureFs(FsOperation operation, Str root, Str relative,
                            Str input, bool recursive) {
     FsResult result;
     Str error;
-    bool ok = FsRun(operation, root, relative, input, recursive, &result,
-                    &error);
+    bool ok =
+        FsRun(operation, root, relative, input, recursive, &result, &error);
     result.Free();
     StrFree(error);
     return ok;
@@ -2650,10 +2795,14 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
         "\"shell-version\":\"0.1.0\","
         "\"entry\":\"main.js\","
         "\"capabilities\":{"
-        "\"fs\":{\"read\":[\"${pluginDir}\",\"${dataDir}\"],\"write\":[\"${dataDir}\"],\"execute\":[\"git\"]},"
-        "\"network\":{\"hosts\":[\"api.example.com\"],\"http\":[{\"host\":\"readonly.example.com\",\"methods\":[\"GET\"],\"paths\":[\"/v1/account\"],\"path_prefixes\":[\"/v1/quotes/\"]}]},"
-        "\"storage\":true,\"clipboard\":{\"write\":true},\"process\":{\"exit\":true}"
-        "}}" );
+        "\"fs\":{\"read\":[\"${pluginDir}\",\"${dataDir}\"],\"write\":[\"${"
+        "dataDir}\"],\"execute\":[\"git\"]},"
+        "\"network\":{\"hosts\":[\"api.example.com\"],\"http\":[{\"host\":"
+        "\"readonly.example.com\",\"methods\":[\"GET\"],\"paths\":[\"/v1/"
+        "account\"],\"path_prefixes\":[\"/v1/quotes/\"]}]},"
+        "\"storage\":true,\"clipboard\":{\"write\":true},\"process\":{\"exit\":"
+        "true}"
+        "}}");
     ShellError error = {};
     PluginManifest manifest;
     utassert(PluginManifestParse(valid, &manifest, &error));
@@ -2667,22 +2816,23 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     utassert(granted.HasReadAccess() && granted.HasWriteAccess() &&
              granted.HasStorage() && granted.MayRun(StrL("git")) &&
              granted.MayReach(StrL("API.EXAMPLE.COM")) &&
-             granted.MayRequest(StrL("https"),
-                                StrL("readonly.example.com"), 443, false,
-                                StrL("GET"), StrL("/v1/quotes/MSFT")) &&
+             granted.MayRequest(StrL("https"), StrL("readonly.example.com"),
+                                443, false, StrL("GET"),
+                                StrL("/v1/quotes/MSFT")) &&
              granted.IsClipboardWritable() && granted.MayExit());
 
     PluginManifest omitted;
-    utassert(PluginManifestParse(
-        StrL("{\"id\":\"com.example.empty\",\"name\":\"Empty\",\"entry\":\"main.js\"}"),
-        &omitted, &error));
+    utassert(PluginManifestParse(StrL("{\"id\":\"com.example.empty\",\"name\":"
+                                      "\"Empty\",\"entry\":\"main.js\"}"),
+                                 &omitted, &error));
     Capabilities defaultGrant = omitted.Grant(StrL("plugin"), StrL("data"));
     utassert(defaultGrant.HasStorage() && !defaultGrant.HasReadAccess() &&
              !defaultGrant.MayExit());
 
     PluginManifest badField;
     utassert(!PluginManifestParse(
-        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"main.js\",\"capabilites\":{}}"),
+        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"main."
+             "js\",\"capabilites\":{}}"),
         &badField, &error));
     utassert(StrContains(error.message, StrL("unknown field")));
     ShellErrorClear(&error);
@@ -2693,20 +2843,22 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     utassert(StrContains(error.message, StrL("invalid `id`")));
     ShellErrorClear(&error);
     PluginManifest badEntry;
-    utassert(!PluginManifestParse(
-        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"../main.js\"}"),
-        &badEntry, &error));
+    utassert(!PluginManifestParse(StrL("{\"id\":\"com.example.bad\",\"name\":"
+                                       "\"Bad\",\"entry\":\"../main.js\"}"),
+                                  &badEntry, &error));
     utassert(StrContains(error.message, StrL("invalid `entry`")));
     ShellErrorClear(&error);
     PluginManifest badPlaceholder;
     utassert(!PluginManifestParse(
-        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"main.js\",\"capabilities\":{\"fs\":{\"read\":[\"${otherDir}\"]}}}"),
+        StrL("{\"id\":\"com.example.bad\",\"name\":\"Bad\",\"entry\":\"main."
+             "js\",\"capabilities\":{\"fs\":{\"read\":[\"${otherDir}\"]}}}"),
         &badPlaceholder, &error));
     utassert(StrContains(error.message, StrL("unknown placeholder")));
     ShellErrorClear(&error);
     PluginManifest future;
     utassert(!PluginManifestParse(
-        StrL("{\"id\":\"com.example.future\",\"name\":\"Future\",\"shell-version\":\"0.2.0\",\"entry\":\"main.js\"}"),
+        StrL("{\"id\":\"com.example.future\",\"name\":\"Future\",\"shell-"
+             "version\":\"0.2.0\",\"entry\":\"main.js\"}"),
         &future, &error));
     utassert(StrContains(error.message, StrL("not compatible")));
     ShellErrorClear(&error);
@@ -2737,15 +2889,20 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
                             {}, true));
     utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), brokenDir,
                             {}, true));
-    utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), dataDir,
-                            {}, true));
+    utassert(ShellFixtureFs(FsOperation::MakeDirectory, StrL("."), dataDir, {},
+                            true));
     const Str fixtureManifest = StrL(
-        "{\"id\":\"com.example.plugin\",\"name\":\"Plugin\",\"version\":\"1.0.0\",\"shell-version\":\"0.1.0\",\"entry\":\"main.js\",\"capabilities\":{\"fs\":{\"read\":[\"${pluginDir}\"]},\"storage\":true}}" );
+        "{\"id\":\"com.example.plugin\",\"name\":\"Plugin\",\"version\":\"1.0."
+        "0\",\"shell-version\":\"0.1.0\",\"entry\":\"main.js\","
+        "\"capabilities\":{\"fs\":{\"read\":[\"${pluginDir}\"]},\"storage\":"
+        "true}}");
     utassert(ShellFixtureFs(FsOperation::Write, pluginDir,
                             Str(kShellManifestFile), fixtureManifest));
     utassert(ShellFixtureFs(
         FsOperation::Write, pluginDir, StrL("main.js"),
-        StrL("import { View, div } from 'gpui'; globalThis.pluginExecuted = true; export default class Plugin extends View { render() { return div().child('plugin'); } }")));
+        StrL("import { View, div } from 'gpui'; globalThis.pluginExecuted = "
+             "true; export default class Plugin extends View { render() { "
+             "return div().child('plugin'); } }")));
     utassert(ShellFixtureFs(FsOperation::Write, brokenDir,
                             Str(kShellManifestFile), StrL("{broken")));
 
@@ -2765,21 +2922,19 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     }
     utassert(good == 1 && broken == 1);
     bool approved = false;
-    utassert(!manager.Load(runtime, StrL("com.example.plugin"),
-                           AuthorizePlugin, &approved, &window, &app,
-                           &error));
+    utassert(!manager.Load(runtime, StrL("com.example.plugin"), AuthorizePlugin,
+                           &approved, &window, &app, &error));
     utassert(StrContains(error.message, StrL("not approved")) &&
              runtime->LiveTasks() == 0);
     ShellErrorClear(&error);
     approved = true;
-    utassert(manager.Load(runtime, StrL("com.example.plugin"),
-                          AuthorizePlugin, &approved, &window, &app, &error));
+    utassert(manager.Load(runtime, StrL("com.example.plugin"), AuthorizePlugin,
+                          &approved, &window, &app, &error));
     const Plugin* loaded = manager.Loaded(StrL("com.example.plugin"));
     utassert(loaded && loaded->view.IsValid() && loaded->policy &&
              PolicyCapabilities(loaded->policy).HasReadAccess() &&
              PolicyCapabilities(loaded->policy).HasStorage() &&
-             StrContains(loaded->dataDirectory,
-                         StrL("gpui-shell")));
+             StrContains(loaded->dataDirectory, StrL("gpui-shell")));
     utassert(manager.Unload(StrL("com.example.plugin"), &app));
     utassert(!manager.Loaded(StrL("com.example.plugin")) &&
              !manager.Unload(StrL("com.example.plugin"), &app));
@@ -2788,12 +2943,12 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     AppGlobalClear(&app);
     utassert(ShellFixtureFs(FsOperation::RemoveFile, pluginDir,
                             Str(kShellManifestFile)));
-    utassert(ShellFixtureFs(FsOperation::RemoveFile, pluginDir,
-                            StrL("main.js")));
+    utassert(
+        ShellFixtureFs(FsOperation::RemoveFile, pluginDir, StrL("main.js")));
     utassert(ShellFixtureFs(FsOperation::RemoveFile, brokenDir,
                             Str(kShellManifestFile)));
-    utassert(ShellFixtureFs(FsOperation::RemoveDirectory, container,
-                            StrL("mail")));
+    utassert(
+        ShellFixtureFs(FsOperation::RemoveDirectory, container, StrL("mail")));
     utassert(ShellFixtureFs(FsOperation::RemoveDirectory, container,
                             StrL("broken")));
 #if GPUI_OS_WINDOWS
@@ -2805,8 +2960,7 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
                    StrL("gpui-shell/plugins/com.example.plugin"));
     ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
                    StrL("gpui-shell/plugins"));
-    ShellFixtureFs(FsOperation::RemoveDirectory, dataDir,
-                   StrL("gpui-shell"));
+    ShellFixtureFs(FsOperation::RemoveDirectory, dataDir, StrL("gpui-shell"));
     ShellFixtureFs(FsOperation::RemoveDirectory, StrL("."), dataDir);
     ShellErrorClear(&error);
 }
@@ -3130,8 +3284,8 @@ static void ShellStructureFingerprintsCountRepeatedShapes() {
             : nullptr;
     utassert(first != nullptr);
     // The same shape with a different value in it.
-    runtime
-        ->Eval(StrL("globalThis.shellPrice = 'two'"), StrL("edit.js"), &error);
+    runtime->Eval(StrL("globalThis.shellPrice = 'two'"), StrL("edit.js"),
+                  &error);
     RenderSnapshot* second =
         first
             ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)
