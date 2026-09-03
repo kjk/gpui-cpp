@@ -922,9 +922,14 @@ static bool PressedButton(MouseButton* out) {
     gpui::WindowMacKeyUp(win, event);
 }
 
-// Cocoa beeps on an unhandled key equivalent; the app handles its own keys.
+// Command chords belong to the menu bar first: ⌘Q is Quit, not a letter.
+// NSApplication asks the key window before the main menu, and this view
+// used to return NO without offering the event on — the custom event loop
+// never asked the menu a second time, so Quit never ran.
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
-    (void)event;
+    if ([[NSApp mainMenu] performKeyEquivalent:event]) {
+        return YES;
+    }
     return NO;
 }
 
@@ -1607,7 +1612,65 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
 
 namespace gpui {
 
+static App* gRunningApp = nullptr;
 static GpuiAppMenuTarget* gAppMenuTarget = nil;
+
+} // namespace gpui
+
+// terminate: only stops [NSApp run]. The examples drive their own loop with
+// nextEventMatchingMask, so Quit and ⌘Q have to close the windows here or
+// the process keeps running.
+@interface GpuiAppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation GpuiAppDelegate
+- (NSApplicationTerminateReply)applicationShouldTerminate:
+    (NSApplication*)sender {
+    (void)sender;
+    if (gpui::gRunningApp) {
+        gpui::AppQuitAll(gpui::gRunningApp);
+    }
+    return NSTerminateCancel;
+}
+@end
+
+static GpuiAppDelegate* gAppDelegate = nil;
+
+namespace gpui {
+
+static void InstallDefaultAppMenu() {
+    NSString* name = [[NSProcessInfo processInfo] processName];
+    NSMenu* bar = [[NSMenu alloc] init];
+    NSMenu* appMenu = [[NSMenu alloc] initWithTitle:name];
+    NSMenuItem* hide = [[NSMenuItem alloc]
+        initWithTitle:[@"Hide " stringByAppendingString:name]
+               action:@selector(hide:)
+        keyEquivalent:@"h"];
+    [appMenu addItem:hide];
+    NSMenuItem* hideOthers =
+        [[NSMenuItem alloc] initWithTitle:@"Hide Others"
+                                   action:@selector(hideOtherApplications:)
+                            keyEquivalent:@"h"];
+    [hideOthers setKeyEquivalentModifierMask:NSEventModifierFlagCommand |
+                                             NSEventModifierFlagOption];
+    [appMenu addItem:hideOthers];
+    NSMenuItem* showAll =
+        [[NSMenuItem alloc] initWithTitle:@"Show All"
+                                   action:@selector(unhideAllApplications:)
+                            keyEquivalent:@""];
+    [appMenu addItem:showAll];
+    [appMenu addItem:[NSMenuItem separatorItem]];
+    NSMenuItem* quit = [[NSMenuItem alloc]
+        initWithTitle:[@"Quit " stringByAppendingString:name]
+               action:@selector(terminate:)
+        keyEquivalent:@"q"];
+    [appMenu addItem:quit];
+    NSMenuItem* appItem =
+        [[NSMenuItem alloc] initWithTitle:name action:nil keyEquivalent:@""];
+    [appItem setSubmenu:appMenu];
+    [bar addItem:appItem];
+    [NSApp setMainMenu:bar];
+}
 
 bool PlatHasAppMenu() {
     return true;
@@ -1616,6 +1679,7 @@ bool PlatHasAppMenu() {
 void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
     (void)app;
     if (!items || n <= 0) {
+        InstallDefaultAppMenu();
         return;
     }
     if (!gAppMenuTarget) {
@@ -1809,7 +1873,16 @@ bool PlatInit(App* app) {
         // Regular, not accessory: the examples run straight from a terminal
         // with no bundle, and this is what gives them a Dock tile and focus.
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        // NSApp.delegate is weak: this is what keeps the object alive.
+        if (!gAppDelegate) {
+            gAppDelegate = [[GpuiAppDelegate alloc] init];
+        }
+        [NSApp setDelegate:gAppDelegate];
         [NSApp finishLaunching];
+        // finishLaunching's menu is empty when we are not a bundled app.
+        // ⌘Q and the application menu's Quit row both call terminate:, which
+        // the delegate turns into AppQuitAll.
+        InstallDefaultAppMenu();
         [NSApp activateIgnoringOtherApps:YES];
     }
     return true;
@@ -1895,6 +1968,7 @@ int AppRun(App* app) {
     if (!app) {
         return 1;
     }
+    gRunningApp = app;
     while (AppAnyWindowOpen(app)) {
         @autoreleasepool {
             // Drain everything queued, then draw, then block until the next
@@ -1967,6 +2041,7 @@ int AppRun(App* app) {
             }
         }
     }
+    gRunningApp = nullptr;
     return app->exitCode;
 }
 

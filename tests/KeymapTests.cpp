@@ -565,6 +565,36 @@ static void AnActionCanBeDispatchedWithoutAKeystroke() {
     KeymapClear();
 }
 
+// A menu row dispatches with no focused field. The root's on_action is
+// still the window's, so Quit (and every other app-menu action) must
+// reach it rather than falling on the floor at the exclusive end of the
+// dispatch list.
+static void AnUnfocusedWindowStillRunsTheRootAction() {
+    KeymapClear();
+    uint32_t act = ActionOf(StrL("t::Quit"));
+
+    Arena* a = ArenaNew();
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<Recorder> rec = EntityNew<Recorder>(&app);
+    El* leaf = Div(a)->FocusId(5);
+    El* root =
+        Div(a)->OnAction(act, ListenTo(rec, &Recorder::Stop))->Child(leaf);
+    FocusCollect(win, root);
+    win->focusId = 0;
+
+    gCalls = 0;
+    utassert(WindowDispatchAction(win, act, 7));
+    utassert(gCalls == 1);
+    utassert(gSeen[0] == act);
+    utassert(gLastArg == 7);
+
+    delete win;
+    ArenaDelete(a);
+    KeymapClear();
+}
+
 // The input's chords come out of the keymap now, in the key context
 // El::BindInput declares. This is the window's own path: resolve the chord
 // against the contexts over the focused element, then read the action as the
@@ -706,6 +736,7 @@ void TestKeymap() {
     TestSuite("keymap");
     ABindingCarriesTheActionsPayload();
     AnActionCanBeDispatchedWithoutAKeystroke();
+    AnUnfocusedWindowStillRunsTheRootAction();
     AFieldsChordsResolveInItsOwnContext();
     TheChordAnActionIsReachedBy();
     AChordIsReadTheWayRustSpellsIt();

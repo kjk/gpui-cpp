@@ -2905,6 +2905,9 @@ struct FocusRect {
 // dispatch path in.
 struct DispatchNode {
     int subtreeEnd = 0;
+    // 0 at the window root. An unfocused dispatch stands just after the
+    // depth-0 nodes so a menu action still reaches the root's on_action.
+    int depth = 0;
     uint32_t context = 0;
     uint32_t action = 0;
     Listener fn = {};

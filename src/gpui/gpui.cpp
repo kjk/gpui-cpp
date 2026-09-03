@@ -6649,7 +6649,7 @@ int CopyTextHitsInEntity(PaintCtx* ctx, int a, int b, int scope, EntityId owner,
 // and nothing else has the tree to work it out again.
 static void CollectFocus(El* e, Window* win, int trap, Listener increment,
                          Listener decrement, Func0 incrementDirect,
-                         Func0 decrementDirect) {
+                         Func0 decrementDirect, int depth) {
     if (!e) {
         return;
     }
@@ -6675,12 +6675,14 @@ static void CollectFocus(El* e, Window* win, int trap, Listener increment,
     if (e->style.keyContext) {
         DispatchNode n;
         n.context = e->style.keyContext;
+        n.depth = depth;
         VecAppend(win->dispatch, n);
     }
     for (ActionSlot* slot = e->actions; slot; slot = slot->next) {
         DispatchNode n;
         n.action = slot->action;
         n.fn = slot->fn;
+        n.depth = depth;
         VecAppend(win->dispatch, n);
     }
     if (e->style.focusId) {
@@ -6696,6 +6698,7 @@ static void CollectFocus(El* e, Window* win, int trap, Listener increment,
         // one, an element that declares neither would share an index with the
         // end of the subtree beside it and pick up that sibling's context.
         DispatchNode marker;
+        marker.depth = depth;
         fr.dispatchIx = win->dispatch.len;
         VecAppend(win->dispatch, marker);
         fr.bounds = e->Bounds();
@@ -6707,7 +6710,7 @@ static void CollectFocus(El* e, Window* win, int trap, Listener increment,
     }
     for (El* c = e->first; c; c = c->next) {
         CollectFocus(c, win, trap, increment, decrement, incrementDirect,
-                     decrementDirect);
+                     decrementDirect, depth + 1);
     }
     // The subtree is closed: everything from here down was written between
     // `first` and now, so anything focused in it sits inside this span.
@@ -6739,7 +6742,15 @@ static AppAction gAppActions[kMaxAppActions];
 static int gNAppActions = 0;
 
 void AppOnAction(uint32_t action, ActionFn fn) {
-    if (!action || !fn || gNAppActions >= kMaxAppActions) {
+    if (!action || !fn) {
+        return;
+    }
+    for (int i = 0; i < gNAppActions; i++) {
+        if (gAppActions[i].action == action && gAppActions[i].fn == fn) {
+            return;
+        }
+    }
+    if (gNAppActions >= kMaxAppActions) {
         return;
     }
     gAppActions[gNAppActions].action = action;
@@ -6754,6 +6765,14 @@ static void ToggleInspectorAction(Window* win, ActionEvent*) {
     WindowToggleInspector(win);
 }
 
+#ifdef __APPLE__
+static void QuitAction(Window* win, ActionEvent*) {
+    if (win && win->app) {
+        AppQuitAll(win->app);
+    }
+}
+#endif
+
 static void KeymapDefaults() {
     static uint32_t done = 0;
     if (done == KeymapGeneration()) {
@@ -6761,20 +6780,30 @@ static void KeymapDefaults() {
     }
     done = KeymapGeneration();
     uint32_t toggle = ActionOf(StrL("inspector::ToggleInspector"));
-    KeyBinding bindings[] = {
 #ifdef __APPLE__
+    uint32_t quit = ActionOf(StrL("gpui::Quit"));
+    KeyBinding bindings[] = {
         {"cmd-alt-i", toggle, nullptr},
-#else
-        {"ctrl-shift-i", toggle, nullptr},
-#endif
+        // ⌘Q is the platform Quit chord. Examples that never call set_menus
+        // still need it; a menu row that names its own Quit action keeps
+        // that binding too, and the last one for the chord wins.
+        {"cmd-q", quit, nullptr},
     };
+#else
+    KeyBinding bindings[] = {
+        {"ctrl-shift-i", toggle, nullptr},
+    };
+#endif
     KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
     AppOnAction(toggle, &ToggleInspectorAction);
+#ifdef __APPLE__
+    AppOnAction(quit, &QuitAction);
+#endif
 }
 
 // Where in the dispatch list the focused element sits. Nothing focused is
-// the end of the list, which leaves the root's chain — every node whose
-// subtree is still open there, which is the window itself.
+// just after the root's own nodes — the window itself — so a menu action
+// with no focused field (⌘Q, Quit) still reaches the root's on_action.
 static int DispatchAnchor(Window* win) {
     if (win->focusId) {
         for (int i = 0; i < win->focusEls.len; i++) {
@@ -6783,7 +6812,15 @@ static int DispatchAnchor(Window* win) {
             }
         }
     }
-    return win->dispatch.len;
+    // CollectFocus closes every subtree, so standing at `len` is past every
+    // exclusive end and skipped the root too. Depth 0 is the window's own
+    // nodes; stand just after them, the way a focused root would.
+    int n = win->dispatch.len;
+    int i = 0;
+    while (i < n && win->dispatch[i].depth == 0) {
+        i++;
+    }
+    return i;
 }
 
 // The reserved action a raw key listener is recorded under. No chord resolves
@@ -7322,7 +7359,7 @@ void AccessibilityCollect(El* root, Vec<AccessibilityNode>* out) {
 void FocusCollect(Window* win, El* root) {
     VecClear(win->focusEls);
     VecClear(win->dispatch);
-    CollectFocus(root, win, 0, {}, {}, {}, {});
+    CollectFocus(root, win, 0, {}, {}, {}, {}, 0);
     // The traversal order is the tab index first and the paint order within
     // it, so the sort has to be a stable one: an insertion sort over a list
     // this size, where almost every element is already index zero and nothing
