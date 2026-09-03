@@ -10923,3 +10923,97 @@ Verification: MSVC release tests pass 22,277 checks; the release `story`,
 `showcase` and `motion` targets build with `/W4 /WX`; `bun cmd/bench.ts
 motion` reports its six rows; and the port audit's motion, spinner,
 collapsible and MotionTokens lines are gone.
+## Upstream ingest after `6d07863f`: TextView moves to Base
+
+`346f7035` moves rich text out of the themed layer. `src/ui/text.*` and
+`src/ui/html.*` are now `src/base/text.*` and `src/base/text_format.*`, in
+`namespace gpui` rather than `gpui::component`, and everything they hold —
+the mdast fold, the MdNode tree, the inline flow, `TextViewState`, the
+selection reconstruction, the HTML tokenizer and the minifier — belongs to
+gpui-base. What made the move possible is that the renderer no longer reads a
+theme: `TextViewStyle` carries the six colours it used to look up
+(foreground, muted foreground, link, selection, code background, border),
+`TextViewStyle::Default()` is the light `ColorTokens` palette rather than an
+empty customization bag, and syntax highlighting became the opt-in
+`CodeBlockHighlighter` callback so Base keeps no language support of its own.
+`ColorTokens` grew `selection` and both palettes — `Light()` and `Dark()`,
+with the default now Light, since every field zeroed was transparent on
+transparent. `src/ui/text.h` is the façade `crates/ui/src/text` became: it
+re-exports the Base names under `component::` so every call site in the tree
+still compiles unchanged, derives a `TextViewStyle` from the component
+`Theme` (`base_text_view_style`), and installs that style plus the
+`ui/syntax.h` highlighter as `TextViewDefaults` from `ThemeSyncBase`, which
+is where Rust's `install_text_view_defaults` runs. Two C++-only collapses are
+deliberate: Rust keeps a second, component-level `TextViewStyle` carrying a
+`HighlightTheme` and folds it onto the Base one, but this tree's style never
+carried a highlight theme — `ui/syntax.h` keys its colours off `ThemeMode` —
+so there is nothing to fold and `resolve_component_style` has no work; and
+the compatibility element's `TextViewLayoutState` / `TextViewPrepaintState`
+are Base's, re-exported, because the façade is a set of `using` declarations
+rather than a wrapper element. `TextViewState`'s stack and the selection's
+document order moved from `UiGlobalState` into `BaseGlobalState` with the
+text that reads them, and `src/ui/global_state.h` is the forwarding
+re-export Rust left behind. `ScrollableMask` moved to
+`src/base/scrollable_mask.*` (`ui/scroll.h` re-exports it) and the new
+`src/base/selectable_text.*` is plain text that joins the window's selection:
+`SelectionQuadBounds` is ported outright, while the element half is a builder
+over one selectable text element, because the runtime already collects,
+projects and paints a frame's selectable runs. Constructors are selectable by
+default now, the task-list checkbox takes the style's foreground and is
+centred on the line box instead of nudged down by a fixed rem, and both table
+layouts paint their frame from the Base theme's surface with rules and header
+text from the style — the themed header pair arrives as the `table_head`
+refinement the façade fills in, which is what keeps the themed look identical.
+Base cannot express one thing Rust does: `SelectableText::selection_color`
+has no seam, since this runtime paints the window's selection in one pass, so
+the override is carried and reported rather than honoured, and the comment at
+the field says so.
+
+`30081a3d` restores the Markdown table's wheel axis lock. The C++ table never
+lost it — `ScrollTable` has applied a horizontal mask to its viewport since
+the scrolling layout landed — so no behaviour changed here; what this checkin
+brings is the structure: the mask now lives in gpui-base beside the table
+that wants it, and the table goes through `HorizontalScrollArea`, the C++
+shape of `horizontal_scroll_area`, rather than marking the axis itself. The
+16 mask tests upstream carries are the ones `tests/ScrollbarTests.cpp`
+already holds as `ScrollableMasksChainAndTrapLikeTheSource`, now pointed at
+`base/scrollable_mask` in the audit ledger.
+
+`5a564d4e` stops a Markdown render loop. A view that rebuilds equivalent
+plugin closures every frame handed the parse cache a fresh extension revision
+each time, so the document was reparsed, the reparse notified, and the notify
+rendered again forever. `MarkdownExtensions` gained
+`HasSameParserConfiguration` and `ParserFingerprint` — the parser's shape
+(MDX, the parser and renderer counts, the renderer names, order-independent)
+rather than the globally unique revision — and the per-window parse cache is
+keyed on the fingerprint, so refreshed render handles reuse the parsed tree.
+The regression drives two frames of a view that registers its plugins again
+in each and asserts both got the same document. The two story examples take
+the same one-line change as upstream: the Markdown and HTML preview panes are
+`px_5` rather than `p_5`.
+
+`12054f59` stops the drag auto-scroll when the content mask collapses. The
+region a selection drag scrolls is the nearest clipping viewport, not the
+participant's own box, and a scrollable ancestor clipped away mid-drag used to
+leave an empty clamp range that kept the last delta running. The registration's
+hitbox is that viewport here — the runtime intersects every hit rectangle with
+the content mask on the way down the paint tree — so the auto-scroll now
+computes its delta against it and stops outright when it is thinner than the
+two-pixel hit-test inset Rust uses. The ported regression registers a
+collapsed mask mid-gesture and asserts the next drag publishes a stop.
+
+The showcase gains the `text-view` page: a Base `TextViewState` rendered with
+a `TextViewStyle` derived from the example palette, scrolling inside a fixed
+560-high viewport — the page that demonstrates rich text with no themed layer
+above it. `examples/showcase/palette.h` is a minimal `ExamplePalette` holding
+the roles that page reads; the full `crates/base/examples/shared/palette.rs`
+port belongs to another package and is what should replace it. The
+text-selection page is rewritten onto `SelectableText`: its four paragraphs
+are runs sharing one reading order, and the bespoke paragraph-offset,
+word-and-line hit-testing that `showcase.cpp` carried for it is gone, since
+the window owns the gesture and the copy. Its footer reads the selection from
+the mouse seams rather than while building its tree, because the C++ copy
+walks the runs the last frame painted; Rust reads the same string from a
+`TextSelectionEvent` subscription. The story fixture loses the CI badge line
+and the CJK paragraph, as upstream's does. MSVC release passes 22,180 checks
+and every example builds with `/W4 /WX`.

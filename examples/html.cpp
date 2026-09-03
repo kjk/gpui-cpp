@@ -67,7 +67,7 @@ El* HtmlApp::Render(HtmlApp* self, Ctx* cx) {
             ->ScrollY(self->previewScroll)
             ->ScrollId(HashClickId(StrL("preview")))
             ->OnScroll(Listen(cx, &OnPreviewScroll))
-            ->Child(Div(a)->FlexCol()->W(kFill)->Pad(20)->Child(preview));
+            ->Child(Div(a)->FlexCol()->W(kFill)->PadX(20)->Child(preview));
 
     El* split = component::Resizable::New(cx, StrL("container"))
                     ->H(kFill)

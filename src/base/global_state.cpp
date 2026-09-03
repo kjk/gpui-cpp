@@ -10,6 +10,41 @@ void BaseGlobalStateInit(App* app) {
     (void)BaseGlobalStateOf(app);
 }
 
+void BaseSelectionFrameBegin(App* app) {
+    if (BaseGlobalState* state = BaseGlobalStateOf(app)) {
+        state->selectionDocumentOrder = 1;
+    }
+}
+
+uint64_t BaseSelectionNextDocumentOrder(App* app) {
+    BaseGlobalState* state = BaseGlobalStateOf(app);
+    if (!state) {
+        return 0;
+    }
+    return state->selectionDocumentOrder++;
+}
+
+void BaseTextViewStatePush(App* app, EntityId view) {
+    if (BaseGlobalState* state = BaseGlobalStateOf(app)) {
+        VecAppend(state->textViewStateStack, view);
+    }
+}
+
+void BaseTextViewStatePop(App* app) {
+    if (BaseGlobalState* state = AppGlobalGet<BaseGlobalState>(app)) {
+        if (state->textViewStateStack.len > 0) {
+            state->textViewStateStack.len--;
+        }
+    }
+}
+
+EntityId BaseTextViewStateCurrent(const App* app) {
+    BaseGlobalState* state = AppGlobalGet<BaseGlobalState>(app);
+    return state && state->textViewStateStack.len > 0
+               ? state->textViewStateStack[state->textViewStateStack.len - 1]
+               : EntityId{};
+}
+
 void BaseSuppressTextSelection(App* app) {
     if (BaseGlobalState* state = BaseGlobalStateOf(app)) {
         state->suppressTextSelection = true;

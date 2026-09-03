@@ -1,6 +1,7 @@
 #include "ui/theme.h"
 
 #include "gpui/assets.h"
+#include "ui/text.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -801,6 +802,9 @@ SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
     c.border = t.border;
     c.input = t.inputBorder;
     c.ring = t.ring;
+    // `selection` joined the Base palette when rich text moved down: the
+    // wash behind selected text had been a literal in three places.
+    c.selection = t.selection;
 
     out.radius.none = 0;
     out.radius.sm = t.radius / 2.f;
@@ -847,6 +851,8 @@ void ThemeApplySemanticTokens(Theme* t, const SemanticThemeTokens& tokens) {
     t->border = c.border;
     t->inputBorder = c.input;
     t->ring = c.ring;
+    t->selection = c.selection;
+    t->tokens.selection = Background(c.selection);
     // The seven tokens Rust writes back beside the flat colours, so a
     // gradient left over from the palette this was applied to does not
     // outlive the colour under it.
@@ -907,6 +913,10 @@ void ThemeSyncBase(App* app) {
     base.resizable.hasHandle = true;
     base.resizable.hasActiveHandle = true;
     BaseThemeSet(app, base);
+    // `install_text_view_defaults`: rich text lives in Base and reads no
+    // theme, so the themed palette and the themed syntax highlighter are
+    // handed to it here, on the same beat the Base theme is replaced.
+    component::TextViewInstallDefaults(app);
 }
 
 #if GPUI_OS_WINDOWS

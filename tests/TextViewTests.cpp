@@ -363,14 +363,13 @@ static void TestHtmlImage(Arena* a) {
     // The README showcase uses this shape: a remote bitmap with a width and
     // no height. It remains an image run and lets the decoded aspect supply
     // the missing dimension.
-    MdNode* widthOnly = HtmlParse(
-        a, StrL("<img width=\"1763\" alt=\"Image\" "
-                "src=\"https://example.com/showcase.png\">"));
+    MdNode* widthOnly =
+        HtmlParse(a, StrL("<img width=\"1763\" alt=\"Image\" "
+                          "src=\"https://example.com/showcase.png\">"));
     MdRun* widthRun = ImageRunOf(Child(widthOnly, 0));
     utassert(widthRun != nullptr);
     utassert(widthRun->imgW == 1763 && widthRun->imgH == 0);
-    utassert(base::StrEq(widthRun->imgSrc,
-                         "https://example.com/showcase.png"));
+    utassert(base::StrEq(widthRun->imgSrc, "https://example.com/showcase.png"));
 
     MdNode* pct =
         HtmlParse(a, StrL("<img src=\"y.png\" style=\"width: 50%\">"));
@@ -460,11 +459,11 @@ static void TestSourceMarks() {
     d.Run("two ", &bold, true);
     d.Run("three", &plain, true);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "**one two **three"));
+                         "**one two **three"));
     // The same runs in Plain are the text as rendered, on one line: a
     // paragraph is one InlineState.text in Rust however it is copied.
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                   "one two three"));
+                         "one two three"));
 }
 
 // reconstruct_markdown: a partial selection inside a marked run still wraps
@@ -493,7 +492,7 @@ static void TestSourceCodeAndLink() {
     d.Run(" c ", &plain, true);
     d.Run("home", &link, true);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "a `b` c [home](https://x.dev)"));
+                         "a `b` c [home](https://x.dev)"));
 }
 
 // A selected heading round-trips with its marker, and the paragraph under it
@@ -508,9 +507,9 @@ static void TestSourceHeading() {
     d.Run("Title", &h, false);
     d.Run("body", &p, false);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "## Title\nbody"));
+                         "## Title\nbody"));
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                   "Title\nbody"));
+                         "Title\nbody"));
 }
 
 // Every line of a blockquote carries its prefix, including the ones inside a
@@ -525,7 +524,7 @@ static void TestSourceBlockquote() {
     d.Run("first", &a, false);
     d.Run("second\nthird", &b, false);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "> first\n> second\n> third"));
+                         "> first\n> second\n> third"));
 }
 
 // code_block.selected_source: the code comes back fenced, with the block's
@@ -538,7 +537,7 @@ static void TestSourceCodeBlock() {
     d.Run("let x", &tok, false);
     d.Run(" = 1;", &tok, true);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "```rust\nlet x = 1;\n```"));
+                         "```rust\nlet x = 1;\n```"));
 }
 
 // table_selected_source: the row is piped and the alignment row follows the
@@ -559,9 +558,9 @@ static void TestSourceTable() {
     d.Run("Nut", &s2, false);
     d.Run("3", &s3, false);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "| Name | Qty |\n| :-- | :-: |\n| Nut | 3 |"));
+                         "| Name | Qty |\n| :-- | :-: |\n| Nut | 3 |"));
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                   "Name Qty\nNut 3"));
+                         "Name Qty\nNut 3"));
 }
 
 // A list item's marker is the markdown one, not the bullet glyph it draws
@@ -576,7 +575,7 @@ static void TestSourceList() {
     d.Run("first", &a, false);
     d.Run("under", &b, false);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "- first\n  - under"));
+                         "- first\n  - under"));
 }
 
 // A task list item: list_selected_source puts the checkbox after the marker
@@ -592,11 +591,11 @@ static void TestSourceTaskList() {
     d.Run("shipped", &a, false);
     d.Run("pending", &b, false);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "- [x] shipped\n- [ ] pending"));
+                         "- [x] shipped\n- [ ] pending"));
     // The rendered text is the item's words: the checkbox is drawn, not
     // written.
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                   "shipped\npending"));
+                         "shipped\npending"));
 }
 
 // node.rs selected_source: an inline image is emitted when the selection runs
@@ -613,9 +612,9 @@ static void TestSourceImage() {
     d.Image(&img, true);
     d.Run(" now", &plain, true);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "see ![alt](a.png) now"));
+                         "see ![alt](a.png) now"));
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                   "see  now"));
+                         "see  now"));
     // Stopping at the end of the run before it still reaches it: the run
     // after has nothing selected in it, which is the trailing case.
     int n = CopyTextHitsIn(&d.ctx, 0, 4, -1, buf, sizeof(buf),
@@ -661,8 +660,9 @@ static void TestSourceImageAtTheEnds() {
     SrcDoc lone;
     lone.Image(&img, false);
     lone.Run("after", &below, false);
-    utassert(base::StrEq(SrcCopy(&lone, SelectionFormat::Source, buf, sizeof(buf)),
-                   "![alt](a.png)\nafter"));
+    utassert(
+        base::StrEq(SrcCopy(&lone, SelectionFormat::Source, buf, sizeof(buf)),
+                    "![alt](a.png)\nafter"));
     // The paragraph below it on its own leaves it behind.
     n = CopyTextHitsIn(&lone.ctx, 1, 6, -1, buf, sizeof(buf),
                        SelectionFormat::Source);
@@ -678,9 +678,9 @@ static void TestSourceIgnoresPlainRuns() {
     d.Run("hello", nullptr, false);
     d.Run("world", nullptr, false);
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                   "hello\nworld"));
+                         "hello\nworld"));
     utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                   "hello\nworld"));
+                         "hello\nworld"));
 }
 
 #if GPUI_MARKDOWN_FULL
@@ -694,7 +694,7 @@ static void TestTableToMarkdown(Arena* a) {
     MdNode* table = Child(doc, 0);
     utassert(table && table->kind == MdKind::Table);
     utassert(base::StrEq(MdTableToMarkdown(a, table),
-                   "| a | b |\n| --- | ---: |\n| 1 | 2 |\n"));
+                         "| a | b |\n| --- | ---: |\n| 1 | 2 |\n"));
 
     // One column, which is the shape that was not valid GFM before.
     MdNode* one = Child(MdParse(a, StrL("| only |\n| --- |\n| x |\n")), 0);
@@ -710,8 +710,9 @@ static void TestTableToMarkdown(Arena* a) {
     MdNode* aligned = Child(
         MdParse(a, StrL("| l | c | r |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n")),
         0);
-    utassert(base::StrEq(MdTableToMarkdown(a, aligned),
-                   "| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n"));
+    utassert(
+        base::StrEq(MdTableToMarkdown(a, aligned),
+                    "| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n"));
 }
 
 #endif // GPUI_MARKDOWN_FULL
@@ -867,11 +868,11 @@ static void TestSourceShapedTextValues(Arena* a) {
     TextViewStyle base = TextViewStyle::Default();
     TextViewStyle same = TextViewStyle::Default();
     utassert(base.Equals(same));
-    same.HeadingFontSize(&HeadingIdentity);
+    same.WithHeadingFontSize(&HeadingIdentity);
     utassert(!base.Equals(same));
-    base.HeadingFontSize(&HeadingIdentity);
+    base.WithHeadingFontSize(&HeadingIdentity);
     utassert(base.Equals(same));
-    same.HeadingFontSize(&HeadingDouble);
+    same.WithHeadingFontSize(&HeadingDouble);
     utassert(!base.Equals(same));
     utassert(same.HeadingSize(2) == 28);
 
@@ -882,29 +883,30 @@ static void TestSourceShapedTextValues(Arena* a) {
     codeA.bg = Rgb(10, 20, 30);
     codeB.bg = codeA.bg;
     codeB.fontSize = 99;
-    styledA.CodeBlock(codeA, StyleFieldBg);
-    styledB.CodeBlock(codeB, StyleFieldBg);
+    styledA.WithCodeBlock(codeA, StyleFieldBg);
+    styledB.WithCodeBlock(codeB, StyleFieldBg);
     utassert(styledA.Equals(styledB));
     codeB.bg = Rgb(30, 20, 10);
-    styledB.CodeBlock(codeB, StyleFieldBg);
+    styledB.WithCodeBlock(codeB, StyleFieldBg);
     utassert(!styledA.Equals(styledB));
 
     gpui::Style head;
     head.color = Rgb(1, 2, 3);
     styledA = TextViewStyle::Default();
     styledB = TextViewStyle::Default();
-    styledA.TableHead(head, StyleFieldColor);
+    styledA.WithTableHead(head, StyleFieldColor);
     utassert(!styledA.Equals(styledB));
-    styledB.TableHead(head, StyleFieldColor);
+    styledB.WithTableHead(head, StyleFieldColor);
     utassert(styledA.Equals(styledB));
 }
 
 static void TestHtmlMinifier(Arena* a) {
     Minifier minifier;
-    utassert(base::StrEq(minifier.WriteCollapseWhitespace(a, StrL(" x   \n  \t y  ")),
-                   " x y "));
+    utassert(base::StrEq(
+        minifier.WriteCollapseWhitespace(a, StrL(" x   \n  \t y  ")), " x y "));
     minifier.precedingWhitespace = true;
-    utassert(base::StrEq(minifier.WriteCollapseWhitespace(a, StrL("   x")), "x"));
+    utassert(
+        base::StrEq(minifier.WriteCollapseWhitespace(a, StrL("   x")), "x"));
 
     minifier = {};
     minifier.OmitDoctype();
@@ -915,7 +917,7 @@ static void TestHtmlMinifier(Arena* a) {
     minifier = {};
     minifier.PreserveComments();
     utassert(base::StrEq(minifier.Minify(a, StrL("<p>x</p><!-- keep -->")),
-                   "<p>x</p><!-- keep -->"));
+                         "<p>x</p><!-- keep -->"));
 }
 
 static int gParseTimePluginCalls = 0;
@@ -972,29 +974,43 @@ static void TestMarkdownTableThemeTokens() {
     Arena* a = ArenaNew();
     Ctx cx = {&app, win, a, {}};
     const Theme& th = ThemeNow(&app);
+    // Rich text reads no theme any more: the themed palette reaches it as the
+    // TextViewDefaults ThemeSet installs, and the table's header pair and
+    // row rules arrive as style refinements on top of the Base defaults.
+    TextViewDefaults installed = TextViewDefaults::Global(&app);
+    utassert(installed.hasStyle);
+    utassert(installed.HasCodeBlockHighlighter());
+    utassert(installed.style.tableHeadFields != 0);
     Str source = StrL("| head | other |\n|---|---|\n| body | value |\n");
 
     for (int scroll = 0; scroll < 2; scroll++) {
-        El* rendered = TextView::New(&cx, source)
-                           ->TableScroll(scroll != 0)
-                           ->IntoEl();
+        El* rendered =
+            TextView::New(&cx, source)->TableScroll(scroll != 0)->IntoEl();
         El* table = FindMarkdownTableFrame(rendered, th.border);
         utassert(table && table->style.hasBg);
         utassert(table && SameTextViewColor(table->style.bg.color,
                                             th.tokens.tableBg.color));
         El* head = table ? table->first : nullptr;
         utassert(head && head->style.hasBg && head->style.hasColor);
+        // Base paints the header from the style's own code background and
+        // foreground; the themed pair arrives on top of it as the
+        // `table_head` refinement, which is what the façade fills in.
         utassert(head && SameTextViewColor(head->style.bg.color,
-                                           th.tokens.tableHead.color));
-        utassert(head && SameTextViewColor(head->style.color,
-                                           th.tableHeadFg));
+                                           installed.style.codeBackground));
+        utassert(head && SameTextViewColor(head->style.color, installed.style
+                                                                  .foreground));
+        utassert(head && (head->refineSet & StyleFieldBg) &&
+                 SameTextViewColor(head->refine.bg.color, th.tokens.tableHead
+                                                              .color));
+        utassert(head && (head->refineSet & StyleFieldColor) &&
+                 SameTextViewColor(head->refine.color, th.tableHeadFg));
+        // Row rules and column rules are the style's border now, not the
+        // table theme's own row border.
         utassert(head && head->style.borderB == 1 &&
-                 SameTextViewColor(head->style.borderColor,
-                                   th.tableRowBorder));
+                 SameTextViewColor(head->style.borderColor, th.border));
         El* firstCell = head ? head->first : nullptr;
         utassert(firstCell && firstCell->style.borderR == 1 &&
-                 SameTextViewColor(firstCell->style.borderColor,
-                                   th.tableRowBorder));
+                 SameTextViewColor(firstCell->style.borderColor, th.border));
     }
 
     WindowKeyedFree(win);
@@ -1062,15 +1078,12 @@ static void TestTextViewMaxLines() {
     win->paint.app = &app;
     win->paint.window = win;
     const Theme& th = ThemeNow(&app);
-    LayoutEl(&win->paint, clamped, 0, 0, 200, 500, th.fontSize,
-             th.foreground);
+    LayoutEl(&win->paint, clamped, 0, 0, 200, 500, th.fontSize, th.foreground);
     utassert(clamped->h <= clamped->lineClampCap + 0.01f);
     utassert(TextViewSubtreeBottom(clamped) > clamped->y + clamped->h + 1.f);
 
-    El* scrolling = TextView::New(&cx, state)
-                        ->MaxLines(2)
-                        ->Scrollable()
-                        ->IntoEl();
+    El* scrolling =
+        TextView::New(&cx, state)->MaxLines(2)->Scrollable()->IntoEl();
     utassert(scrolling && !scrolling->lineClamp);
     utassert(managed && managed->maxLines == -1);
 
@@ -1165,6 +1178,215 @@ static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
     AppGlobalClear(&app);
 }
 
+// text/style.rs: default_style_is_readable_without_an_application_theme,
+// from_theme_maps_base_semantic_tokens, inline_code_falls_back_to_the_code_
+// background and heading_font_size_resolves_through_the_installed_callback.
+static float HeadingByLevel(uint8_t level, float base, void*) {
+    return base * (7.f - (float)level);
+}
+
+static void TestTextViewStyleIsReadableWithoutATheme() {
+    TextViewStyle style = TextViewStyle::Default();
+    utassert(style.foreground.a == 255);
+    utassert(style.link.a == 255);
+    utassert(style.selection.a > 0);
+    utassert(style.codeBackground.a > 0);
+    utassert(style.border.a > 0);
+    utassert(style.InlineCodeBackground().a > 0);
+    utassert(style.codeBlockFields == 0);
+    // The default is the light palette, not a bag of zeroes.
+    utassert(
+        SameTextViewColor(style.foreground, ColorTokens::Light().foreground));
+
+    base_theme::Theme theme;
+    theme.appearance = base_theme::ThemeAppearance::Dark;
+    theme.tokens.colors.foreground = RgbaHex(0x112233);
+    theme.tokens.colors.mutedForeground = RgbaHex(0x445566);
+    theme.tokens.colors.primary = RgbaHex(0x3366ff);
+    theme.tokens.colors.accent = RgbaHex(0xddeeff);
+    theme.tokens.colors.border = RgbaHex(0x778899);
+    theme.tokens.colors.selection = RgbaHex(0x55a0fc);
+    TextViewStyle themed = TextViewStyle::FromTheme(theme);
+    utassert(SameTextViewColor(themed.foreground, RgbaHex(0x112233)));
+    utassert(SameTextViewColor(themed.mutedForeground, RgbaHex(0x445566)));
+    utassert(SameTextViewColor(themed.link, RgbaHex(0x3366ff)));
+    utassert(SameTextViewColor(themed.selection, RgbaHex(0x55a0fc)));
+    utassert(SameTextViewColor(themed.codeBackground, RgbaHex(0xddeeff)));
+    utassert(SameTextViewColor(themed.border, RgbaHex(0x778899)));
+    utassert(themed.isDark);
+
+    // inline_code_highlight falls back to the code background.
+    TextViewStyle fallback = TextViewStyle::Default()
+                                 .WithCodeBackground(RgbaHex(0x123456));
+    utassert(
+        SameTextViewColor(fallback.InlineCodeBackground(), RgbaHex(0x123456)));
+    gpui::Style named = {};
+    named.bg = Background(RgbaHex(0x654321));
+    fallback.WithInlineCode(named, StyleFieldBg);
+    utassert(
+        SameTextViewColor(fallback.InlineCodeBackground(), RgbaHex(0x654321)));
+
+    // heading_font_size resolves through the installed callback.
+    TextViewStyle heading = TextViewStyle::Default();
+    utassert(!heading.HasHeadingFontSize());
+    heading.WithHeadingFontSize(&HeadingByLevel);
+    utassert(heading.HasHeadingFontSize());
+    utassert(heading.HeadingSize(1) == 14.f * 6.f);
+    utassert(heading.HeadingSize(6) == 14.f);
+}
+
+// text_view.rs: text_view_constructors_are_selectable_by_default and
+// syntax_highlighting_is_opt_in.
+static int gTestHighlighterCalls = 0;
+
+static void TestHighlighter(void* data, const CodeBlock* block, Arena* a,
+                            ArenaVec<CodeHighlight>* out) {
+    (void)data;
+    gTestHighlighterCalls++;
+    CodeHighlight span;
+    span.start = 0;
+    span.end = block->Code().len;
+    span.color = RgbaHex(0x3366ff);
+    out->Append(a, span);
+}
+
+static void TestTextViewDefaultsAndOptInHighlighting() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+
+    // Every constructor is selectable now; `.selectable(false)` opts out.
+    utassert(TextView::New(&cx, StrL("text"))->selectable);
+    utassert(TextView::NewHtml(&cx, StrL("<p>text</p>"))->selectable);
+    utassert(!TextView::New(&cx, StrL("text"))->Selectable(false)->selectable);
+    // The two free constructors are the same two calls.
+    utassert(MarkdownView(&cx, StrL("# hi"))->selectable);
+    utassert(HtmlView(&cx, StrL("<p>hi</p>"))->html);
+
+    // Without a highlighter a fenced block is one plain run; with one, the
+    // colours it answers reach the painted words.
+    Str source = StrL("```rust\nfn main() {}\n```");
+    gTestHighlighterCalls = 0;
+    El* plain = TextView::New(&cx, source)->IntoEl();
+    utassert(plain && gTestHighlighterCalls == 0);
+
+    El* highlighted = TextView::New(&cx, source)
+                          ->CodeBlockHighlighter(&TestHighlighter)
+                          ->IntoEl();
+    utassert(highlighted && gTestHighlighterCalls == 1);
+
+    // TextViewDefaults installs one for every view that names none.
+    TextViewDefaults::New()
+        .WithCodeBlockHighlighter(&TestHighlighter)
+        .Install(&app);
+    utassert(TextViewDefaults::Global(&app).HasCodeBlockHighlighter());
+    gTestHighlighterCalls = 0;
+    El* fromDefaults = TextView::New(&cx, source)->IntoEl();
+    utassert(fromDefaults && gTestHighlighterCalls == 1);
+
+    // An installed style is what an unstyled view renders with, so a Base
+    // application's link and selection colours are its own.
+    TextViewStyle style = TextViewStyle::Default()
+                              .WithLink(RgbaHex(0x55aaff))
+                              .WithSelection(RgbaHex(0x335577));
+    TextViewDefaults::New().WithStyle(style).Install(&app);
+    Entity<TextViewState> state =
+        TextViewState::Markdown(&app, StrL("[link](url)"));
+    TextView::New(&cx, state)->IntoEl();
+    TextViewState* managed = state.Get(&app);
+    utassert(managed &&
+             SameTextViewColor(managed->textViewStyle.link, RgbaHex(0x55aaff)));
+    utassert(managed && SameTextViewColor(managed->textViewStyle.selection,
+                                          RgbaHex(0x335577)));
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
+// markdown_ext.rs has_same_parser_configuration, and the render loop it
+// exists to stop: a view that rebuilds equivalent plugins every frame must
+// reuse the parsed document — `stateless_markdown_with_rebuilt_parser_
+// settles`.
+static bool NeverClaims(const markdown::Node*, const MarkdownParseContext*,
+                        void*, MarkdownNode*) {
+    return false;
+}
+
+static El* RenderNothing(Ctx*, const MarkdownNode*, void*) {
+    return nullptr;
+}
+
+static void TestMarkdownExtensionsParserConfiguration(Arena* a) {
+    MarkdownExtensions first;
+    first.BlockParser(a, &NeverClaims);
+    first.BlockRenderer(a, StrL("card"), &RenderNothing);
+    MarkdownExtensions second;
+    second.BlockParser(a, &NeverClaims);
+    second.BlockRenderer(a, StrL("card"), &RenderNothing);
+
+    // Rebuilt handles: different revisions, the same parser.
+    utassert(first.revision != second.revision);
+    utassert(first.HasSameParserConfiguration(second));
+    utassert(first.ParserFingerprint() == second.ParserFingerprint());
+
+    MarkdownExtensions renamed;
+    renamed.BlockParser(a, &NeverClaims);
+    renamed.BlockRenderer(a, StrL("ticker"), &RenderNothing);
+    utassert(!first.HasSameParserConfiguration(renamed));
+    utassert(first.ParserFingerprint() != renamed.ParserFingerprint());
+
+    MarkdownExtensions extra;
+    extra.BlockParser(a, &NeverClaims);
+    utassert(!first.HasSameParserConfiguration(extra));
+
+    MarkdownExtensions mdx;
+    mdx.BlockParser(a, &NeverClaims);
+    mdx.BlockRenderer(a, StrL("card"), &RenderNothing);
+    mdx.Mdx();
+    utassert(!first.HasSameParserConfiguration(mdx));
+}
+
+static void TestStatelessMarkdownSettles() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+    Str source = StrL("# Heading\n\nA paragraph with `code` in it.\n");
+
+    // Two frames, each building its plugin table again. The parse cache is
+    // keyed on the parser's shape, so the second frame reuses the first
+    // frame's document instead of reparsing and notifying forever.
+    MdNode* first = nullptr;
+    MdNode* second = nullptr;
+    for (int frame = 0; frame < 2; frame++) {
+        TextView* view =
+            TextView::New(&cx, source)
+                ->MarkdownBlockParser(&NeverClaims)
+                ->MarkdownBlockRenderer(StrL("card"), &RenderNothing);
+        view->IntoEl();
+        MdNode* doc =
+            MdParseCachedForTest(&cx, a, source, &view->markdownExtensions);
+        if (frame == 0) {
+            first = doc;
+        } else {
+            second = doc;
+        }
+    }
+    utassert(first && first == second);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
@@ -1207,6 +1429,10 @@ void TestTextView() {
     TestSourceShapedTextValues(a);
     TestHtmlMinifier(a);
     TestTextViewKeys();
+    TestTextViewStyleIsReadableWithoutATheme();
+    TestTextViewDefaultsAndOptInHighlighting();
+    TestMarkdownExtensionsParserConfiguration(a);
+    TestStatelessMarkdownSettles();
     TestManagedTextViewAndParseTimePlugins(a);
     TestMarkdownTableThemeTokens();
     TestTextViewMaxLines();

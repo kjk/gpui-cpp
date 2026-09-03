@@ -25,8 +25,9 @@ calendar checkbox collapsible color_picker combobox component_traits
 date_picker dialog dock element_ext event focus_trap geometry global_state
 history hover_card index_path input link list_settings macos_accessibility
 measure motion nav_stack number_input otp_input pagination popover popup positioner
-progress radio radio_group resizable scrollbar select sheet slider state_style
-styled switch table tabs text_boundary text_selection theme theme_tokens toast
+progress radio radio_group resizable scrollbar scrollable_mask select selectable_text
+sheet slider state_style styled switch table tabs text text_boundary text_selection
+theme theme_tokens toast
 toggle toggle_group tooltip tree virtual_list
 `
   .trim()
@@ -99,6 +100,10 @@ const baseOverrides: Record<string, string[]> = {
     "src/base/input_keys.cpp",
   ],
   macos_accessibility: ["src/gpui/window_mac.cpp"],
+  // crates/base/src/text/ is one C++ file per Rust module directory, and the
+  // HTML half of `text/format/` is beside it under the name the tree gives a
+  // second file of one module.
+  text: ["src/base/text.h", "src/base/text.cpp", "src/base/text_format.h", "src/base/text_format.cpp"],
 };
 
 const uiOverrides: Record<string, string[]> = {
@@ -116,7 +121,10 @@ const uiOverrides: Record<string, string[]> = {
   plot: ["src/ui/plot.h", "src/ui/plot.cpp", "src/ui/sankey.h", "src/base/sankey.h", "src/base/sankey.cpp"],
   resizable: ["src/ui/resizable.h", "src/ui/resizable.cpp", "src/base/resizable.h", "src/base/resizable.cpp"],
   sheet: ["src/ui/sheet_settings.h", "src/ui/sheet.h", "src/ui/sheet.cpp"],
-  text: ["src/ui/text.h", "src/ui/text.cpp", "src/ui/html.h", "src/ui/html.cpp"],
+  // The UI side of text is the façade over Base's: text/mod.rs, compat.rs,
+  // style.rs and window_selection.rs.
+  text: ["src/ui/text.h", "src/ui/text.cpp"],
+  scroll: ["src/ui/scroll.h", "src/ui/scroll.cpp", "src/base/scrollable_mask.h"],
   table: [
     "src/ui/table.h",
     "src/ui/table.cpp",
@@ -216,7 +224,11 @@ const testTargets: Record<string, string[]> = {
   "base/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp", "tests/StateStyleTests.cpp"],
   "base/table": ["tests/DataTableTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/tabs": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
+  "base/scrollable_mask": ["tests/ScrollbarTests.cpp"],
+  "base/selectable_text": ["tests/TextSelectionTests.cpp"],
+  "base/text": ["tests/TextViewTests.cpp", "tests/MarkdownTests.cpp"],
   "base/text_selection": ["tests/TextSelectionTests.cpp"],
+  "base/theme_tokens": ["tests/ThemeColorTests.cpp"],
   "base/theme": ["tests/ThemeSettingsTests.cpp"],
   "base/toast": ["tests/ToastTests.cpp"],
   "base/toggle": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
@@ -382,9 +394,17 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     collapse:
       "Rust's private sealed-trait gate has no C++ runtime representation; only the four concrete scale types expose the convention",
   },
-  "ui/text/text_view.rs::struct TextViewPrepaintState": {
+  "base/text/text_view.rs::struct TextViewPrepaintState": {
     collapse:
       "C++ fuses element prepaint into El painting: the ordinary hit-test entry and line-clamp clip bottom are resolved by the shared paint walk rather than retained in a TextView-specific state",
+  },
+  "ui/text/compat.rs::struct TextViewPrepaintState": {
+    collapse:
+      "the C++ façade re-exports Base's TextView rather than wrapping it in a second element, so the compatibility element's prepaint state has no separate representation",
+  },
+  "ui/text/compat.rs::struct TextViewLayoutState": {
+    collapse:
+      "same façade: TextViewLayoutState is Base's, re-exported, because there is no wrapper element holding an AnyElement of its own",
   },
   "ui/theme/color.rs::fn black": { spellings: ["ThemeBlack"] },
   "ui/theme/color.rs::fn hsl": { spellings: ["ThemeHsl"] },

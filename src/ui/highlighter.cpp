@@ -247,7 +247,7 @@ El* CompletionMenu::IntoEl() {
             }
         }
         TextViewStyle textStyle = TextViewStyle::Default();
-        textStyle.ParagraphGap(8);
+        textStyle.WithParagraphGap(8);
         menu->Child(
             PopoverSurface(
                 cx,
@@ -361,7 +361,7 @@ El* DiagnosticPopover::IntoEl() {
         foreground = theme.cyan;
     Rgba background = RgbaMix(theme.background, foreground, 0.8f);
     TextViewStyle textStyle = TextViewStyle::Default();
-    textStyle.ParagraphGap(8);
+    textStyle.WithParagraphGap(8);
     El* body = TextView::New(cx, item.message)
                    ->Font(12)
                    ->Style(textStyle)
@@ -411,7 +411,7 @@ El* HoverPopover::IntoEl() {
     if (!editor || hover.len <= 0) return nullptr;
     const Theme& theme = ThemeNow(cx->app);
     TextViewStyle textStyle = TextViewStyle::Default();
-    textStyle.ParagraphGap(8);
+    textStyle.WithParagraphGap(8);
     El* surface = PopoverSurface(
         cx, Div(a)->MinW(200)->MaxW(500)->MaxH(320)->ClipY()->PadX(8)->PadY(4));
     surface
