@@ -16,8 +16,9 @@ static bool FpsSameRgba(Rgba a, Rgba b) {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
-// timing(): a frame that answered one request to redraw.
-static FrameSample Timing(float drawSecs) {
+// timing(): a frame that answered one request to redraw. Named
+// FpsTiming because gpui::Timing is the motion core's timing block.
+static FrameSample FpsTiming(float drawSecs) {
     FrameSample s;
     s.drawSecs = drawSecs;
     s.invalidations = 1;
@@ -26,7 +27,7 @@ static FrameSample Timing(float drawSecs) {
 
 // coalesced(): a frame that answered `invalidations` requests at once.
 static FrameSample Coalesced(float drawSecs, uint64_t invalidations) {
-    FrameSample s = Timing(drawSecs);
+    FrameSample s = FpsTiming(drawSecs);
     s.invalidations = invalidations;
     return s;
 }
@@ -43,7 +44,7 @@ static void IngestPresent(FrameSampler* s, double presentAt, double now) {
 static void SamplerOf(FrameSampler* s, const float* millis, int n) {
     FrameSamplerSetCapacity(s, kFpsCapacity);
     for (int i = 0; i < n; i++) {
-        IngestDraw(s, Timing(millis[i] / 1000.f));
+        IngestDraw(s, FpsTiming(millis[i] / 1000.f));
     }
 }
 
@@ -52,7 +53,7 @@ static void DropsOldestSamplesBeyondCapacity() {
     FrameSamplerSetCapacity(&s, 2);
 
     for (int i = 0; i < 3; i++) {
-        IngestDraw(&s, Timing(0.005f + 0.001f * (float)i));
+        IngestDraw(&s, FpsTiming(0.005f + 0.001f * (float)i));
     }
 
     utassert(s.n == 2);
@@ -215,7 +216,7 @@ static void FramesOutsideTheRollingWindowStopCounting() {
 
     for (int i = 0; i < 10; i++) {
         double presented = 0.010 * (double)i;
-        IngestDraw(&s, Timing(0.004f));
+        IngestDraw(&s, FpsTiming(0.004f));
         IngestPresent(&s, presented, presented);
     }
     utassert(FrameSamplerFps(&s) > 0.f);
