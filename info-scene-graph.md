@@ -26,9 +26,11 @@ Linux, macOS and wasm still issue `Paint.h` calls directly. The custom Windows
 renderer already builds one instance buffer and batches the frame, independently
 of whether the scene recorder is enabled.
 
-The current scene state is process-global. That is unsafe for multiple windows:
-the previous frame, skip decision, damage history and path cache do not belong
-to the window whose surface they describe.
+Scene state is owned by each window's paint context. The previous frame, skip
+decision, damage history and path cache therefore describe only that window's
+surface. Path-building calls retain one non-owning pointer to the active
+recorder because the public calls after `PathNew` carry `Path*` but no
+`PaintCtx*`; painting is single-threaded and the pointer owns no state.
 
 ## What upstream has in addition
 
@@ -112,19 +114,18 @@ profile requires it.
 
 The worthwhile near-term work is narrower:
 
-1. Move all scene state to the window/paint context so two windows cannot share
-   frame comparison, damage or cache state.
-2. Give retained paint resources stable generation-based identities instead of
+1. Give retained paint resources stable generation-based identities instead of
    hashing their addresses.
-3. Benchmark real scrolling, hover, caret, popup and chart-tick invalidations.
+2. Benchmark real scrolling, hover, caret, popup and chart-tick invalidations.
    Keep damage mode only if those workloads demonstrate a useful total-frame
    improvement without stale output.
-4. If path construction remains material, key paths relative to their origin
+3. If path construction remains material, key paths relative to their origin
    and draw cached geometry with a translation.
-5. Enable the recorder on Linux, macOS and wasm only after measuring its cost
+4. Enable the recorder on Linux, macOS and wasm only after measuring its cost
    on those backends.
-6. Port `BoundsTree` and typed batches only when an ordering problem or a new
+5. Port `BoundsTree` and typed batches only when an ordering problem or a new
    renderer needs them.
 
-The first three items are implementation work following this analysis. They do
-not commit the project to the full retained-scene architecture.
+Per-window ownership was the first implementation following this analysis. The
+remaining items do not commit the project to the full retained-scene
+architecture.

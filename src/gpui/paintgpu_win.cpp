@@ -1847,7 +1847,7 @@ static bool D12PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         D12FreeSurfaces(t);
         t->pxW = pxW;
         t->pxH = pxH;
-        scene::Invalidate();
+        scene::Invalidate(ctx);
         if (FAILED(t->swap->ResizeBuffers(kD12FrameCount, (UINT)pxW, (UINT)pxH,
                                           DXGI_FORMAT_B8G8R8A8_UNORM, 0)) ||
             !D12MakeWindowSurfaces(t)) {
@@ -1865,7 +1865,7 @@ static bool D12PaintTargetEnd(PaintCtx* ctx) {
         return false;
     }
     Flush();
-    bool skip = scene::SkipPresent();
+    bool skip = scene::SkipPresent(ctx);
     ID3D12Resource* back = t->back[t->frameIx];
     if (t->msaa) {
         if (!skip) {
@@ -2023,7 +2023,7 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         t->pxH = pxH;
         // New surfaces with nothing in them: the multisampled one a partial
         // redraw would have built on is gone with the rest.
-        scene::Invalidate();
+        scene::Invalidate(ctx);
         if (FAILED(t->swap->ResizeBuffers(0, (UINT)pxW, (UINT)pxH,
                                           DXGI_FORMAT_UNKNOWN, 0)) ||
             !BindBack(g, t) || !MakeRenderSurfaces(g, t)) {
@@ -2054,7 +2054,7 @@ bool PaintTargetEnd(PaintCtx* ctx) {
     // A frame the scene found identical to the last one is not presented.
     // The multisampled surface it would have resolved still holds the frame
     // before it, which is what is already on screen.
-    if (scene::SkipPresent()) {
+    if (scene::SkipPresent(ctx)) {
         return true;
     }
     // Sync interval 0, the way the D2D path presents, so the comparison is

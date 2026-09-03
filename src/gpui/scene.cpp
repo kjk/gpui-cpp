@@ -107,49 +107,116 @@ struct PathRec {
     bool any = false;
 };
 
-static Vec<Prim> gCur;
-static Vec<Prim> gPrev;
-static Vec<PathRec> gPaths;
-static Vec<uint8_t> gVerbs;
-static Vec<float> gPts;
-
-// The clip stack while recording, four floats a level, mirroring what the GPU
-// backend does with its own: a push intersects, a pop restores.
-static Vec<float> gClipStack;
-static Bounds gClip = {};
-static bool gRecording = false;
-static uint32_t gSeq = 0;
-static float gViewW = 0, gViewH = 0;
-static bool gSkipPresent = false;
-static SceneStats gStats;
-static uint64_t gPrevFrameHash = 0;
-static bool gHavePrev = false;
-static int gFrameNo = 0;
-
 // The damage of the last frames that were actually presented. The swap chain
 // is FLIP_SEQUENTIAL with three buffers, so the buffer a frame is handed back
 // holds what was drawn three presents ago: a partial redraw has to cover
 // everything that has changed since then, not only what changed this frame.
 static const int kBufferDepth = 3;
-static Bounds gDamageRing[kBufferDepth] = {};
-static int gDamageRingAt = 0;
+
+struct CacheEntry {
+    uint64_t hash = 0;
+    Path* path = nullptr;
+    int lastFrame = 0;
+    bool live = false;
+};
+
+static const int kCacheSlots = 2048;
+
+struct HashBag {
+    Vec<uint64_t> keys;
+    Vec<int> counts;
+    int mask = 0;
+};
+
+struct State {
+    Vec<Prim> cur;
+    Vec<Prim> prev;
+    Vec<PathRec> paths;
+    Vec<uint8_t> verbs;
+    Vec<float> pts;
+    // Four floats per level, mirroring the GPU backend's clip stack.
+    Vec<float> clipStack;
+    Bounds clip = {};
+    bool recording = false;
+    uint32_t seq = 0;
+    float viewW = 0, viewH = 0;
+    bool skipPresent = false;
+    SceneStats stats;
+    uint64_t prevFrameHash = 0;
+    bool havePrev = false;
+    int frameNo = 0;
+    Bounds damageRing[kBufferDepth] = {};
+    int damageRingAt = 0;
+    CacheEntry cache[kCacheSlots] = {};
+    CacheEntry sweepBuf[kCacheSlots] = {};
+    int cacheLive = 0;
+    HashBag bagA;
+    HashBag bagB;
+};
+
+// Paint.h's path-building calls after PathNew carry only Path*, not PaintCtx*.
+// Painting is single-threaded, so this non-owning pointer identifies the open
+// recorder for those calls. All persistent data lives in the PaintCtx-owned
+// State; switching windows switches this pointer at FrameBegin.
+static State* gActive = nullptr;
+
+#define gCur (gActive->cur)
+#define gPrev (gActive->prev)
+#define gPaths (gActive->paths)
+#define gVerbs (gActive->verbs)
+#define gPts (gActive->pts)
+#define gClipStack (gActive->clipStack)
+#define gClip (gActive->clip)
+#define gRecording (gActive->recording)
+#define gSeq (gActive->seq)
+#define gViewW (gActive->viewW)
+#define gViewH (gActive->viewH)
+#define gSkipPresent (gActive->skipPresent)
+#define gStats (gActive->stats)
+#define gPrevFrameHash (gActive->prevFrameHash)
+#define gHavePrev (gActive->havePrev)
+#define gFrameNo (gActive->frameNo)
+#define gDamageRing (gActive->damageRing)
+#define gDamageRingAt (gActive->damageRingAt)
+#define gCache (gActive->cache)
+#define gSweepBuf (gActive->sweepBuf)
+#define gCacheLive (gActive->cacheLive)
+#define gBagA (gActive->bagA)
+#define gBagB (gActive->bagB)
+
+static State* StateFor(PaintCtx* ctx, bool create) {
+    if (!ctx) {
+        return nullptr;
+    }
+    if (!ctx->sceneState && create) {
+        ctx->sceneState = new State();
+    }
+    return ctx->sceneState;
+}
 
 bool Recording() {
-    return gRecording;
+    return gActive && gActive->recording;
 }
 bool SuspendBegin() {
-    bool prev = gRecording;
-    gRecording = false;
+    bool prev = Recording();
+    if (gActive) {
+        gActive->recording = false;
+    }
     return prev;
 }
 void SuspendEnd(bool prev) {
-    gRecording = prev;
+    if (gActive) {
+        gActive->recording = prev;
+    }
 }
-bool SkipPresent() {
-    return gSkipPresent;
+bool SkipPresent(PaintCtx* ctx) {
+    State* s = StateFor(ctx, false);
+    return s && s->skipPresent;
 }
-const SceneStats& Stats() {
-    return gStats;
+const SceneStats& Stats(PaintCtx* ctx) {
+    static const SceneStats empty;
+    State* s = StateFor(ctx, false);
+    return s ? s->stats : empty;
 }
 
 // ─── hashing ─────────────────────────────────────────────────────────────
@@ -277,6 +344,10 @@ static Prim* Emit(PaintCtx* ctx, uint8_t kind, Bounds bbox) {
 }
 
 void FrameBegin(PaintCtx* ctx) {
+    gActive = StateFor(ctx, true);
+    if (!gActive) {
+        return;
+    }
     gRecording = true;
     gSkipPresent = false;
     VecClear(gCur);
@@ -410,7 +481,11 @@ static PathRec* PathOf(Path* p) {
     return &gPaths[idx];
 }
 
-Path* RecPathNew(bool winding) {
+Path* RecPathNew(PaintCtx* ctx, bool winding) {
+    State* s = StateFor(ctx, false);
+    if (!s || s != gActive) {
+        return nullptr;
+    }
     PathRec pr;
     pr.winding = winding;
     pr.verbFirst = gVerbs.len;
@@ -642,17 +717,6 @@ static void SortByLayer(Vec<Prim>& v) {
 // realized once and drawn many times is the difference the measurements
 // show.
 
-struct CacheEntry {
-    uint64_t hash = 0;
-    Path* path = nullptr;
-    int lastFrame = 0;
-    bool live = false;
-};
-
-static const int kCacheSlots = 2048;
-static CacheEntry gCache[kCacheSlots];
-static int gCacheLive = 0;
-
 static CacheEntry* CacheFind(uint64_t hash) {
     if (hash == 0) {
         hash = 1;
@@ -685,7 +749,6 @@ static void CacheClear() {
 // the whole table, because open addressing cannot delete in place, and it
 // only runs when the table is filling up.
 static const int kCacheAge = 120;
-static CacheEntry gSweepBuf[kCacheSlots];
 static void CacheSweep() {
     CacheEntry* old = gSweepBuf;
     for (int i = 0; i < kCacheSlots; i++) {
@@ -713,18 +776,56 @@ static void CacheSweep() {
     }
 }
 
-void Invalidate() {
-    VecClear(gPrev);
-    gHavePrev = false;
-    gPrevFrameHash = 0;
+void Invalidate(PaintCtx* ctx) {
+    State* s = StateFor(ctx, false);
+    if (!s) {
+        return;
+    }
+    VecClear(s->prev);
+    s->havePrev = false;
+    s->prevFrameHash = 0;
     for (int i = 0; i < kBufferDepth; i++) {
-        gDamageRing[i] = Bounds{};
+        s->damageRing[i] = Bounds{};
     }
 }
 
-void Reset() {
+void Reset(PaintCtx* ctx) {
+    State* s = StateFor(ctx, false);
+    if (!s) {
+        return;
+    }
+    State* previous = gActive;
+    gActive = s;
+    bool wasRecording = s->recording;
+    s->recording = false;
     CacheClear();
-    Invalidate();
+    Invalidate(ctx);
+    s->recording = wasRecording;
+    gActive = previous;
+}
+
+void Free(PaintCtx* ctx) {
+    State* s = StateFor(ctx, false);
+    if (!s) {
+        return;
+    }
+    State* previous = gActive;
+    gActive = s;
+    s->recording = false;
+    CacheClear();
+    VecReset(s->cur);
+    VecReset(s->prev);
+    VecReset(s->paths);
+    VecReset(s->verbs);
+    VecReset(s->pts);
+    VecReset(s->clipStack);
+    VecReset(s->bagA.keys);
+    VecReset(s->bagA.counts);
+    VecReset(s->bagB.keys);
+    VecReset(s->bagB.counts);
+    delete s;
+    ctx->sceneState = nullptr;
+    gActive = previous == s ? nullptr : previous;
 }
 
 // Build a backend path out of the recorded verbs. The caller is drawing, so
@@ -818,14 +919,6 @@ static Path* PathFor(PaintCtx* ctx, const Prim& prim, bool* owned) {
 
 // A hash to count map, open addressed, rebuilt each frame. Two of them, one
 // per direction of the comparison.
-struct HashBag {
-    Vec<uint64_t> keys;
-    Vec<int> counts;
-    int mask = 0;
-};
-static HashBag gBagA;
-static HashBag gBagB;
-
 static void BagBuild(HashBag& b, const Vec<Prim>& v) {
     int cap = 16;
     while (cap < v.len * 2) {
@@ -869,7 +962,11 @@ static bool BagTake(HashBag& b, uint64_t hash) {
 }
 
 bool FrameEnd(PaintCtx* ctx, Bounds* damage) {
-    (void)ctx;
+    State* s = StateFor(ctx, false);
+    if (!s) {
+        return false;
+    }
+    gActive = s;
     gRecording = false;
     gFrameNo++;
     SortByLayer(gCur);
@@ -981,9 +1078,11 @@ bool FrameEnd(PaintCtx* ctx, Bounds* damage) {
 // ─── replay ──────────────────────────────────────────────────────────────
 
 void Replay(PaintCtx* ctx, const Bounds* damage) {
-    if (!ctx) {
+    State* s = StateFor(ctx, false);
+    if (!s) {
         return;
     }
+    gActive = s;
     Bounds whole = Bounds{0, 0, gViewW, gViewH};
     bool partial = damage && !SameBounds(*damage, whole);
     if (partial && (damage->w <= 0 || damage->h <= 0)) {
@@ -1105,3 +1204,29 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
 
 } // namespace scene
 } // namespace gpui
+
+// Source files are amalgamated into one translation unit for normal builds.
+// Keep the short aliases above private to this implementation.
+#undef gCur
+#undef gPrev
+#undef gPaths
+#undef gVerbs
+#undef gPts
+#undef gClipStack
+#undef gClip
+#undef gRecording
+#undef gSeq
+#undef gViewW
+#undef gViewH
+#undef gSkipPresent
+#undef gStats
+#undef gPrevFrameHash
+#undef gHavePrev
+#undef gFrameNo
+#undef gDamageRing
+#undef gDamageRingAt
+#undef gCache
+#undef gSweepBuf
+#undef gCacheLive
+#undef gBagA
+#undef gBagB

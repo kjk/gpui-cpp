@@ -2712,11 +2712,19 @@ struct InspectorState {
     float pendingY = 0;
 };
 
+namespace scene {
+struct State;
+}
+
 struct PaintCtx {
     App* app = nullptr;
     Window* window = nullptr;
     PaintApp* pa = nullptr;
     PaintTarget* rt = nullptr;
+    // The recorded and previous frames, damage history and retained path
+    // geometry belong to this target's window. Opaque here so the portable
+    // public drawing context does not expose the scene implementation.
+    scene::State* sceneState = nullptr;
     // Window::element_opacity: the Style::opacity of everything this element
     // is inside, multiplied together. Every colour painted is faded by it, so
     // a subtree fades as one thing rather than each of its boxes separately.

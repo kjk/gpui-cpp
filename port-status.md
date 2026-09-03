@@ -28,8 +28,8 @@ and wasm. The work left is depth, not breadth.
   is 0; values are in the same ballpark, not bit-identical.
 - **The scene graph is half of GPUI's.** `src/gpui/scene.h` collects and culls;
   there is no stacking context per element (layers are a field, not a tree),
-  no offscreen mask cache, no batching across windows, and only
-  `paint_win.cpp` dispatches into it.
+  there is no offscreen mask cache, and only `paint_win.cpp` dispatches into
+  it.
 - **A repaint rebuilds the whole element tree.** `Notify` picks the right
   windows (see AGENTS.md), but an `El` is arena-allocated per frame, so hover,
   focus and animation are resolved while the tree is built. Layout *is* kept

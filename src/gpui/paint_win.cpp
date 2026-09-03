@@ -237,7 +237,7 @@ void PaintTargetFree(PaintCtx* ctx) {
     // Before anything is released: the scene's path cache holds geometry
     // realizations, which belong to the device context about to go.
     if (SceneOn()) {
-        scene::Reset();
+        scene::Reset(ctx);
     }
     if (PaintGpuOn()) {
         gpuw::PaintTargetFree(ctx);
@@ -446,7 +446,7 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         t->pxH = pxH;
         // ResizeBuffers hands out new surfaces with nothing in them, so the
         // frame the scene remembers is not what is on this one.
-        scene::Invalidate();
+        scene::Invalidate(ctx);
     }
     ctx->rt->rt->BeginDraw();
     ctx->rt->rt->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -605,7 +605,7 @@ bool PaintTargetEnd(PaintCtx* ctx) {
     // A frame the scene found identical to the last one is not presented:
     // what is on screen is already it, and presenting would rotate the
     // buffers under the damage rectangles.
-    if (SUCCEEDED(hr) && ctx->rt->swap && !scene::SkipPresent()) {
+    if (SUCCEEDED(hr) && ctx->rt->swap && !scene::SkipPresent(ctx)) {
         // Sync interval 0, the way GPUI's renderer presents. On a flip-model
         // chain that hands the frame straight to DWM, which composites it at
         // the next vblank anyway, so nothing tears — but the draw is not held
@@ -860,7 +860,7 @@ struct Path {
 
 Path* PathNew(PaintCtx* ctx, bool winding) {
     if (scene::Recording()) {
-        return scene::RecPathNew(winding);
+        return scene::RecPathNew(ctx, winding);
     }
     if (PaintGpuOn()) {
         return gpuw::PathNew(ctx, winding);

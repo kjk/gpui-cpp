@@ -174,7 +174,7 @@ static void FrameBenchTick(Window* win, float secs) {
     }
 #endif
     if (SceneOn()) {
-        const scene::SceneStats& sc = scene::Stats();
+        const scene::SceneStats& sc = scene::Stats(&win->paint);
         logf(
             "frame-bench scene prims=%d culled=%d layers=%d clipPushes=%d "
             "maskChanges=%d paths=%d verbs=%d changed=%d",
@@ -258,8 +258,8 @@ static void LayoutDumpFrame(Window* win, El* root) {
             "nodes=%d slots=%d made=%d dropped=%d restyled=%d remeasured=%d "
             "allocs=%d\n",
             (unsigned long long)win->frameSeq, TimeNow(), win->paint.viewW,
-            win->paint.viewH, SceneOn() ? scene::Stats().prims : -1,
-            (SceneOn() && scene::SkipPresent()) ? 0 : 1, ls.nodes,
+            win->paint.viewH, SceneOn() ? scene::Stats(&win->paint).prims : -1,
+            (SceneOn() && scene::SkipPresent(&win->paint)) ? 0 : 1, ls.nodes,
             LayoutCacheSlotCount(win->layout), ls.made, ls.dropped, ls.restyled,
             ls.remeasured, ls.allocs);
     LayoutDumpEl(f, root, 0);
@@ -588,7 +588,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // The present happened inside PaintTargetEnd above, so this is the closest
     // thing to GPUI's `present_end` the runtime has; a frame the scene did not
     // present carries no present time at all.
-    bool presented = !(SceneOn() && scene::SkipPresent());
+    bool presented = !(SceneOn() && scene::SkipPresent(&win->paint));
     timing.presentAt = presented ? drawEnd : -1;
     win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
     win->frameSeq++;
@@ -2599,6 +2599,7 @@ Window::~Window() {
     }
     input = nullptr;
     prevInput = nullptr;
+    scene::Free(&paint);
 }
 
 void WindowClosed(Window* win) {

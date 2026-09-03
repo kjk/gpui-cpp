@@ -147,4 +147,5 @@ void TestQuickJs();
 void TestShellCore();
 void TestShellDependencies();
 void TestShellDock();
+void TestScene();
 void TestRuntimeArgs();

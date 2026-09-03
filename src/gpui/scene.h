@@ -70,6 +70,12 @@ inline bool SceneOn() {
 
 namespace scene {
 
+struct State;
+
+// A PaintCtx owns one of these lazily. Free is separate because PaintCtx is a
+// POD-friendly public type and does not own resources through a destructor.
+void Free(PaintCtx* ctx);
+
 // True while the recorder is swallowing Paint.h calls rather than letting
 // them reach a backend. False during the replay, which is what lets the
 // replay use the ordinary entry points.
@@ -95,16 +101,16 @@ void SuspendEnd(bool prev);
 
 // True when FrameEnd said the frame was unchanged, which is what tells
 // PaintTargetEnd not to present. Cleared by the next FrameBegin.
-bool SkipPresent();
+bool SkipPresent(PaintCtx* ctx);
 
 // Forget the previous frame, so the next one is drawn whole and presented
 // whatever it looks like. What the surface holds and what this thinks it
 // holds have parted company: a swap chain resized, its buffers discarded.
 // The path cache is geometry and survives.
-void Invalidate();
+void Invalidate(PaintCtx* ctx);
 // The above, and drop the path cache with it. A lost device, a target freed
 // -- anything that takes the objects the cache holds down with it.
-void Reset();
+void Reset(PaintCtx* ctx);
 
 // ─── what the recorder is handed ─────────────────────────────────────────
 //
@@ -125,7 +131,7 @@ void RecEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
 void RecPushClip(PaintCtx* ctx, float x, float y, float w, float h);
 void RecPopClip(PaintCtx* ctx);
 
-Path* RecPathNew(bool winding);
+Path* RecPathNew(PaintCtx* ctx, bool winding);
 void RecPathFree(Path* p);
 void RecPathMoveTo(Path* p, float x, float y);
 void RecPathLineTo(Path* p, float x, float y);
@@ -179,7 +185,7 @@ struct SceneStats {
     // The primitives that differed from the previous frame, this frame.
     int primsChanged = 0;
 };
-const SceneStats& Stats();
+const SceneStats& Stats(PaintCtx* ctx);
 
 } // namespace scene
 
@@ -272,8 +278,6 @@ const SceneStats& Stats();
 // - **Only Windows records.** scene.cpp names no OS and no GPU type, but the
 //   dispatch into it is the one line at the top of each entry point that
 //   paint_win.cpp has, and the other three backends do not have it yet.
-// - **One window.** Nothing here is per-window state that a second window
-//   would get its own of.
 
 } // namespace gpui
 #endif // GPUI_GPUI_SCENE_H_
