@@ -1,5 +1,7 @@
 #include "shell/retained.h"
 
+#include "shell/dock.h"
+
 #include <string.h>
 
 namespace gpui::shell {
@@ -53,8 +55,8 @@ EntityHandle RetainedStore::Push(RetainedEntry* entry) {
 }
 
 EntityHandle RetainedStore::CreateInput(bool textarea, Str placeholder,
-                                         Str value, int rows, App* app,
-                                         EntityId owner, void* application) {
+                                        Str value, int rows, App* app,
+                                        EntityId owner, void* application) {
     RetainedEntry* entry = new RetainedEntry();
     entry->kind = textarea ? RetainedKind::Textarea : RetainedKind::Input;
     entry->owner = owner;
@@ -73,23 +75,22 @@ EntityHandle RetainedStore::CreateInput(bool textarea, Str placeholder,
 }
 
 EntityHandle RetainedStore::CreateSlider(float min, float max, float step,
-                                          SliderScale scale,
-                                          SliderValue value, App* app,
-                                          EntityId owner,
-                                          void* application) {
+                                         SliderScale scale, SliderValue value,
+                                         App* app, EntityId owner,
+                                         void* application) {
     RetainedEntry* entry = new RetainedEntry();
     entry->kind = RetainedKind::Slider;
     entry->owner = owner;
     entry->application = application;
     entry->app = app;
-    entry->slider = new SliderState(
-        SliderStateNew(min, max, value, step, scale));
+    entry->slider =
+        new SliderState(SliderStateNew(min, max, value, step, scale));
     return Push(entry);
 }
 
 EntityHandle RetainedStore::CreateOtp(int length, Str value, bool masked,
-                                       App* app, EntityId owner,
-                                       void* application) {
+                                      App* app, EntityId owner,
+                                      void* application) {
     if (!app) return 0;
     RetainedEntry* entry = new RetainedEntry();
     entry->kind = RetainedKind::Otp;
@@ -114,8 +115,50 @@ EntityHandle RetainedStore::CreateOtp(int length, Str value, bool masked,
     return Push(entry);
 }
 
+EntityHandle RetainedStore::CreateCalendar(Ctx* cx, EntityId owner,
+                                           void* application) {
+    if (!cx || !cx->app) return 0;
+    RetainedEntry* entry = new RetainedEntry();
+    entry->kind = RetainedKind::Calendar;
+    entry->owner = owner;
+    entry->application = application;
+    entry->app = cx->app;
+    entry->calendar = CalendarStateNew(cx);
+    if (!entry->calendar.IsValid()) {
+        delete entry;
+        return 0;
+    }
+    return Push(entry);
+}
+
+EntityHandle RetainedStore::CreateDock(Str id, bool hasVersion, int version,
+                                       Ctx* cx, EntityId owner,
+                                       void* application) {
+    if (!cx || !cx->app) return 0;
+    RetainedEntry* entry = new RetainedEntry();
+    entry->kind = RetainedKind::Dock;
+    entry->owner = owner;
+    entry->application = application;
+    entry->app = cx->app;
+    entry->dock = EntityNewState<DockState>(cx->app);
+    DockState* state = entry->dock.Get(cx);
+    if (!state) {
+        delete entry;
+        return 0;
+    }
+    state->hasVersion = hasVersion;
+    state->version = version;
+    entry->dockSkin = new ScriptDockSkin();
+    entry->dockSkin->id = StrDup(id);
+    EntityHandle handle = Push(entry);
+    if (!handle) return 0;
+    entry->dockSkin->hooks = &entry->dockHooks;
+    entry->dockSkin->dock = handle;
+    return handle;
+}
+
 EntityHandle RetainedStore::CreateFocus(App* app, EntityId owner,
-                                         void* application) {
+                                        void* application) {
     RetainedEntry* entry = new RetainedEntry();
     entry->kind = RetainedKind::Focus;
     entry->owner = owner;
@@ -126,7 +169,7 @@ EntityHandle RetainedStore::CreateFocus(App* app, EntityId owner,
 }
 
 EntityHandle RetainedStore::CreateVirtualScroll(App* app, EntityId owner,
-                                                 void* application) {
+                                                void* application) {
     RetainedEntry* entry = new RetainedEntry();
     entry->kind = RetainedKind::VirtualScroll;
     entry->owner = owner;
@@ -153,8 +196,7 @@ bool RetainedStore::AddCallback(EntityHandle handle, RetainedEvent event,
     return true;
 }
 
-void RetainedStore::Destroy(RetainedEntry* entry,
-                            Vec<CallbackId>* callbacks) {
+void RetainedStore::Destroy(RetainedEntry* entry, Vec<CallbackId>* callbacks) {
     if (!entry) return;
     if (callbacks) {
         for (int i = 0; i < entry->callbacks.len; i++) {
@@ -169,6 +211,20 @@ void RetainedStore::Destroy(RetainedEntry* entry,
         delete entry->input;
     }
     delete entry->slider;
+    if (entry->subscription.IsValid() && entry->app) {
+        EntityUnsubscribe(entry->app, entry->subscription);
+    }
+    if (entry->calendar.IsValid() && entry->app) {
+        EntityDrop(entry->app, entry->calendar.id);
+    }
+    if (entry->dock.IsValid() && entry->app) {
+        EntityDrop(entry->app, entry->dock.id);
+    }
+    if (entry->dockSkin) {
+        StrFree(entry->dockSkin->id);
+        delete entry->dockSkin;
+    }
+    if (entry->dockArena) ArenaDelete(entry->dockArena);
     if (entry->otp.IsValid() && entry->app) {
         OtpState* otp = entry->otp.Get(entry->app);
         if (otp && otp->blink.IsValid()) EntityDrop(entry->app, otp->blink);
@@ -177,8 +233,7 @@ void RetainedStore::Destroy(RetainedEntry* entry,
     delete entry;
 }
 
-bool RetainedStore::Release(EntityHandle handle,
-                            Vec<CallbackId>* callbacks) {
+bool RetainedStore::Release(EntityHandle handle, Vec<CallbackId>* callbacks) {
     RetainedEntry* entry = Find(handle);
     if (!entry) return false;
     for (int i = 0; i < entries.len; i++) {
@@ -191,8 +246,7 @@ bool RetainedStore::Release(EntityHandle handle,
     return false;
 }
 
-void RetainedStore::ReleaseOwner(EntityId owner,
-                                 Vec<CallbackId>* callbacks) {
+void RetainedStore::ReleaseOwner(EntityId owner, Vec<CallbackId>* callbacks) {
     if (!owner.IsValid()) return;
     for (int i = entries.len - 1; i >= 0; i--) {
         if (entries[i]->owner != owner) continue;
@@ -215,8 +269,7 @@ void RetainedStore::ReleaseApplication(void* application,
     }
 }
 
-void RetainedStore::Rollback(uint32_t checkpoint,
-                             Vec<CallbackId>* callbacks) {
+void RetainedStore::Rollback(uint32_t checkpoint, Vec<CallbackId>* callbacks) {
     for (int i = entries.len - 1; i >= 0; i--) {
         if (entries[i]->id < checkpoint) continue;
         RetainedEntry* entry = entries[i];

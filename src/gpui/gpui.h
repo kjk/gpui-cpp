@@ -541,6 +541,10 @@ struct ScrollWheelEvent {
     bool precise = false;
     Modifiers modifiers = {};
     TouchPhase phase = TouchPhase::Moved;
+    // cx.propagate(): an `El::OnScrollWheel` handler that leaves this true
+    // lets the gesture carry on to the scrolled box underneath. Unused by the
+    // window-level `WindowOnScrollWheel`, which is the last thing to see it.
+    bool propagate = true;
 };
 
 // GPUI's PlatformInput: what a platform window hands to the window layer.
@@ -1845,6 +1849,11 @@ struct El {
     // on_mouse_move: every move over this element, without requiring a press.
     Listener onMouseMove;
     Listener onScroll;
+    // on_scroll_wheel: the wheel or trackpad gesture itself, offered to this
+    // element before the scrolled box under the pointer takes it. GPUI's
+    // `InteractiveElement::on_scroll_wheel`; `El::OnScroll` above is the
+    // scrolled box's own offset, which is a different question.
+    Listener onScrollWheel;
     ActionSlot* actions = nullptr;
     // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
     // what `div().on_mouse_down(..)` is. A press runs this before the click
@@ -2360,6 +2369,14 @@ struct El {
     // halves of a keystroke arrive here: the key itself, and the character it
     // produced, with `ch` set and `vk` zero.
     El* OnKeyDown(Listener fn);
+    // div().on_key_up(..): the release, on the same focus path the press
+    // walked. GPUI's `InteractiveElement::on_key_up`; the KeyEvent it carries
+    // has `down` false and no character half.
+    El* OnKeyUp(Listener fn);
+    // div().on_scroll_wheel(..): the gesture, before the scrolled box under
+    // the pointer takes it. A handler that leaves `propagate` set lets the
+    // scroll carry on, which is `cx.propagate()`.
+    El* OnScrollWheel(Listener fn);
     El* TabIndex(int v);
     El* TabStop(bool v);
     // Opt into the component focus appearance. FocusId / TrackFocus alone do
@@ -2421,6 +2438,9 @@ struct HitRect {
     DragPayload drag = {};
     Listener onMouseDownOut;
     Listener onMouseUpOut;
+    // El::OnScrollWheel, carried through the hit test so the wheel can walk
+    // the same chain a press does.
+    Listener onScrollWheel;
     Str dropKind = {};
     Listener onDrop;
     CursorKind cursor = CursorKind::Arrow;
@@ -5704,6 +5724,8 @@ bool WindowDispatchAction(Window* win, uint32_t action, intptr_t arg = 0);
 // The `El::OnKeyDown` handlers over the focused element, innermost first.
 // Answers true when one of them stopped propagating.
 bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev);
+// The `El::OnKeyUp` half of the same chain, run when the key comes back up.
+bool WindowDispatchKeyUpEvent(Window* win, KeyEvent* ev);
 // cx.on_action: a handler that belongs to the application rather than to any
 // element. Tried after the focused element's chain has passed on the action,
 // which is where Rust's App-level handlers sit too. A plain function pointer,

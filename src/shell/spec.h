@@ -79,6 +79,28 @@ enum class ComponentKind : uint8_t {
     NumberInput,
     OtpInput,
     Svg,
+    // An accordion root: a group, and nothing else on screen.
+    Accordion,
+    // One item: it connects a header with a panel and passes its own `open`
+    // down to both, which is the whole of what it does.
+    AccordionItem,
+    AccordionHeader,
+    // The region an item reveals. Unmounted while shut unless
+    // `keep_mounted(true)` says otherwise.
+    AccordionPanel,
+    AccordionTrigger,
+    // A pagination root: a navigation landmark carrying the announced label.
+    // The page buttons are the script's; the ellipsis layout is the free
+    // function `pagination_items(...)` rather than a component.
+    Pagination,
+    // An avatar root: it renders its `image` slot, or its `fallback` slot
+    // when there is no image, and nothing else.
+    Avatar,
+    // The image slot, a component of its own because base's `Avatar::image`
+    // takes an AvatarImage rather than an element — the slot has to be
+    // resolved back into that type, which needs the path.
+    AvatarImage,
+    AvatarFallback,
     Image,
     PathFill,
     PathStroke,
@@ -113,6 +135,18 @@ enum class ComponentKind : uint8_t {
     Select,
     Combobox,
     DatePicker,
+    // A dockable layout, addressed by its entity handle for the reason Input
+    // is: the layout is the state, it outlives every description, and the
+    // user changes it without a script render. Nothing under it is
+    // described — its panels are entities the script handed it, and its
+    // chrome is drawn by the handlers this node carries.
+    DockArea,
+    // Where a dock's own content goes inside the chrome the script drew
+    // around it. Base hands the content to the chrome as a finished element
+    // and keeps whatever comes back, so a chrome that wants both has to place
+    // the content itself; an element cannot cross into script, so this stands
+    // in for it.
+    DockContent,
     VVirtualList,
     HVirtualList,
 };
@@ -143,6 +177,10 @@ enum class SpecOpKind : uint8_t {
     ParamStyle,
     Method,
     Callback,
+    // A handler for one named action. Its own kind rather than a Callback
+    // because the name it carries is the script's, discovered at run time,
+    // while a Callback's name is one of a fixed set.
+    ActionCallback,
     StateStyle,
     Slot,
 };
@@ -271,6 +309,10 @@ class SpecArena {
     SpecId Push(const Component& component);
     bool PushChildView(const Component& component, SpecId* out,
                        SpecError* error = nullptr);
+    // The same rule and the same table as a child view's, because it is the
+    // same rule: one entity cannot be mounted at two positions in a tree, and
+    // a dock area is an entity.
+    bool PushDockArea(uint64_t handle, SpecId* out, SpecError* error = nullptr);
     const SpecNode* Node(SpecId id) const;
     bool PushOp(SpecId id, const SpecOp& op, SpecError* error = nullptr);
     bool Claim(SpecId id, SpecError* error = nullptr);

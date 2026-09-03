@@ -211,6 +211,10 @@ static Policy* LocalPolicy(Str root, ShellError* error) {
     capabilities.AddReadRoot(root).AddReadRoot(data).AddWriteRoot(data).Exit(
         true);
     Policy* policy = PolicyNew(capabilities);
+    // The same name namespaces the application's dock panels. Storage and a
+    // persisted layout are the two things that have to survive a restart under
+    // a name rather than a path, so they take the name from one place.
+    PolicySetApplication(policy, id);
     if (capabilities.HasStorage()) {
         char store[kMaxPath];
         if (JoinPath(store, kMaxPath, data, StrL("store.json"))) {

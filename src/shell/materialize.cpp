@@ -1,7 +1,10 @@
 #include "shell/materialize.h"
 
+#include "base/accordion.h"
+#include "base/avatar.h"
 #include "base/button.h"
 #include "base/actions.h"
+#include "base/pagination.h"
 #include "base/checkbox.h"
 #include "base/collapsible.h"
 #include "base/combobox.h"
@@ -29,6 +32,8 @@
 #include "base/toggle_group.h"
 #include "fps/fps.h"
 #include "shell/a11y.h"
+#include "shell/action.h"
+#include "shell/dock.h"
 #include "shell/view.h"
 
 #include <math.h>
@@ -105,6 +110,42 @@ struct MaterialBehavior {
     // on_item_click is: the rows are rebuilt every frame.
     shell::CallbackId onItemSecondaryClick = 0;
     shell::EntityHandle virtualScroll = 0;
+    // Reports a key press or release that reached this element. GPUI routes a
+    // key event down the focus path, so an element only hears one while it —
+    // or something inside it — holds the keyboard, which makes
+    // track_focus(handle) half of the registration rather than an unrelated
+    // call.
+    shell::CallbackId onKeyDown = 0;
+    shell::CallbackId onKeyUp = 0;
+    // Presses and releases, one entry per button listened for: GPUI takes the
+    // button as an argument and an element may well want two of them — a left
+    // press that selects and a right press that opens a menu are one
+    // element's job.
+    ShellMouseButtonBinding mouseDown = {};
+    ShellMouseButtonBinding mouseUp = {};
+    bool hasMouseDown = false;
+    bool hasMouseUp = false;
+    shell::CallbackId onMouseDownOut = 0;
+    shell::CallbackId onScrollWheel = 0;
+    // The key-binding context this element and its subtree sit in, and the
+    // handlers for the actions it claims.
+    Str keyContext;
+    ShellActionBinding actions[8] = {};
+    int actionCount = 0;
+    // A heading's announced level, for an AccordionHeader, and whether a shut
+    // AccordionPanel stays in the tree.
+    int ariaLevel = 0;
+    bool keepMounted = false;
+    // Which script handler draws each piece of a dock_area's chrome. Six
+    // handlers in one field rather than six fields, because they are written
+    // together: they leave here for the slots the skin reads, and a skin reads
+    // all of them or none.
+    shell::DockChromeHooks dockChrome = {};
+    // The dock commands a chrome element carries — what base is asked to do
+    // when it is clicked or dragged. A list, because one element often carries
+    // two: a tab both selects and drags.
+    const shell::SpecOp* dockCommands[8] = {};
+    int dockCommandCount = 0;
 };
 
 static const shell::Bridged* Arg(const shell::SpecOp& op, int at) {
@@ -154,6 +195,28 @@ static PopupAnchor AnchorOf(Str name, bool* found) {
     return PopupAnchor::TopLeft;
 }
 
+// A dock command carries no script value: it names a container in the area and
+// what to ask it. That is why a tab can report its click at all — a chrome
+// handler runs once per frame for as long as the dock is on screen, so a
+// callback registered inside one would pile up the way a virtual list's row
+// handlers would.
+static DockPlacement DockPlacementOfName(Str name) {
+    if (StrEq(name, "left")) return DockPlacement::Left;
+    if (StrEq(name, "right")) return DockPlacement::Right;
+    if (StrEq(name, "bottom")) return DockPlacement::Bottom;
+    return DockPlacement::Center;
+}
+
+static bool IsDockCommandName(Str name) {
+    static const char names[] =
+        "select_tab\0close_panel\0toggle_zoom\0drag_tab\0drop_tab\0"
+        "toggle_dock\0resize_dock\0";
+    for (const char* at = names; *at; at += strlen(at) + 1) {
+        if (StrEq(name, at)) return true;
+    }
+    return false;
+}
+
 static void ResolveBehavior(const shell::SpecNode* node,
                             MaterialBehavior* out) {
     for (const shell::SpecOp& op : node->ops) {
@@ -180,9 +243,64 @@ static void ResolveBehavior(const shell::SpecNode* node,
                 out->onItemClick = op.callback;
             else if (StrEq(op.name, "on_item_secondary_click"))
                 out->onItemSecondaryClick = op.callback;
+            else if (StrEq(op.name, "on_key_down"))
+                out->onKeyDown = op.callback;
+            else if (StrEq(op.name, "on_key_up"))
+                out->onKeyUp = op.callback;
+            // The button is carried in the op name rather than beside it:
+            // three fixed names cost nothing next to widening every op to
+            // carry an argument only these six use.
+            else if (StrEq(op.name, "on_mouse_down_left")) {
+                out->mouseDown.left = op.callback;
+                out->hasMouseDown = true;
+            } else if (StrEq(op.name, "on_mouse_down_right")) {
+                out->mouseDown.right = op.callback;
+                out->hasMouseDown = true;
+            } else if (StrEq(op.name, "on_mouse_down_middle")) {
+                out->mouseDown.middle = op.callback;
+                out->hasMouseDown = true;
+            } else if (StrEq(op.name, "on_mouse_up_left")) {
+                out->mouseUp.left = op.callback;
+                out->hasMouseUp = true;
+            } else if (StrEq(op.name, "on_mouse_up_right")) {
+                out->mouseUp.right = op.callback;
+                out->hasMouseUp = true;
+            } else if (StrEq(op.name, "on_mouse_up_middle")) {
+                out->mouseUp.middle = op.callback;
+                out->hasMouseUp = true;
+            } else if (StrEq(op.name, "on_mouse_down_out")) {
+                out->onMouseDownOut = op.callback;
+            } else if (StrEq(op.name, "on_scroll_wheel")) {
+                out->onScrollWheel = op.callback;
+            } else if (StrEq(op.name, "tab_bar")) {
+                out->dockChrome.tabBar = op.callback;
+            } else if (StrEq(op.name, "empty_group")) {
+                out->dockChrome.emptyGroup = op.callback;
+            } else if (StrEq(op.name, "drop_indicator")) {
+                out->dockChrome.dropIndicator = op.callback;
+            } else if (StrEq(op.name, "dock")) {
+                out->dockChrome.dock = op.callback;
+            }
+            continue;
+        }
+        if (op.kind == shell::SpecOpKind::ActionCallback) {
+            if (out->actionCount <
+                (int)(sizeof(out->actions) / sizeof(out->actions[0]))) {
+                out->actions[out->actionCount]
+                    .action = shell::ShellActionOf(op.name);
+                out->actions[out->actionCount].callback = op.callback;
+                out->actionCount++;
+            }
             continue;
         }
         if (op.kind != shell::SpecOpKind::Method) continue;
+        if (IsDockCommandName(op.name)) {
+            if (out->dockCommandCount < (int)(sizeof(out->dockCommands) /
+                                              sizeof(out->dockCommands[0]))) {
+                out->dockCommands[out->dockCommandCount++] = &op;
+            }
+            continue;
+        }
         if (StrEq(op.name, "id"))
             out->key = AsString(op, 0);
         else if (StrEq(op.name, "accessibility_label"))
@@ -297,6 +415,14 @@ static void ResolveBehavior(const shell::SpecNode* node,
         } else if (StrEq(op.name, "with_item_to_measure_index")) {
             out->itemToMeasure = (int)AsNumber(op, 0);
             out->hasItemToMeasure = true;
+        } else if (StrEq(op.name, "key_context")) {
+            out->keyContext = AsString(op, 0);
+        } else if (StrEq(op.name, "aria_level")) {
+            // Announced, not drawn, and base defaults it to 3.
+            float level = AsNumber(op, 0, 3);
+            out->ariaLevel = (int)(level < 1 ? 1 : level);
+        } else if (StrEq(op.name, "keep_mounted")) {
+            out->keepMounted = AsBool(op, 0, true);
         }
     }
 }
@@ -451,7 +577,12 @@ static bool ApplyNullary(El* element, Str name) {
         element->JustifyAround();
     else if (StrEq(name, "absolute"))
         element->Absolute();
-    else if (StrEq(name, "fixed"))
+    // `relative()` is the position an element already has — GPUI's own
+    // default — so it says nothing rather than being unknown. A script writes
+    // it to mark the box an absolutely placed child is measured against, which
+    // is what it means in CSS and what it means here.
+    else if (StrEq(name, "relative")) {
+    } else if (StrEq(name, "fixed"))
         element->Fixed();
     else if (StrEq(name, "overflow_hidden"))
         element->ClipX()->ClipY();
@@ -1272,6 +1403,166 @@ static void MaterialVirtualRange(void* user, Ctx* cx, int first, int end,
     }
 }
 
+// `dock_area` — the one element whose contents the description does not
+// contain.
+//
+// Every other component here is the whole of what it draws. A dock area is
+// not, and cannot be: the layout is what the *user* changed. The layout
+// therefore lives in a retained entity and this node mounts it. Two things do
+// cross from the description into that entity, and both happen here: the
+// chrome handlers in force for the frame, and the runtime they are asked
+// through. Written every frame rather than only when they change, because a
+// callback id is only meaningful while the snapshot that registered it lives,
+// and materialization is the one place that always runs against the live one.
+static El* DockAreaElement(Ctx* cx, ShellRuntime* runtime,
+                           const shell::SpecNode* node,
+                           const MaterialBehavior& behavior) {
+    shell::RetainedEntry* entry =
+        runtime ? runtime->Retained(node->component.handle) : nullptr;
+    if (!entry || entry->kind != shell::RetainedKind::Dock ||
+        !entry->dockSkin) {
+        logf("shell: this dock area is no longer live\n");
+        return Div(cx->a);
+    }
+    if (node->children.len > 0) {
+        logf(
+            "shell: children are dropped on a dock_area: what it draws is "
+            "the panels in its layout, which are added with add_panel(...) "
+            "rather than described\n");
+    }
+    entry->dockHooks = behavior.dockChrome;
+    entry->dockSkin->runtime = runtime;
+    entry->dockSkin->hooks = &entry->dockHooks;
+    entry->dockSkin->dock = node->component.handle;
+    // `SizeFull` before the script's own refinement, so it is a default rather
+    // than an override: an area with no size draws nothing at all, which is a
+    // failure with no visible cause on screen.
+    return Div(cx->a)->SizeFull()->Child(DockArea::New(
+        cx, entry->dockSkin->id, entry->dock, entry->dockSkin->Renderer()));
+}
+
+// The dock commands a chrome element carries, wired onto it.
+//
+// Only reachable while a chrome handler is running, which is where the live
+// group or dock is. Upstream files each context away as it goes past and
+// resolves the command later, because its callbacks live only for the length
+// of one chrome call; base's own `DockBind*` calls put the behavior on the
+// element instead, so the resolution happens here and nothing has to be kept.
+static El* WireDockCommands(Ctx* cx, El* element,
+                            const MaterialBehavior& behavior) {
+    (void)cx;
+    if (behavior.dockCommandCount == 0 || !element) return element;
+    const shell::ShellDockChromeFrame* frame = shell::ShellDockCurrentChrome();
+    if (!frame) {
+        logf(
+            "shell: a dock command was used outside a dock's chrome "
+            "handler; the command is dropped\n");
+        return element;
+    }
+    for (int i = 0; i < behavior.dockCommandCount; i++) {
+        const shell::SpecOp& op = *behavior.dockCommands[i];
+        // Read as a double rather than through AsNumber: a retained handle
+        // packs a store id above the low 32 bits, which a float cannot hold.
+        shell::EntityHandle dock = AsHandle(op, 0);
+        if (dock != frame->dock) {
+            logf(
+                "shell: `%s` names a dock area other than the one being "
+                "drawn; the command is dropped\n",
+                op.name);
+            continue;
+        }
+        const DockTabGroup* group = frame->group;
+        const DockCtx* region = frame->dockCtx;
+        if (StrEq(op.name, "select_tab") && group) {
+            element = DockBindTab(group, (int)AsNumber(op, 2, -1), element);
+        } else if (StrEq(op.name, "close_panel") && group) {
+            // The script holds the panel id the area reported; base binds by
+            // position in the row, and the two are one lookup apart.
+            // A panel id is a whole 64-bit number; float would round it.
+            const shell::Bridged* value = Arg(op, 2);
+            double id = value && value->kind == shell::BridgedKind::Number
+                            ? value->number
+                            : -1;
+            int at = -1;
+            for (int ix = 0; ix < DockGroupCount(group); ix++) {
+                const DockPanelDef* def = DockGroupPanel(group, ix);
+                if (def && (double)def->id.AsU64() == id) {
+                    at = ix;
+                    break;
+                }
+            }
+            if (at >= 0) element = DockBindClose(group, at, element);
+        } else if (StrEq(op.name, "toggle_zoom") && group) {
+            int active = DockGroupActiveIx(group);
+            if (active >= 0) element = DockBindZoom(group, active, element);
+        } else if (StrEq(op.name, "drag_tab") && group) {
+            element =
+                DockBindTitleDrag(group, (int)AsNumber(op, 2, -1), element);
+        } else if (StrEq(op.name, "drop_tab") && group) {
+            // A tab bar that names no slot means "append", which is what a
+            // drop past the last tab is.
+            float at = AsNumber(op, 2, -1);
+            element = at < 0 ? DockBindTabRest(group, element)
+                             : DockBindTab(group, (int)at, element);
+        } else if (StrEq(op.name, "toggle_dock") && (group || region)) {
+            DockPlacement placement = DockPlacementOfName(AsString(op, 1));
+            if (group) {
+                element = DockBindToggle(group, placement, element);
+            } else {
+                // The same binding as base's, from a dock's own chrome rather
+                // than from a group's tab bar: `DockBindToggle` wants a group
+                // and a dock has none of its own, but the listener it hangs
+                // needs only the area and the placement, which the DockCtx
+                // carries.
+                element
+                    ->OnClick(ListenTo(region->state, &DockState::OnToggleSide,
+                                       (intptr_t)placement));
+                element->TabStop(false);
+            }
+        } else if (StrEq(op.name, "resize_dock") && region) {
+            element = DockBindResizeStrip(region, element);
+        } else {
+            logf(
+                "shell: `%s` did not name a container in the dock area "
+                "being drawn; the command is dropped\n",
+                op.name);
+        }
+    }
+    return element;
+}
+
+// The item's `open` and `disabled`, while its two halves are being built.
+//
+// Rust's `AccordionItem::render` passes them down to the header and the panel,
+// so a script sets them once on the item rather than three times in agreement
+// with itself. The C++ parts are elements rather than concrete types, so the
+// push-down happens while the slot is materialized instead of afterwards.
+static struct {
+    bool active = false;
+    bool open = false;
+    bool disabled = false;
+} gAccordionItem;
+
+struct AccordionItemScope {
+    bool active = false;
+    bool open = false;
+    bool disabled = false;
+
+    AccordionItemScope(bool isOpen, bool isDisabled) {
+        active = gAccordionItem.active;
+        open = gAccordionItem.open;
+        disabled = gAccordionItem.disabled;
+        gAccordionItem.active = true;
+        gAccordionItem.open = isOpen;
+        gAccordionItem.disabled = isDisabled;
+    }
+    ~AccordionItemScope() {
+        gAccordionItem.active = active;
+        gAccordionItem.open = open;
+        gAccordionItem.disabled = disabled;
+    }
+};
+
 static El* Construct(Ctx* cx, ShellRuntime* runtime,
                      const shell::Component& component,
                      const MaterialBehavior& behavior) {
@@ -1328,6 +1619,35 @@ static El* Construct(Ctx* cx, ShellRuntime* runtime,
         case shell::ComponentKind::Progress:
             return Progress::New(cx, id, behavior.value, behavior.indeterminate,
                                  behavior.accessibilityLabel);
+        // The accordion root and the pagination root are groups: identity and
+        // the announced landmark, and nothing else on screen. A pagination's
+        // page buttons are the script's own elements; what base contributes
+        // that a script could not write for itself is the ellipsis layout,
+        // and that is a calculation — exported as `pagination_items(...)`
+        // rather than as a component.
+        case shell::ComponentKind::Accordion:
+            return Accordion::New(cx, id);
+        case shell::ComponentKind::Pagination:
+            return Pagination::New(cx, id);
+        // Reached outside the arrangement they belong to: each exists to be
+        // resolved by its root, so one used as an ordinary child is a mistake
+        // worth naming rather than an empty box worth puzzling over.
+        case shell::ComponentKind::AccordionHeader:
+        case shell::ComponentKind::AccordionPanel:
+        case shell::ComponentKind::AccordionTrigger:
+            logf(
+                "shell: an %s belongs in an AccordionItem's slots; used as "
+                "an ordinary child it draws nothing\n",
+                Str(shell::ComponentName(component)));
+            return Div(cx->a);
+        case shell::ComponentKind::AvatarImage:
+        case shell::ComponentKind::AvatarFallback:
+            logf(
+                "shell: an %s belongs in an Avatar's slot — "
+                "`Avatar.new().image(...)` or `.fallback(...)`; used as an "
+                "ordinary child it draws nothing\n",
+                Str(shell::ComponentName(component)));
+            return Div(cx->a);
         case shell::ComponentKind::ProgressTrack:
             return ProgressTrack::New(cx);
         case shell::ComponentKind::ProgressIndicator:
@@ -1789,6 +2109,101 @@ static El* MaterializeNode(Ctx* cx, ShellRuntime* runtime,
                 CancelBindKeys(cx, element, "Popover", node->component.text,
                                ListenTo(state, &PopoverDismiss));
         }
+    } else if (node->component.kind == shell::ComponentKind::Avatar) {
+        // Base renders the element in its `image` slot, or the one in its
+        // `fallback` slot when there is no image, and draws nothing itself:
+        // no circle, no size, no background. All of that is the script's.
+        El* image = Slot(cx, runtime, specs, node, "image", error);
+        El* fallback = Slot(cx, runtime, specs, node, "fallback", error);
+        if (!image && !fallback) {
+            logf(
+                "shell: an Avatar with neither an `image` nor a `fallback` "
+                "slot draws nothing\n");
+        }
+        Avatar* avatar = Avatar::New(cx);
+        if (image) avatar->Image(image);
+        if (fallback) avatar->Fallback(fallback);
+        element = avatar->IntoEl();
+    } else if (node->component.kind == shell::ComponentKind::AccordionHeader) {
+        if (!gAccordionItem.active) {
+            logf(
+                "shell: an AccordionHeader belongs in an AccordionItem's "
+                "`header` slot; used as an ordinary child it draws "
+                "nothing\n");
+            element = Div(cx->a);
+        } else {
+            // AccordionHeader::New takes the trigger, exactly as Popup::New
+            // takes its own: a heading whose button arrived later would be a
+            // heading that announced nothing for a frame.
+            El* trigger = Slot(cx, runtime, specs, node, "trigger", error);
+            if (!trigger) {
+                // The empty button a malformed header falls back to, keyed by
+                // the slot's own address rather than a fixed string, so two
+                // broken items do not share one element id.
+                trigger = AccordionTrigger::New(
+                    cx, StrDup(cx->a, fmt("accordion-trigger-%u", id)));
+            }
+            element = AccordionHeader::New(
+                cx, trigger, behavior.key,
+                behavior.ariaLevel > 0 ? behavior.ariaLevel : 3);
+        }
+    } else if (node->component.kind == shell::ComponentKind::AccordionTrigger) {
+        // `open` and `disabled` come from the item, which pushes its own down
+        // over whatever was set here — so neither is read off the trigger.
+        bool open = gAccordionItem.active ? gAccordionItem.open : behavior.open;
+        bool disabled =
+            gAccordionItem.active ? gAccordionItem.disabled : behavior.disabled;
+        if (!behavior.onChange) {
+            logf(
+                "shell: an AccordionTrigger with no `on_change` cannot open "
+                "anything: the item's `open` is the script's, and this is "
+                "what asks it to flip\n");
+        }
+        element = AccordionTrigger::New(
+            cx, node->component.text, open, disabled,
+            behavior.onChange ? ChangeListener(cx) : Listener{});
+        if (behavior.onChange && behavior.onChange <= INT32_MAX)
+            element->Click((int)behavior.onChange);
+    } else if (node->component.kind == shell::ComponentKind::AccordionPanel) {
+        element = AccordionPanel::New(cx, behavior.key);
+    } else if (node->component.kind == shell::ComponentKind::AccordionItem) {
+        // The item passes its own `open` down to both halves, so a script sets
+        // it once rather than three times in agreement with itself: the
+        // trigger announces it, the panel mounts on it, and neither can drift.
+        // An item with no `open` is a closed one — base has no uncontrolled
+        // mode, and the script owns which item is showing.
+        AccordionItem* item = AccordionItem::New(cx)
+                                  ->Open(behavior.open)
+                                  ->KeepMounted(behavior.keepMounted);
+        AccordionItemScope scope(behavior.open, behavior.disabled);
+        El* header = Slot(cx, runtime, specs, node, "header", error);
+        El* panel = Slot(cx, runtime, specs, node, "panel", error);
+        if (!header) {
+            logf(
+                "shell: an AccordionItem with no `header` slot has nothing "
+                "to open it; the trigger lives in the header\n");
+        }
+        if (header) item->Header(header);
+        if (panel) item->Panel(panel);
+        element = item->IntoEl();
+    } else if (node->component.kind == shell::ComponentKind::DockArea) {
+        element = DockAreaElement(cx, runtime, node, behavior);
+        childrenConsumed = true;
+    } else if (node->component.kind == shell::ComponentKind::DockContent) {
+        // Base hands a dock's content to the chrome as a finished element and
+        // keeps whatever comes back, so a chrome that wants both has to place
+        // the content itself. This is where the real one lands.
+        El* content = shell::ShellDockTakeContent();
+        if (!content) {
+            logf(
+                "shell: dock_content() was used outside a dock's chrome "
+                "handler, or twice inside one; the dock's content is a "
+                "single element and can only be placed once\n");
+            element = Div(cx->a);
+        } else {
+            element = Div(cx->a)->Child(content);
+        }
+        childrenConsumed = true;
     } else if (node->component.kind == shell::ComponentKind::HoverCard) {
         El* trigger = Slot(cx, runtime, specs, node, "trigger", error);
         El* content = Slot(cx, runtime, specs, node, "content", error);
@@ -1922,6 +2337,50 @@ static El* MaterializeNode(Ctx* cx, ShellRuntime* runtime,
     if (behavior.onMouseMove)
         element->OnMouseMove(Listen(cx, &ScriptView::OnMouseMove,
                                     (intptr_t)behavior.onMouseMove));
+    // GPUI's own input listeners. Every node here is an El, so unlike Rust —
+    // where each component builds its own base type and only a plain div,
+    // h_flex or v_flex carries the family — there is no component that has to
+    // report the gap: what a script writes reaches GPUI wherever it writes it.
+    // Reachability is still the component's: a key event travels the focus
+    // path, so an element that holds no focus handle hears presses and never
+    // hears keys.
+    if (behavior.keyContext) element->KeyContext(behavior.keyContext);
+    if (behavior.onKeyDown)
+        element->OnKeyDown(
+            Listen(cx, &ScriptView::OnScriptKey, (intptr_t)behavior.onKeyDown));
+    if (behavior.onKeyUp)
+        element->OnKeyUp(
+            Listen(cx, &ScriptView::OnScriptKey, (intptr_t)behavior.onKeyUp));
+    if (behavior.hasMouseDown) {
+        auto* buttons = ArenaNew<ShellMouseButtonBinding>(cx->a);
+        *buttons = behavior.mouseDown;
+        element->OnMouseDown(
+            Listen(cx, &ScriptView::OnScriptMouseDown, (intptr_t)buttons));
+    }
+    if (behavior.hasMouseUp) {
+        auto* buttons = ArenaNew<ShellMouseButtonBinding>(cx->a);
+        *buttons = behavior.mouseUp;
+        element->OnMouseUp(
+            Listen(cx, &ScriptView::OnScriptMouseUp, (intptr_t)buttons));
+    }
+    if (behavior.onMouseDownOut)
+        element->OnMouseDownOut(Listen(cx, &ScriptView::OnScriptMouseDownOut,
+                                       (intptr_t)behavior.onMouseDownOut));
+    if (behavior.onScrollWheel)
+        element->OnScrollWheel(Listen(cx, &ScriptView::OnScriptScrollWheel,
+                                      (intptr_t)behavior.onScrollWheel));
+    for (int i = 0; i < behavior.actionCount; i++) {
+        // One listener per action rather than one per element. GPUI matches by
+        // the action's type and stops at the first listener that claims it,
+        // which is why upstream — where every script action shares one Rust
+        // type — has to install a single listener and route by id. An action
+        // here is its own id, so the dispatch table already does the routing.
+        auto* bound = ArenaNew<ShellActionBinding>(cx->a);
+        *bound = behavior.actions[i];
+        element->OnAction(bound->action, Listen(cx, &ScriptView::OnScriptAction,
+                                                (intptr_t)bound));
+    }
+    element = WireDockCommands(cx, element, behavior);
     if (!childrenConsumed &&
         node->component.kind != shell::ComponentKind::VVirtualList &&
         node->component.kind != shell::ComponentKind::HVirtualList) {

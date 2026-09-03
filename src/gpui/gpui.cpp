@@ -1973,6 +1973,13 @@ El* El::KeyContext(Str name) {
 El* El::OnKeyDown(Listener fn) {
     return OnAction(ActionOf(StrL("gpui::KeyDown")), fn);
 }
+El* El::OnKeyUp(Listener fn) {
+    return OnAction(ActionOf(StrL("gpui::KeyUp")), fn);
+}
+El* El::OnScrollWheel(Listener fn) {
+    onScrollWheel = fn;
+    return this;
+}
 
 El* El::OnClickAction(uint32_t action, intptr_t arg) {
     clickAction = action;
@@ -5477,7 +5484,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->clickAction || e->onHover.IsValid() || e->onMouseMove.IsValid() ||
         e->onMouseDown.IsValid() || e->onMouseUp.IsValid() ||
         e->onDragMove.IsValid() || e->onMouseDownOut.IsValid() ||
-        e->onMouseUpOut.IsValid() || e->drag.IsValid() || e->onDrop.IsValid() ||
+        e->onMouseUpOut.IsValid() || e->onScrollWheel.IsValid() ||
+        e->drag.IsValid() || e->onDrop.IsValid() ||
         e->cursor != CursorKind::Arrow || e->slider || e->stopMouseDown ||
         e->suppressTextSelection || e->scrollMaskAxes) {
         HitRect hr;
@@ -5500,6 +5508,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.drag = e->drag;
         hr.onMouseDownOut = e->onMouseDownOut;
         hr.onMouseUpOut = e->onMouseUpOut;
+        hr.onScrollWheel = e->onScrollWheel;
         hr.dropKind = e->dropKind;
         hr.onDrop = e->onDrop;
         hr.cursor = e->cursor;
@@ -6715,11 +6724,13 @@ static uint32_t KeyDownAction() {
     return ActionOf(StrL("gpui::KeyDown"));
 }
 
-bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev) {
-    if (!win || !ev) {
-        return false;
-    }
-    uint32_t action = KeyDownAction();
+// The same, for the release half. GPUI's `on_key_up` walks the same focus
+// path; nothing resolves to this action either.
+static uint32_t KeyUpAction() {
+    return ActionOf(StrL("gpui::KeyUp"));
+}
+
+static bool DispatchKeyChain(Window* win, KeyEvent* ev, uint32_t action) {
     int ix = DispatchAnchor(win);
     for (int i = ix - 1; i >= 0; i--) {
         if (win->dispatch[i].subtreeEnd <= ix ||
@@ -6734,6 +6745,20 @@ bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev) {
         }
     }
     return false;
+}
+
+bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev) {
+    if (!win || !ev) {
+        return false;
+    }
+    return DispatchKeyChain(win, ev, KeyDownAction());
+}
+
+bool WindowDispatchKeyUpEvent(Window* win, KeyEvent* ev) {
+    if (!win || !ev) {
+        return false;
+    }
+    return DispatchKeyChain(win, ev, KeyUpAction());
 }
 
 uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,

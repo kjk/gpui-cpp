@@ -33,8 +33,7 @@ class ShellRuntime {
     void SetDependencyCacheRoot(Str root);
     ViewObject* Instantiate(ViewType* type, Window* window, App* app,
                             Policy* policy = nullptr,
-                            ShellError* error = nullptr,
-                            EntityId view = {});
+                            ShellError* error = nullptr, EntityId view = {});
     RenderSnapshot* BuildSnapshot(ViewObject* object, Window* window, App* app,
                                   EntityId view = {}, Policy* policy = nullptr,
                                   ShellError* error = nullptr);
@@ -72,18 +71,46 @@ class ShellRuntime {
                            App* app);
     void DispatchChange(shell::CallbackId callback, bool value, Window* window,
                         App* app);
-    void DispatchIndex(shell::CallbackId callback, uint32_t value, Window* window,
-                       App* app);
+    void DispatchIndex(shell::CallbackId callback, uint32_t value,
+                       Window* window, App* app);
     void DispatchNumbers(shell::CallbackId callback, const float* values,
                          int count, Window* window, App* app);
     void DispatchString(shell::CallbackId callback, Str value, Window* window,
                         App* app);
     void DispatchSignal(shell::CallbackId callback, Window* window, App* app);
+    // The keyboard, the pointer and one named action.
+    //
+    // The keystroke is handed over twice, and both forms earn their place.
+    // `key` and `modifiers` are what the event holds, and a script that wants
+    // one half of a chord reads them; `keystroke` is the "cmd-shift-s"
+    // spelling a key binding is written in, which is the form a comparison is
+    // actually written against.
+    void DispatchKey(shell::CallbackId callback, const KeyEvent& event,
+                     bool* propagate, Window* window, App* app);
+    void DispatchMouseButton(shell::CallbackId callback, MouseButton button,
+                             float x, float y, int clickCount,
+                             Modifiers modifiers, Bounds bounds, bool hasBounds,
+                             Window* window, App* app);
+    void DispatchScrollWheel(shell::CallbackId callback,
+                             const ScrollWheelEvent& event, Bounds bounds,
+                             bool hasBounds, bool* propagate, Window* window,
+                             App* app);
+    void DispatchAction(shell::CallbackId callback, Str action, bool* propagate,
+                        Window* window, App* app);
+    void DispatchCalendarEvent(shell::EntityHandle handle,
+                               const CalendarEvent& event, Window* window,
+                               App* app);
+    // Draws one piece of a dock's chrome by asking the script, and replays a
+    // cached description when neither the handler nor the container's state
+    // has moved. See src/shell/dock.h.
+    El* DescribeDockChrome(Ctx* cx, shell::EntityHandle dock,
+                           shell::DockChromeSlot slot, uint64_t key,
+                           shell::CallbackId handler, Str payload);
     void DispatchItemSecondaryClick(shell::CallbackId callback, Str key,
                                     const MouseDownEvent& event,
                                     Window* window, App* app);
-    void DispatchInputEvent(shell::EntityHandle handle,
-                            const InputEvent& event, Window* window, App* app);
+    void DispatchInputEvent(shell::EntityHandle handle, const InputEvent& event,
+                            Window* window, App* app);
     void DispatchSliderEvent(shell::EntityHandle handle,
                              const SliderEvent& event, Window* window,
                              App* app);

@@ -11313,3 +11313,125 @@ Verification: MSVC release tests pass 22,205 checks, and the release
 incrementally after these changes — `ScriptView` and `ShellRoot` grew fields,
 and `cmd/test.ts` will relink a stale `tests/` object against the new amalgam;
 delete `out/rel/obj/tests` if a suite that passed starts crashing.
+
+## Upstream ingest after `6d07863f`: shell script API
+
+`27b08eca` opens the keyboard, the pointer, actions, the window and five base
+components to a script, and — the half its title does not mention — hands a
+script the whole dockable layout. The shell half of it is ported here. The
+example is copied unchanged and runs: `out/rel/gpui_shell.exe examples/js_dock`
+draws a workspace with a left dock, a centre holding two tabs and a right dock,
+every pixel of the chrome written in `ui.js`.
+
+**Actions are ids here, not one type.** The checkin's central design problem
+is that a script cannot produce a Rust type, so upstream collapses every
+script action into one `ShellAction` and installs a single GPUI listener per
+element that routes by id, because GPUI matches by `TypeId` and stops at the
+first listener that claims one. None of that machinery is needed in this tree:
+an action is already the hash of a name (`src/gpui/keymap.h`), so every script
+action is its own action and each `on_action(id, handler)` is its own listener,
+dispatched and compared exactly the way `ui::Cancel` is. What survives from
+`action.rs` is the naming rule — a script id becomes `shell::<id>`, so a script
+cannot claim `ui::Confirm` — plus the reverse lookup that hands a handler back
+the name it was registered for. `cx.bind_keys` parses every chord before
+installing any of it and interns the text the keymap keeps.
+
+**Dock commands resolve where they are built.** Upstream's chrome elements
+carry a `DockCommand` naming a container, resolved later against a table of
+contexts recorded as base walked past, because a Rust `TabGroupContext` holds
+`Rc` callbacks that live only for the length of one chrome call. Base's C++
+skin hands the hook a live `DockTabGroup` / `DockCtx` and offers `DockBind*`
+calls that wire the behaviour straight onto an element — and materialization
+runs *inside* the hook — so the command is resolved as the element is built.
+`ShellDockChromeFrame` is that hand; there is no `DockContexts`, no
+`MovingTile`/`ResizingTile`/`ResizingDock` drag marker and nothing to clear
+once a frame. A command naming another area, or a container the frame is not
+drawing, is reported and dropped.
+
+**Layout edits apply where they are written.** `add_panel` and `load` are
+queued upstream because both construct views and Rust cannot do that while
+QuickJS holds its runtime lock. This binding already constructs a nested view
+directly — the deviation `cx.new(Class)` documented at the nested-views
+checkpoint — so both apply at the call, and a failure is catchable at the line
+that caused it. `PendingNestedOperation::EditDock` has no counterpart.
+
+**The chrome description cache is ported as it stands.** Each of the four
+hooks is asked once per callback-and-payload pair and its `SpecArena` is then
+replayed, under the same three protections a virtual list's item renderer
+gets: a `Layout` scope, an arena of its own swapped in for the call, and no
+job drain on the way out. Past 4,096 entries the whole cache goes rather than
+one entry. `RuntimeMetrics::frameScriptCalls` counts these and the list's
+alike — the same rename `time_virtual_items` -> `time_frame_script` made — and
+their time still lands in the materialize total without moving its count.
+
+`Policy` now carries the application name a panel is filed under
+(`shell:<application>/<panel>`), defaulting to `app`; `gpui_shell` and the
+plugin loader set it from the same id that places storage, which is the
+`set_bundle_id` half of `lib.rs`. The retained store gained `Calendar` and
+`Dock` records; its live-entity ceiling was already enforced inside `Push`,
+which is where upstream moved it.
+
+Four small things in the layers underneath had to move, and each is the
+narrowest version of what the checkin assumes:
+
+- `El::OnKeyUp` and a key-up pass over the focus path, mirroring
+  `El::OnKeyDown` and its reserved action. GPUI's `on_key_up` observes the
+  release rather than claiming it, so it never eats the keyboard activation.
+- `El::OnScrollWheel` and a `HitRect` slot for it, offered to the element
+  chain under the pointer before anything scrolls. `El::OnScroll` is the
+  scrolled box's own offset, which is a different question.
+- `DockRenderer::emptyGroup`, base's `TabGroupRenderer::render_empty`, called
+  for a group with nothing to show. The themed skin answers null, which is
+  what base's default did.
+- `explicit.track_focus` in the prelude now unwraps the handle the way
+  upstream's does. Without it a script wrote `.track_focus(handle.__handle)`,
+  and a keyboard handler on an element that never took focus heard nothing —
+  which is exactly the shape of gap the checkin's own review found.
+
+The dock's own box is base's — `DockFrame`, applied around whatever the `dock`
+hook returns — and the shell skin therefore states nothing about it. This
+package first applied the extent itself, because a script-drawn dock came out
+with no width at all when the hook replaced the box along with the chrome; the
+base package landed `DockExtent`/`DockFrame` for the same checkin, so the two
+were reconciled to base's when this merged and the skin is chrome only.
+`NativeApply` also stopped naming arena strings in five exceptions it threw
+after deleting the arena; two of those five were already there.
+
+Deliberately not ported, with the reason:
+
+- **The tile half.** `add_panel` with a `bounds`, the `tile_drag_bar` and
+  `tile_resize_handles` hooks, and the five tile commands (`move_tile`,
+  `resize_tile`, `raise_tile`, `toggle_tile_zoom`, `close_tile`) have nothing
+  to attach to: `src/base/tiles.*` is a ported primitive, but `dock_area.cpp`
+  never builds a tiles pane, so a `DockArea` in this tree has tab groups,
+  splits and docks and no canvas. The script surface refuses them rather than
+  accepting a call that would do nothing.
+- **`window.set_rem_size`, `is_fullscreen` and `toggle_fullscreen`.** The port
+  has no rem scale to move — `1rem` resolves to a fixed 16 everywhere, which
+  is what `rem_size()` answers — and no fullscreen seam. `zoom_window` is the
+  maximise toggle the title bar already runs.
+- **`Calendar` the element**, which upstream leaves out too, for its own
+  reason: up to forty-two crossings into the VM per frame for cells that carry
+  no behaviour. `CalendarState` is bound, and `month_days()` is the one thing a
+  script cannot work out for itself.
+- **`warn_unhonoured_input`.** Upstream reports the components that record an
+  input handler and never reach GPUI with it, because each builds its own base
+  type. Every node here is an `El`, so a handler reaches GPUI wherever it is
+  written and there is no gap to report. Reachability is still the component's:
+  a key event travels the focus path, so an element with no focus handle hears
+  presses and never hears keys.
+
+`src/shell/typings_data.cpp` is the generated payload and this package does not
+touch it. The declarations for everything here — `dock_area`,
+`pagination_items`, `CalendarState`, `on_key_down` and the rest — arrive with
+the regeneration at `0c746dff` that landed separately, which is what
+`gpui.d.ts` is written from; nothing at run time depends on it.
+
+`tests/ShellDockTests.cpp` ports the checkin's suite. Ten of its eleven run
+through a real window, a real focus path and real input upstream, which needs
+GPUI's `TestAppContext`; what stands in here is the split every other shell
+suite uses — the description tree for what a script said, the materialized
+element tree for what base was asked to build — plus the breadth test as it
+stands, which touches every name in the checkin's tables under the name the
+documentation gives it. MSVC release passes 22,994 checks with the rest of the
+`0c746dff` ingest merged in, and every release target builds with `/W4 /WX`.
