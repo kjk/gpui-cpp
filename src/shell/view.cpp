@@ -1,5 +1,6 @@
 #include "shell/view.h"
 #include "shell/action.h"
+#include "shell/theme_tokens.h"
 #include "base/resizable.h"
 #include "base/select.h"
 
