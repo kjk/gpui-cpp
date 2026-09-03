@@ -4395,6 +4395,15 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y,
 int InputFoldIconAt(const InputState* s, float x, float y);
 // Open or close the fold that starts on `line`, and redraw.
 void InputToggleFold(InputState* s, App* app, Window* win, int line);
+// unfold_at: open every fold that hides `position`, and only those. A fold
+// keeps its own first and last line visible, so a position on either opens
+// nothing; nested folds all open, since opening only the outermost would
+// leave the position hidden; sibling folds stay shut and the candidates stay,
+// so the gutter can fold the ranges again. What a caller reveals a target
+// with before moving the caret to it, since the caret stops at a fold
+// boundary. Rust takes an lsp `Position`; the row and byte column are what
+// this tree spells a document position as. Returns whether any fold opened.
+bool InputUnfoldAt(InputState* s, App* app, Window* win, RopePoint position);
 // apply_highlighter_fold_candidates: what the highlighter found, taken only
 // when this field is a code editor with folding on.
 void InputSetFoldCandidates(InputState* s, const FoldRange* ranges, int n);

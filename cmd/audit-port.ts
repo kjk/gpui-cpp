@@ -211,6 +211,7 @@ const testTargets: Record<string, string[]> = {
   "base/sheet": ["tests/SheetTests.cpp"],
   "base/slider": ["tests/SliderTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/state_style": ["tests/StateStyleTests.cpp"],
+  "base/styled": ["tests/SizingTests.cpp", "tests/StyleEqTests.cpp"],
   "base/switch": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp", "tests/StateStyleTests.cpp"],
   "base/table": ["tests/DataTableTests.cpp", "tests/AccessibilityTests.cpp"],
   "base/tabs": ["tests/TabTests.cpp", "tests/AccessibilityTests.cpp"],
@@ -325,6 +326,9 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   },
   "base/popup.rs::const POPUP_PRIORITY": {
     spellings: ["kPopupPriority"],
+  },
+  "base/dock/dock_area.rs::const CLOSED_BOTTOM_STRIP": {
+    spellings: ["kClosedBottomStrip"],
   },
   "base/select.rs::fn init": { spellings: ["SelectInitKeys"] },
   "base/sheet.rs::fn init": { spellings: ["SheetInitKeys"] },

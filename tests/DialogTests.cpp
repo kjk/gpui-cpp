@@ -191,24 +191,21 @@ static void ThemedPartsAndAlertDefaultsMatchTheSource() {
     utassert(props.okVariant == component::ButtonVariant::Danger);
     utassert(props.cancelVariant == component::ButtonVariant::Ghost);
     utassert(props.showCancel);
-    utassert(props.RenderOk(&cx, StrL("ok"))->clickAction ==
-             action::Confirm());
-    utassert(props.RenderCancel(&cx, StrL("cancel"))->clickAction ==
-             action::Cancel());
+    utassert(props.RenderOk(&cx, StrL("ok"))->clickAction == action::Confirm());
+    utassert(props.RenderCancel(&cx, StrL("cancel"))
+                 ->clickAction == action::Cancel());
 
     El* content = component::DialogContent::New(&cx)
                       ->Child(TextEl(arena, StrL("body")))
                       ->IntoEl();
-    utassert(content->style.dir == FlexDir::Col &&
-             content->style.flexGrow == 1);
+    utassert(content->style.dir == FlexDir::Col && content->style
+                                                           .flexGrow == 1);
     El* header = component::DialogHeader::New(&cx)->IntoEl();
-    utassert(header->style.dir == FlexDir::Col &&
-             header->style.gapY == 8);
+    utassert(header->style.dir == FlexDir::Col && header->style.gapY == 8);
     El* title = component::DialogTitle::New(&cx)->IntoEl();
     utassert(title->style.fontSize == 16 && title->style.fontSemibold);
     El* description = component::DialogDescription::New(&cx)->IntoEl();
-    utassert(description->style.fontSize == 14 &&
-             description->style.hasColor);
+    utassert(description->style.fontSize == 14 && description->style.hasColor);
     El* footer = component::DialogFooter::New(&cx)->IntoEl();
     utassert(footer->style.dir == FlexDir::Row &&
              footer->style.justify == Justify::End);
@@ -216,8 +213,8 @@ static void ThemedPartsAndAlertDefaultsMatchTheSource() {
     utassert(close->semantic.IsCancel() && !close->semantic.IsAction());
     utassert(close->slot->clickAction == action::Cancel());
     component::DialogAction* actionPart = component::DialogAction::New(&cx);
-    utassert(!actionPart->semantic.IsCancel() &&
-             actionPart->semantic.IsAction());
+    utassert(!actionPart->semantic.IsCancel() && actionPart->semantic
+                                                     .IsAction());
     utassert(actionPart->root->clickAction == action::Confirm());
 
     component::AlertDialog* alert = component::AlertDialog::New(&cx);
@@ -226,8 +223,8 @@ static void ThemedPartsAndAlertDefaultsMatchTheSource() {
     utassert(alert->base->alertHost);
     alert->Confirm()->ButtonProps(props)->CloseButton();
     utassert(alert->base->buttonProps.showCancel);
-    utassert(alert->base->buttonProps.cancelVariant ==
-             component::ButtonVariant::Ghost);
+    utassert(alert->base->buttonProps
+                 .cancelVariant == component::ButtonVariant::Ghost);
     utassert(alert->base->closeButton);
 
     EntityDropAll(&app);
@@ -236,8 +233,57 @@ static void ThemedPartsAndAlertDefaultsMatchTheSource() {
     delete win;
 }
 
+// the_backdrop_fills_the_host.
+//
+// The backdrop is the dimming surface every caller hands over as an
+// absolutely placed element, so it has to have the host's box to resolve
+// against — a collapsed wrapper leaves it zero-sized and invisible, which is
+// what took the overlay away and the click-outside dismissal with it. Rust
+// grew a wrapper for `on_any_mouse_down` and had to give it `absolute()
+// .inset_0()`; the port hangs the backdrop straight off the full-window host,
+// so there is no wrapper to collapse. This pins that.
+static void TheBackdropFillsTheHost() {
+    App app = {};
+    ThemeSet(&app, ThemeMode::Light);
+    Window* win = new Window();
+    win->app = &app;
+    win->paint.app = &app;
+    win->paint.window = win;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, win, arena, {}};
+
+    const float viewW = 1920;
+    const float viewH = 1080;
+    El* backdrop = Div(arena)->W(kFill)->H(kFill);
+    El* host = gpui::Dialog::New(&cx)
+                   ->Open(true)
+                   ->Backdrop(backdrop)
+                   ->Popup(Div(arena)->W(100)->H(100))
+                   ->IntoEl();
+    // The host is `fixed`, the way Rust hangs the dialog off the window Root
+    // rather than off whatever page element contains it, so it is laid out
+    // inside a page of the viewport's size exactly as Root does it.
+    El* page = Div(arena)->FlexCol()->W(viewW)->H(viewH)->Child(host);
+    const RuntimeStyle& th = RuntimeStyleNow(&app);
+    LayoutEl(&win->paint, page, 0, 0, viewW, viewH, th.fontSize, th.foreground);
+
+    // The host covers the window, so a caller's backdrop has a box to fill:
+    // a zero-sized one paints no overlay behind the dialog.
+    utassertnear(host->w, viewW);
+    utassertnear(host->h, viewH);
+    utassertnear(backdrop->w, viewW);
+    utassertnear(backdrop->h, viewH);
+
+    WindowKeyedFree(win);
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+    ArenaDelete(arena);
+    delete win;
+}
+
 void TestDialog() {
     TestSuite("dialog");
+    TheBackdropFillsTheHost();
     EscapeCancelsAndEnterConfirms();
     TheActionsRunTheSameHandlersTheButtonsDo();
     KeyboardOffRemovesTheBindings();

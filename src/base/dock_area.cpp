@@ -342,7 +342,16 @@ El* RenderTabs(const AreaCtx& ac, int node) {
     if (!box) {
         box = Div(a);
     }
-    box->FlexCol()->SizeFull();
+    // Structure, applied around whatever the renderer returns.
+    //
+    // A column, and not a `div`: gpui's default display is Block, and in
+    // block layout a child's `flex_grow` is ignored -- the content region
+    // below the tab bar resolves to zero height, because its only descendant
+    // is the panel view, positioned absolutely and contributing no content
+    // height. So a renderer that returned a plain frame got a group that
+    // drew its tabs and nothing else, at whatever width its tabs happened to
+    // be.
+    box->FlexCol()->SizeFull()->ClipX()->ClipY();
     // The group is its own drop target, and its box is what decides which of
     // the five zones a drop landed in — so the box has to be reported back.
     box->BoundsOut(&n.bounds);
@@ -362,7 +371,17 @@ El* RenderTabs(const AreaCtx& ac, int node) {
         if (!body) {
             body = Div(a);
         }
-        body->FlexCol()->Flex1()->W(kFill);
+        // The region below the tab bar takes the rest of the group -- except
+        // in a collapsed one, which is a strip of tabs with no content and
+        // claims no space at all, which is why it is not built here.
+        //
+        // `min_h(0)`: a flex item's `min-height` is `auto`, so a column that
+        // grows to fill the group is still floored by the height its content
+        // wants. A panel holding a virtualized list measured itself against
+        // every row rather than the region it was given: the clip was right,
+        // so it looked correct, and the list built rows nobody could see.
+        // Flooring it at zero lets the region win.
+        body->FlexCol()->Flex1()->W(kFill)->MinH(0)->ClipX()->ClipY();
         int activeIx = DockActiveIx(s, node);
         if (activeIx >= 0) {
             const DockPanelDef& def = s->panels[n.panel[activeIx]];
@@ -423,7 +442,13 @@ El* RenderSplit(const AreaCtx& ac, int node) {
     if (!box) {
         box = Div(a);
     }
-    box->SizeFull();
+    // A split frame with no size collapses: base puts it between a
+    // `resizable_panel` and the resizable group, and between `center_frame`
+    // and the centre's root split, and neither parent sizes it. `size_full`
+    // and `flex_1` are belt and braces -- either alone passes every case
+    // upstream could construct, so this does not depend on which one wins in
+    // a given parent.
+    box->SizeFull()->Flex1()->MinH(0)->ClipX()->ClipY();
     if (horizontal) {
         box->FlexRow();
     } else {
@@ -505,25 +530,76 @@ El* RenderDragPreview(const AreaCtx& ac) {
         ->Deferred();
 }
 
-// One Dock, and the strip on its inner edge. `render_dock` is the whole box:
-// a skin that answers null for a shut Dock takes it out of the layout, which
-// is what upstream's showcase does.
+// One Dock: its box, and the skin's chrome inside it. Null when there is no
+// dock on that side at all, which is Rust's `None`.
 El* RenderDock(const AreaCtx& ac, DockPlacement p, const DockSide& side) {
-    if (side.node < 0 || !ac.r->dock) {
+    if (side.node < 0) {
         return nullptr;
     }
+    Ctx* cx = ac.cx;
     DockCtx d;
-    d.cx = ac.cx;
+    d.cx = cx;
     d.state = ac.state;
     d.id = ac.id;
     d.placement = p;
     d.size = side.size;
     d.open = side.open;
     d.collapsible = side.collapsible;
-    return ac.r->dock(ac.cx, ac.r->data, &d, RenderNode(ac, side.node));
+
+    // A closed left or right dock takes no space at all; a closed bottom
+    // dock keeps a strip so its tab bar stays clickable. Nothing is drawn
+    // for a dock with no extent, and the renderer is not asked for chrome
+    // nobody can see.
+    float size = DockExtent(&d);
+    if (size <= 0) {
+        return Div(cx->a);
+    }
+
+    El* content = RenderNode(ac, side.node);
+    // The box is applied here rather than left to the renderer, and that is
+    // the whole point of it being here. A dock's extent along its own axis
+    // is not presentation -- it is what makes the dock a column beside the
+    // centre instead of a block in the flow below it -- and a renderer that
+    // did not know to state it produced a dock with no width, every pane
+    // inside it shrunk to its content. `render_dock` on the renderer is a
+    // chrome hook, so a renderer that draws nothing at all still gets a dock
+    // that is the right shape.
+    El* chrome = ac.r->dock ? ac.r->dock(cx, ac.r->data, &d, content) : content;
+    if (!chrome) {
+        chrome = content;
+    }
+    return DockFrame(cx, &d, size)->Child(chrome);
 }
 
 } // namespace
+
+float DockExtent(const DockCtx* dock) {
+    if (!dock) {
+        return 0;
+    }
+    if (dock->open) {
+        return dock->size;
+    }
+    return dock->placement == DockPlacement::Bottom ? kClosedBottomStrip : 0;
+}
+
+El* DockFrame(Ctx* cx, const DockCtx* dock, float size) {
+    El* frame = Div(cx->a)->FlexNone()->ClipX()->ClipY();
+    switch (dock ? dock->placement : DockPlacement::Center) {
+        case DockPlacement::Left:
+        case DockPlacement::Right:
+            frame->FlexRow()->H(kFill)->W(size);
+            break;
+        case DockPlacement::Bottom:
+            frame->FlexCol()->W(kFill)->H(size);
+            break;
+        case DockPlacement::Center:
+            // Base never builds a dock for the centre.
+            frame->FlexCol();
+            break;
+    }
+    return frame;
+}
 
 El* DockArea::New(Ctx* cx, Str id, Entity<DockState> state,
                   const DockRenderer* r) {
@@ -548,7 +624,12 @@ El* DockArea::New(Ctx* cx, Str id, Entity<DockState> state,
     if (!box) {
         box = Div(a);
     }
-    box->Id(id)->FlexCol()->SizeFull();
+    // Structure, applied after the hook and not inside it. A dock area lays
+    // its left dock, centre and right dock out in a row; a frame that is not
+    // one stacks them down the window instead, which is what every renderer
+    // that is not the themed skin used to get, because the row lived in the
+    // skin's frame and a bare hook is a bare `Div`.
+    box->Id(id)->FlexRow()->SizeFull()->ClipX()->ClipY();
     box->BoundsOut(&s->bounds);
 
     // ToggleZoom: one panel over the whole area, and nothing else rendered.
@@ -561,28 +642,30 @@ El* DockArea::New(Ctx* cx, Str id, Entity<DockState> state,
         s->zoomPanel = -1;
     }
 
-    El* row = Div(a)->FlexRow()->Flex1()->W(kFill);
     if (El* left = RenderDock(ac, DockPlacement::Left, s->left)) {
-        row->Child(left);
+        box->Child(left);
     }
     El* center =
         ac.r->centerFrame ? ac.r->centerFrame(cx, ac.r->data) : nullptr;
     if (!center) {
         center = Div(a);
     }
-    row->Child(
-        center->FlexCol()->Flex1()->H(kFill)->Child(RenderNode(ac, s->center)));
-    if (El* right = RenderDock(ac, DockPlacement::Right, s->right)) {
-        row->Child(right);
+    // Same reason as the frame above: the centre is whatever the side docks
+    // leave, in a column with the bottom dock. Without this it is neither,
+    // and shrinks to its content.
+    center->FlexCol()->Flex1()->H(kFill)->ClipX()->ClipY();
+    center->Child(RenderNode(ac, s->center));
+    if (El* bottom = RenderDock(ac, DockPlacement::Bottom, s->bottom)) {
+        center->Child(bottom);
     }
-    box->Child(row);
+    box->Child(center);
+    if (El* right = RenderDock(ac, DockPlacement::Right, s->right)) {
+        box->Child(right);
+    }
     // The dragged tab's preview goes over everything, which is what a
     // deferred child is for.
     if (El* preview = RenderDragPreview(ac)) {
         box->Child(preview);
-    }
-    if (El* bottom = RenderDock(ac, DockPlacement::Bottom, s->bottom)) {
-        box->Child(bottom);
     }
     return box;
 }

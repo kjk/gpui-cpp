@@ -924,6 +924,19 @@ void DockResizeSide(DockState* s, Ctx* cx, DockPlacement p, float x, float y) {
     Notify(cx);
 }
 
+void DockSetDockSize(DockState* s, Ctx* cx, DockPlacement p, float size) {
+    DockSide* side = DockSideOf(s, p);
+    if (!side || side->node < 0) {
+        return;
+    }
+    float previous = side->GetSize();
+    side->SetSize(size);
+    if (side->GetSize() == previous) {
+        return;
+    }
+    DockEmit(s, cx);
+}
+
 void DockToggleZoom(DockState* s, Ctx* cx, int panelIx) {
     bool zoomed = s->zoomPanel == panelIx;
     if (!zoomed && (panelIx < 0 || panelIx >= s->panels.len ||

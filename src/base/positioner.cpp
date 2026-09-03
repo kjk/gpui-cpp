@@ -64,6 +64,11 @@ Positioner* Positioner::Offset(float value) {
     return this;
 }
 
+Positioner* Positioner::Occlude() {
+    occlude = true;
+    return this;
+}
+
 Positioner* Positioner::Margin(float value) {
     margin = value;
     return this;
@@ -78,6 +83,15 @@ Positioner* Positioner::Child(El* child) {
 
 El* Positioner::IntoEl() {
     El* group = Div(a)->Flex()->Absolute();
+    if (occlude) {
+        // `insert_hitbox(bounds, HitboxBehavior::BlockMouse)`, ahead of the
+        // children so it blocks what is behind the popup without blocking
+        // the popup's own content. A box that stops the press records a hit
+        // rect of its own here, and its children record theirs after it, so
+        // the hit test finds the content first and the surface next — and
+        // the panel under the surface not at all.
+        group->StopMouseDown();
+    }
     for (El* child : children) {
         group->Child(child);
     }

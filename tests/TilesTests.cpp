@@ -79,8 +79,8 @@ static void ResizeCornerSnapsBothEdges() {
     Bounds others[2] = {B(100, 0, 200, 100), B(0, 100, 100, 150)};
     float w = 298;
     float h = 248;
-    Bounds out =
-        TileComputeResizedBounds(prev, nullptr, nullptr, &w, &h, others, 2, 8.f);
+    Bounds out = TileComputeResizedBounds(prev, nullptr, nullptr, &w, &h,
+                                          others, 2, 8.f);
     utassertnear(out.w, 300.f);
     utassertnear(out.h, 250.f);
 }
@@ -243,7 +243,6 @@ static void AnUndoRecordsNothing() {
     utassert(s.nChange == recorded);
 }
 
-
 // The room the tiles take between them, which is what the area scrolls over.
 // Rust folds it from an empty box at the origin, so the content never starts
 // past the origin and is never smaller than the view's own corner.
@@ -281,8 +280,39 @@ static void ADragReadsThePointerThroughTheScroll() {
     utassertnear(s.items[0].bounds.y, 210.f);
 }
 
+// a_resize_tracks_the_pointer_travel_not_its_window_position.
+//
+// A resize is resolved against the pointer's travel since the drag began,
+// never against the pointer's position: pointer positions are window
+// coordinates and tile bounds are canvas coordinates, and the two differ by
+// the canvas's own offset in the window. Reading the position directly
+// widened the tile by that offset the moment a drag started.
+static void AResizeTracksThePointerTravelNotItsWindowPosition() {
+    TilesState s;
+    // The canvas sits offset in the window, as it always does.
+    s.bounds = B(200, 150, 800, 600);
+    TilesAdd(&s, 0, B(20, 20, 100, 100));
+
+    // The pointer's window position is nowhere near the tile's canvas bounds.
+    const float startX = 500;
+    const float startY = 300;
+    TilesBeginResize(&s, 0, TileSide::Right, startX, startY);
+    TilesUpdateResize(&s, startX, startY);
+    utassertnear(s.items[0].bounds.w, 100.f);
+
+    // 30px of travel: 100 + 30 puts the right edge at 150, and GRID_SIZE
+    // rounds it to 152, so the width lands at 132. (Upstream's own case is
+    // the same arithmetic against the ten-pixel grid its story uses; the
+    // crate's GRID_SIZE, which this port pins, is eight.)
+    TilesUpdateResize(&s, startX + 30.f, startY);
+    utassertnear(s.items[0].bounds.w, 132.f);
+    // The pinned edge never moved.
+    utassertnear(s.items[0].bounds.x, 20.f);
+}
+
 void TestTiles() {
     TestSuite("tiles/snap");
+    AResizeTracksThePointerTravelNotItsWindowPosition();
     SnapEdgeWithinThreshold();
     SnapEdgeOutsideThreshold();
     SnapEdgePicksNearest();

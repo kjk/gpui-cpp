@@ -58,6 +58,7 @@ struct Positioner {
     gpui::Align align = gpui::Align::Center;
     float offset = 0;
     float margin = 4;
+    bool occlude = false;
     ArenaVec<El*> children;
 
     static Positioner* Side(Ctx* cx, Bounds trigger);
@@ -65,6 +66,13 @@ struct Positioner {
     Positioner* Placement(gpui::Placement value);
     Positioner* Align(gpui::Align value);
     Positioner* Offset(float value);
+    // Blocks the mouse over the positioned popup.
+    //
+    // Off by default, because a tooltip that swallowed the pointer would
+    // un-hover the very trigger keeping it open. An interactive surface — a
+    // popover, a menu, a dropdown — wants it on: what the surface covers is
+    // the surface's, not the panel underneath.
+    Positioner* Occlude();
     Positioner* Margin(float value);
     Positioner* Child(El* child);
     El* IntoEl();

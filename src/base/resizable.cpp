@@ -699,7 +699,15 @@ El* ResizablePanelGroup::IntoEl() {
                                         : nullptr;
             bool builtInLine = line == nullptr;
             if (!line) {
-                line = Div(a)->Bg(active ? handleDragColor : handleColor);
+                // `flex_none()`: Rust's handle is HANDLE_SIZE wide but padded
+                // by HANDLE_PADDING, so its content area is zero and a
+                // shrinkable child collapses with it. The handle here centres
+                // the line with `justify` rather than padding, so the crush
+                // never happened; the line still says it cannot shrink, so
+                // that stays true whatever the handle's box becomes.
+                line = Div(a)
+                           ->FlexNone()
+                           ->Bg(active ? handleDragColor : handleColor);
             }
             El* handle =
                 Div(a)

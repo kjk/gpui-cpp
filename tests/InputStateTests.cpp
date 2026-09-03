@@ -2752,8 +2752,70 @@ static void ScrollToCursorUsesDocumentYNotStaleWindowY() {
     utassert(state.scrollY > 200);
 }
 
+// test_unfold_at: unfolding at a position opens exactly the folds hiding it.
+//
+// A fold keeps its own first and last line visible, so a position on either
+// of them opens nothing. Nested folds all open at once, sibling folds stay
+// closed, and the opened ranges stay fold candidates.
+static void UnfoldingAtAPositionOpensExactlyWhatHidesIt() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.mode.kind = LayoutModeKind::CodeEditor;
+    s.mode.folding = true;
+    InputSetValue(&s, StrL("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl"));
+
+    // An outer fold over lines 0..=5, a fold nested inside it, and a sibling
+    // fold that must never be touched.
+    FoldRange ranges[3] = {};
+    ranges[0].startLine = 0;
+    ranges[0].endLine = 5;
+    ranges[1].startLine = 2;
+    ranges[1].endLine = 4;
+    ranges[2].startLine = 7;
+    ranges[2].endLine = 10;
+    InputSetFoldCandidates(&s, ranges, 3);
+    FoldMapSetFolded(&s.folds, 0, true);
+    FoldMapSetFolded(&s.folds, 2, true);
+    FoldMapSetFolded(&s.folds, 7, true);
+    FoldMapRebuild(&s.folds, InputLinesLen(&s));
+
+    // The outer fold's own first and last line stay visible, so neither
+    // position opens anything.
+    const int kOwnLines[] = {0, 5};
+    for (int line : kOwnLines) {
+        utassert(!FoldMapLineHidden(&s.folds, line));
+        utassert(!InputUnfoldAt(&s, nullptr, nullptr, {line, 0}));
+        utassert(FoldMapIsFolded(&s.folds, 0));
+        utassert(FoldMapIsFolded(&s.folds, 2));
+        utassert(FoldMapIsFolded(&s.folds, 7));
+    }
+
+    // Line 3 is hidden by both the outer and the nested fold, so both open;
+    // the sibling fold does not.
+    utassert(FoldMapLineHidden(&s.folds, 3));
+    utassert(InputUnfoldAt(&s, nullptr, nullptr, {3, 0}));
+    FoldMapRebuild(&s.folds, InputLinesLen(&s));
+    utassert(!FoldMapLineHidden(&s.folds, 3));
+    utassert(!FoldMapIsFolded(&s.folds, 0));
+    utassert(!FoldMapIsFolded(&s.folds, 2));
+    utassert(FoldMapIsFolded(&s.folds, 7));
+    // The opened ranges are still candidates for refolding.
+    utassert(FoldMapIsCandidate(&s.folds, 0));
+    utassert(FoldMapIsCandidate(&s.folds, 2));
+
+    // Nothing is hidden there any more, so a second call is a no-op.
+    utassert(!InputUnfoldAt(&s, nullptr, nullptr, {3, 0}));
+
+    // A field that is not a folding code editor has no folds to open.
+    InputState plain;
+    plain.kind = InputKind::Textarea;
+    InputSetValue(&plain, StrL("a\nb\nc"));
+    utassert(!InputUnfoldAt(&plain, nullptr, nullptr, {1, 0}));
+}
+
 void TestInputState() {
     TestSuite("input_state");
+    UnfoldingAtAPositionOpensExactlyWhatHidesIt();
     SingleLineRemovesNewlines();
     SetValueCaretAtEnd();
     ReplaceAllPreservesUndoHistory();
