@@ -242,7 +242,7 @@ static void MdSetup(MdCase* c) {
     c->out->Reset();
 }
 
-static void MdRun(MdCase* c) {
+static void MdParseRun(MdCase* c) {
     markdown::Node* tree = markdown::ToMdast(c->out, c->source, c->options);
     BenchKeep(tree);
 }
@@ -295,13 +295,13 @@ static void RunShapeSized(const char* name, BuildFn build, int32_t largeBytes) {
         c.out = out;
         c.source = doc.AsStr();
         BenchCase(group, name, "bytes", doc.len, MkFunc0(MdSetup, &c),
-                  MkFunc0(MdRun, &c));
+                  MkFunc0(MdParseRun, &c));
         // What the tree cost to hold, which is the other half of the number
         // above: one more parse into a freshly reset arena, and how far the
         // arena's position moved. Reported per byte of source as well, since
         // that is what makes two document shapes comparable.
         MdSetup(&c);
-        MdRun(&c);
+        MdParseRun(&c);
         BenchMem(group, name, doc.len, ArenaUsed(c.out));
 
         // And what building it cost, which is the arena `ToMdast` makes and
