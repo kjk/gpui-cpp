@@ -17,22 +17,6 @@
 
 namespace gpui {
 
-// crates/base/src/motion/presence.rs owns PresencePhase. The C++ motion core
-// does not carry the layered Presence yet; this is its temporary home so
-// NavPage can name the phase Rust names. Delete the block once motion.h has
-// it — the guard lets the two land in either order.
-#ifndef GPUI_MOTION_PRESENCE_PHASE_
-#define GPUI_MOTION_PRESENCE_PHASE_
-namespace motion {
-enum class PresencePhase : uint8_t {
-    Entering,
-    Present,
-    Exiting,
-    Absent
-};
-} // namespace motion
-#endif
-
 // What a running transition is doing, in Qt's terms. The operation decides
 // paint order and lets a renderer move a pushed view differently from a popped
 // one.
@@ -179,7 +163,7 @@ void NavStackClear(NavStackState* s, Ctx* cx);
 struct NavPage {
     EntityId view = {};
     int index = 0;
-    motion::PresencePhase phase = motion::PresencePhase::Present;
+    PresencePhase phase = PresencePhase::Present;
     NavOperation operation = NavOperation::Push;
     bool hasOperation = false;
     float progress = 1.f;
@@ -188,7 +172,7 @@ struct NavPage {
     // The view's position on the stack, root first. A view on its way out
     // keeps the position it had.
     int Index() const { return index; }
-    motion::PresencePhase Phase() const { return phase; }
+    PresencePhase Phase() const { return phase; }
     bool HasOperation() const { return hasOperation; }
     NavOperation Operation() const { return operation; }
     float Progress() const { return progress; }

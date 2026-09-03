@@ -155,139 +155,13 @@ void NavStackClear(NavStackState* s, Ctx* cx) {
 }
 
 // ─── presence ─────────────────────────────────────────────────────────────
-//
-// This is crates/base/src/motion/presence.rs, written here because the C++
-// motion core is being rewritten from upstream's layered motion in parallel
-// and does not carry Presence yet. Once it does, this block goes and the two
-// samples below call `motion::Presence::new(id, present).transition(t)
-// .sample(window, cx)` instead; nothing outside this file reads it.
-struct NavPresenceState {
-    float from = 0;
-    float target = 0;
-    double startedAt = 0;
-    float reversingFactor = 1.f;
-    float durationMs = 0;
-    bool init = false;
-};
 
-enum class NavMotionStatus : uint8_t {
-    Delayed,
-    Running,
-    Finished
-};
-
-struct NavPresenceSample {
-    motion::PresencePhase phase = motion::PresencePhase::Absent;
-    float progress = 0;
-    NavMotionStatus status = NavMotionStatus::Finished;
-
-    bool ShouldRender() const { return phase != motion::PresencePhase::Absent; }
-};
-
-// Transition::progress, against the duration the state carries rather than the
-// policy's — a reversal shortens the run it is reversing.
-static float NavProgress(const motion::Transition& t, float elapsedMs,
-                         float durationMs, NavMotionStatus* status) {
-    if (elapsedMs < t.delayMs) {
-        *status = NavMotionStatus::Delayed;
-        return 0.f;
-    }
-    float active = elapsedMs - t.delayMs;
-    if (durationMs <= 0 || active >= durationMs) {
-        *status = NavMotionStatus::Finished;
-        return 1.f;
-    }
-    *status = NavMotionStatus::Running;
-    return active / durationMs;
-}
-
-static NavPresenceSample NavStableSample(bool present) {
-    NavPresenceSample out;
-    out.phase = present ? motion::PresencePhase::Present
-                        : motion::PresencePhase::Absent;
-    out.progress = present ? 1.f : 0.f;
-    out.status = NavMotionStatus::Finished;
-    return out;
-}
-
-static float NavLerp(float from, float to, float progress) {
-    return from + (to - from) * progress;
-}
-
-static float NavClamp01(float v) {
-    return v < 0.f ? 0.f : (v > 1.f ? 1.f : v);
-}
-
-static NavPresenceSample NavSamplePresence(Ctx* cx, uint32_t key, bool present,
-                                           const motion::Transition& t) {
-    auto* st =
-        (NavPresenceState*)MotionSlot(cx, key, (int)sizeof(NavPresenceState));
-    if (!st) {
-        return NavStableSample(present);
-    }
-    double now = MotionNow(cx);
-    float target = present ? 1.f : 0.f;
-    if (!st->init) {
-        st->init = true;
-        st->from = 0.f;
-        st->target = target;
-        st->startedAt = now;
-        st->reversingFactor = 1.f;
-        st->durationMs = t.durationMs;
-    }
-    if (MotionReduced() || t.durationMs <= 0) {
-        if (st->from != target || st->target != target) {
-            st->from = target;
-            st->target = target;
-            st->startedAt = now;
-            st->reversingFactor = 1.f;
-            st->durationMs = t.durationMs;
-        }
-        return NavStableSample(present);
-    }
-
-    float elapsedMs = (float)((now - st->startedAt) * 1000.0);
-    NavMotionStatus status = NavMotionStatus::Finished;
-    // The time fraction of the run, which the eased value is read at. What the
-    // sample reports is the presence *value* — 1 present, 0 absent — the way
-    // the settled samples do.
-    float fraction = NavProgress(t, elapsedMs, st->durationMs, &status);
-    float sampled = NavLerp(st->from, st->target, MotionSample(t, fraction));
-    float progress = sampled;
-
-    if (st->target != target) {
-        // The target moved. Reversing a run that is part way through shortens
-        // the return by however far it had got, so an interrupted change comes
-        // back at the pace it left at rather than taking a full duration.
-        bool reversing = target == st->from;
-        float reversingFactor =
-            reversing
-                ? NavClamp01(MotionSample(t, fraction) * st->reversingFactor +
-                             (1.f - st->reversingFactor))
-                : 1.f;
-        float duration = t.durationMs * reversingFactor;
-        st->from = sampled;
-        st->target = target;
-        st->startedAt = now;
-        st->reversingFactor = reversingFactor;
-        st->durationMs = duration;
-        float initial = NavProgress(t, 0, duration, &status);
-        progress = NavLerp(sampled, target, MotionSample(t, initial));
-    }
-
-    if (status == NavMotionStatus::Delayed ||
-        status == NavMotionStatus::Running) {
-        MotionWantsFrame(cx);
-    }
-    if (status == NavMotionStatus::Finished) {
-        return NavStableSample(present);
-    }
-    NavPresenceSample out;
-    out.phase = present ? motion::PresencePhase::Entering
-                        : motion::PresencePhase::Exiting;
-    out.progress = progress;
-    out.status = status;
-    return out;
+// motion/presence.rs is the sampler: NavStack asks the motion core for a
+// mount/unmount transition per page, exactly as Rust's
+// `Presence::new(id, present).transition(t).sample(window, cx)` does.
+static PresenceSample NavSamplePresence(Ctx* cx, uint32_t key, bool present,
+                                        const motion::Transition& t) {
+    return Presence::New(key, present).Transition(t).Sample(cx);
 }
 
 // fn page_id(view): ("nav-stack", view.entity_id()), then presence.rs's
@@ -322,7 +196,7 @@ NavStack* NavStack::Item(NavItemFn fn, void* userData) {
 // NavPage's own render: absolute, inset 0, with the view as its child. The
 // item renderer refines what comes back.
 static El* NavBuildPage(NavStack* stack, EntityId view, int index,
-                        motion::PresencePhase phase, bool hasOperation,
+                        PresencePhase phase, bool hasOperation,
                         NavOperation operation, float progress) {
     Ctx* cx = stack->cx;
     El* box = Div(cx->a)->SizeFull()->Absolute()->Top(0)->Left(0)->Child(
@@ -369,7 +243,7 @@ El* NavStack::IntoEl() {
     bool changing = false;
     float progress = 1.f;
     if (hasTransit) {
-        NavPresenceSample sample =
+        PresenceSample sample =
             NavSamplePresence(cx, NavPageKey(transit.outgoing), false, timing);
         if (sample.ShouldRender()) {
             changing = true;
@@ -395,9 +269,8 @@ El* NavStack::IntoEl() {
 
     int index = depth - 1;
     if (!changing) {
-        root->Child(NavBuildPage(this, current, index,
-                                 motion::PresencePhase::Present, false,
-                                 NavOperation::Push, 1.f));
+        root->Child(NavBuildPage(this, current, index, PresencePhase::Present,
+                                 false, NavOperation::Push, 1.f));
         return root;
     }
 
@@ -405,19 +278,17 @@ El* NavStack::IntoEl() {
     // paints over what it reveals. The item renderer is called in that order,
     // which is the order Rust fills its `items` vector in.
     if (transit.operation == NavOperation::Pop) {
-        root->Child(NavBuildPage(this, current, index,
-                                 motion::PresencePhase::Entering, true,
-                                 transit.operation, progress));
+        root->Child(NavBuildPage(this, current, index, PresencePhase::Entering,
+                                 true, transit.operation, progress));
         root->Child(NavBuildPage(this, transit.outgoing, transit.index,
-                                 motion::PresencePhase::Exiting, true,
+                                 PresencePhase::Exiting, true,
                                  transit.operation, progress));
     } else {
         root->Child(NavBuildPage(this, transit.outgoing, transit.index,
-                                 motion::PresencePhase::Exiting, true,
+                                 PresencePhase::Exiting, true,
                                  transit.operation, progress));
-        root->Child(NavBuildPage(this, current, index,
-                                 motion::PresencePhase::Entering, true,
-                                 transit.operation, progress));
+        root->Child(NavBuildPage(this, current, index, PresencePhase::Entering,
+                                 true, transit.operation, progress));
     }
     // Neither page takes pointer input while the change runs: the outgoing one
     // is on its way out, and the incoming one is not yet where it will be.

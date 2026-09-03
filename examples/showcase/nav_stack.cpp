@@ -136,14 +136,14 @@ static El* ScNavSlide(void*, Ctx*, const NavPage& page) {
     if (page.HasOperation()) {
         NavOperation op = page.Operation();
         switch (page.Phase()) {
-            case motion::PresencePhase::Entering:
+            case PresencePhase::Entering:
                 if (op == NavOperation::Push || op == NavOperation::Replace) {
                     offset = 1.f - page.Progress();
                 } else if (op == NavOperation::Pop) {
                     offset = -0.3f * (1.f - page.Progress());
                 }
                 break;
-            case motion::PresencePhase::Exiting:
+            case PresencePhase::Exiting:
                 if (op == NavOperation::Pop) {
                     offset = page.Progress();
                 } else if (op == NavOperation::Push) {

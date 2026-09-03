@@ -287,10 +287,10 @@ static void TheItemRendererSeesBothPagesOfAChange() {
     // A pushed view paints over what it covers: the outgoing page first.
     utassert(gNavSeen.len == 2);
     utassert(gNavSeen[0].view == root);
-    utassert(gNavSeen[0].Phase() == motion::PresencePhase::Exiting);
+    utassert(gNavSeen[0].Phase() == PresencePhase::Exiting);
     utassert(gNavSeen[0].Index() == 0);
     utassert(gNavSeen[1].view == second);
-    utassert(gNavSeen[1].Phase() == motion::PresencePhase::Entering);
+    utassert(gNavSeen[1].Phase() == PresencePhase::Entering);
     utassert(gNavSeen[1].Index() == 1);
     // Both read one clock, and a change starts at zero.
     utassert(gNavSeen[0].HasOperation());
