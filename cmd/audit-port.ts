@@ -36,12 +36,13 @@ toggle toggle_group tooltip tree virtual_list
 const uiModules = `
 component_traits element_ext global_state icon index_path inspector
 root sizing styled time title_bar virtual_list window_border window_ext
-accordion alert avatar badge breadcrumb button chart checkbox clipboard
-collapsible color_picker combobox command description_list dialog dock form
-group_box highlighter history hover_card input kbd label link list menu
-native_menu notification pagination plot popover progress radio rating
-resizable scroll searchable_list select separator setting sheet sidebar skeleton
-slider spinner status_bar stepper switch tab table tag text theme tooltip tree
+accordion alert attachment avatar badge breadcrumb bubble button chart checkbox
+clipboard collapsible color_picker combobox command description_list dialog dock
+form group_box highlighter history hover_card input kbd label link list marker
+menu message message_scroller native_menu notification pagination plot popover
+progress radio rating resizable scroll searchable_list select separator setting
+sheet shimmer sidebar skeleton slider spinner status_bar stepper switch tab
+table tag text theme tooltip tree
 `
   .trim()
   .split(/\s+/);
@@ -235,7 +236,9 @@ const testTargets: Record<string, string[]> = {
   "base/tree": ["tests/TreeTests.cpp"],
   "base/virtual_list": ["tests/VirtualListTests.cpp"],
   "ui/accordion": ["tests/AccessibilityTests.cpp"],
+  "ui/attachment": ["tests/AttachmentTests.cpp"],
   "ui/avatar": ["tests/AvatarTests.cpp", "tests/AccessibilityTests.cpp"],
+  "ui/bubble": ["tests/BubbleTests.cpp"],
   "ui/button": ["tests/ButtonGroupTests.cpp", "tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/chart": [
     "tests/ChartTests.cpp",
@@ -268,7 +271,10 @@ const testTargets: Record<string, string[]> = {
   "ui/label": ["tests/LabelTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/link": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/list": ["tests/ListTests.cpp"],
+  "ui/marker": ["tests/MarkerTests.cpp"],
   "ui/menu": ["tests/PopupMenuTests.cpp", "tests/AppMenuTests.cpp"],
+  "ui/message": ["tests/MessageTests.cpp"],
+  "ui/message_scroller": ["tests/MessageScrollerTests.cpp"],
   "ui/native_menu": ["tests/NativeMenuTests.cpp"],
   "ui/notification": ["tests/NotificationTests.cpp"],
   "ui/plot": ["tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
@@ -278,6 +284,7 @@ const testTargets: Record<string, string[]> = {
   "ui/root": ["tests/RootTests.cpp"],
   "ui/scroll": ["tests/ScrollbarTests.cpp", "tests/AutoScrollTests.cpp"],
   "ui/select": ["tests/SelectTests.cpp"],
+  "ui/shimmer": ["tests/ShimmerTests.cpp"],
   "ui/sidebar": ["tests/SidebarTests.cpp", "tests/BuilderCapacityTests.cpp"],
   "ui/sizing": ["tests/SizingTests.cpp", "tests/StyleEqTests.cpp"],
   "ui/slider": ["tests/SliderTests.cpp", "tests/AccessibilityTests.cpp"],

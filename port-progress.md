@@ -11435,3 +11435,133 @@ element tree for what base was asked to build — plus the breadth test as it
 stands, which touches every name in the checkin's tables under the name the
 documentation gives it. MSVC release passes 22,994 checks with the rest of the
 `0c746dff` ingest merged in, and every release target builds with `/W4 /WX`.
+## Upstream ingest after `6d07863f`: chat components
+
+`6b2aa4a7` adds the whole composable chat family to `crates/ui` —
+`Bubble`, `Message`, `Attachment`, `Marker`, `ShimmerText`/`ShimmerStyle`
+and the virtualized `MessageScroller` — on top of the semantic theme
+tokens, with six story pages and a new `radius_2xl/3xl/4xl` scale.
+`a10352aa` is the sizing pass over those pages; both are applied here, so
+each page is at its final state.
+
+All six modules are ported name for name into `src/ui/`: `shimmer`,
+`marker`, `bubble`, `message`, `attachment`, `message_scroller`, each with
+the source's own type names, its slot types and its constants. Rust's
+`StyleRefinement` parameters — `separator_style`, `with_stack_style`,
+`with_content_style`, `with_list_style`, `with_row_style`,
+`with_jump_button_style` — become this tree's existing refinement
+representation, a `Style` plus the `StyleField` bits that were actually
+named, applied through `El::Refine`. `ParentElement` becomes `Child`, and
+the tagged child lists (`MarkerChild`, `BubbleReactionChild`,
+`AttachmentContentChild`) keep the source's discrimination, so a typed slot
+still inherits what the parent hands it and an arbitrary element still does
+not.
+
+The theme hunk is the radius scale: `ThemeRadius2xl` / `3xl` / `4xl` over
+`Theme::radius`, and `radius_tokens().full` now answers `radius_full()`
+rather than the raw constant, so a theme that squares its corners squares
+the pill tier with them. `Theme::transparent` was opaque black — an `Rgba`
+defaults to alpha 255 and nothing had ever set the field — which the ghost
+bubble found on its first frame; it is spelled out as `transparent_black()`
+now.
+
+`ScrollableMask` needed no change. The checkin generalizes it over
+`ScrollbarHandle` and recovers `axis_max` from `content_size - viewport`
+instead of `max_offset()`; the C++ mask is `El::ScrollMask(axis)` collapsed
+onto the viewport whose handle it controls, so it was never bound to one
+handle type, and the runtime already derives the maximum offset from the
+content and the viewport at the same dispatch point. The checkin's two new
+`#[gpui::test]`s need `TestAppContext` and have no counterpart.
+
+Three seams were added to the element runtime, each because a chat
+component names something `Style` had no word for: `max_w(relative(f))`
+(`El::MaxWFrac`, which is the bubble's 80% cap), `align_self`
+(`El::SelfStart` / `SelfEnd` / `SelfCenter`, which is how a bubble sits at
+one edge of a column that stretches everything else), and `aspect_ratio` as
+an explicit call (`El::Aspect`, for a vertical attachment's square
+preview). All three translate straight into the `taffy::Style` fields that
+were already there. `IconName::FileText` and `IconName::RotateCw` came with
+the checkin's two new Lucide assets and are compiled into
+`asset_icons.cpp`.
+
+Where the port had to differ, and why:
+
+- **The shimmer is composited rather than overdrawn.** Rust keeps
+  `StyledText` as the layout owner and paints every covered glyph again
+  under twelve nested content masks. This tree has no per-glyph paint seam
+  and cannot ask a run for its glyph positions while the element tree is
+  being built, so the same visual result is reached analytically: a
+  character's coverage count is the number of bands containing it, the
+  composited alpha is `1 - (1 - layerOpacity)^count`, and the highlight is
+  mixed into the run's colour over that character through `El::Spans`.
+  `shimmer_band_bounds` and `shimmer_highlight_color` are ported exactly
+  and are what the tests drive. Two consequences are deliberate: a glyph's
+  horizontal position is approximated by its index, so a run of mixed
+  advances sweeps at a slightly uneven rate; and the run's colour cannot be
+  read from the inherited text style at build time, so `ShimmerText::Fg`
+  carries it — unset means the theme foreground, and `Marker` passes the
+  row's own colour down. `Animation::repeat_synced` is the shared clock
+  rather than `MotionRepeat`'s per-element one, so two labels of the same
+  duration still sweep together.
+- **`MessageScrollerState` measures a frame late.** GPUI's `ListState`
+  measures a row during layout and caches its height by item. There is no
+  measure-during-layout seam here, so the state keeps the box the previous
+  frame gave each row — reported through `El::BoundsOut`, the way every
+  other measured thing in this tree is — and a row nothing has laid out yet
+  stands in at a 64px estimate. A row whose height changed asks for one
+  more frame and is right on it. The rest of the public surface is the
+  source's: `item_count`, `is_scrolled_up`, `is_following_tail`, `reset`,
+  `splice` (including the remeasure of the new last row and the splice's
+  neighbour), `append`, `prepend`, `remeasure`, `remeasure_items`,
+  `scroll_to_item` and `scroll_to_end`, with the same return values.
+  `LIST_OVERDRAW` has no counterpart: the C++ virtual list takes an
+  explicit viewport height, which `MessageScroller::H` is, rather than
+  filling whatever box it is given.
+- **The list's horizontal padding rides on the rows**, as upstream does,
+  and its vertical padding lands on the first and last row wrappers rather
+  than on the list element, because `VirtualList::Pad` is one value for all
+  four sides and the rows already carry the horizontal half.
+- **`AttachmentContent` grows with an auto basis.** Upstream writes
+  `flex_1()`. This port's flex intrinsic sizing gives a `basis: 0` item no
+  max-content contribution, so a content-sized card collapsed onto its
+  `min_w_40`; `Grow(1)` — grow 1, shrink 1, basis auto — makes the card as
+  wide as its metadata and still lets the column take the slack, which is
+  what the zero basis was for here. Noted at the spot.
+- **`El::Truncate` is a property of the run, not of the box.** Rust puts
+  `.truncate()` on the `div` and the text inside inherits it; the
+  attachment title and description put it on their text element as well, or
+  a long filename paints straight over the actions.
+- `mr_auto` / `ml_auto` beside `self_start` / `self_end` are not ported —
+  there are no auto margins here, and align-self alone puts the box at the
+  edge of a column in every composition these components ship in.
+  `object_fit(Cover)` on an attachment's image preview is the runtime's
+  `Contain`, and `text_center` on a separator's content slot is the flex
+  box's centering rather than the run's.
+
+The six story pages are ports of `crates/story/src/stories/*_story.rs` at
+their post-`a10352aa` state, registered the way the other sixty-six are
+(`STORY_PAGE`, the `Story*` enum and the `kMeta` row). The gallery now
+lists 72 components. `MessageScrollerStory` keeps seven scroller entities,
+a composer `InputState` and its own message vectors; the streaming demo is
+a 110 ms `WindowSetInterval` walking the scripted response one token at a
+time and remeasuring only the row that grew, which is what `cx.spawn` plus
+a background timer does upstream.
+
+`cmd/audit-port.ts` carries the six module names and six `testTargets`
+rows, and needs no override or declaration mapping — every public
+declaration keeps its Rust spelling.
+`tests/{Shimmer,Marker,Bubble,Message,Attachment,MessageScroller}Tests.cpp`
+port all twenty `#[cfg(test)]` cases plus the element geometry the builder
+tests cannot see. One is answered structurally rather than by simulation:
+`whole_card_click_stays_below_the_actions` needs a `TestAppContext`, so
+what is checked is the pair of facts that make its assertions come out —
+the click layer is built before the actions slot, and the actions cluster
+stops the press. One tolerance is looser than Rust's: a colour here is
+eight bits a channel and a byte is truncated, not rounded, so twelve
+compounded shimmer layers land about a point and a half under the source's
+peak; `ShimmerLayerOpacity` is the float the byte came from and is checked
+against Rust's own thousandth.
+
+MSVC release tests pass 22,390 checks, `bun cmd/build.ts -rel -all` and
+`bun cmd/build-no-amalgam.ts -rel` build clean under `/W4 /WX`, and all six
+story pages were screenshot and read against the Rust source's intent.

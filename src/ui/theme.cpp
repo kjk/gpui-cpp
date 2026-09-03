@@ -811,7 +811,9 @@ SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
     out.radius.md = t.radius;
     out.radius.lg = t.radiusLg;
     out.radius.xl = t.radius * 2.f;
-    out.radius.full = 9999.f;
+    // radius_tokens().full is `radius_full()`, not the raw constant: a theme
+    // that squares its corners squares the pill tier with them.
+    out.radius.full = t.radiusFull;
 
     // `typography_tokens` overwrites the application base sizes and leaves
     // the source platform-default families and the rest of the scale intact.
