@@ -1003,6 +1003,10 @@ static int KeyFor(unichar c) {
             return KeyPageUp;
         case NSPageDownFunctionKey:
             return KeyPageDown;
+        // Rust GPUI observes the Insert key as NSHelpFunctionKey rather than
+        // NSInsertFunctionKey on macOS.
+        case NSHelpFunctionKey:
+            return KeyInsert;
         case NSDeleteFunctionKey:
             return KeyDelete;
         case 0x7f: // the key labelled Delete on a Mac keyboard
@@ -1018,11 +1022,66 @@ static int KeyFor(unichar c) {
         case ' ':
             return KeySpace;
         case '[':
+        case '{':
             return KeyLeftBracket;
         case ']':
+        case '}':
             return KeyRightBracket;
+        case '-':
+        case '_':
+            return KeyMinus;
+        case '=':
+        case '+':
+            return KeyEqual;
+        case '\\':
+        case '|':
+            return KeyBackslash;
+        case ';':
+        case ':':
+            return KeySemicolon;
+        case '\'':
+        case '"':
+            return KeyQuote;
+        case ',':
+        case '<':
+            return KeyComma;
+        case '.':
+        case '>':
+            return KeyPeriod;
+        case '/':
+        case '?':
+            return KeySlash;
+        case '`':
+        case '~':
+            return KeyBacktick;
+        case '!':
+            return '1';
+        case '@':
+            return '2';
+        case '#':
+            return '3';
+        case '$':
+            return '4';
+        case '%':
+            return '5';
+        case '^':
+            return '6';
+        case '&':
+            return '7';
+        case '*':
+            return '8';
+        case '(':
+            return '9';
+        case ')':
+            return '0';
         default:
             break;
+    }
+    if (c >= NSF1FunctionKey && c <= NSF24FunctionKey) {
+        return KeyF1 + (int)(c - NSF1FunctionKey);
+    }
+    if (c >= NSF25FunctionKey && c <= NSF35FunctionKey) {
+        return KeyF25 + (int)(c - NSF25FunctionKey);
     }
     if (c >= 'a' && c <= 'z') {
         return (int)(c - 'a') + 'A';
@@ -1049,10 +1108,13 @@ void WindowMacKeyUp(Window* win, NSEvent* event) {
     if (!key) {
         return;
     }
+    bool function =
+        (mods & NSEventModifierFlagFunction) != 0 &&
+        !(first >= NSUpArrowFunctionKey && first <= NSModeSwitchFunctionKey);
     WindowKeyUp(win, key, (mods & NSEventModifierFlagShift) != 0,
                 (mods & NSEventModifierFlagControl) != 0,
                 (mods & NSEventModifierFlagOption) != 0,
-                (mods & NSEventModifierFlagCommand) != 0);
+                (mods & NSEventModifierFlagCommand) != 0, function);
 }
 
 // True when the caller should hand the event to the input method for its
@@ -1075,9 +1137,12 @@ bool WindowMacKeyDown(Window* win, NSEvent* event) {
 
     NSString* bare = [event charactersIgnoringModifiers];
     unichar first = [bare length] > 0 ? [bare characterAtIndex:0] : 0;
+    bool function =
+        (mods & NSEventModifierFlagFunction) != 0 &&
+        !(first >= NSUpArrowFunctionKey && first <= NSModeSwitchFunctionKey);
     int key = KeyFor(first);
     if (key) {
-        WindowKeyDown(win, key, shift, ctrl, alt, platform);
+        WindowKeyDown(win, key, shift, ctrl, alt, platform, function);
     }
     // Backspace arrives as a key only; the bound InputState edits on the
     // control code the Windows window delivers through WM_CHAR.
@@ -1453,6 +1518,9 @@ static NSEventModifierFlags KeyEquivalentMask(const Modifiers& mods) {
     }
     if (mods.platform) {
         mask |= NSEventModifierFlagCommand;
+    }
+    if (mods.function) {
+        mask |= NSEventModifierFlagFunction;
     }
     return mask;
 }

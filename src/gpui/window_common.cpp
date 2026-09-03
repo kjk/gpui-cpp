@@ -759,10 +759,10 @@ static void SetMouseDown(Window* win, bool down) {
 static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt);
 static bool SemanticKeyStep(Window* win, int key, bool ctrl, bool alt);
 
-void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
-                   bool platform) {
+bool WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
+                   bool platform, bool function) {
     if (!win) {
-        return;
+        return false;
     }
     // The focused field gets the chord first, as GPUI dispatches an action to
     // whatever has focus before anything else sees the key. The view's own
@@ -786,14 +786,14 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     uint32_t action = 0;
     if (!held) {
         action = WindowResolveKeyAction(win, key, shift, ctrl, alt, platform,
-                                        &actionArg, &actionPending);
+                                        function, &actionArg, &actionPending);
     }
     if (actionPending) {
         // Begun a sequence: nothing under the keymap sees this keystroke.
         win->eatChar = true;
         win->eatReturn = false;
         AppInvalidate(win);
-        return;
+        return true;
     }
 
     // The focused field first, which is where its own key context puts it:
@@ -821,14 +821,14 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     // element bound to a SliderState is a slider whatever else it is.
     if (!held && !eaten && SliderKeyStep(win, key, ctrl, alt)) {
         win->eatChar = true;
-        return;
+        return true;
     }
     // A spinbutton's focused editor inherits the semantic operations from
     // its frame. Up/down invoke the same operation as assistive technology
     // and the two step buttons; horizontal arrows remain editor movement.
     if (!held && !eaten && SemanticKeyStep(win, key, ctrl, alt)) {
         win->eatChar = true;
-        return;
+        return true;
     }
     // div().on_key_down: the focused element's own listener, and then the
     // ones above it, before the keymap resolves the chord. A field that is
@@ -841,12 +841,14 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
         kd.shift = shift;
         kd.ctrl = ctrl;
         kd.alt = alt;
+        kd.platform = platform;
+        kd.function = function;
         if (WindowDispatchKeyEvent(win, &kd)) {
             // The character it also arrives as belongs to the handler that
             // took the key, not to whatever is under it.
             win->eatChar = true;
             AppInvalidate(win);
-            return;
+            return true;
         }
     }
     // The keymap, once the focused field has had its go: a field's own
@@ -860,7 +862,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
         win->eatChar = true;
         win->eatReturn = false;
         AppInvalidate(win);
-        return;
+        return true;
     }
     // The focus ring, last of the three: `tab` is bound on the window in
     // GPUI, the outermost key context there is, so a field indenting with it
@@ -869,8 +871,9 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     if (!eaten && key == KeyTab) {
         FocusTrapTab(win, shift);
         AppInvalidate(win);
-        return;
+        return true;
     }
+    bool windowHandled = false;
     if (win->onKey.IsValid()) {
         KeyEvent ev = {};
         ev.vk = key;
@@ -879,7 +882,9 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
         ev.ctrl = ctrl;
         ev.alt = alt;
         ev.platform = platform;
+        ev.function = function;
         ListenerCall(win->app, win, win->onKey, &ev);
+        windowHandled = !ev.propagate;
     }
     // Enter and Space both activate the focused element, and the press only
     // arms that: the click is made from the release, the same as the mouse's.
@@ -889,15 +894,16 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     // A focused field takes the space as text instead, so it never arms.
     bool activates = (key == KeyReturn && !win->eatReturn) ||
                      (key == KeySpace && !(win->input && win->input->focused));
-    bool modified = shift || ctrl || alt;
+    bool modified = shift || ctrl || alt || platform || function;
     win->keyPressPending = activates && !modified && !eaten && win->focusId;
     win->keyPressGen = win->focusGen;
     win->eatReturn = false;
     AppInvalidate(win);
+    return eaten || windowHandled || win->keyPressPending;
 }
 
 void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt,
-                 bool platform) {
+                 bool platform, bool function) {
     if (!win) {
         return;
     }
@@ -913,6 +919,7 @@ void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt,
         ku.ctrl = ctrl;
         ku.alt = alt;
         ku.platform = platform;
+        ku.function = function;
         WindowDispatchKeyUpEvent(win, &ku);
     }
     // The release consumes the pending press whatever it is: a clean
@@ -922,7 +929,7 @@ void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt,
     int gen = win->keyPressGen;
     win->keyPressPending = false;
     if (!ClickFromKeyRelease(pending, gen, win->focusGen, key,
-                             shift || ctrl || alt)) {
+                             shift || ctrl || alt || platform || function)) {
         return;
     }
     // GPUI registers the keyboard activation on the painted element, so a
@@ -3040,6 +3047,7 @@ static PlatMenuItem* AppMenuToPlat(AppMenuState* state, Arena* a,
                 p.keyMods.alt = chord.alt;
                 p.keyMods.shift = chord.shift;
                 p.keyMods.platform = chord.platform;
+                p.keyMods.function = chord.function;
             }
         }
     }

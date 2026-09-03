@@ -10440,6 +10440,7 @@ static const float kShellWheelNotch = 48.f;
 // construction. The modifier order is GPUI's own, so a chord round-trips.
 static Str ScriptKeystroke(Arena* arena, const KeyEvent& event) {
     StrBuilder out;
+    if (event.function) StrBuilderAppend(arena, out, StrL("fn-"));
     if (event.ctrl) StrBuilderAppend(arena, out, StrL("ctrl-"));
     if (event.alt) StrBuilderAppend(arena, out, StrL("alt-"));
     if (event.platform) StrBuilderAppend(arena, out, StrL("cmd-"));
@@ -10456,12 +10457,13 @@ static Str ScriptKeystroke(Arena* arena, const KeyEvent& event) {
 }
 
 static JSValue JsModifiers(JSContext* ctx, bool shift, bool control, bool alt,
-                           bool platform) {
+                           bool platform, bool function) {
     JSValue modifiers = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, modifiers, "shift", JS_NewBool(ctx, shift));
     JS_SetPropertyStr(ctx, modifiers, "control", JS_NewBool(ctx, control));
     JS_SetPropertyStr(ctx, modifiers, "alt", JS_NewBool(ctx, alt));
     JS_SetPropertyStr(ctx, modifiers, "platform", JS_NewBool(ctx, platform));
+    JS_SetPropertyStr(ctx, modifiers, "function", JS_NewBool(ctx, function));
     return modifiers;
 }
 
@@ -10512,7 +10514,7 @@ void ShellRuntime::DispatchKey(shell::CallbackId callback,
     }
     JS_SetPropertyStr(impl->context, payload, "modifiers",
                       JsModifiers(impl->context, event.shift, event.ctrl,
-                                  event.alt, event.platform));
+                                  event.alt, event.platform, event.function));
     ArenaDelete(arena);
     ShellPropagationGuard guard(propagate);
     Dispatch(this, callback, payload, window, app);
@@ -10536,7 +10538,7 @@ void ShellRuntime::DispatchMouseButton(shell::CallbackId callback,
     JS_SetPropertyStr(
         impl->context, payload, "modifiers",
         JsModifiers(impl->context, modifiers.shift, modifiers.control,
-                    modifiers.alt, modifiers.platform));
+                    modifiers.alt, modifiers.platform, modifiers.function));
     Dispatch(this, callback, payload, window, app);
 }
 
@@ -10566,10 +10568,11 @@ void ShellRuntime::DispatchScrollWheel(shell::CallbackId callback,
                       JS_NewString(impl->context, phase));
     SetPointerGeometry(impl->context, payload, event.x, event.y, bounds,
                        hasBounds);
-    JS_SetPropertyStr(impl->context, payload, "modifiers",
-                      JsModifiers(impl->context, event.modifiers.shift,
-                                  event.modifiers.control, event.modifiers.alt,
-                                  event.modifiers.platform));
+    JS_SetPropertyStr(
+        impl->context, payload, "modifiers",
+        JsModifiers(impl->context, event.modifiers.shift,
+                    event.modifiers.control, event.modifiers.alt,
+                    event.modifiers.platform, event.modifiers.function));
     ShellPropagationGuard guard(propagate);
     Dispatch(this, callback, payload, window, app);
 }

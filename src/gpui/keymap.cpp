@@ -37,10 +37,14 @@ static bool IsNameChar(char c) {
 struct NamedKey {
     const char* name;
     int vk;
+    // Rust names a shifted punctuation character itself ("?"), while this
+    // port keeps the physical Win32 OEM code plus modifiers. The alias sets
+    // the modifier so both spellings resolve to the same chord.
+    bool shift = false;
 };
 
-// The names GPUI spells its keys with. The port's key codes are the Windows
-// virtual keys, which is what a KeyEvent carries on all three platforms.
+// The names GPUI spells its keys with. The common codes are Windows virtual
+// keys; the handful that only macOS/XKB can emit use the reserved range.
 static const NamedKey kNamedKeys[] = {
     {"backspace", KeyBack},
     {"tab", KeyTab},
@@ -56,35 +60,78 @@ static const NamedKey kNamedKeys[] = {
     {"up", KeyUp},
     {"right", KeyRight},
     {"down", KeyDown},
+    {"insert", KeyInsert},
     {"delete", KeyDelete},
-    // The OEM keys. Only the brackets are reported on all three — the X11 and
-    // Cocoa windows map those two, because a field binds them; a binding on
-    // any of the rest is simply never matched off Windows, the way a binding
-    // on a key the keyboard does not have is never matched anywhere.
-    {"-", 189},
-    {"=", 187},
+    {"back", KeyBrowserBack},
+    {"forward", KeyBrowserForward},
+    {"menu", KeyApps},
+    // Linux names these dedicated XF86 keys. They remain valid bindings on
+    // every platform, but only a keyboard that produces one can match them.
+    {"cut", KeyCut},
+    {"copy", KeyCopy},
+    {"paste", KeyPaste},
+    {"new", KeyNew},
+    {"open", KeyOpen},
+    {"save", KeySave},
+    // XKB strips the KP_ prefix from the dedicated keypad operators.
+    {"add", KeyKpAdd},
+    {"subtract", KeyKpSubtract},
+    {"multiply", KeyKpMultiply},
+    {"divide", KeyKpDivide},
+    {"decimal", KeyKpDecimal},
+    {"separator", KeyKpSeparator},
+    {"equal", KeyKpEqual},
+    {"begin", KeyKpBegin},
+    // Win32's OEM punctuation row, followed by its shifted aliases.
+    {"-", KeyMinus},
+    {"=", KeyEqual},
     {"[", KeyLeftBracket},
     {"]", KeyRightBracket},
-    {"\\", 220},
-    {";", 186},
-    {"'", 222},
-    {",", 188},
-    {".", 190},
-    {"/", 191},
-    {"`", 192},
+    {"\\", KeyBackslash},
+    {";", KeySemicolon},
+    {"'", KeyQuote},
+    {",", KeyComma},
+    {".", KeyPeriod},
+    {"/", KeySlash},
+    {"`", KeyBacktick},
+    {"_", KeyMinus, true},
+    {"+", KeyEqual, true},
+    {"{", KeyLeftBracket, true},
+    {"}", KeyRightBracket, true},
+    {"|", KeyBackslash, true},
+    {":", KeySemicolon, true},
+    {"\"", KeyQuote, true},
+    {"<", KeyComma, true},
+    {">", KeyPeriod, true},
+    {"?", KeySlash, true},
+    {"~", KeyBacktick, true},
+    {"!", '1', true},
+    {"@", '2', true},
+    {"#", '3', true},
+    {"$", '4', true},
+    {"%", '5', true},
+    {"^", '6', true},
+    {"&", '7', true},
+    {"*", '8', true},
+    {"(", '9', true},
+    {")", '0', true},
 };
 
-static int VkForName(Str name) {
+static int VkForName(Str name, bool* shift) {
     if (name.len == 0) {
         return 0;
     }
     for (int i = 0; i < (int)(sizeof(kNamedKeys) / sizeof(kNamedKeys[0]));
          i++) {
         if (base::StrEqI(name, kNamedKeys[i].name)) {
+            if (shift && kNamedKeys[i].shift) {
+                *shift = true;
+            }
             return kNamedKeys[i].vk;
         }
     }
-    // f1..f12, which are VK_F1 (112) upwards.
+    // Windows names F1..F24; macOS and XKB continue the same vocabulary to
+    // F35. The latter live in the reserved portable range above the VKs.
     if ((name.s[0] == 'f' || name.s[0] == 'F') && name.len >= 2 &&
         name.len <= 3) {
         int n = 0;
@@ -94,8 +141,11 @@ static int VkForName(Str name) {
             }
             n = n * 10 + (name.s[i] - '0');
         }
-        if (n >= 1 && n <= 12) {
-            return 111 + n;
+        if (n >= 1 && n <= 24) {
+            return KeyF1 + n - 1;
+        }
+        if (n >= 25 && n <= 35) {
+            return KeyF25 + n - 25;
         }
         return 0;
     }
@@ -107,6 +157,9 @@ static int VkForName(Str name) {
         return c - 'a' + 'A';
     }
     if (c >= 'A' && c <= 'Z') {
+        if (shift) {
+            *shift = true;
+        }
         return c;
     }
     if (c >= '0' && c <= '9') {
@@ -155,12 +208,14 @@ bool KeyChordParse(Str spec, KeyChord* out) {
             c.alt = true;
         } else if (base::StrEqI(part, "shift")) {
             c.shift = true;
+        } else if (base::StrEqI(part, "fn")) {
+            c.function = true;
         } else {
             return false;
         }
         i = dash + 1;
     }
-    c.vk = VkForName(Str(spec.s + i, spec.len - i));
+    c.vk = VkForName(Str(spec.s + i, spec.len - i), &c.shift);
     if (!c.vk) {
         return false;
     }
@@ -170,7 +225,8 @@ bool KeyChordParse(Str spec, KeyChord* out) {
 
 bool KeyChordEq(const KeyChord& a, const KeyChord& b) {
     return a.vk == b.vk && a.shift == b.shift && a.ctrl == b.ctrl &&
-           a.alt == b.alt && a.platform == b.platform;
+           a.alt == b.alt && a.platform == b.platform &&
+           a.function == b.function;
 }
 
 int KeyChordsParse(Str spec, KeyChord* out, int maxChords) {
@@ -576,24 +632,29 @@ void KeymapClearPending() {
 
 Str KeyName(int vk) {
     for (size_t i = 0; i < sizeof(kNamedKeys) / sizeof(kNamedKeys[0]); i++) {
-        if (kNamedKeys[i].vk == vk) {
+        if (kNamedKeys[i].vk == vk && !kNamedKeys[i].shift) {
             return Str(kNamedKeys[i].name);
         }
     }
-    // f1..f12, the other half of the parse above: a binding may be written on
+    // f1..f35, the other half of the parse above: a binding may be written on
     // one, so a menu row or a tooltip has to be able to say which. The buffer
     // is static for the same reason the one below is — the name outlives the
     // call, and only one is ever being looked at.
-    if (vk >= 112 && vk <= 123) {
+    int n = 0;
+    if (vk >= KeyF1 && vk <= KeyF24) {
+        n = vk - KeyF1 + 1;
+    } else if (vk >= KeyF25 && vk <= KeyF35) {
+        n = vk - KeyF25 + 25;
+    }
+    if (n) {
         static char fkey[4] = {};
-        int n = vk - 111;
         fkey[0] = 'f';
         if (n < 10) {
             fkey[1] = (char)('0' + n);
             return Str(fkey, 2);
         }
-        fkey[1] = '1';
-        fkey[2] = (char)('0' + (n - 10));
+        fkey[1] = (char)('0' + n / 10);
+        fkey[2] = (char)('0' + n % 10);
         return Str(fkey, 3);
     }
     // A letter or a digit is its own lowercase name, which is how a binding

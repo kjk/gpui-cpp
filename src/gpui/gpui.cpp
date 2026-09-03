@@ -6797,8 +6797,8 @@ bool WindowDispatchKeyUpEvent(Window* win, KeyEvent* ev) {
 }
 
 uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                                bool alt, bool platform, intptr_t* arg,
-                                bool* pending) {
+                                bool alt, bool platform, bool function,
+                                intptr_t* arg, bool* pending) {
     if (arg) {
         *arg = 0;
     }
@@ -6828,6 +6828,7 @@ uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,
     chord.ctrl = ctrl;
     chord.alt = alt;
     chord.platform = platform;
+    chord.function = function;
     KeyMatch m = KeymapMatch(chord, contexts, nContexts);
     if (m.pending) {
         // Half of a sequence. Rust holds the keystroke on the matcher and
@@ -6845,11 +6846,11 @@ uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,
 }
 
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                             bool alt, bool platform) {
+                             bool alt, bool platform, bool function) {
     intptr_t arg = 0;
     bool pending = false;
-    uint32_t action = WindowResolveKeyAction(win, vk, shift, ctrl, alt,
-                                             platform, &arg, &pending);
+    uint32_t action = WindowResolveKeyAction(
+        win, vk, shift, ctrl, alt, platform, function, &arg, &pending);
     if (pending) {
         return true;
     }

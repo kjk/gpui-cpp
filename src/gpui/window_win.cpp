@@ -383,13 +383,41 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             WindowKeyDown(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown(),
                           WinDown());
             return 0;
+        case WM_SYSKEYDOWN: {
+            // Rust GPUI's translate_accelerator routes both WM_KEYDOWN and
+            // WM_SYSKEYDOWN through one key dispatcher. Keep an unhandled
+            // system chord for DefWindowProc (Alt+F4/menu behavior), but
+            // consume a binding such as Alt+Up before Windows takes it.
+            bool alt = AltDown() || (lParam & (1ll << 29)) != 0;
+            win->eatSysChar = false;
+            if (WindowKeyDown(win, (int)wParam, ShiftDown(), CtrlDown(), alt,
+                              WinDown())) {
+                win->eatSysChar = true;
+                return 0;
+            }
+            break;
+        }
         case WM_KEYUP:
             WindowKeyUp(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown(),
                         WinDown());
             return 0;
+        case WM_SYSKEYUP: {
+            bool alt = AltDown() || (lParam & (1ll << 29)) != 0;
+            WindowKeyUp(win, (int)wParam, ShiftDown(), CtrlDown(), alt,
+                        WinDown());
+            // Rust always consumes this release so ModifiersChanged remains
+            // coherent and the paired key-up is not interpreted twice.
+            return 0;
+        }
         case WM_CHAR:
             WindowChar(win, (uint32_t)wParam, CtrlDown(), AltDown());
             return 0;
+        case WM_SYSCHAR:
+            if (win->eatSysChar) {
+                win->eatSysChar = false;
+                return 0;
+            }
+            break;
         case WM_IME_SETCONTEXT:
             // The field draws the marked text itself, so the system's inline
             // composition window would be a second copy of it.

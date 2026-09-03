@@ -12,6 +12,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
+#include <X11/XF86keysym.h>
 #include <X11/cursorfont.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -269,35 +270,146 @@ static int KeyFor(KeySym ks) {
             return KeyControl;
         case XK_Alt_L:
         case XK_Alt_R:
-            return KeyMenu;
+            return KeyAlt;
         case XK_Escape:
             return KeyEscape;
         case XK_space:
             return KeySpace;
         case XK_Prior:
+        case XK_KP_Prior:
             return KeyPageUp;
         case XK_Next:
+        case XK_KP_Next:
             return KeyPageDown;
         case XK_End:
+        case XK_KP_End:
             return KeyEnd;
         case XK_Home:
+        case XK_KP_Home:
             return KeyHome;
         case XK_Left:
+        case XK_KP_Left:
             return KeyLeft;
         case XK_Up:
+        case XK_KP_Up:
             return KeyUp;
         case XK_Right:
+        case XK_KP_Right:
             return KeyRight;
         case XK_Down:
+        case XK_KP_Down:
             return KeyDown;
+        case XK_Insert:
+        case XK_KP_Insert:
+            return KeyInsert;
         case XK_Delete:
+        case XK_KP_Delete:
             return KeyDelete;
+        case XK_Menu:
+            return KeyApps;
+        case XF86XK_Back:
+            return KeyBrowserBack;
+        case XF86XK_Forward:
+            return KeyBrowserForward;
+        case XF86XK_Cut:
+            return KeyCut;
+        case XF86XK_Copy:
+            return KeyCopy;
+        case XF86XK_Paste:
+            return KeyPaste;
+        case XF86XK_New:
+            return KeyNew;
+        case XF86XK_Open:
+            return KeyOpen;
+        case XF86XK_Save:
+            return KeySave;
+        case XK_minus:
+        case XK_underscore:
+            return KeyMinus;
+        case XK_equal:
+        case XK_plus:
+            return KeyEqual;
         case XK_bracketleft:
+        case XK_braceleft:
             return KeyLeftBracket;
         case XK_bracketright:
+        case XK_braceright:
             return KeyRightBracket;
+        case XK_backslash:
+        case XK_bar:
+            return KeyBackslash;
+        case XK_semicolon:
+        case XK_colon:
+            return KeySemicolon;
+        case XK_apostrophe:
+        case XK_quotedbl:
+            return KeyQuote;
+        case XK_comma:
+        case XK_less:
+            return KeyComma;
+        case XK_period:
+        case XK_greater:
+            return KeyPeriod;
+        case XK_slash:
+        case XK_question:
+            return KeySlash;
+        case XK_grave:
+        case XK_asciitilde:
+            return KeyBacktick;
+        case XK_exclam:
+            return '1';
+        case XK_at:
+            return '2';
+        case XK_numbersign:
+            return '3';
+        case XK_dollar:
+            return '4';
+        case XK_percent:
+            return '5';
+        case XK_asciicircum:
+            return '6';
+        case XK_ampersand:
+            return '7';
+        case XK_asterisk:
+            return '8';
+        case XK_parenleft:
+            return '9';
+        case XK_parenright:
+            return '0';
+        case XK_KP_Add:
+            return KeyKpAdd;
+        case XK_KP_Subtract:
+            return KeyKpSubtract;
+        case XK_KP_Multiply:
+            return KeyKpMultiply;
+        case XK_KP_Divide:
+            return KeyKpDivide;
+        case XK_KP_Decimal:
+            return KeyKpDecimal;
+        case XK_KP_Separator:
+            return KeyKpSeparator;
+        case XK_KP_Equal:
+            return KeyKpEqual;
+        case XK_KP_Begin:
+            return KeyKpBegin;
+        case XK_KP_Space:
+            return KeySpace;
+        case XK_KP_Tab:
+            return KeyTab;
         default:
             break;
+    }
+    if (ks >= XK_F1 && ks <= XK_F24) {
+        return KeyF1 + (int)(ks - XK_F1);
+    }
+    if (ks >= XK_F25 && ks <= XK_F35) {
+        return KeyF25 + (int)(ks - XK_F25);
+    }
+    if (ks >= XK_KP_F1 && ks <= XK_KP_F4) {
+        return KeyF1 + (int)(ks - XK_KP_F1);
+    }
+    if (ks >= XK_KP_0 && ks <= XK_KP_9) {
+        return '0' + (int)(ks - XK_KP_0);
     }
     // Letters and digits carry their ASCII uppercase code, as VK_* does.
     if (ks >= XK_a && ks <= XK_z) {

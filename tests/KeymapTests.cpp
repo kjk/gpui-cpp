@@ -42,11 +42,54 @@ static void AChordIsReadTheWayRustSpellsIt() {
 
     utassert(KeyChordParse(StrL("ctrl-shift-alt-i"), &c));
     utassert(c.vk == 'I' && c.ctrl && c.shift && c.alt);
+    utassert(KeyChordParse(StrL("fn-left"), &c));
+    utassert(c.vk == KeyLeft && c.function && !c.shift);
+
+    KeyChord uppercase = {}, explicitShift = {};
+    utassert(KeyChordParse(StrL("A"), &uppercase));
+    utassert(KeyChordParse(StrL("shift-a"), &explicitShift));
+    utassert(KeyChordEq(uppercase, explicitShift));
 
     utassert(KeyChordParse(StrL("pagedown"), &c));
     utassert(c.vk == KeyPageDown && !c.ctrl);
     utassert(KeyChordParse(StrL("f12"), &c));
     utassert(c.vk == 123);
+    utassert(KeyChordParse(StrL("f24"), &c));
+    utassert(c.vk == KeyF24);
+    utassert(KeyChordParse(StrL("f25"), &c));
+    utassert(c.vk == KeyF25);
+    utassert(KeyChordParse(StrL("f35"), &c));
+    utassert(c.vk == KeyF35);
+    utassert(!KeyChordParse(StrL("f36"), &c));
+
+    utassert(KeyChordParse(StrL("insert"), &c));
+    utassert(c.vk == KeyInsert);
+    utassert(KeyChordParse(StrL("back"), &c));
+    utassert(c.vk == KeyBrowserBack);
+    utassert(KeyChordParse(StrL("forward"), &c));
+    utassert(c.vk == KeyBrowserForward);
+    utassert(KeyChordParse(StrL("menu"), &c));
+    utassert(c.vk == KeyApps && c.vk != KeyMenu && !c.alt);
+
+    // Rust spells shifted punctuation as the character itself. It and the
+    // explicit modifier spelling are the same physical chord here.
+    KeyChord question = {}, shiftedSlash = {};
+    utassert(KeyChordParse(StrL("?"), &question));
+    utassert(KeyChordParse(StrL("shift-/"), &shiftedSlash));
+    utassert(KeyChordEq(question, shiftedSlash));
+
+    const char* linuxCommands[] = {"cut", "copy", "paste",
+                                   "new", "open", "save"};
+    for (const char* command : linuxCommands) {
+        utassert(KeyChordParse(Str(command), &c));
+        utassert(KeyName(c.vk).len > 0);
+    }
+    const char* keypadNames[] = {"add",     "subtract",  "multiply", "divide",
+                                 "decimal", "separator", "equal",    "begin"};
+    for (const char* keypad : keypadNames) {
+        utassert(KeyChordParse(Str(keypad), &c));
+        utassert(KeyName(c.vk).len > 0);
+    }
 
     // A dash is only a separator when something follows it, so the key can be
     // one: "alt-f4" and "ctrl--" both read.
@@ -324,6 +367,36 @@ static void AnActionWalksOutFromWhatHasFocus() {
     KeymapClear();
 }
 
+// Windows delivers an Alt chord as WM_SYSKEYDOWN rather than WM_KEYDOWN.
+// WndProc asks this dispatcher whether GPUI handled it: a bound chord must be
+// consumed, while an unmatched system key must remain available to Windows.
+static void AnAltChordIsAHandledKeystroke() {
+    KeymapClear();
+    uint32_t act = ActionOf(StrL("t::AltUp"));
+    KeyBinding b[] = {{"alt-up", act, nullptr}};
+    KeymapBind(b, 1);
+
+    Arena* a = ArenaNew();
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<Recorder> rec = EntityNew<Recorder>(&app);
+    El* root =
+        Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Stop));
+    FocusCollect(win, root);
+    win->focusId = 5;
+
+    gCalls = 0;
+    utassert(WindowKeyDown(win, KeyUp, false, false, true, false));
+    utassert(gCalls == 1 && gSeen[0] == act);
+    // F10 is a Windows system-menu key and is deliberately not bound here.
+    utassert(!WindowKeyDown(win, 121, false, false, false, false));
+
+    delete win;
+    ArenaDelete(a);
+    KeymapClear();
+}
+
 // A handler that propagates hands the action on outwards, and the outer one
 // is what ends it.
 static void PropagateCarriesOnOutwards() {
@@ -517,7 +590,7 @@ static void AFieldsChordsResolveInItsOwnContext() {
         arg = 0;
         pending = false;
         uint32_t id = WindowResolveKeyAction(win, vk, shift, ctrl, alt, plat,
-                                             &arg, &pending);
+                                             false, &arg, &pending);
         return InputActionOf(id, arg);
     };
     // The shortcut modifier, whichever key it is on this platform.
@@ -605,14 +678,22 @@ static void TheChordAnActionIsReachedBy() {
     utassert(base::StrEq(KeyName(120), "f9"));
     utassert(base::StrEq(KeyName(121), "f10"));
     utassert(base::StrEq(KeyName(123), "f12"));
-    // And nothing past it: 124 is F13, which no binding here names.
-    utassert(KeyName(124).len == 0);
+    utassert(base::StrEq(KeyName(KeyF24), "f24"));
+    utassert(base::StrEq(KeyName(KeyF25), "f25"));
+    utassert(base::StrEq(KeyName(KeyF35), "f35"));
+    utassert(KeyName(KeyKpBegin + 1).len == 0);
+    utassert(base::StrEq(KeyName(KeyInsert), "insert"));
+    utassert(base::StrEq(KeyName(KeyBrowserBack), "back"));
+    utassert(base::StrEq(KeyName(KeyBrowserForward), "forward"));
+    utassert(base::StrEq(KeyName(KeyApps), "menu"));
 
     // Round trip: every name KeyChordParse reads, KeyName spells again.
-    const char* specs[] = {"enter", "escape", "tab", "space", "backspace",
-                           "delete", "left", "up", "right", "down",
-                           "home", "end", "pageup", "pagedown",
-                           "f1", "f7", "f11", "f12"};
+    const char* specs[] = {
+        "enter",  "escape",   "tab",    "space", "backspace", "delete",
+        "left",   "up",       "right",  "down",  "home",      "end",
+        "pageup", "pagedown", "insert", "back",  "forward",   "menu",
+        "f1",     "f7",       "f11",    "f12",   "f24",       "f35",
+        "cut",    "copy",     "paste",  "new",   "open",      "save"};
     for (const char* spec : specs) {
         KeyChord parsed = {};
         utassert(KeyChordParse(Str(spec), &parsed));
@@ -637,6 +718,7 @@ void TestKeymap() {
     BlurDropsWhatTheKeyboardWasPartWayThrough();
     AnActionIsItsName();
     AnActionWalksOutFromWhatHasFocus();
+    AnAltChordIsAHandledKeystroke();
     PropagateCarriesOnOutwards();
     AContextOffThePathDoesNotMatch();
     AFocusableWithNothingOfItsOwnStaysOnItsOwnPath();

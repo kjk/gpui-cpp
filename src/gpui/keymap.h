@@ -33,10 +33,13 @@ struct KeyChord {
     // `Modifiers::platform`, which is a modifier of its own and not a second
     // name for control.
     bool platform = false;
+    // GPUI's `fn-` modifier. Native input only supplies it on macOS.
+    bool function = false;
 };
 
 // Keystroke::parse. The modifiers Rust spells are `ctrl-`, `alt-`, `shift-`,
-// `cmd-` and `secondary-`. `cmd-` is the platform key; `secondary-` is the
+// `cmd-`, `fn-` and `secondary-`. `cmd-` is the platform key; `secondary-` is
+// the
 // shortcut modifier, which is the platform key on macOS and control
 // everywhere else — so one `secondary-c` binding is Cmd-C on a Mac and
 // Ctrl-C on the other two.
@@ -46,8 +49,10 @@ struct KeyChord {
 // `ctrl-cmd-space` needs both at once, so control and command have to stay
 // apart. The key name is GPUI's:
 // lowercase, with "enter", "escape", "tab", "space", "backspace", "delete",
-// the four arrows, "home", "end", "pageup", "pagedown", "f1".."f12", a letter
-// or a digit, or one of the punctuation keys.
+// the four arrows, "home", "end", "pageup", "pagedown", "insert", "back",
+// "forward", "menu", "f1".."f35", a letter or digit, or an ASCII punctuation
+// key. Linux also names its XF86 cut/copy/paste/new/open/save keys and the
+// operators on its numeric keypad.
 //
 // Answers false for a spec it cannot read, which is a programming mistake
 // rather than something to handle.

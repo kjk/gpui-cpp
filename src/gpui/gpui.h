@@ -597,16 +597,21 @@ struct ClickEvent {
     int keyboardKey = 0;
 };
 
-// Portable key codes. The values are the Win32 VK_* ones, so the Windows
-// window passes wParam straight through and the X11 window maps keysyms onto
-// them. Only the keys the widgets react to are named.
-enum : uint8_t {
+// Portable key codes. Where Win32 has a VK_* value, that is the value here, so
+// the Windows window passes wParam straight through and the other windows map
+// their native keys onto it. F25..F35 and the XF86-only commands start at 256:
+// Windows has no virtual-key values for them, but Rust GPUI names them on the
+// platforms that do.
+enum : int {
     KeyBack = 8,
     KeyTab = 9,
     KeyReturn = 13,
     KeyShift = 16,
     KeyControl = 17,
-    KeyMenu = 18,
+    KeyAlt = 18,
+    // Compatibility for the old direct VK_MENU spelling. The context-menu
+    // key is KeyApps and is written "menu" in a binding.
+    KeyMenu = KeyAlt,
     KeyEscape = 27,
     KeySpace = 32,
     KeyPageUp = 33,
@@ -617,6 +622,7 @@ enum : uint8_t {
     KeyUp = 38,
     KeyRight = 39,
     KeyDown = 40,
+    KeyInsert = 45,
     KeyDelete = 46,
     // Letters and digits are their ASCII uppercase / digit codes.
     KeyA = 65,
@@ -628,10 +634,41 @@ enum : uint8_t {
     KeyX = 88,
     KeyY = 89,
     KeyZ = 90,
-    // The two OEM keys a field binds: VK_OEM_4 and VK_OEM_6, which the X11
-    // and Cocoa windows map their bracket keys onto.
+    KeyApps = 93,
+    KeyF1 = 112,
+    KeyF24 = 135,
+    KeyBrowserBack = 166,
+    KeyBrowserForward = 167,
+    // Win32's OEM punctuation keys. X11 and Cocoa map both the unshifted and
+    // shifted character on each physical key onto the same code.
+    KeySemicolon = 186,
+    KeyEqual = 187,
+    KeyComma = 188,
+    KeyMinus = 189,
+    KeyPeriod = 190,
+    KeySlash = 191,
+    KeyBacktick = 192,
     KeyLeftBracket = 219,
-    KeyRightBracket = 221
+    KeyBackslash = 220,
+    KeyRightBracket = 221,
+    KeyQuote = 222,
+    // Portable-only codes, outside the uint8_t Win32 VK range.
+    KeyF25 = 256,
+    KeyF35 = 266,
+    KeyCut = 267,
+    KeyCopy = 268,
+    KeyPaste = 269,
+    KeyNew = 270,
+    KeyOpen = 271,
+    KeySave = 272,
+    KeyKpAdd = 273,
+    KeyKpSubtract = 274,
+    KeyKpMultiply = 275,
+    KeyKpDivide = 276,
+    KeyKpDecimal = 277,
+    KeyKpSeparator = 278,
+    KeyKpEqual = 279,
+    KeyKpBegin = 280
 };
 
 struct KeyEvent {
@@ -643,9 +680,12 @@ struct KeyEvent {
     bool alt = false;
     // Command on macOS, the Windows/Super key elsewhere.
     bool platform = false;
+    // Fn. Only macOS reports it as a modifier of an ordinary key.
+    bool function = false;
     // cx.propagate(): an `El::OnKeyDown` handler that leaves this true passes
-    // the keystroke on outwards, the way an action handler does. Unused by
-    // the window-level `WindowOnKey`, which is the last thing to see a key.
+    // the keystroke on outwards, the way an action handler does. A
+    // window-level `WindowOnKey` is last; clearing this there tells Windows
+    // not to perform default handling for a WM_SYSKEYDOWN Alt chord.
     bool propagate = true;
 };
 
@@ -5063,6 +5103,10 @@ struct Window {
     // element, and the generation the focus was at when it went down.
     bool keyPressPending = false;
     int keyPressGen = 0;
+    // TranslateMessage has already queued WM_SYSCHAR by the time WndProc
+    // learns that GPUI handled its WM_SYSKEYDOWN. Suppress that paired
+    // character so an Alt+letter binding does not also activate a menu/beep.
+    bool eatSysChar = false;
     // The scrollbar being dragged, and how far into its thumb the press
     // landed. GPUI keeps the same pair in ScrollbarState::drag_pos.
     int scrollDragId = 0;
@@ -5774,7 +5818,8 @@ bool WindowRestoreFocus(Window* win, int id);
 // it is then offered to. Answers true when one of them kept it — Rust's
 // `dispatch_action` plus the `cx.propagate()` that decides how far it goes.
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                             bool alt, bool platform = false);
+                             bool alt, bool platform = false,
+                             bool function = false);
 // The action half on its own: the chord resolved against the contexts over
 // the focused element, with no handler run. The matcher is stateful — a
 // sequence half-finished is held on it — so a keystroke may only be resolved
@@ -5782,8 +5827,8 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
 // than asking twice. `pending` comes back true when the chord began a
 // sequence and belongs to nobody else.
 uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                                bool alt, bool platform, intptr_t* arg,
-                                bool* pending);
+                                bool alt, bool platform, bool function,
+                                intptr_t* arg, bool* pending);
 // Whether the shortcut modifier is down — `secondary-` in a binding spec:
 // Command on macOS, Control everywhere else. The two are separate modifiers
 // now, so the code that means "the copy chord" has to say which.
