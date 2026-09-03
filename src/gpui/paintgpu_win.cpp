@@ -33,11 +33,11 @@
    MSAA is a prototype's version of the same answer, and having it as a knob
    is what makes its cost visible.
 
-   Known gaps, which are why this is not the default: no subpixel glyph
-   positioning — x is snapped, where DirectWrite positions at a third of a
-   pixel — and dashes are expanded on the CPU for lines and ignored on rounded
-   rects. The four shaders are checked-in FXC bytecode generated from
-   paintgpu_win.hlsl by cmd/update-win-shaders.ts. */
+   The remaining visible gap, and why this is not the default: dashes are
+   expanded on the CPU for lines and ignored on rounded rects. Text uses
+   DirectWrite's RGB masks, display gamma/contrast and third-pixel phases. The
+   four shaders are checked-in FXC bytecode generated from paintgpu_win.hlsl by
+   cmd/update-win-shaders.ts. */
 
 #include "gpui/paintgpu.h"
 #include "gpui/scene.h"
@@ -198,10 +198,11 @@ static void SetColor(float* out, Rgba c) {
 
 // ─── the glyph atlas ─────────────────────────────────────────────────────
 //
-// One R8 texture, filled by a shelf allocator: a glyph goes on the current
-// row until it will not fit, then a new row starts under the tallest of the
-// last. Good enough for text that is nearly all one or two sizes, which is
-// what a UI is. A full atlas is cleared and refilled rather than grown.
+// One RGBA texture, filled by a shelf allocator: DirectWrite's ClearType
+// coverage occupies RGB, and a glyph goes on the current row until it will
+// not fit, then a new row starts under the tallest of the last. Good enough
+// for text that is nearly all one or two sizes, which is what a UI is. A full
+// atlas is cleared and refilled rather than grown.
 
 constexpr int kAtlasDim = 1024;
 
@@ -210,6 +211,8 @@ struct GlyphKey {
     uint32_t glyph = 0;
     // The em size in 1/4 px, so 13.5 and 14 are different entries.
     uint32_t size4 = 0;
+    // DirectWrite positions ClearType glyphs on thirds of a pixel.
+    uint32_t phase3 = 0;
 };
 
 struct GlyphEntry {
@@ -235,6 +238,7 @@ static uint32_t GlyphHash(const GlyphKey& k) {
     uint64_t h = (uint64_t)(uintptr_t)k.face * 0x9e3779b97f4a7c15ull;
     h ^= (uint64_t)k.glyph * 0xc2b2ae3d27d4eb4full;
     h ^= (uint64_t)k.size4 * 0x165667b19e3779f9ull;
+    h ^= (uint64_t)k.phase3 * 0x85ebca77c2b2ae63ull;
     h ^= h >> 29;
     return (uint32_t)(h & (kGlyphSlots - 1));
 }
@@ -287,6 +291,10 @@ struct Gpu {
     ID3D11DeviceContext* ctx = nullptr;
     IDXGIFactory2* factory = nullptr;
     IDWriteFactory* dwrite = nullptr;
+    float textGamma[4] = {};
+    float textContrast = 0.f;
+    float clearTypeLevel = 1.f;
+    bool textBgr = false;
 
     ID3D11VertexShader* vsQuad = nullptr;
     ID3D11PixelShader* psQuad = nullptr;
@@ -319,6 +327,45 @@ struct Gpu {
 };
 
 static Gpu gGpu;
+
+// DirectWrite's native compositor corrects coverage for the display gamma,
+// enhanced contrast and foreground brightness. These ratios are the compact
+// polynomial approximation published by Microsoft Terminal (MIT); doing the
+// correction in the shader leaves the atlas independent of text colour.
+static void InitTextParams(Gpu* g) {
+    static const float ratios[13][4] = {
+        {0.0000f / 4.f, 0.0000f / 4.f, 0.0000f / 4.f, 0.0000f / 4.f},
+        {0.0166f / 4.f, -0.0807f / 4.f, 0.2227f / 4.f, -0.0751f / 4.f},
+        {0.0350f / 4.f, -0.1760f / 4.f, 0.4325f / 4.f, -0.1370f / 4.f},
+        {0.0543f / 4.f, -0.2821f / 4.f, 0.6302f / 4.f, -0.1876f / 4.f},
+        {0.0739f / 4.f, -0.3963f / 4.f, 0.8167f / 4.f, -0.2287f / 4.f},
+        {0.0933f / 4.f, -0.5161f / 4.f, 0.9926f / 4.f, -0.2616f / 4.f},
+        {0.1121f / 4.f, -0.6395f / 4.f, 1.1588f / 4.f, -0.2877f / 4.f},
+        {0.1300f / 4.f, -0.7649f / 4.f, 1.3159f / 4.f, -0.3080f / 4.f},
+        {0.1469f / 4.f, -0.8911f / 4.f, 1.4644f / 4.f, -0.3234f / 4.f},
+        {0.1627f / 4.f, -1.0170f / 4.f, 1.6051f / 4.f, -0.3347f / 4.f},
+        {0.1773f / 4.f, -1.1420f / 4.f, 1.7385f / 4.f, -0.3426f / 4.f},
+        {0.1908f / 4.f, -1.2652f / 4.f, 1.8650f / 4.f, -0.3476f / 4.f},
+        {0.2031f / 4.f, -1.3864f / 4.f, 1.9851f / 4.f, -0.3501f / 4.f},
+    };
+    IDWriteRenderingParams* p = nullptr;
+    float gamma = 1.f;
+    if (g->dwrite && SUCCEEDED(g->dwrite->CreateRenderingParams(&p)) && p) {
+        gamma = p->GetGamma();
+        g->textContrast = p->GetEnhancedContrast();
+        g->clearTypeLevel = p->GetClearTypeLevel();
+        g->textBgr = p->GetPixelGeometry() == DWRITE_PIXEL_GEOMETRY_BGR;
+        p->Release();
+    }
+    int ix = (int)floorf(gamma * 10.f + 0.5f) - 10;
+    ix = std::max(0, std::min(ix, 12));
+    const float norm13 = (65536.f / (255.f * 255.f)) * 4.f;
+    const float norm24 = (256.f / 255.f) * 4.f;
+    g->textGamma[0] = norm13 * ratios[ix][0];
+    g->textGamma[1] = norm24 * ratios[ix][1];
+    g->textGamma[2] = norm13 * ratios[ix][2];
+    g->textGamma[3] = norm24 * ratios[ix][3];
+}
 
 constexpr int kD12FrameCount = 3;
 constexpr int kD12ImageSlots = 128;
@@ -498,10 +545,10 @@ static D3D12_BLEND_DESC D12Blend() {
     memset(&b, 0, sizeof(b));
     b.RenderTarget[0].BlendEnable = TRUE;
     b.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
-    b.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+    b.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC1_COLOR;
     b.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
     b.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-    b.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+    b.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC1_ALPHA;
     b.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
     b.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
     return b;
@@ -595,6 +642,7 @@ static bool D12MakePipelines(int samples) {
     }
 
     d.PS = {};
+    d.BlendState.RenderTarget[0].BlendEnable = FALSE;
     d.BlendState.RenderTarget[0].RenderTargetWriteMask = 0;
     D3D12_DEPTH_STENCIL_DESC stencil = D12DepthOff();
     stencil.StencilEnable = TRUE;
@@ -709,7 +757,7 @@ static bool D12EnsureGpu(PaintApp* pa) {
     D3D12_ROOT_PARAMETER rp[4] = {};
     rp[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     rp[0].Constants.ShaderRegister = 0;
-    rp[0].Constants.Num32BitValues = 4;
+    rp[0].Constants.Num32BitValues = 12;
     rp[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
     rp[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
     rp[1].Descriptor.ShaderRegister = 0;
@@ -759,7 +807,7 @@ static bool D12EnsureGpu(PaintApp* pa) {
     }
     D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
     D3D12_RESOURCE_DESC atlas =
-        D12Texture(kAtlasDim, kAtlasDim, DXGI_FORMAT_R8_UNORM, 1,
+        D12Texture(kAtlasDim, kAtlasDim, DXGI_FORMAT_R8G8B8A8_UNORM, 1,
                    D3D12_RESOURCE_FLAG_NONE);
     if (FAILED(g->dev->CreateCommittedResource(
             &heap, D3D12_HEAP_FLAG_NONE, &atlas, D3D12_RESOURCE_STATE_COPY_DEST,
@@ -768,7 +816,7 @@ static bool D12EnsureGpu(PaintApp* pa) {
     }
     D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    sv.Format = DXGI_FORMAT_R8_UNORM;
+    sv.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     sv.Texture2D.MipLevels = 1;
     g->dev->CreateShaderResourceView(g->atlas, &sv, D12SrvCpu(0));
@@ -782,6 +830,7 @@ static bool D12EnsureGpu(PaintApp* pa) {
     }
     g->dwrite = (IDWriteFactory*)PaintSharedDwrite(pa);
     gGpu.dwrite = g->dwrite;
+    InitTextParams(&gGpu);
     g->ready = true;
     return true;
 }
@@ -797,7 +846,7 @@ static bool MakeAtlas(Gpu* g) {
     td.Height = kAtlasDim;
     td.MipLevels = 1;
     td.ArraySize = 1;
-    td.Format = DXGI_FORMAT_R8_UNORM;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     td.SampleDesc.Count = 1;
     td.Usage = D3D11_USAGE_DEFAULT;
     td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -893,6 +942,7 @@ static bool EnsureGpu(PaintApp* pa) {
     if (!g->dev || !g->factory || !g->dwrite) {
         return false;
     }
+    InitTextParams(g);
     g->dev->GetImmediateContext(&g->ctx);
     if (!g->ctx) {
         return false;
@@ -927,7 +977,7 @@ static bool EnsureGpu(PaintApp* pa) {
     }
 
     D3D11_BUFFER_DESC cbd = {};
-    cbd.ByteWidth = 16;
+    cbd.ByteWidth = 48;
     cbd.Usage = D3D11_USAGE_DYNAMIC;
     cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -935,15 +985,17 @@ static bool EnsureGpu(PaintApp* pa) {
         return false;
     }
 
-    // Premultiplied source, which is what both pixel shaders emit.
+    // Premultiplied source. Target 1 carries the per-channel destination
+    // attenuation; for non-text pixels all four channels contain alpha, so
+    // this is the ordinary premultiplied blend.
     D3D11_BLEND_DESC bd;
     memset(&bd, 0, sizeof(bd));
     bd.RenderTarget[0].BlendEnable = TRUE;
     bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
-    bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC1_COLOR;
     bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
     bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-    bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC1_ALPHA;
     bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
     bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     if (FAILED(g->dev->CreateBlendState(&bd, &g->blend))) {
@@ -1273,8 +1325,21 @@ static bool D12BeginCommands(D12Target* t) {
     ID3D12DescriptorHeap* heaps[] = {gD12.srvHeap};
     gD12.list->SetDescriptorHeaps(1, heaps);
     gD12.list->SetGraphicsRootSignature(gD12.root);
-    float viewport[4] = {(float)t->pxW, (float)t->pxH, 0, 0};
-    gD12.list->SetGraphicsRoot32BitConstants(0, 4, viewport, 0);
+    float constants[12] = {
+        (float)t->pxW,
+        (float)t->pxH,
+        0,
+        0,
+        gGpu.textGamma[0],
+        gGpu.textGamma[1],
+        gGpu.textGamma[2],
+        gGpu.textGamma[3],
+        gGpu.textContrast,
+        gGpu.clearTypeLevel,
+        0,
+        0,
+    };
+    gD12.list->SetGraphicsRoot32BitConstants(0, 12, constants, 0);
     gD12.list->SetGraphicsRootDescriptorTable(2, D12SrvGpu(0));
     gD12.list->SetGraphicsRootDescriptorTable(3, D12SrvGpu(0));
     D3D12_VIEWPORT vp = {};
@@ -1496,7 +1561,20 @@ static GpuTarget* T11(PaintCtx* ctx) {
 static void SetViewportCb(Gpu* g, float w, float h) {
     D3D11_MAPPED_SUBRESOURCE m = {};
     if (SUCCEEDED(g->ctx->Map(g->cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
-        float v[4] = {w, h, 0, 0};
+        float v[12] = {
+            w,
+            h,
+            0,
+            0,
+            g->textGamma[0],
+            g->textGamma[1],
+            g->textGamma[2],
+            g->textGamma[3],
+            g->textContrast,
+            g->clearTypeLevel,
+            0,
+            0,
+        };
         memcpy(m.pData, v, sizeof(v));
         g->ctx->Unmap(g->cb, 0);
     }
@@ -2767,19 +2845,19 @@ static GlyphEntry* AtlasFind(const GlyphKey& k) {
             return e; // free slot, and therefore not present
         }
         if (e->key.face == k.face && e->key.glyph == k.glyph &&
-            e->key.size4 == k.size4) {
+            e->key.size4 == k.size4 && e->key.phase3 == k.phase3) {
             return e;
         }
     }
     return nullptr;
 }
 
-// Rasterize one glyph at the origin and shelf it. DirectWrite only hands out
-// a ClearType 3x1 texture for an antialiased rendering mode, so the three
-// subpixel channels are averaged back into the one coverage value the shader
-// wants — which is what asking for grayscale antialiasing would have given.
+// Rasterize one glyph at one of DirectWrite's three horizontal subpixel
+// phases and shelf its RGB ClearType mask. The second shader output carries
+// that mask into dual-source blending, where it attenuates the destination
+// per channel just as DirectWrite's ClearType compositor does.
 static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
-                           GlyphEntry* e) {
+                           const GlyphKey& key, GlyphEntry* e) {
     Gpu* g = &gGpu;
     float advance = 0;
     DWRITE_GLYPH_OFFSET offset = {};
@@ -2794,7 +2872,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
     IDWriteGlyphRunAnalysis* an = nullptr;
     HRESULT hr = g->dwrite->CreateGlyphRunAnalysis(
         &run, 1.f, nullptr, DWRITE_RENDERING_MODE_NATURAL,
-        DWRITE_MEASURING_MODE_NATURAL, 0.f, 0.f, &an);
+        DWRITE_MEASURING_MODE_NATURAL, (float)key.phase3 / 3.f, 0.f, &an);
     if (FAILED(hr) || !an) {
         return false;
     }
@@ -2807,6 +2885,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
         // A blank glyph — a space — is a real answer: nothing to draw, and
         // the entry stops it being asked for again.
         e->used = true;
+        e->key = key;
         e->w = 0;
         e->h = 0;
         return SUCCEEDED(hr);
@@ -2815,7 +2894,7 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
     // that touches these, so the buffers are reused rather than grown per
     // glyph.
     static Vec<uint8_t> rgb;
-    static Vec<uint8_t> gray;
+    static Vec<uint8_t> rgba;
     rgb.len = 0;
     if (!VecAppendBlanks(rgb, w * h * 3)) {
         an->Release();
@@ -2827,13 +2906,21 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
     if (FAILED(hr)) {
         return false;
     }
-    gray.len = 0;
-    if (!VecAppendBlanks(gray, w * h)) {
+    rgba.len = 0;
+    if (!VecAppendBlanks(rgba, w * h * 4)) {
         return false;
     }
     for (int i = 0; i < w * h; i++) {
-        int s = (int)rgb[i * 3] + rgb[i * 3 + 1] + rgb[i * 3 + 2];
-        gray[i] = (uint8_t)((s + 1) / 3);
+        uint8_t r8 = rgb[i * 3];
+        uint8_t g8 = rgb[i * 3 + 1];
+        uint8_t b8 = rgb[i * 3 + 2];
+        if (g->textBgr) {
+            std::swap(r8, b8);
+        }
+        rgba[i * 4] = r8;
+        rgba[i * 4 + 1] = g8;
+        rgba[i * 4 + 2] = b8;
+        rgba[i * 4 + 3] = std::max(r8, std::max(g8, b8));
     }
 
     Atlas* a = &g->atlas;
@@ -2849,15 +2936,15 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
         a->penX = 0;
         a->penY = 0;
         a->rowH = 0;
-        e = AtlasFind({face, glyph, (uint32_t)lroundf(em * 4.f)});
+        e = AtlasFind(key);
         if (!e) {
             return false;
         }
     }
     if (PaintD3d12On()) {
         if (!D12UploadTexture(gD12.atlas, &gD12.atlasState,
-                              DXGI_FORMAT_R8_UNORM, a->penX, a->penY, w, h, 1,
-                              gray.els, w)) {
+                              DXGI_FORMAT_R8G8B8A8_UNORM, a->penX, a->penY, w,
+                              h, 4, rgba.els, w * 4)) {
             return false;
         }
     } else {
@@ -2867,13 +2954,11 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
         box.right = (UINT)(a->penX + w);
         box.bottom = (UINT)(a->penY + h);
         box.back = 1;
-        g->ctx->UpdateSubresource(a->tex, 0, &box, gray.els, (UINT)w, 0);
+        g->ctx->UpdateSubresource(a->tex, 0, &box, rgba.els, (UINT)(w * 4), 0);
     }
 
     e->used = true;
-    e->key.face = face;
-    e->key.glyph = glyph;
-    e->key.size4 = (uint32_t)lroundf(em * 4.f);
+    e->key = key;
     e->x = a->penX;
     e->y = a->penY;
     e->w = w;
@@ -2890,21 +2975,27 @@ static bool AtlasRasterize(IDWriteFontFace* face, float em, uint16_t glyph,
 
 static void DrawGlyph(IDWriteFontFace* face, float em, uint16_t glyph, float x,
                       float y, Rgba c) {
-    GlyphKey k = {face, glyph, (uint32_t)lroundf(em * 4.f)};
+    float x3 = floorf(x * 3.f + 0.5f) / 3.f;
+    float pixelX = floorf(x3);
+    uint32_t phase3 = (uint32_t)lroundf((x3 - pixelX) * 3.f);
+    if (phase3 == 3) {
+        phase3 = 0;
+        pixelX += 1.f;
+    }
+    GlyphKey k = {face, glyph, (uint32_t)lroundf(em * 4.f), phase3};
     GlyphEntry* e = AtlasFind(k);
     if (!e) {
         return;
     }
-    if (!e->used && !AtlasRasterize(face, em, glyph, e)) {
+    if (!e->used && !AtlasRasterize(face, em, glyph, k, e)) {
         return;
     }
     if (e->w <= 0 || e->h <= 0) {
         return;
     }
-    // Snapped to whole pixels. DirectWrite would have positioned this at a
-    // third of one; the atlas holds a single rasterization per glyph, so this
-    // is the prototype's one visible difference from the D2D path.
-    float gx = floorf(x + 0.5f) + (float)e->bearingX;
+    // The fractional phase is already baked into the mask's raster bounds;
+    // placing those integer bounds at the pixel origin must not add it again.
+    float gx = pixelX + (float)e->bearingX;
     float gy = floorf(y + 0.5f) + (float)e->bearingY;
 
     Inst i = {};

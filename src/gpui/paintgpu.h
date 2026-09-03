@@ -167,11 +167,13 @@ const FrameStats& LastFrameStats();
 // already leaves the buffer at zero), and it batched the whole scene into a
 // single draw call while doing it, so the cost was never the drawing.
 //
-// Against the D2D path, pixel for pixel: 2.7% of the story's pixels differ
-// and 1.2% of the chart page's, all of it text — DirectWrite draws ClearType
-// and the atlas is grayscale — plus the third-of-a-pixel positioning this
-// does not do. No geometry moves. D3D11 and D3D12 consume the same atlas and
-// shader inputs; their story captures are byte-identical.
+// Text now keeps DirectWrite's RGB ClearType mask, applies its display gamma
+// and enhanced contrast in the shader, and caches all three third-pixel
+// phases. Against D2D, 1600x1026 story and 856x676 showcase captures have
+// 0.88% and 0.30% of pixels over the comparator's 90 channel-sum tolerance;
+// the remaining differences are raster/compositing noise rather than moved
+// geometry. D3D11 and D3D12 consume the same atlas and shader inputs; their
+// captures are byte-identical.
 
 } // namespace gpui
 

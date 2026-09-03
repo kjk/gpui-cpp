@@ -1,6 +1,10 @@
 cbuffer Globals : register(b0) {
     float2 uViewport;
     float2 uPad;
+    float4 uTextGamma;
+    float uTextContrast;
+    float uClearTypeLevel;
+    float2 uTextPad;
 };
 
 struct Inst {
@@ -57,7 +61,31 @@ float sdRound(float2 p, float2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
-float4 PSQuad(VSOut v) : SV_Target {
+struct PSOut {
+    float4 color : SV_Target0;
+    float4 blend : SV_Target1;
+};
+
+PSOut ScalarCoverage(float4 col, float cov) {
+    PSOut o;
+    float a = col.a * cov;
+    o.color = float4(col.rgb * a, a);
+    o.blend = a.xxxx;
+    return o;
+}
+
+float3 TextCoverage(float3 alpha, float3 color) {
+    float gray = dot(alpha, float3(0.25, 0.5, 0.25));
+    alpha = lerp(gray.xxx, alpha, uClearTypeLevel);
+    float contrast = uTextContrast *
+                     saturate(dot(color, float3(-1.2, -2.36, -0.44)) + 3.0);
+    alpha = alpha * (contrast + 1.0) / (alpha * contrast + 1.0);
+    return alpha + alpha * (1.0 - alpha) *
+                       ((uTextGamma.x * color + uTextGamma.y) * alpha +
+                        (uTextGamma.z * color + uTextGamma.w));
+}
+
+PSOut PSQuad(VSOut v) {
     if (v.gpos.x < v.clipr.x || v.gpos.x > v.clipr.z ||
         v.gpos.y < v.clipr.y || v.gpos.y > v.clipr.w) {
         discard;
@@ -69,7 +97,10 @@ float4 PSQuad(VSOut v) : SV_Target {
         if (t.a <= 0.0) {
             discard;
         }
-        return t;
+        PSOut o;
+        o.color = t;
+        o.blend = t.a.xxxx;
+        return o;
     }
     float4 col = v.color;
     float cov = 1.0;
@@ -86,17 +117,25 @@ float4 PSQuad(VSOut v) : SV_Target {
         float outer = saturate(0.5 - d);
         cov = (kind == 2) ? outer : outer - saturate(0.5 - (d + v.misc.y));
     } else if (kind == 4) {
-        cov = gAtlas.Sample(gSamp, v.uv).r;
+        float3 cover = TextCoverage(gAtlas.Sample(gSamp, v.uv).rgb, col.rgb) *
+                       col.a;
+        float a = max(cover.r, max(cover.g, cover.b));
+        if (a <= 0.0) {
+            discard;
+        }
+        PSOut o;
+        o.color = float4(col.rgb * cover, a);
+        o.blend = float4(cover, a);
+        return o;
     } else if (kind == 6) {
         float2 d = v.uvraw.zw - v.uvraw.xy;
         float t = saturate(dot(v.gpos - v.uvraw.xy, d) / max(dot(d, d), 1e-6));
         col = lerp(v.color, v.color2, t);
     }
-    float a = col.a * cov;
-    if (a <= 0.0) {
+    if (col.a * cov <= 0.0) {
         discard;
     }
-    return float4(col.rgb * a, a);
+    return ScalarCoverage(col, cov);
 }
 
 // ─── triangles ───────────────────────────────────────────────────────────
@@ -124,10 +163,10 @@ TriOut VSTri(TriIn i) {
     return o;
 }
 
-float4 PSTri(TriOut v) : SV_Target {
+PSOut PSTri(TriOut v) {
     if (v.gpos.x < v.clipr.x || v.gpos.x > v.clipr.z ||
         v.gpos.y < v.clipr.y || v.gpos.y > v.clipr.w) {
         discard;
     }
-    return float4(v.color.rgb * v.color.a, v.color.a);
+    return ScalarCoverage(v.color, 1.0);
 }
