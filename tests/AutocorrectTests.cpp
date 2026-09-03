@@ -20,6 +20,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#if !GPUI_OS_WINDOWS
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 using base::Arena;
 using base::ArenaDelete;
 using base::ArenaNew;
@@ -662,10 +667,18 @@ end
     }
 }
 
-// ignorer.rs, over a fixture written beside the test binary (the tests run
-// with cwd = out dir), so nothing depends on this repo's own .gitignore.
+// ignorer.rs, over a fixture in a directory of the test's own. It used to
+// write .gitignore straight into the working directory on the assumption that
+// cwd is always the out dir; running the binary directly from a checkout —
+// `out
+el ests.exe` — then overwrote and deleted the repository's own
+    // .gitignore. A test never writes a dotfile into a directory it does not own.
+    static const char* kIgnoreDir = "autocorrect_ignorer_test_root";
+
 static bool WriteIgnoreFile(const char* name, const char* content) {
-    FILE* f = fopen(name, "wb");
+    char path[kMaxPath] = {};
+    snprintf(path, sizeof(path), "%s/%s", kIgnoreDir, name);
+    FILE* f = fopen(path, "wb");
     if (!f) {
         return false;
     }
@@ -675,9 +688,20 @@ static bool WriteIgnoreFile(const char* name, const char* content) {
     return ok;
 }
 
+static void RemoveIgnoreFile(const char* name) {
+    char path[kMaxPath] = {};
+    snprintf(path, sizeof(path), "%s/%s", kIgnoreDir, name);
+    remove(path);
+}
+
 static void TestAutocorrectIgnorer() {
     TestSuite("autocorrect ignorer");
-    remove(".autocorrectignore");
+#if GPUI_OS_WINDOWS
+    CreateDirectoryA(kIgnoreDir, nullptr);
+#else
+    mkdir(kIgnoreDir, 0777);
+#endif
+    RemoveIgnoreFile(".autocorrectignore");
     utassert(WriteIgnoreFile(".gitignore",
                              "# comment\n"
                              "target/\n"
@@ -689,7 +713,7 @@ static void TestAutocorrectIgnorer() {
     utassert(WriteIgnoreFile(".autocorrectignore", "extra/\nkeep.log\n"));
 
     autocorrect::Ignorer ig;
-    autocorrect::IgnorerInit(&ig, StrL("."));
+    autocorrect::IgnorerInit(&ig, Str(kIgnoreDir));
 
     utassert(autocorrect::IgnorerIsIgnored(&ig, StrL("target")));
     utassert(autocorrect::IgnorerIsIgnored(&ig, StrL("target/debug/foo")));
@@ -711,8 +735,13 @@ static void TestAutocorrectIgnorer() {
     utassert(autocorrect::IgnorerIsIgnored(&ig, StrL(".\\target\\debug")));
 
     autocorrect::IgnorerFree(&ig);
-    remove(".gitignore");
-    remove(".autocorrectignore");
+    RemoveIgnoreFile(".gitignore");
+    RemoveIgnoreFile(".autocorrectignore");
+#if GPUI_OS_WINDOWS
+    RemoveDirectoryA(kIgnoreDir);
+#else
+    rmdir(kIgnoreDir);
+#endif
 }
 
 void TestAutocorrectMarkdownFormat(Arena* a);
