@@ -384,8 +384,12 @@ El* RenderTabs(const AreaCtx& ac, int node) {
     // the pointer.
     if (s->dropNode == node && ac.r->dropIndicator) {
         Bounds ph = DockDropPlaceholder(n.bounds, s->dropAt);
-        Spring spring = SpringNew(200.f);
-        spring.epsilon = 0.5f;
+        // spring_move with a coarser tolerance, which is what tab_panel.rs
+        // spells `cx.theme().motion_tokens().spring_move.with_epsilon(0.5)`.
+        // The numbers are written out rather than read from the styled theme:
+        // the drop indicator lives in the Base dock area here, and reading a
+        // crates/ui token from crates/base would invert the layering.
+        Spring spring = SpringNew(280.f).WithDamping(0.85f).WithEpsilon(0.5f);
         uint32_t kx = MotionId(ac.id, StrL("drop-x"));
         uint32_t ky = MotionId(ac.id, StrL("drop-y"));
         uint32_t kw = MotionId(ac.id, StrL("drop-w"));

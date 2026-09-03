@@ -43,17 +43,17 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                      ->Left(0)
                      ->W(trackW)
                      ->H(2)
-                     ->Bg(Rgb(0xd4, 0xd4, 0xd4)));
+                     ->Bg(ExampleRgb(0xd4d4d4)));
     track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(fillW)->H(2)->Bg(
-        Rgb(0x17, 0x17, 0x17)));
+        ExampleRgb(0x171717)));
     track->Child(SliderThumb::New(cx)
                      ->Absolute()
                      ->Top(7)
                      ->Left(thumbX)
                      ->W(thumb)
                      ->H(thumb)
-                     ->Bg(Rgb(0xff, 0xff, 0xff))
-                     ->Border(1, Rgb(0x17, 0x17, 0x17)));
+                     ->Bg(ExampleRgb(0xffffff))
+                     ->Border(1, ExampleRgb(0x171717)));
 
     app->slider.onChange = Listen(cx, &OnSlider);
 
@@ -67,10 +67,10 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->PadB(8)
                     ->Child(TextEl(a, StrL("Volume"))
                                 ->Font(12)
-                                ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                ->Fg(ExampleRgb(0x171717)))
                     ->Child(TextEl(a, StrL("Drag to adjust"))
                                 ->Font(12)
-                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                ->Fg(ExampleRgb(0x171717))))
         ->Child(Slider::New(cx, &app->slider)
                     ->AriaLabel(StrL("Volume"))
                     ->W(trackW)

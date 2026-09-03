@@ -243,6 +243,7 @@ Each has a matching `examples/<name>.cpp` and `bun cmd/build.ts <name>` target:
 | `text_selection` | Selectable text block |
 | `markdown_table` | Heading / hr / paragraph / pipe-table parser + `report.md` |
 | `fps_monitor` | Hilbert + Catmull-Rom + HSL `customPaint`, 16 ms timer |
+| `motion` | The motion core's five demos: rolling-digit transitions, a retargeted spring, an infinite keyframe track, staggered entrances, presence through an exit |
 
 ### gpui-base showcase (ported 2026-08-16)
 

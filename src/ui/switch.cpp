@@ -5,10 +5,10 @@ namespace gpui {
 
 namespace component {
 
-// switch.rs THUMB_SPRING: the period the thumb's travel is felt at. A
-// spring has no duration — it settles when it is close enough — so this is
-// upstream's 0.18 s response rather than the 0.15 s the transition ran for.
-static const float kSwitchMotionMs = 180.f;
+// switch.rs no longer names a spring of its own: the thumb travels under the
+// theme's `spring_move`, the policy everything that goes from one place to
+// another shares, and the tolerance it carries is already the tenth of a
+// pixel a travel in pixels wants.
 
 Switch* Switch::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -90,14 +90,11 @@ El* Switch::IntoEl() {
     float maxX = trackW - thumb - inset * 2;
     float x = checked ? maxX : 0.f;
     if (!disabled) {
-        // THUMB_SPRING: a switch is toggled again long before the thumb
-        // has finished travelling, and a spring turns it around from where
-        // it is rather than restarting the curve. Critically damped — the
-        // thumb slides inside a track, and an overshoot would push it
-        // through the border — and a tenth of a pixel is arrived.
-        Spring spring = SpringNew(kSwitchMotionMs);
-        spring.epsilon = 0.1f;
-        x = SpringValue(cx, MotionId(id, StrL("switch-thumb")), x, spring);
+        // spring_move: a switch is toggled again long before the thumb has
+        // finished travelling, and a spring turns it around from where it is
+        // rather than restarting the curve.
+        x = SpringValue(cx, MotionId(id, StrL("switch-thumb")), x,
+                        th.motion.springMove);
     }
     // Absolutely placed, since what moves is an offset rather than which end
     // of the track the thumb is packed against.

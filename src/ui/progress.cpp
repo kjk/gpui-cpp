@@ -8,10 +8,16 @@ namespace gpui {
 
 namespace component {
 
-// progress.rs: a value that changes takes 0.18 s to get there, and the
-// indeterminate sweep is a one-second loop.
-static const float kProgressMotionMs = 180.f;
+// progress.rs: a value that changes runs the theme's `duration_normal`
+// along its `easing_move`, and the indeterminate sweep is a one-second loop
+// of its own — a repeat is not a transition and takes no policy.
 static const float kProgressLoopMs = 1000.f;
+
+// Transition::new(motion.duration_normal).easing(motion.easing_move), which
+// both the bar and the circle carry a value along.
+static Motion ProgressMotion(const Theme& th) {
+    return MotionNew(th.motion.durationNormalMs).Ease(th.motion.easingMove);
+}
 
 Progress* Progress::New(Ctx* cx) {
     Arena* a = cx->a;
@@ -79,7 +85,7 @@ El* Progress::IntoEl() {
         // width or fills its parent. A value that moves takes 0.15 s to get
         // there rather than jumping.
         float v = MotionValue(cx, MotionId(StrL("progress"), id), value,
-                              MotionNew(kProgressMotionMs));
+                              ProgressMotion(th));
         indicator->WFrac(v / 100.f);
     }
     El* root =
@@ -183,7 +189,7 @@ El* ProgressCircle::IntoEl() {
         startValue = EaseInOutQuad(ClampF01((delta - 0.5f) / 0.5f)) * 100.f;
     } else {
         value = MotionValue(cx, MotionId(StrL("progress-circle"), id), value,
-                            MotionNew(kProgressMotionMs));
+                            ProgressMotion(ThemeNow(cx->app)));
         startValue = 0;
     }
     El* e = Div(a)

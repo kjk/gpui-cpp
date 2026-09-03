@@ -33,21 +33,21 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
                       ->PadX(8)
                       ->ItemsCenter()
                       ->JustifyBetween()
-                      ->Border(1, Rgb(0x17, 0x17, 0x17))
+                      ->Border(1, ExampleRgb(0x171717))
                       ->OnClick(Listen(cx, &ToggleSelect))
                       ->Child(TextEl(a, Str(kFw[sel]))
                                   ->Font(12)
-                                  ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                  ->Fg(ExampleRgb(0x171717)))
                       ->Child(TextEl(a, app->selectOpen ? StrL("⌃") : StrL("⌄"))
                                   ->Font(12)
-                                  ->Fg(Rgb(0x17, 0x17, 0x17)));
+                                  ->Fg(ExampleRgb(0x171717)));
     El* opts = nullptr;
     if (app->selectOpen) {
         opts = Div(a)
                    ->FlexCol()
                    ->Pad(4)
-                   ->Border(1, Rgb(0x17, 0x17, 0x17))
-                   ->Bg(Rgb(0xff, 0xff, 0xff));
+                   ->Border(1, ExampleRgb(0x171717))
+                   ->Bg(ExampleRgb(0xffffff));
         for (int i = 0; i < 4; i++) {
             El* row = Div(a)
                           ->Click(HashClickId(fmt("select-option-%d", i)))
@@ -55,14 +55,14 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
                           ->PadY(4)
                           ->FlexRow()
                           ->JustifyBetween()
-                          ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                          ->HoverBg(ExampleRgb(0xf5f5f5))
                           ->OnClick(Listen(cx, &PickOption, i))
                           ->Child(TextEl(a, Str(kFw[i]))
                                       ->Font(12)
-                                      ->Fg(Rgb(0x17, 0x17, 0x17)));
+                                      ->Fg(ExampleRgb(0x171717)));
             if (i == sel) {
                 row->Child(
-                    TextEl(a, StrL("✓"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+                    TextEl(a, StrL("✓"))->Font(12)->Fg(ExampleRgb(0x171717)));
             }
             opts->Child(row);
         }

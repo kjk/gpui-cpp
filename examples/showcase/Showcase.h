@@ -1,6 +1,7 @@
 /* GPUI Base showcase — C++ port of crates/base/examples/showcase. */
 
 #include "gpui.h"
+#include "palette.h"
 
 using namespace gpui;
 
@@ -51,30 +52,34 @@ enum {
 
 // crates/base is the *unstyled* layer, so its showcase supplies the colors
 // itself: the Rust pages write rgb(0x171717), rgb(0xd4d4d4) and friends
-// inline. These mirror those literals; they are not theme tokens.
+// inline. These name those literals; they are not theme tokens. Every one of
+// them goes through the shared example palette, which is what turns a page
+// full of light values into one that reads on a dark desktop —
+// crates/base/examples/shared/palette.rs, and `super::example_rgb` at the
+// call sites over there.
 inline Rgba ScInk() {
-    return Rgb(0x17, 0x17, 0x17);
+    return ExampleRgb(0x171717);
 }
 inline Rgba ScWhite() {
-    return Rgb(0xff, 0xff, 0xff);
+    return ExampleRgb(0xffffff);
 }
 inline Rgba ScMutedC() {
-    return Rgb(0x73, 0x73, 0x73);
+    return ExampleRgb(0x737373);
 }
 inline Rgba ScGray() {
-    return Rgb(0x52, 0x52, 0x52);
+    return ExampleRgb(0x525252);
 }
 inline Rgba ScBorder() {
-    return Rgb(0xd4, 0xd4, 0xd4);
+    return ExampleRgb(0xd4d4d4);
 }
 inline Rgba ScLine() {
-    return Rgb(0xe5, 0xe5, 0xe5);
+    return ExampleRgb(0xe5e5e5);
 }
 inline Rgba ScHover() {
-    return Rgb(0xf5, 0xf5, 0xf5);
+    return ExampleRgb(0xf5f5f5);
 }
 inline Rgba ScSilver() {
-    return Rgb(0xa3, 0xa3, 0xa3);
+    return ExampleRgb(0xa3a3a3);
 }
 
 // A button that reacts to the pointer. Hover, focus and hit-testing all key

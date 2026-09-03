@@ -49,23 +49,23 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
             ->PadX(8)
             ->ItemsCenter()
             ->JustifyBetween()
-            ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-            ->Bg(Rgb(0xff, 0xff, 0xff))
+            ->Border(1, ExampleRgb(0xd4d4d4))
+            ->Bg(ExampleRgb(0xffffff))
             ->OnClick(Listen(cx, &ToggleCombo))
             ->FocusId(HashClickId(StrL("combobox-trigger")))
-            ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+            ->HoverBg(ExampleRgb(0xf5f5f5))
             ->Child(TextEl(a, Str(app->comboboxSel))
                         ->Font(12)
-                        ->Fg(Rgb(0x17, 0x17, 0x17)))
-            ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73)));
+                        ->Fg(ExampleRgb(0x171717)))
+            ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(ExampleRgb(0x737373)));
     El* pop = nullptr;
     if (app->comboboxOpen) {
         pop = Div(a)
                   ->FlexCol()
                   ->W(224)
                   ->Pad(4)
-                  ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                  ->Bg(Rgb(0xff, 0xff, 0xff));
+                  ->Border(1, ExampleRgb(0xd4d4d4))
+                  ->Bg(ExampleRgb(0xffffff));
         pop->Child(InputBase::New(cx, StrL("combobox-search"), true)
                        ->OnClick(Listen(cx, &FocusComboQuery))
                        ->FocusId(0)
@@ -73,7 +73,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                        ->H(28)
                        ->PadX(8)
                        ->ItemsCenter()
-                       ->Border(1, Rgb(0xe5, 0xe5, 0xe5))
+                       ->Border(1, ExampleRgb(0xe5e5e5))
                        ->Child(Input::New(cx, &app->comboQuery)));
         El* list = Div(a)->FlexCol()->W(kFill)->PadT(4);
         for (int i = 0; i < 4; i++) {
@@ -85,11 +85,11 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                             ->H(28)
                             ->PadX(8)
                             ->ItemsCenter()
-                            ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                            ->HoverBg(ExampleRgb(0xf5f5f5))
                             ->OnClick(Listen(cx, &PickCombo, i))
                             ->Child(TextEl(a, Str(kFwCombo[i]))
                                         ->Font(12)
-                                        ->Fg(Rgb(0x17, 0x17, 0x17))));
+                                        ->Fg(ExampleRgb(0x171717))));
         }
         pop->Child(list);
     }

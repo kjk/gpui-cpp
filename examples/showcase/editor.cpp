@@ -62,7 +62,7 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
         ->Child(Div(a)->H(16)->ItemsCenter()->Child(
             TextEl(a, StrL("Rust Editor"))
                 ->Font(12)
-                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                ->Fg(ExampleRgb(0x171717))))
         ->Child(InputBase::New(cx, StrL("example-editor"), true)
                     ->OnClick(Listen(cx, &OnEditor))
                     ->W(320)
@@ -72,8 +72,8 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
                     ->ClipY()
                     ->FlexCol()
                     ->FocusId(0)
-                    ->Border(1, app->editorOn ? Rgb(0x17, 0x17, 0x17)
-                                              : Rgb(0xd4, 0xd4, 0xd4))
+                    ->Border(1, app->editorOn ? ExampleRgb(0x171717)
+                                              : ExampleRgb(0xd4d4d4))
                     ->Child(Editor::New(cx, &app->editor)));
 }
 

@@ -12,8 +12,8 @@ El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
                       ->PadY(4)
                       ->Child(TextEl(a, StrL("Hover over gpui-base"))
                                   ->Font(12)
-                                  ->Fg(Rgb(0x17, 0x17, 0x17))
-                                  ->BorderB(1, Rgb(0x17, 0x17, 0x17)));
+                                  ->Fg(ExampleRgb(0x171717))
+                                  ->BorderB(1, ExampleRgb(0x171717)));
     HoverCard* card = HoverCard::New(cx, StrL("example-hover-card"));
     card->Trigger(trigger);
     // `.content(|_, _, _| ..)`: the builder runs only while the card is up, so
@@ -27,8 +27,8 @@ El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
                 ->W(210)
                 ->Pad(8)
                 ->FlexCol()
-                ->Bg(Rgb(0xff, 0xff, 0xff))
-                ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                ->Bg(ExampleRgb(0xffffff))
+                ->Border(1, ExampleRgb(0xd4d4d4))
                 ->Child(
                     Div(a)
                         ->FlexRow()
@@ -39,22 +39,22 @@ El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
                                     ->H(28)
                                     ->ItemsCenter()
                                     ->JustifyCenter()
-                                    ->Border(1, Rgb(0x17, 0x17, 0x17))
+                                    ->Border(1, ExampleRgb(0x171717))
                                     ->Child(TextEl(a, StrL("G"))
                                                 ->Font(14)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                                ->Fg(ExampleRgb(0x171717))))
                         ->Child(Div(a)
                                     ->FlexCol()
                                     ->Child(TextEl(a, StrL("gpui-base"))
                                                 ->Font(14)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                                ->Fg(ExampleRgb(0x171717)))
                                     ->Child(TextEl(a, StrL("@gpui-base"))
                                                 ->Font(14)
-                                                ->Fg(Rgb(0x73, 0x73, 0x73)))))
+                                                ->Fg(ExampleRgb(0x737373)))))
                 ->Child(Div(a)->PadT(8)->Child(
                     TextEl(a, StrL("Unstyled primitives for GPUI."))
                         ->Font(14)
-                        ->Fg(Rgb(0x73, 0x73, 0x73)))));
+                        ->Fg(ExampleRgb(0x737373)))));
     }
     return card->IntoEl();
 }

@@ -22,11 +22,11 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                   ->Shrink0()
                   ->ItemsCenter()
                   ->JustifyCenter()
-                  ->Border(1, Rgb(0x17, 0x17, 0x17))
-                  ->Bg(Rgb(0xff, 0xff, 0xff))
+                  ->Border(1, ExampleRgb(0x171717))
+                  ->Bg(ExampleRgb(0xffffff))
                   ->Child(TextEl(a, StrL("Save changes"))
                               ->Font(12)
-                              ->Fg(Rgb(0x17, 0x17, 0x17)));
+                              ->Fg(ExampleRgb(0x171717)));
     El* box = Div(a)->W(288)->H(158)->ClipY()->Child(
         Div(a)->W(kFill)->H(kFill)->ItemsCenter()->JustifyCenter()->Child(btn));
     if (app->toastOn) {
@@ -39,8 +39,8 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                 ->W(256)
                 ->Pad(8)
                 ->FlexCol()
-                ->Border(1, Rgb(0x17, 0x17, 0x17))
-                ->Bg(Rgb(0xff, 0xff, 0xff))
+                ->Border(1, ExampleRgb(0x171717))
+                ->Bg(ExampleRgb(0xffffff))
                 ->Child(
                     Div(a)
                         ->FlexRow()
@@ -48,7 +48,7 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                         ->W(kFill)
                         ->Child(TextEl(a, StrL("Changes saved"))
                                     ->Font(12)
-                                    ->Fg(Rgb(0x17, 0x17, 0x17))
+                                    ->Fg(ExampleRgb(0x171717))
                                     ->Semibold())
                         ->Child(Button::New(cx, StrL("dismiss-toast"))
                                     ->OnClick(Listen(cx, &HideToast))
@@ -58,11 +58,11 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                                     ->JustifyCenter()
                                     ->Child(TextEl(a, StrL("×"))
                                                 ->Font(14)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17)))))
+                                                ->Fg(ExampleRgb(0x171717)))))
                 ->Child(Div(a)->PadT(4)->Child(
                     TextEl(a, StrL("Your preferences are now up to date."))
                         ->Font(12)
-                        ->Fg(Rgb(0x73, 0x73, 0x73)))));
+                        ->Fg(ExampleRgb(0x737373)))));
     }
     return box;
 }

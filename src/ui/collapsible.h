@@ -12,6 +12,11 @@ struct Collapsible {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     bool open = false;
+    // `motion_id(id)`: a stable identity turns the open/close into a
+    // reversible measured reveal. Without one the content is dropped while
+    // closed, exactly as before.
+    Str motionId = {};
+    bool hasMotion = false;
     El* trigger = nullptr;
     El* content = nullptr;
     // The caller's own style on the collapsible's root: `w_full()` and
@@ -23,6 +28,7 @@ struct Collapsible {
     Collapsible* W(float v);
     Collapsible* Gap(float v);
     Collapsible* Open(bool v);
+    Collapsible* MotionId(Str id);
     Collapsible* Trigger(El* e);
     Collapsible* Content(El* e);
     El* IntoEl();

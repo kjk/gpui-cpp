@@ -22,6 +22,7 @@
 
 #include "base/json.h"
 #include "base/list_settings.h"
+#include "base/motion.h"
 #include "base/theme.h"
 #include "ui/notification_settings.h"
 #include "ui/sheet_settings.h"
@@ -142,6 +143,33 @@ struct ThemeTokens {
     Background sidebar = {};
     Background groupBox = {};
     Background descListLabel = {};
+};
+
+// Semantic motion policy shared by styled components —
+// crates/ui/src/theme/motion.rs. A component names the *role* of its motion
+// rather than a duration and a curve, so a theme can retune the lot: a
+// control that answers a click springs with `springControl`, something
+// travelling from one place to another with `springMove`, and a value that
+// runs to an end takes `durationNormalMs` along `easingMove`.
+//
+// Rust's two distances are `Rems`; there is no Rems in this tree, so they
+// are the DIPs a 16 px root resolves them to — rems(0.25) and rems(0.5).
+struct MotionTokens {
+    float durationInstantMs = 0;
+    float durationFastMs = 0;
+    float durationNormalMs = 0;
+    float durationSlowMs = 0;
+    Easing easingEnter = Easing::EaseOut();
+    Easing easingExit = Easing::EaseOut();
+    Easing easingMove = Easing::EaseOut();
+    Spring springControl = {};
+    Spring springMove = {};
+    float distanceShort = 0;
+    float distanceMedium = 0;
+
+    // `impl Default for MotionTokens`, which is what every theme starts with
+    // and what the components read today.
+    static MotionTokens Default();
 };
 
 struct Theme {
@@ -395,6 +423,10 @@ struct Theme {
     // Component behavior settings live beside the palette in Rust's Theme.
     component::NotificationSettings notification = {};
     component::SheetSettings sheet = {};
+    // Theme::motion / Theme::motion_tokens(): the styled layer's semantic
+    // motion policy. Read it as a field, the way every other setting here is
+    // read; Rust needs the accessor only because its palette is nested.
+    MotionTokens motion = MotionTokens::Default();
     // The renderable half of the palette, for the tokens a theme file may
     // spell as a gradient. Every one of these carries the flat colour of the
     // same name, so reading a token instead of a field is never wrong.

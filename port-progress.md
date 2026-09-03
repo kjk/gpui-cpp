@@ -10369,3 +10369,115 @@ for mdast's tab arithmetic, caught by the probe. readme-dist.md documents
 each pair with crate versions filled from the cmd/run.ts pins
 (<taffy-version>, <markdown-version>, <wry-version> beside
 <autocorrect-version>).
+
+## Upstream ingest after `6d07863f`: motion core
+
+`09333c32` replaces the small keyed-transition module with a layered motion
+core, and moves the styled components off the per-component constants they
+each carried onto one semantic scale. All of it is here.
+
+`crates/base/src/motion.rs` and its six submodules are one C++ file per Rust
+module directory, as the map says: `src/base/motion.h` and `.cpp` now carry
+`Easing` (the CSS keyword curves, `cubic_bezier`, `steps` with all four jump
+positions, and `linear()` stops with their omitted inputs filled in),
+`Timing` (a signed delay, a duration, finite or infinite iterations, the four
+playback directions and an easing, sampled into a `TimingSample`),
+`Keyframes` and `Discrete`, `Stagger`, `Presence`, `MotionReveal`, the
+`MotionStatus` a transition reports, `MotionTransform`, and
+`animate_keyframes`. Rust's `Result` is a `MotionResult<T, E>` the caller
+asks rather than unwraps, since a checked builder cannot throw here;
+`Spring::with_damping` and `with_epsilon` keep the spring they had where Rust
+panics, and `try_with_*` is the form for a value that is not a constant.
+`Keyframes` borrows the array it was validated against instead of owning an
+`Arc<[Keyframe<T>]>`, so a track built on the frame arena costs nothing to
+sample and the steady paths allocate as little as Rust's do.
+
+The transition rule itself gained the part it was missing: a *direct*
+reversal now shortens the return to the fraction of the curve it had actually
+travelled, through the `reversing_factor` and the per-run duration upstream
+keeps beside `from` and `target`. A reversal halfway through a 100 ms open
+closes in 50 ms rather than in 100, which is what
+`a_direct_reversal_shortens_the_return_transition` pins. `MotionProgress`
+also answers a `MotionStatus` now — Idle, Delayed, Running, Finished — and a
+frame is requested for exactly the two middle ones, which is what lets
+`Presence` keep a surface mounted through its exit and drop it on the first
+Finished.
+
+`MotionReveal` is the measured, clipped vertical reveal, and it is the
+element `AnimatedAccordionPanel` used to be: the themed accordion hands its
+panel to it now, and the base `Collapsible` grows a `Reveal(id, progress)`
+that keeps closed content mounted, which is what the themed `Collapsible`'s
+new `MotionId(id)` drives through `spring_control`. The one difference from
+Rust is where the measurement lands: `with_element_state` reads the child's
+height inside prepaint, while an `El` reports its own box after layout, so
+the frame that notices a new natural height is the next one — and it is asked
+for, exactly as Rust's prepaint asks. `MotionRevealStateOf` is the seam that
+makes the rule testable without a real layout pass.
+
+`crates/ui/src/theme/motion.rs` is `MotionTokens` on `Theme`, with the
+durations, three cubic-Bézier curves and two springs written out. Rust's two
+`Rems` distances are the DIPs a 16 px root resolves them to. Every component
+the checkin migrated reads them now: the accordion panel, the checkbox tick
+and the slider's thumb ring take `spring_control`; the switch thumb and the
+tab indicator take `spring_move`; both progress indicators take
+`duration_normal` along `easing_move`. Three of those changed numbers, which
+is the point of a shared scale — the switch thumb travels over a 280 ms
+response at damping 0.85 where it used to be 180 ms critically damped, and
+the accordion panel and the slider ring both land on 180 ms. The dock drop
+placeholder is the one that reads its policy from neither: this port put the
+indicator in the Base dock area, and `spring_move.with_epsilon(0.5)` is
+written out there rather than reaching from `crates/base` into a `crates/ui`
+token.
+
+`spinner.rs` gained only a test upstream, and it is the one place where the
+behaviour had to move: a reduced-motion spinner is static now and asks for no
+frame. The check is at the spinner rather than inside `MotionRepeat`, because
+a repeat is not otherwise gated here — the indeterminate progress bar already
+decided for itself, and a `with_animation` entrance still plays. Everything
+else about `MotionRepeat` and `MotionAppear` is unchanged.
+
+`crates/base/examples/shared/palette.rs` is `examples/showcase/palette.h`,
+header-only so the two example binaries each compile their own copy the way
+Rust's `#[path]` module does. Both palettes and the whole `resolve` table are
+value for value from upstream, and the showcase's existing `Sc*` helpers go
+through it now, so all 226 colour literals across the pages resolve through
+one table instead of being written twice. What has no counterpart is
+`Window::appearance()` and `observe_window_appearance`: this tree reads the
+desktop's light/dark setting only in `window_win.cpp`, for the DWM frame, and
+there is no portable seam for it — so the palette is activated from the theme
+mode the example sets, which is what chooses light or dark for the rest of
+the window anyway. `refresh_editor_styles` has nothing to refresh here: the
+C++ showcase never set `InputEditorStyle` colours of its own.
+
+`crates/base/examples/motion.rs` is `examples/motion.cpp`, with all five
+demos and their constants: the 620 ms per-digit transitions of the rolling
+clock, the 420 ms spring at damping 0.68 behind the two-option selector, the
+seven bars on one infinite 1200 ms track staggered 80 ms apart, three rows
+entering on a 90 ms stagger, and a notice that stays mounted through a 360 ms
+exit. The playback task is a 500 ms window interval rather than a spawned
+`Task`. Worth knowing when reading a screenshot of it: this machine has
+SPI_GETCLIENTAREAANIMATION off, so `MotionReduced()` is true and every demo
+shows its resolved end state — the keyframe bars sit at the track's final
+value of 0, the stagger rows are fully in. That is upstream's reduced-motion
+policy, not a stalled animation.
+
+`crates/base/benches/motion.rs` is `bench/MotionBench.cpp`, the same four
+workloads at the same iteration counts. Two halves of the Rust bench do not
+come over, for one reason: it installs a counting global allocator to prove
+that the steady sampling loops allocate nothing, and here they cannot — every
+type is a POD copied by value and `Keyframes` borrows its frames — and its
+100 µs budget is a wall clock on a machine we do not control, where
+`bench/bench.cpp` reports a median and a minimum instead of failing a run.
+
+`crates/story/src/lib.rs` stops advertising an alpha surface on Linux. There
+is nothing to change: `window_linux.cpp` asks X11 for an ordinary opaque
+visual and never sets an ARGB one, and a comment beside the story's `WinOpts`
+now says so. `crates/fps/src/monitor.rs` is one `cfg` attribute for a wasm
+build and belongs to the fps package. `crates/base/examples/wasm/*` is not
+ported: there is no embedding host here, and the two examples it wraps are
+two binaries.
+
+Verification: MSVC release tests pass 22,277 checks; the release `story`,
+`showcase` and `motion` targets build with `/W4 /WX`; `bun cmd/bench.ts
+motion` reports its six rows; and the port audit's motion, spinner,
+collapsible and MotionTokens lines are gone.

@@ -197,6 +197,7 @@ export const simpleExamples = [
   "table_in_scrollable",
   "text_selection",
   "text_max_lines",
+  "motion",
   "markdown_table",
   "rich_text",
   "stream_markdown",

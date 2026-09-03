@@ -21,7 +21,7 @@ El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
             ->Child(TextEl(a, app->popupOpen ? StrL("Close popup")
                                              : StrL("Open popup"))
                         ->Font(12)
-                        ->Fg(Rgb(0xff, 0xff, 0xff)));
+                        ->Fg(ExampleRgb(0xffffff)));
     El* content = nullptr;
     if (app->popupOpen) {
         content =
@@ -29,18 +29,18 @@ El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
                 ->W(256)
                 ->Pad(8)
                 ->FlexCol()
-                ->Bg(Rgb(0xff, 0xff, 0xff))
-                ->Border(1, Rgb(0x17, 0x17, 0x17))
+                ->Bg(ExampleRgb(0xffffff))
+                ->Border(1, ExampleRgb(0x171717))
                 ->Child(TextEl(a, StrL("Anchored surface"))
                             ->Font(12)
-                            ->Fg(Rgb(0x17, 0x17, 0x17)))
+                            ->Fg(ExampleRgb(0x171717)))
                 ->Child(Div(a)->PadT(4)->Child(
                     TextEl(
                         a,
                         StrL(
                             "Popup positions content relative to its trigger."))
                         ->Font(14)
-                        ->Fg(Rgb(0x73, 0x73, 0x73))
+                        ->Fg(ExampleRgb(0x737373))
                         ->Wrap()
                         ->MaxW(240)));
     }

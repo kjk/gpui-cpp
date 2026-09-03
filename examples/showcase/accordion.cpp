@@ -24,7 +24,7 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
 
     El* root = Accordion::New(cx, StrL("example-accordion"))
                    ->W(270)
-                   ->BorderT(1, Rgb(0xd4, 0xd4, 0xd4))
+                   ->BorderT(1, ExampleRgb(0xd4d4d4))
                    ->FlexCol();
     for (int i = 0; i < 3; i++) {
         bool open = app->accordionOpen[i];
@@ -36,13 +36,13 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
                 ->H(28)
                 ->ItemsCenter()
                 ->JustifyBetween()
-                ->BorderB(1, Rgb(0xd4, 0xd4, 0xd4))
-                ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                ->BorderB(1, ExampleRgb(0xd4d4d4))
+                ->HoverBg(ExampleRgb(0xf5f5f5))
                 ->Child(
-                    TextEl(a, Str(qs[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
+                    TextEl(a, Str(qs[i]))->Font(12)->Fg(ExampleRgb(0x171717)))
                 ->Child(TextEl(a, open ? StrL("−") : StrL("+"))
                             ->Font(12)
-                            ->Fg(Rgb(0x73, 0x73, 0x73)));
+                            ->Fg(ExampleRgb(0x737373)));
         AccordionItem* item = AccordionItem::New(cx)
                                   ->Open(open)
                                   ->Header(AccordionHeader::New(cx, trigger));
@@ -50,10 +50,10 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
                         ->PadX(4)
                         ->PadY(4)
                         ->W(kFill)
-                        ->BorderB(1, Rgb(0xd4, 0xd4, 0xd4))
+                        ->BorderB(1, ExampleRgb(0xd4d4d4))
                         ->Child(TextEl(a, Str(as[i]))
                                     ->Font(12)
-                                    ->Fg(Rgb(0x52, 0x52, 0x52))
+                                    ->Fg(ExampleRgb(0x525252))
                                     ->Wrap()
                                     ->MaxW(262)));
         root->Child(item->IntoEl());
