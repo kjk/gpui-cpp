@@ -8348,10 +8348,9 @@ static JSValue NativeCalendarOn(JSContext* ctx, JSValueConst, int argc,
         EntityUnsubscribe(app, entry->subscription);
         entry->subscription = {};
     }
-    entry->subscription = EntitySubscribeRaw(
-        app, entry->calendar.id,
-        ListenTo(Entity<ScriptView>{shell::ScopeCurrentView()},
-                 &ScriptView::OnCalendarEvent, (intptr_t)handle));
+    entry->subscription = SubscribeTo(
+        app, entry->calendar, Entity<ScriptView>{shell::ScopeCurrentView()},
+        &ScriptView::OnCalendarEvent, (intptr_t)handle);
     return JS_NewBool(ctx, true);
 }
 

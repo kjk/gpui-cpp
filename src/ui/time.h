@@ -117,7 +117,7 @@ enum class DateFormat : uint8_t {
 // its Base calendar entity and forwards its completed selections as
 // DatePickerEvent::Change.
 struct DatePickerState {
-    EntityId self = {};
+    Entity<DatePickerState> self = {};
     FocusHandle focus = {};
     Date date = {};
     bool open = false;
@@ -255,5 +255,9 @@ struct DatePicker {
 };
 
 } // namespace component
+
+template <>
+struct EventEmitter<component::DatePickerState, component::DatePickerEvent> {};
+
 } // namespace gpui
 #endif // GPUI_SRC_UI_TIME_H_

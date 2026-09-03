@@ -211,7 +211,7 @@ struct TableState {
     // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
-    EntityId self = {};
+    Entity<TableState> self = {};
     // The table's own focus handle — `self.state.focus_handle(cx)`, which
     // data_table.rs tracks on the element that declares the key context. Asked
     // for once and kept, because the state is what outlives the frame the
@@ -380,6 +380,9 @@ void TablePerform(TableState* s, Ctx* cx, TableAction act);
 
 void TableOnAction(TableState* self, Ctx* cx, const ActionEvent* ev);
 void TableBindKeys(Ctx* cx, El* root, Entity<TableState> state);
+
+template <>
+struct EventEmitter<TableState, TableEvent> {};
 
 } // namespace gpui
 #endif // GPUI_BASE_DATA_TABLE_H_

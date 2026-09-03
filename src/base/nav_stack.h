@@ -83,7 +83,7 @@ struct NavStackState {
     // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
     // NavStackStateNew stamps it; the element stamps it again, so a state made
     // by hand still emits once it has been rendered.
-    EntityId self = {};
+    Entity<NavStackState> self = {};
 
     // The number of views on the stack.
     int Depth() const { return history.Undos().len; }
@@ -210,6 +210,9 @@ struct NavStack {
     NavStack* Item(NavItemFn fn, void* user = nullptr);
     El* IntoEl();
 };
+
+template <>
+struct EventEmitter<NavStackState, NavStackEvent> {};
 
 } // namespace gpui
 #endif // GPUI_BASE_NAV_STACK_H_

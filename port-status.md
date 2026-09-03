@@ -26,9 +26,6 @@ and wasm. The work left is depth, not breadth.
   into the same `MdNode` tree. A deliberately smaller tag vocabulary.
 - **Process CPU %** is a Win32/procfs times delta, not `sysinfo`. First sample
   is 0; values are in the same ballpark, not bit-identical.
-- **`EventEmitter` is untyped.** `EntityEmit` / `Subscribe` fan out and sweep
-  stale subscriptions, but no trait marks what an entity emits, so nothing
-  checks the handler takes the type the emitter sends.
 - **The scene graph is half of GPUI's.** `src/gpui/scene.h` collects and culls;
   there is no stacking context per element (layers are a field, not a tree),
   no offscreen mask cache, no batching across windows, and only

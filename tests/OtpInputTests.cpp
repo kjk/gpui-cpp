@@ -75,7 +75,7 @@ static void EditingEmitsChangeAndThenComplete() {
     Entity<OtpRecorder> recorder = EntityNewState<OtpRecorder>(&app);
     SubscribeTo(&app, otp, recorder, &OtpRecorder::OnEvent);
     OtpState* state = otp.Get(&app);
-    state->self = otp.id;
+    state->self = otp;
     state->length = 2;
     state->focused = true;
     Ctx cx = {&app, win, nullptr, otp.id};

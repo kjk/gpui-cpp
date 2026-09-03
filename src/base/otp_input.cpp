@@ -117,7 +117,7 @@ El* OtpInput::New(Ctx* cx, Str id, Entity<OtpState> state) {
     El* e = New(cx, id);
     OtpState* s = state.Get(cx);
     if (s) {
-        s->self = state.id;
+        s->self = state;
     }
     if (!s || !id.s) {
         return e;

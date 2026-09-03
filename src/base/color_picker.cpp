@@ -54,7 +54,7 @@ void ColorPickerStateInit(ColorPickerState* s, Ctx* cx) {
 Entity<ColorPickerState> ColorPickerStateNew(Ctx* cx) {
     Entity<ColorPickerState> state = EntityNewState<ColorPickerState>(cx->app);
     if (ColorPickerState* s = state.Get(cx)) {
-        s->self = state.id;
+        s->self = state;
         ColorPickerStateInit(s, cx);
     }
     return state;

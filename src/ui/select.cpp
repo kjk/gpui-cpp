@@ -78,7 +78,7 @@ Entity<SelectState> SelectState::New(App* app) {
     Entity<SelectState> out = EntityNewState<SelectState>(app);
     SelectState* self = out.Get(app);
     if (self) {
-        self->self = out.id;
+        self->self = out;
         self->activeQuery = &self->queryInput;
         self->state.onChange = ListenTo(out, &SelectState::OnListChange);
     }
@@ -216,7 +216,7 @@ Select* Select::New(Ctx* cx, Str id, Entity<SelectState> state) {
     out->selectState = state;
     SelectState* self = state.Get(cx);
     if (self) {
-        self->self = state.id;
+        self->self = state;
         self->state.onChange = ListenTo(state, &SelectState::OnListChange);
     }
     return out;

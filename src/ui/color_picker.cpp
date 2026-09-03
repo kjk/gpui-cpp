@@ -11,7 +11,7 @@ Entity<ColorPickerState> ColorPickerStateFor(Ctx* cx, Str id) {
         KeyedEntity<ColorPickerState>(cx, KeyedName(cx, id));
     if (ColorPickerState* s = state.Get(cx)) {
         if (!s->self.IsValid()) {
-            s->self = state.id;
+            s->self = state;
         }
         ColorPickerStateInit(s, cx);
     }

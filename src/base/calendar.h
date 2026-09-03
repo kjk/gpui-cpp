@@ -97,7 +97,7 @@ struct CalendarEvent {
 // the matcher all live in one entity. The public current/year-page fields are
 // retained for compatibility with the original C++ pure helpers.
 struct CalendarState {
-    EntityId self = {};
+    Entity<CalendarState> self = {};
     FocusHandle focus = {};
     CalendarView view = CalendarView::Day;
     Date date = {};
@@ -283,5 +283,8 @@ int CalendarDaysInMonth(int year, int month);
 struct CalendarItem {
     static El* New(Ctx* cx, Str id = {}, Listener onClick = {});
 };
+
+template <>
+struct EventEmitter<CalendarState, CalendarEvent> {};
 } // namespace gpui
 #endif // GPUI_BASE_CALENDAR_H_

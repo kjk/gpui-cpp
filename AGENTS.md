@@ -255,6 +255,7 @@ an example, or writing a widget that owns state.
 | `cx.notify()` | `Notify(cx)` |
 | `cx.observe(&e, ..)` | `Observe(cx, e, &T::OnChanged)`; `ObserveTo` where `SubscribeTo` would be |
 | `cx.emit` / `cx.subscribe` | `EntityEmit` / `Subscribe(cx, emitter, &T::OnEvent)`, `EntityUnsubscribe` |
+| `impl EventEmitter<E> for T` | `template <> struct EventEmitter<T, E> {};` |
 | `Drop for T` | `~T()`, run when the entity is dropped |
 | `window.use_keyed_state` | `KeyedState<T>(cx, key)` |
 | `cx.spawn(...)` with no await | `WindowPost(win, Listener)` |
@@ -293,6 +294,15 @@ int GpuiMain(int argc, char** argv) {
 
 `AppNew` → `WindowOpenView` → `AppRun` → `AppFree` is the whole lifecycle;
 `AppRunView` is the one-window shorthand. There is no hook table.
+
+An entity/event pair must have an `EventEmitter<T, E>` specialization before
+it can be passed to `EntityEmit`, `Subscribe` or `SubscribeTo`. The constraint
+checks both sides: subscribing an `Entity<T>` with a handler for the wrong
+event type, or emitting an undeclared event from it, does not compile. A state
+may specialize `EventEmitter` more than once. Subscriber storage carries the
+event type key as well as the entity id, so those event channels remain
+separate at runtime. Keep the state entity's self handle typed as `Entity<T>`;
+dropping it to `EntityId` before an emit would also drop the check.
 
 Rules:
 

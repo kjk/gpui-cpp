@@ -4845,6 +4845,7 @@ enum : uint16_t {
 struct EntitySub {
     int id = 0;
     EntityId emitter = {};
+    const void* eventType = nullptr;
     Listener handler = {};
 };
 
@@ -5278,11 +5279,27 @@ Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t),
 // ─── EventEmitter (crates/gpui/src/app/entity_map.rs, subscriber lists) ───
 //
 // Rust marks what an entity emits with `impl EventEmitter<E> for T`, sends one
-// with `cx.emit(e)`, and hears it with `cx.subscribe(&entity, ..)`, which
-// hands back a Subscription that unsubscribes when it drops. There is no trait
-// to mark here: an emitter is an entity, an event is whatever struct the
-// emitter sends, and the subscriber's handler has to take that same type —
-// which is the one thing Rust checks and this cannot.
+// with `cx.emit(e)`, and hears it with `cx.subscribe(&entity, ..)`. An empty
+// specialization is the C++ declaration of the same pairing:
+//
+//     template <> struct EventEmitter<MyState, MyEvent> {};
+//
+// A state may have more than one specialization. Subscribe and EntityEmit are
+// constrained by that declaration, and the erased runtime key keeps those
+// event channels separate.
+template <typename T, typename E>
+struct EventEmitter;
+
+template <typename T, typename E>
+concept EmitsEvent = requires {
+    sizeof(EventEmitter<T, E>);
+};
+
+template <typename E>
+const void* EntityEventType() {
+    static const uint8_t key = 0;
+    return &key;
+}
 //
 // A Subscription is a handle rather than a guard: nothing is destroyed on
 // scope exit in a tree of POD state, so it is dropped by asking. It rarely
@@ -5294,7 +5311,8 @@ struct Subscription {
     bool IsValid() const { return id != 0; }
 };
 
-Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler);
+Subscription EntitySubscribeRaw(App* app, EntityId emitter,
+                                const void* eventType, Listener handler);
 void EntityUnsubscribe(App* app, Subscription sub);
 
 // ─── observers (crates/gpui/src/app.rs, `observers`) ─────────────────────
@@ -5316,10 +5334,10 @@ int EntityObserverCount(App* app, EntityId observed);
 // is what this did for everything before there was anything to be precise
 // with.
 void NotifyEntity(App* app, EntityId id, Window* from);
-// cx.emit(ev): every live subscriber hears it, oldest first. `ev` is the
-// event struct the emitter sends, by pointer, and it does not outlive the
-// call.
-void EntityEmit(App* app, Window* win, EntityId emitter, const void* ev);
+// The erased runtime half used by the typed EntityEmit wrapper and by dynamic
+// language bridges. `ev` does not outlive the call.
+void EntityEmitRaw(App* app, Window* win, EntityId emitter,
+                   const void* eventType, const void* ev);
 // How many subscriptions the emitter has, stale ones swept first. For a
 // caller that has to know whether anybody is listening at all.
 int EntitySubscriberCount(App* app, EntityId emitter);
@@ -5327,12 +5345,12 @@ int EntitySubscriberCount(App* app, EntityId emitter);
 // cx.subscribe(&emitter, cx.listener(..)): the handler belongs to whatever is
 // rendering, the way Listen's does, and runs whenever `emitter` emits an E.
 template <typename T, typename S, typename E>
-Subscription Subscribe(Ctx* cx, Entity<T> emitter,
-                       void (*fn)(S*, Ctx*, const E*)) {
+requires EmitsEvent<T, E> Subscription
+Subscribe(Ctx* cx, Entity<T> emitter, void (*fn)(S*, Ctx*, const E*)) {
     Listener l;
     l.fn = (void*)fn;
     l.view = cx->self;
-    return EntitySubscribeRaw(cx->app, emitter.id, l);
+    return EntitySubscribeRaw(cx->app, emitter.id, EntityEventType<E>(), l);
 }
 
 // cx.observe(&entity, ..): `handler` runs on `cx->self` whenever `observed`
@@ -5355,18 +5373,35 @@ Subscription ObserveTo(App* app, Entity<T> observed, Entity<S> observer,
 
 // The same, for a subscriber that is not the one rendering.
 template <typename T, typename S, typename E>
-Subscription SubscribeTo(App* app, Entity<T> emitter, Entity<S> subscriber,
-                         void (*fn)(S*, Ctx*, const E*)) {
+requires EmitsEvent<T, E> Subscription SubscribeTo(App* app, Entity<T> emitter,
+                                                   Entity<S> subscriber,
+                                                   void (*fn)(S*, Ctx*,
+                                                              const E*)) {
     Listener l;
     l.fn = (void*)fn;
     l.view = subscriber.id;
-    return EntitySubscribeRaw(app, emitter.id, l);
+    return EntitySubscribeRaw(app, emitter.id, EntityEventType<E>(), l);
 }
 
-// cx.emit(ev) from inside the emitter: `emitter` is the entity sending it,
-// which a state that does not know its own handle takes as an argument.
-template <typename E>
-void Emit(Ctx* cx, EntityId emitter, const E* ev) {
+// The same, with the value a Rust closure would capture.
+template <typename T, typename S, typename E>
+requires EmitsEvent<T, E> Subscription
+SubscribeTo(App* app, Entity<T> emitter, Entity<S> subscriber,
+            void (*fn)(S*, Ctx*, const E*, intptr_t), intptr_t arg) {
+    Listener l = ListenTo(subscriber, fn, arg);
+    return EntitySubscribeRaw(app, emitter.id, EntityEventType<E>(), l);
+}
+
+// cx.emit(ev): every live subscriber to this event type hears it, oldest
+// first. The event pointer does not outlive the call.
+template <typename T, typename E>
+requires EmitsEvent<T, E> void EntityEmit(App* app, Window* win,
+                                          Entity<T> emitter, const E* ev) {
+    EntityEmitRaw(app, win, emitter.id, EntityEventType<E>(), ev);
+}
+
+template <typename T, typename E>
+requires EmitsEvent<T, E> void Emit(Ctx* cx, Entity<T> emitter, const E* ev) {
     EntityEmit(cx->app, cx->win, emitter, ev);
 }
 

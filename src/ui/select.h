@@ -54,7 +54,7 @@ struct SelectState {
     IconName icon = IconName::None;
     Str titlePrefix = {};
     bool focusRingEnabled = true;
-    EntityId self = {};
+    Entity<SelectState> self = {};
 
     static Entity<SelectState> New(App* app);
     SearchableListState* List() { return &state; }
@@ -185,5 +185,9 @@ void SelectClear(SearchableListState* s, Ctx* cx);
 void SelectClear(SelectState* s, Ctx* cx);
 
 } // namespace component
+
+template <>
+struct EventEmitter<component::SelectState, component::SelectEvent> {};
+
 } // namespace gpui
 #endif // GPUI_SRC_UI_SELECT_H_

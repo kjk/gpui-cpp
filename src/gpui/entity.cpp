@@ -665,14 +665,16 @@ int EntityObserverCount(App* app, EntityId observed) {
     return n;
 }
 
-Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler) {
+Subscription EntitySubscribeRaw(App* app, EntityId emitter,
+                                const void* eventType, Listener handler) {
     Subscription sub;
-    if (!app || !emitter.IsValid() || !handler.IsValid()) {
+    if (!app || !emitter.IsValid() || !eventType || !handler.IsValid()) {
         return sub;
     }
     EntitySub s;
     s.id = app->nextSubId++;
     s.emitter = emitter;
+    s.eventType = eventType;
     s.handler = handler;
     VecAppend(app->subs, s);
     sub.id = s.id;
@@ -702,8 +704,9 @@ static void SweepSubs(App* app) {
     }
 }
 
-void EntityEmit(App* app, Window* win, EntityId emitter, const void* ev) {
-    if (!app || !emitter.IsValid()) {
+void EntityEmitRaw(App* app, Window* win, EntityId emitter,
+                   const void* eventType, const void* ev) {
+    if (!app || !emitter.IsValid() || !eventType) {
         return;
     }
     SweepSubs(app);
@@ -717,7 +720,8 @@ void EntityEmit(App* app, Window* win, EntityId emitter, const void* ev) {
     Subscription ids[64];
     int nIds = 0;
     for (int i = 0; i < n && nIds < 64; i++) {
-        if (app->subs[i].emitter == emitter) {
+        if (app->subs[i].emitter == emitter &&
+            app->subs[i].eventType == eventType) {
             ids[nIds++].id = app->subs[i].id;
         }
     }

@@ -169,7 +169,7 @@ struct ListState {
     // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
-    EntityId self = {};
+    Entity<ListState> self = {};
     // The list's own focus handle — `self.focus_handle(cx)`, which list.rs
     // tracks on the element it declares the key context on. Asked for once and
     // kept, because the state is what outlives the frame; the port derived it
@@ -269,6 +269,9 @@ void ListClickRow(ListState* s, Ctx* cx, int ix, bool secondary);
 
 // A secondary press on a row, which only marks it.
 void ListRightClickRow(ListState* s, Ctx* cx, int ix);
+
+template <>
+struct EventEmitter<ListState, ListEvent> {};
 
 } // namespace gpui
 #endif // GPUI_BASE_LIST_H_

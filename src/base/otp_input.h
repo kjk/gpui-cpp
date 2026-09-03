@@ -22,7 +22,7 @@ struct OtpEvent {
 // and shrinks with backspace. The value is UTF-8 but every character in it is
 // an ASCII digit, so `len` counts characters and bytes alike.
 struct OtpState {
-    EntityId self = {};
+    Entity<OtpState> self = {};
     // Shell exposes the upstream retained-state limit of 64 cells. Keep the
     // terminating byte in the state so the native and script paths share one
     // bound instead of silently truncating after the old story-only limit.
@@ -73,5 +73,8 @@ struct OtpInput {
     // edits the value.
     static El* New(Ctx* cx, Str id, Entity<OtpState> state);
 };
+
+template <>
+struct EventEmitter<OtpState, OtpEvent> {};
 } // namespace gpui
 #endif // GPUI_BASE_OTP_INPUT_H_

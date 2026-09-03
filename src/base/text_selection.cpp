@@ -7,7 +7,7 @@
 namespace gpui {
 
 struct TextSelectionParticipantState {
-    EntityId self = {};
+    Entity<TextSelectionParticipantState> self = {};
     Str fallbackCopyText = {};
     Str projectedCopyText = {};
     Vec<TextSelectionRun> runs;
@@ -301,16 +301,16 @@ static bool ComputeParticipantSnapshot(TextSelectionParticipantState* receiver,
 
     TextSelectionCoverage coverage = TextSelectionCoverage::Bounded;
     if (anchorId != cursorId) {
-        if (receiver->self != anchorId && receiver->self != cursorId) {
+        if (receiver->self.id != anchorId && receiver->self.id != cursorId) {
             coverage = TextSelectionCoverage::Full;
-        } else if ((receiver->self == anchorId) ==
+        } else if ((receiver->self.id == anchorId) ==
                    (anchor->registration.documentOrder < cursor->registration
                                                              .documentOrder)) {
             coverage = TextSelectionCoverage::ToEnd;
         } else {
             coverage = TextSelectionCoverage::FromStart;
         }
-    } else if (receiver->self != anchorId) {
+    } else if (receiver->self.id != anchorId) {
         return false;
     }
     TextSelectionRegistration anchorRegistration = anchor->registration;
@@ -421,14 +421,15 @@ static void ParticipantAutoScroll(Window* window, Point point, bool stopping) {
     event.kind = TextSelectionEventKind::AutoScroll;
     event.autoScroll = delta;
     event.hasAutoScroll = has;
-    EntityEmit(window->app, window, id, &event);
+    EntityEmit(window->app, window, Entity<TextSelectionParticipantState>{id},
+               &event);
 }
 
 TextSelectionHandle TextSelectionHandle::New(Str fallbackCopyText, App* app) {
     TextSelectionHandle out;
     out.state = EntityNewState<TextSelectionParticipantState>(app);
     if (TextSelectionParticipantState* state = out.state.Get(app)) {
-        state->self = out.state.id;
+        state->self = out.state;
         state->fallbackCopyText = StrDup(fallbackCopyText);
     }
     return out;
@@ -456,7 +457,7 @@ void TextSelectionHandle::SetLocalSelection(bool active, App* app) const {
     TextSelectionParticipantState* participant = ParticipantState(*this, app);
     if (!participant || participant->localSelection == active) return;
     participant->localSelection = active;
-    NotifyEntity(app, participant->self, participant->window);
+    NotifyEntity(app, participant->self.id, participant->window);
 }
 
 bool TextSelectionHandle::HasLocalSelection(const App* app) const {
@@ -611,10 +612,8 @@ TextSelectionProjection TextSelectionHandle::UpdateRuns(
 }
 
 Subscription TextSelectionHandle::RefreshWindowOnChange(App* app) const {
-    Listener listener;
-    listener.fn = (void*)&TextSelectionParticipantState::Refresh;
-    listener.view = state.id;
-    return EntitySubscribeRaw(app, state.id, listener);
+    return SubscribeTo(app, state, state,
+                       &TextSelectionParticipantState::Refresh);
 }
 
 void TextSelectionHandle::FocusWith(TextSelectionFocusFn fn, void* user,
@@ -1170,10 +1169,12 @@ void WindowSelectionFinishFrame(Window* win) {
             participant->hasProjectedCopyText = false;
             TextSelectionEvent cleared;
             cleared.kind = TextSelectionEventKind::Cleared;
-            EntityEmit(win->app, win, id, &cleared);
+            EntityEmit(win->app, win, Entity<TextSelectionParticipantState>{id},
+                       &cleared);
             TextSelectionEvent changed;
             changed.kind = TextSelectionEventKind::SelectionChanged;
-            EntityEmit(win->app, win, id, &changed);
+            EntityEmit(win->app, win, Entity<TextSelectionParticipantState>{id},
+                       &changed);
             if (clear) clear(clearUser, win->app);
         }
     }

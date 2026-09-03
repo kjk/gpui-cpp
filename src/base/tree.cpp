@@ -398,7 +398,7 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
     if (!s || !row) {
         return Div(a)->H(h);
     }
-    s->self = state.id;
+    s->self = state;
     // The height the list was laid out at is what scroll_to_item measures
     // against, and the caller is the one that knows it.
     s->viewportH = h;

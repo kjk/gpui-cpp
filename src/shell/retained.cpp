@@ -103,7 +103,7 @@ EntityHandle RetainedStore::CreateOtp(int length, Str value, bool masked,
         delete entry;
         return 0;
     }
-    state->self = entry->otp.id;
+    state->self = entry->otp;
     state->length = length;
     state->masked = masked;
     state->focus = FocusHandleNew(app);

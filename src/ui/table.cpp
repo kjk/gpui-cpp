@@ -798,7 +798,7 @@ El* DataTable::BuildEl() {
     }
     TableState* s = state.Get(cx);
     if (s) {
-        s->self = state.id;
+        s->self = state;
         // The counts are the caller's every frame, which is what keeps the
         // keys inside the rows and columns there actually are.
         s->rowCount = nRows;

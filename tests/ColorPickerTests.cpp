@@ -136,7 +136,7 @@ static void RetainedSlidersEmitTypedChanges() {
     SubscribeTo(&app, picker, sink, &ColorSink::OnChange);
     ColorPickerState* state = picker.Get(&app);
     cx.self = picker.id;
-    utassert(state && state->self == picker.id);
+    utassert(state && state->self.id == picker.id);
     utassert(state && state->focus.IsValid());
     utassert(state && state->sliders.At(0) == &state->sliders.hue);
     utassert(state && state->sliders.At(1) == &state->sliders.saturation);
@@ -179,10 +179,9 @@ static void ConfirmTogglesAndCancelDismisses() {
     FocusHandle focus = FocusHandleNew(&cx);
     Listener open = ListenTo(sink, &ColorSink::OnOpen);
 
-    El* root = ColorPicker::New(&cx, StrL("picker"), false, false,
-                                StrL("Theme color"),
-                                AccessibilityRole::Button, open, focus, 3,
-                                false);
+    El* root =
+        ColorPicker::New(&cx, StrL("picker"), false, false, StrL("Theme color"),
+                         AccessibilityRole::Button, open, focus, 3, false);
     utassert(root->style.focusId == focus.id);
     utassert(root->style.tabIndex == 3 && !root->style.tabStop);
     FocusCollect(win, root);
@@ -191,9 +190,9 @@ static void ConfirmTogglesAndCancelDismisses() {
     ColorSink* received = sink.Get(&app);
     utassert(received && received->openChanges == 1 && received->open);
 
-    root = ColorPicker::New(&cx, StrL("picker"), true, false,
-                            StrL("Theme color"),
-                            AccessibilityRole::Button, open, focus);
+    root =
+        ColorPicker::New(&cx, StrL("picker"), true, false, StrL("Theme color"),
+                         AccessibilityRole::Button, open, focus);
     FocusCollect(win, root);
     win->focusId = focus.id;
     utassert(WindowDispatchKeyAction(win, KeyEscape, false, false, false));

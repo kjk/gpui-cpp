@@ -47,7 +47,7 @@ Entity<ComboboxState> ComboboxState::New(App* app) {
     Entity<ComboboxState> out = EntityNewState<ComboboxState>(app);
     ComboboxState* self = out.Get(app);
     if (self) {
-        self->self = out.id;
+        self->self = out;
         self->state.onChange = ListenTo(out, &ComboboxState::OnListChange);
     }
     return out;
@@ -302,7 +302,7 @@ Combobox* Combobox::New(Ctx* cx, Str id, Entity<ComboboxState> state) {
     Combobox* out = Combobox::New(cx, id, ComboboxListEntity(state), nullptr);
     out->comboboxState = state;
     if (owner) {
-        owner->self = state.id;
+        owner->self = state;
         owner->searchable = true;
         owner->state.onChange = ListenTo(state, &ComboboxState::OnListChange);
     }

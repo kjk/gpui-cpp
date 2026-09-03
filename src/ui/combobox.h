@@ -55,7 +55,7 @@ struct ComboboxState {
     IconName checkIcon = IconName::Check;
     bool focusRingEnabled = true;
     Bounds bounds = {};
-    EntityId self = {};
+    Entity<ComboboxState> self = {};
 
     static Entity<ComboboxState> New(App* app);
     SearchableListState* List() { return &state; }
@@ -176,5 +176,9 @@ struct Combobox {
 };
 
 } // namespace component
+
+template <>
+struct EventEmitter<component::ComboboxState, component::ComboboxEvent> {};
+
 } // namespace gpui
 #endif // GPUI_UI_COMBOBOX_H_

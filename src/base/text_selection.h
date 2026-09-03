@@ -158,6 +158,9 @@ using TextSelectionContentKeyFn = bool (*)(void* user, Point point,
 
 struct TextSelectionParticipantState;
 
+template <>
+struct EventEmitter<TextSelectionParticipantState, TextSelectionEvent> {};
+
 struct TextSelectionHandle {
     gpui::Entity<TextSelectionParticipantState> state = {};
 
@@ -182,10 +185,7 @@ struct TextSelectionHandle {
     Subscription Subscribe(Ctx* cx,
                            void (*fn)(S*, Ctx*,
                                       const TextSelectionEvent*)) const {
-        Listener listener;
-        listener.fn = (void*)fn;
-        listener.view = cx->self;
-        return EntitySubscribeRaw(cx->app, state.id, listener);
+        return gpui::Subscribe(cx, state, fn);
     }
 };
 

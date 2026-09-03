@@ -176,7 +176,7 @@ Entity<CalendarState> CalendarStateNew(Ctx* cx, Date date) {
     }
     Entity<CalendarState> out = EntityNewState<CalendarState>(cx->app);
     if (CalendarState* s = out.Get(cx)) {
-        s->self = out.id;
+        s->self = out;
         CalendarStateInit(s, cx, date);
     }
     return out;
@@ -411,7 +411,7 @@ El* Calendar::IntoEl() {
     if (!s) {
         return Div(a)->Id(id);
     }
-    s->self = state.id;
+    s->self = state;
     s->numberOfMonths = std::max(1, opts.numberOfMonths);
     CalendarOpts o = opts;
     o.year = s->currentYear;

@@ -124,7 +124,7 @@ struct TreeState {
     // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
-    EntityId self = {};
+    Entity<TreeState> self = {};
 
     static void OnRowClick(TreeState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t entryIx);
@@ -214,5 +214,8 @@ struct TreeList {
 struct TreeItemEl {
     static El* New(Ctx* cx, Str id = {}, Listener onClick = {});
 };
+
+template <>
+struct EventEmitter<TreeState, TreeEvent> {};
 } // namespace gpui
 #endif // GPUI_BASE_TREE_H_

@@ -236,7 +236,7 @@ El* List::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     ListState* s = state.Get(cx);
     if (s) {
-        s->self = state.id;
+        s->self = state;
         s->queryInput = search;
         s->onPerformSearch = delegate.performSearch;
         s->onSetSelectedIndex = delegate.setSelectedIndex;

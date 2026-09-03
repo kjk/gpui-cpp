@@ -587,7 +587,7 @@ DatePickerState::~DatePickerState() {
 
 static void NotifyDatePicker(DatePickerState* state, Ctx* cx) {
     if (state && cx && state->self.IsValid()) {
-        NotifyEntity(cx->app, state->self, cx->win);
+        NotifyEntity(cx->app, state->self.id, cx->win);
     }
 }
 
@@ -600,7 +600,7 @@ Entity<DatePickerState> DatePickerStateNew(Ctx* cx, bool range) {
     if (!state) {
         return {};
     }
-    state->self = out.id;
+    state->self = out;
     state->focus = FocusHandleNew(cx);
     state->date = range ? Date::Range() : Date::Single();
     state->dateFormat = StrDup(StrL("%Y/%m/%d"));

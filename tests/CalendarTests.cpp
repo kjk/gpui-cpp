@@ -96,8 +96,7 @@ struct CalendarSink {
     int events = 0;
     Date last = {};
 
-    static void OnSelected(CalendarSink* self, Ctx*,
-                           const CalendarEvent* ev) {
+    static void OnSelected(CalendarSink* self, Ctx*, const CalendarEvent* ev) {
         self->events++;
         self->last = ev->date;
     }
@@ -124,13 +123,12 @@ static void RetainedStateOwnsSelectionEventsAndRendering() {
     Arena* a = ArenaNew();
     Ctx cx = {&app, win, a, {}};
 
-    Entity<CalendarState> calendar =
-        CalendarStateNew(&cx, Date::Range());
+    Entity<CalendarState> calendar = CalendarStateNew(&cx, Date::Range());
     Entity<CalendarSink> sink = EntityNewState<CalendarSink>(&app);
     SubscribeTo(&app, calendar, sink, &CalendarSink::OnSelected);
     CalendarState* state = calendar.Get(&app);
     utassert(state && state->focus.id != 0);
-    utassert(state && state->self == calendar.id);
+    utassert(state && state->self.id == calendar.id);
 
     bool first = CalendarStateSelectDate(state, CalDate(2025, 4, 4), &cx);
     utassert(!first && sink.Get(&app)->events == 0);

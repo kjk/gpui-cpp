@@ -8,7 +8,7 @@ Entity<NavStackState> NavStackStateNew(App* app) {
     Entity<NavStackState> e = EntityNewState<NavStackState>(app);
     NavStackState* s = e.Get(app);
     if (s) {
-        s->self = e.id;
+        s->self = e;
     }
     return e;
 }
@@ -40,7 +40,7 @@ static bool NavUndoOne(NavStackState* s, EntityId* view) {
 static void NavEmit(NavStackState* s, Ctx* cx, NavStackEvent event) {
     EntityEmit(cx->app, cx->win, s->self, &event);
     if (s->self.IsValid()) {
-        NotifyEntity(cx->app, s->self, cx->win);
+        NotifyEntity(cx->app, s->self.id, cx->win);
     } else {
         Notify(cx);
     }
@@ -225,7 +225,7 @@ El* NavStack::IntoEl() {
     if (!s) {
         return root;
     }
-    s->self = state.id;
+    s->self = state;
 
     EntityId current = s->Current();
     int depth = s->Depth();

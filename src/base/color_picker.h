@@ -49,7 +49,7 @@ struct HslaSliders {
 // widget can bind its own handlers to it — `component::ColorPickerStateFor`
 // is what hands one out.
 struct ColorPickerState {
-    EntityId self = {};
+    Entity<ColorPickerState> self = {};
     FocusHandle focus = {};
     uint32_t value = 0;
     bool hasValue = false;
@@ -143,5 +143,8 @@ struct ColorSwatch {
                    bool tabStop = true,
                    AccessibilityRole role = AccessibilityRole::RadioButton);
 };
+
+template <>
+struct EventEmitter<ColorPickerState, ColorPickerEvent> {};
 } // namespace gpui
 #endif // GPUI_BASE_COLOR_PICKER_H_
