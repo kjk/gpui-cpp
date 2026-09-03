@@ -523,6 +523,9 @@ static void EditableTextOffersSetValueAndReadOnlyTextDoesNot() {
     utassert(node && (node->actions & AccessibilityActionSetValue));
     utassert(node && base::StrEq(node->info.value, "old"));
     if (node) {
+#if GPUI_OS_WINDOWS
+        utassert(AccessibilityWinSmokeTest(f.win, node->id));
+#endif
         utassert(WindowAccessibilityPerform(
             f.win, node->id, AccessibilityAction::SetValue, StrL("new value")));
         utassert(base::StrEq(InputValue(&editable), "new value"));
@@ -538,6 +541,30 @@ static void EditableTextOffersSetValueAndReadOnlyTextDoesNot() {
     FreeAccessibilityFrame(&f);
 }
 
+static void SelectionContainersExposeTheirSelectedItems() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    El* list = Div(f.arena)
+                   ->Role(AccessibilityRole::ListBox)
+                   ->Child(Div(f.arena)
+                               ->Role(AccessibilityRole::ListBoxOption)
+                               ->AriaLabel(StrL("One"))
+                               ->AriaSelected(false))
+                   ->Child(Div(f.arena)
+                               ->Role(AccessibilityRole::ListBoxOption)
+                               ->AriaLabel(StrL("Two"))
+                               ->AriaSelected(true));
+    AccessibilityCollect(list, &f.win->accessibility);
+    const AccessibilityNode* node =
+        RoleNode(f.win->accessibility, AccessibilityRole::ListBox);
+    utassert(node);
+#if GPUI_OS_WINDOWS
+    if (node) {
+        utassert(AccessibilityWinSmokeTest(f.win, node->id));
+    }
+#endif
+    FreeAccessibilityFrame(&f);
+}
+
 void TestAccessibility() {
     TestSuite("accessibility");
     TheTreeSkipsVisualBoxesButKeepsSemanticParents();
@@ -549,6 +576,7 @@ void TestAccessibility() {
     TablesKeepCountsAndOneBasedIndices();
     SliderActionsUseTheSlidersOwnStep();
     EditableTextOffersSetValueAndReadOnlyTextDoesNot();
+    SelectionContainersExposeTheirSelectedItems();
     ExplicitSemanticListenersAreInvoked();
     ConditionalAndCompositeRolesMatchUpstream();
     InputContentTypesAndSecretsProjectSafely();

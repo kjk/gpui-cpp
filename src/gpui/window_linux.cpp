@@ -7,6 +7,7 @@
 
 #include "gpui/platform.h"
 #include "gpui/paint.h"
+#include "gpui/accessibility_linux.h"
 #include "sys/executor.h"
 
 #include <X11/Xlib.h>
@@ -745,12 +746,27 @@ void PlatInstallAccessibilityHitTest(Window* win) {
 }
 
 void PlatAccessibilityTreeChanged(Window* win) {
-    (void)win;
+    AccessibilityLinuxTreeChanged(win);
 }
 
 void PlatAccessibilityFocusChanged(Window* win, int focusId) {
-    (void)win;
-    (void)focusId;
+    AccessibilityLinuxFocusChanged(win, focusId);
+}
+
+Point AccessibilityLinuxWindowOrigin(Window* win) {
+    Point result = {};
+    if (!gDpy || !win || !win->plat) {
+        return result;
+    }
+    XWindow child = 0;
+    int x = 0;
+    int y = 0;
+    if (XTranslateCoordinates(gDpy, win->plat->xwin, gRoot, 0, 0, &x, &y,
+                              &child)) {
+        result.x = (float)x;
+        result.y = (float)y;
+    }
+    return result;
 }
 
 bool PlatHasMenu() {
@@ -1417,7 +1433,6 @@ void PlatWake(App* app) {
 }
 
 bool PlatInit(App* app) {
-    (void)app;
     WakeInit();
     if (gDpy) {
         return true;
@@ -1450,11 +1465,33 @@ bool PlatInit(App* app) {
     aClipboard = XInternAtom(gDpy, "CLIPBOARD", False);
     aTargets = XInternAtom(gDpy, "TARGETS", False);
     aClipTarget = XInternAtom(gDpy, "GPUI_CLIPBOARD", False);
+    const char* accessibilityBus = getenv("AT_SPI_BUS_ADDRESS");
+    if (accessibilityBus && *accessibilityBus) {
+        AccessibilityLinuxInit(app, Str(accessibilityBus));
+    } else {
+        // at-spi-bus-launcher publishes the private bus here for applications
+        // that were started before its environment could be inherited.
+        Atom property = XInternAtom(gDpy, "AT_SPI_BUS", True);
+        Atom type = None;
+        int format = 0;
+        unsigned long count = 0;
+        unsigned long after = 0;
+        unsigned char* value = nullptr;
+        if (property != None &&
+            XGetWindowProperty(gDpy, gRoot, property, 0, 4096, False,
+                               AnyPropertyType, &type, &format, &count, &after,
+                               &value) == Success &&
+            format == 8 && value && count) {
+            AccessibilityLinuxInit(app, Str((char*)value, (int)count));
+        }
+        if (value) XFree(value);
+    }
     return true;
 }
 
 void PlatShutdown(App* app) {
     (void)app;
+    AccessibilityLinuxShutdown();
     WakeShutdown();
     if (gClipboard.s) {
         StrFree(gClipboard);
@@ -1593,13 +1630,18 @@ int AppRun(App* app) {
         }
         if (!anyDirty && XPending(gDpy) == 0 && ExecQueued() == 0) {
             int timeoutMs = waitS <= 0 ? 0 : (int)(waitS * 1000.0);
-            struct pollfd pfd[2] = {{fd, POLLIN, 0}, {gWakeFd[0], POLLIN, 0}};
-            poll(pfd, gWakeFd[0] >= 0 ? 2 : 1, timeoutMs);
+            int accessibilityFd = AccessibilityLinuxFd();
+            struct pollfd pfd[3] = {{fd, POLLIN, 0},
+                                    {gWakeFd[0], POLLIN, 0},
+                                    {accessibilityFd, POLLIN, 0}};
+            int nfd = accessibilityFd >= 0 ? 3 : (gWakeFd[0] >= 0 ? 2 : 1);
+            poll(pfd, nfd, timeoutMs);
         }
         // Whatever woke us, the queue is drained on the way past: a worker
         // that finished while we were asleep wrote the byte that ended the
         // poll, and one that finished while we were drawing did not have to.
         WakeConsume();
+        AccessibilityLinuxPump();
         ExecDrain();
 
         now = TimeNow();

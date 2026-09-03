@@ -721,6 +721,9 @@ const uiThemeHeader = readFileSync(join(root, "src/ui/theme.h"), "utf8");
 const baseThemeTokens = readFileSync(join(root, "src/base/theme_tokens.h"), "utf8");
 const windowCommon = readFileSync(join(root, "src/gpui/window_common.cpp"), "utf8");
 const accessibilityWin = readFileSync(join(root, "src/gpui/accessibility_win.cpp"), "utf8");
+const accessibilityLinux = readFileSync(join(root, "src/gpui/accessibility_linux.cpp"), "utf8");
+const windowLinux = readFileSync(join(root, "src/gpui/window_linux.cpp"), "utf8");
+const windowMac = readFileSync(join(root, "src/gpui/window_mac.cpp"), "utf8");
 const windowWin = readFileSync(join(root, "src/gpui/window_win.cpp"), "utf8");
 if (/\bstruct\s+Theme(?:Tokens)?\b/.test(gpuiHeader)) {
   errors.push("theme layering: component Theme type leaked into gpui/gpui.h");
@@ -764,7 +767,10 @@ for (const marker of [
   "IValueProvider",
   "IRangeValueProvider",
   "IExpandCollapseProvider",
+  "ISelectionProvider",
   "ISelectionItemProvider",
+  "ITextProvider",
+  "ITextRangeProvider",
   "IGridProvider",
   "IGridItemProvider",
   "ITableProvider",
@@ -778,6 +784,37 @@ for (const marker of [
 }
 if (!windowWin.includes("case WM_GETOBJECT") || !windowWin.includes("AccessibilityWinGetObject(")) {
   errors.push("Windows accessibility adapter: WM_GETOBJECT is not wired");
+}
+for (const marker of [
+  "GpuiAccessibilityElement",
+  "accessibilityChildren",
+  "accessibilityHitTest:",
+  "accessibilitySelectedTextRange",
+  "NSAccessibilityPostNotification",
+]) {
+  if (!windowMac.includes(marker)) {
+    errors.push(`macOS accessibility adapter: missing ${marker}`);
+  }
+}
+for (const marker of [
+  "org.a11y.atspi.Accessible",
+  "org.a11y.atspi.Component",
+  "org.a11y.atspi.Action",
+  "org.a11y.atspi.Value",
+  "org.a11y.atspi.Selection",
+  "org.a11y.atspi.Text",
+  "GetApplicationBusAddress",
+  "GetActions",
+  "GetStringAtOffset",
+  "GetAll",
+  "AccessibilityLinuxPump",
+]) {
+  if (!accessibilityLinux.includes(marker)) {
+    errors.push(`Linux accessibility adapter: missing ${marker}`);
+  }
+}
+if (!windowLinux.includes("AccessibilityLinuxFd()") || !windowLinux.includes("AccessibilityLinuxPump()")) {
+  errors.push("Linux accessibility adapter: AT-SPI socket is not wired into poll");
 }
 
 const counts = (status: Status) => entries.filter((e) => e.status === status).length;

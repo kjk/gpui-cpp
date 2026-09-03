@@ -10,6 +10,7 @@
 namespace gpui {
 
 struct WinAccessibilityNode;
+struct WinTextRange;
 
 static BSTR AccessibilityBstr(Str value) {
     if (!value.s || value.len <= 0) {
@@ -227,6 +228,18 @@ static bool AccessibilitySelectionItemRole(AccessibilityRole role) {
            role == AccessibilityRole::Tab;
 }
 
+static bool AccessibilitySelectionContainerRole(AccessibilityRole role) {
+    return role == AccessibilityRole::ListBox ||
+           role == AccessibilityRole::RadioGroup ||
+           role == AccessibilityRole::TabList ||
+           role == AccessibilityRole::Tree;
+}
+
+static bool AccessibilityTextPattern(const AccessibilityNode& node) {
+    return AccessibilityTextRole(node.info.role) && node.input &&
+           node.info.role != AccessibilityRole::PasswordInput;
+}
+
 static bool AccessibilityInvokePattern(const AccessibilityNode& node) {
     if (!(node.actions & AccessibilityActionDefault)) {
         return false;
@@ -303,7 +316,9 @@ struct WinAccessibilityNode : IRawElementProviderSimple,
                               IValueProvider,
                               IRangeValueProvider,
                               IExpandCollapseProvider,
+                              ISelectionProvider,
                               ISelectionItemProvider,
+                              ITextProvider,
                               IGridProvider,
                               IGridItemProvider,
                               ITableProvider,
@@ -360,12 +375,24 @@ struct WinAccessibilityNode : IRawElementProviderSimple,
     HRESULT STDMETHODCALLTYPE Collapse() override;
     HRESULT STDMETHODCALLTYPE
     get_ExpandCollapseState(ExpandCollapseState* out) override;
+    HRESULT STDMETHODCALLTYPE GetSelection(SAFEARRAY** out) override;
+    HRESULT STDMETHODCALLTYPE get_CanSelectMultiple(BOOL* out) override;
+    HRESULT STDMETHODCALLTYPE get_IsSelectionRequired(BOOL* out) override;
     HRESULT STDMETHODCALLTYPE Select() override;
     HRESULT STDMETHODCALLTYPE AddToSelection() override;
     HRESULT STDMETHODCALLTYPE RemoveFromSelection() override;
     HRESULT STDMETHODCALLTYPE get_IsSelected(BOOL* out) override;
     HRESULT STDMETHODCALLTYPE
     get_SelectionContainer(IRawElementProviderSimple** out) override;
+    HRESULT STDMETHODCALLTYPE GetVisibleRanges(SAFEARRAY** out) override;
+    HRESULT STDMETHODCALLTYPE RangeFromChild(IRawElementProviderSimple* child,
+                                             ITextRangeProvider** out) override;
+    HRESULT STDMETHODCALLTYPE RangeFromPoint(UiaPoint point,
+                                             ITextRangeProvider** out) override;
+    HRESULT STDMETHODCALLTYPE
+    get_DocumentRange(ITextRangeProvider** out) override;
+    HRESULT STDMETHODCALLTYPE
+    get_SupportedTextSelection(SupportedTextSelection* out) override;
     HRESULT STDMETHODCALLTYPE GetItem(int row, int column,
                                       IRawElementProviderSimple** out) override;
     HRESULT STDMETHODCALLTYPE get_RowCount(int* out) override;
@@ -382,6 +409,70 @@ struct WinAccessibilityNode : IRawElementProviderSimple,
     get_RowOrColumnMajor(RowOrColumnMajor* out) override;
     HRESULT STDMETHODCALLTYPE GetRowHeaderItems(SAFEARRAY** out) override;
     HRESULT STDMETHODCALLTYPE GetColumnHeaderItems(SAFEARRAY** out) override;
+};
+
+// A text range stores UTF-16 offsets, which is what UI Automation speaks.
+// The owner and node id are stable; every operation resolves the current
+// InputState and clamps the offsets after an edit instead of retaining text.
+struct WinTextRange : ITextRangeProvider {
+    LONG refs = 1;
+    WinAccessibility* root = nullptr;
+    uint32_t id = 0;
+    int start = 0;
+    int end = 0;
+
+    WinTextRange(WinAccessibility* owner, uint32_t nodeId, int lo, int hi)
+        : root(owner), id(nodeId), start(lo), end(hi) {
+        root->AddRef();
+    }
+    ~WinTextRange() { root->Release(); }
+
+    const AccessibilityNode* Node() const { return root->Node(id); }
+    Str Text() const {
+        const AccessibilityNode* node = Node();
+        return node && node->input ? InputValue(node->input) : Str{};
+    }
+    int Length() const { return RopeOffsetToOffsetUtf16(Text(), Text().len); }
+    void Clamp() {
+        int n = Length();
+        start = std::max(0, std::min(start, n));
+        end = std::max(start, std::min(end, n));
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override;
+    ULONG STDMETHODCALLTYPE AddRef() override;
+    ULONG STDMETHODCALLTYPE Release() override;
+    HRESULT STDMETHODCALLTYPE Clone(ITextRangeProvider** out) override;
+    HRESULT STDMETHODCALLTYPE Compare(ITextRangeProvider* range,
+                                      BOOL* out) override;
+    HRESULT STDMETHODCALLTYPE CompareEndpoints(
+        TextPatternRangeEndpoint endpoint, ITextRangeProvider* target,
+        TextPatternRangeEndpoint targetEndpoint, int* out) override;
+    HRESULT STDMETHODCALLTYPE ExpandToEnclosingUnit(TextUnit unit) override;
+    HRESULT STDMETHODCALLTYPE FindAttribute(TEXTATTRIBUTEID attribute,
+                                            VARIANT value, BOOL backward,
+                                            ITextRangeProvider** out) override;
+    HRESULT STDMETHODCALLTYPE FindText(BSTR text, BOOL backward,
+                                       BOOL ignoreCase,
+                                       ITextRangeProvider** out) override;
+    HRESULT STDMETHODCALLTYPE GetAttributeValue(TEXTATTRIBUTEID attribute,
+                                                VARIANT* out) override;
+    HRESULT STDMETHODCALLTYPE GetBoundingRectangles(SAFEARRAY** out) override;
+    HRESULT STDMETHODCALLTYPE
+    GetEnclosingElement(IRawElementProviderSimple** out) override;
+    HRESULT STDMETHODCALLTYPE GetText(int maxLength, BSTR* out) override;
+    HRESULT STDMETHODCALLTYPE Move(TextUnit unit, int count, int* out) override;
+    HRESULT STDMETHODCALLTYPE
+    MoveEndpointByUnit(TextPatternRangeEndpoint endpoint, TextUnit unit,
+                       int count, int* out) override;
+    HRESULT STDMETHODCALLTYPE MoveEndpointByRange(
+        TextPatternRangeEndpoint endpoint, ITextRangeProvider* target,
+        TextPatternRangeEndpoint targetEndpoint) override;
+    HRESULT STDMETHODCALLTYPE Select() override;
+    HRESULT STDMETHODCALLTYPE AddToSelection() override;
+    HRESULT STDMETHODCALLTYPE RemoveFromSelection() override;
+    HRESULT STDMETHODCALLTYPE ScrollIntoView(BOOL alignToTop) override;
+    HRESULT STDMETHODCALLTYPE GetChildren(SAFEARRAY** out) override;
 };
 
 IRawElementProviderFragment* WinAccessibility::NewNode(int index) {
@@ -506,6 +597,31 @@ static HRESULT AccessibilityEmptyProviderArray(SAFEARRAY** out) {
     }
     *out = SafeArrayCreateVector(VT_UNKNOWN, 0, 0);
     return *out ? S_OK : E_OUTOFMEMORY;
+}
+
+static HRESULT AccessibilityRangeArray(WinTextRange* range, SAFEARRAY** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = SafeArrayCreateVector(VT_UNKNOWN, 0, range ? 1 : 0);
+    if (!*out) {
+        if (range) {
+            range->Release();
+        }
+        return E_OUTOFMEMORY;
+    }
+    if (range) {
+        LONG at = 0;
+        IUnknown* value = static_cast<ITextRangeProvider*>(range);
+        HRESULT hr = SafeArrayPutElement(*out, &at, value);
+        range->Release();
+        if (FAILED(hr)) {
+            SafeArrayDestroy(*out);
+            *out = nullptr;
+            return hr;
+        }
+    }
+    return S_OK;
 }
 
 HRESULT WinAccessibility::QueryInterface(REFIID iid, void** out) {
@@ -741,8 +857,12 @@ HRESULT WinAccessibilityNode::QueryInterface(REFIID iid, void** out) {
         *out = static_cast<IRangeValueProvider*>(this);
     } else if (iid == __uuidof(IExpandCollapseProvider)) {
         *out = static_cast<IExpandCollapseProvider*>(this);
+    } else if (iid == __uuidof(ISelectionProvider)) {
+        *out = static_cast<ISelectionProvider*>(this);
     } else if (iid == __uuidof(ISelectionItemProvider)) {
         *out = static_cast<ISelectionItemProvider*>(this);
+    } else if (iid == __uuidof(ITextProvider)) {
+        *out = static_cast<ITextProvider*>(this);
     } else if (iid == __uuidof(IGridProvider)) {
         *out = static_cast<IGridProvider*>(this);
     } else if (iid == __uuidof(IGridItemProvider)) {
@@ -807,9 +927,16 @@ HRESULT WinAccessibilityNode::GetPatternProvider(PATTERNID pattern,
     if (pattern == UIA_ExpandCollapsePatternId && node->info.hasExpanded) {
         return QueryInterface(__uuidof(IExpandCollapseProvider), (void**)out);
     }
+    if (pattern == UIA_SelectionPatternId &&
+        AccessibilitySelectionContainerRole(node->info.role)) {
+        return QueryInterface(__uuidof(ISelectionProvider), (void**)out);
+    }
     if (pattern == UIA_SelectionItemPatternId && node->info.hasSelected &&
         AccessibilitySelectionItemRole(node->info.role)) {
         return QueryInterface(__uuidof(ISelectionItemProvider), (void**)out);
+    }
+    if (pattern == UIA_TextPatternId && AccessibilityTextPattern(*node)) {
+        return QueryInterface(__uuidof(ITextProvider), (void**)out);
     }
     if (pattern == UIA_GridPatternId &&
         node->info.role == AccessibilityRole::Table && node->info.hasRowCount &&
@@ -1258,6 +1385,117 @@ HRESULT WinAccessibilityNode::get_ExpandCollapseState(
     return S_OK;
 }
 
+static bool AccessibilityDescendsFrom(const Window* win, int index,
+                                      int ancestor) {
+    if (!win || index < 0 || ancestor < 0) {
+        return false;
+    }
+    int at = win->accessibility[index].parent;
+    while (at >= 0 && at < win->accessibility.len) {
+        if (at == ancestor) {
+            return true;
+        }
+        if (AccessibilitySelectionContainerRole(win->accessibility[at]
+                                                    .info.role)) {
+            return false;
+        }
+        at = win->accessibility[at].parent;
+    }
+    return false;
+}
+
+HRESULT WinAccessibilityNode::GetSelection(SAFEARRAY** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    const AccessibilityNode* node = Node();
+    if (!node) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    if (AccessibilityTextPattern(*node)) {
+        Str text = InputValue(node->input);
+        Selection selection = node->input->selectedRange;
+        int lo = RopeOffsetToOffsetUtf16(text, selection.start);
+        int hi = RopeOffsetToOffsetUtf16(text, selection.end);
+        return AccessibilityRangeArray(
+            new WinTextRange(root, id, std::min(lo, hi), std::max(lo, hi)),
+            out);
+    }
+    if (!AccessibilitySelectionContainerRole(node->info.role)) {
+        return UIA_E_INVALIDOPERATION;
+    }
+    int ancestor = root->NodeIndex(id);
+    int count = 0;
+    for (int i = 0; i < root->win->accessibility.len; i++) {
+        const AccessibilityNode& candidate = root->win->accessibility[i];
+        if (candidate.info.hasSelected && candidate.info.selected &&
+            AccessibilityDescendsFrom(root->win, i, ancestor)) {
+            count++;
+        }
+    }
+    *out = SafeArrayCreateVector(VT_UNKNOWN, 0, count);
+    if (!*out) {
+        return E_OUTOFMEMORY;
+    }
+    LONG at = 0;
+    for (int i = 0; i < root->win->accessibility.len; i++) {
+        const AccessibilityNode& candidate = root->win->accessibility[i];
+        if (!candidate.info.hasSelected || !candidate.info.selected ||
+            !AccessibilityDescendsFrom(root->win, i, ancestor)) {
+            continue;
+        }
+        IRawElementProviderSimple* provider = nullptr;
+        HRESULT hr = AccessibilitySimpleAt(root, i, &provider);
+        if (FAILED(hr) || !provider ||
+            FAILED(SafeArrayPutElement(*out, &at, provider))) {
+            if (provider) {
+                provider->Release();
+            }
+            SafeArrayDestroy(*out);
+            *out = nullptr;
+            return FAILED(hr) ? hr : E_OUTOFMEMORY;
+        }
+        provider->Release();
+        at++;
+    }
+    return S_OK;
+}
+
+HRESULT WinAccessibilityNode::get_CanSelectMultiple(BOOL* out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    const AccessibilityNode* node = Node();
+    if (!node) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    if (!AccessibilitySelectionContainerRole(node->info.role)) {
+        return UIA_E_INVALIDOPERATION;
+    }
+    // The portable semantic record has no multi-select policy. Every current
+    // gpui-component selection container is single-select.
+    *out = FALSE;
+    return S_OK;
+}
+
+HRESULT WinAccessibilityNode::get_IsSelectionRequired(BOOL* out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    const AccessibilityNode* node = Node();
+    if (!node) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    if (!AccessibilitySelectionContainerRole(node->info.role)) {
+        return UIA_E_INVALIDOPERATION;
+    }
+    // AccessKit does not carry this container policy in the subset GPUI
+    // exports, so do not promise that an empty selection is forbidden.
+    *out = FALSE;
+    return S_OK;
+}
+
 HRESULT WinAccessibilityNode::Select() {
     const AccessibilityNode* node = Node();
     if (!node) {
@@ -1310,6 +1548,10 @@ HRESULT WinAccessibilityNode::get_SelectionContainer(
         return UIA_E_ELEMENTNOTAVAILABLE;
     }
     int parent = root->win->accessibility[index].parent;
+    while (parent >= 0 && !AccessibilitySelectionContainerRole(
+                              root->win->accessibility[parent].info.role)) {
+        parent = root->win->accessibility[parent].parent;
+    }
     if (parent < 0) {
         return root
             ->QueryInterface(__uuidof(IRawElementProviderSimple), (void**)out);
@@ -1322,6 +1564,80 @@ HRESULT WinAccessibilityNode::get_SelectionContainer(
                                           (void**)out);
     fragment->Release();
     return hr;
+}
+
+HRESULT WinAccessibilityNode::GetVisibleRanges(SAFEARRAY** out) {
+    const AccessibilityNode* node = Node();
+    if (!node || !AccessibilityTextPattern(*node)) {
+        return node ? UIA_E_INVALIDOPERATION : UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    int n = RopeOffsetToOffsetUtf16(InputValue(node->input),
+                                    InputValue(node->input).len);
+    return AccessibilityRangeArray(new WinTextRange(root, id, 0, n), out);
+}
+
+HRESULT WinAccessibilityNode::RangeFromChild(IRawElementProviderSimple* child,
+                                             ITextRangeProvider** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    const AccessibilityNode* node = Node();
+    if (!node || !AccessibilityTextPattern(*node)) {
+        return node ? UIA_E_INVALIDOPERATION : UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    // Text inputs publish their document as their own value, without embedded
+    // child providers, so no child can name a sub-range.
+    (void)child;
+    return E_INVALIDARG;
+}
+
+HRESULT WinAccessibilityNode::RangeFromPoint(UiaPoint point,
+                                             ITextRangeProvider** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    const AccessibilityNode* node = Node();
+    if (!node || !AccessibilityTextPattern(*node)) {
+        return node ? UIA_E_INVALIDOPERATION : UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Str text = InputValue(node->input);
+    POINT client = {(LONG)point.x, (LONG)point.y};
+    ScreenToClient(root->hwnd, &client);
+    int offset = InputIndexForPosition(node->input, &root->win->paint,
+                                       (float)client.x, (float)client.y);
+    int offsetUtf16 = RopeOffsetToOffsetUtf16(text, offset);
+    *out = new WinTextRange(root, id, offsetUtf16, offsetUtf16);
+    return S_OK;
+}
+
+HRESULT WinAccessibilityNode::get_DocumentRange(ITextRangeProvider** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    const AccessibilityNode* node = Node();
+    if (!node || !AccessibilityTextPattern(*node)) {
+        return node ? UIA_E_INVALIDOPERATION : UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Str text = InputValue(node->input);
+    *out =
+        new WinTextRange(root, id, 0, RopeOffsetToOffsetUtf16(text, text.len));
+    return S_OK;
+}
+
+HRESULT WinAccessibilityNode::get_SupportedTextSelection(
+    SupportedTextSelection* out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    const AccessibilityNode* node = Node();
+    if (!node || !AccessibilityTextPattern(*node)) {
+        return node ? UIA_E_INVALIDOPERATION : UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    *out = SupportedTextSelection_Single;
+    return S_OK;
 }
 
 HRESULT WinAccessibilityNode::GetItem(int row, int column,
@@ -1517,6 +1833,387 @@ HRESULT WinAccessibilityNode::GetColumnHeaderItems(SAFEARRAY** out) {
         root, table, AccessibilityRole::ColumnHeader, column, out);
 }
 
+HRESULT WinTextRange::QueryInterface(REFIID iid, void** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    if (iid == __uuidof(IUnknown) || iid == __uuidof(ITextRangeProvider)) {
+        *out = static_cast<ITextRangeProvider*>(this);
+    }
+    if (!*out) {
+        return E_NOINTERFACE;
+    }
+    AddRef();
+    return S_OK;
+}
+
+ULONG WinTextRange::AddRef() {
+    return (ULONG)InterlockedIncrement(&refs);
+}
+
+ULONG WinTextRange::Release() {
+    ULONG left = (ULONG)InterlockedDecrement(&refs);
+    if (!left) {
+        delete this;
+    }
+    return left;
+}
+
+HRESULT WinTextRange::Clone(ITextRangeProvider** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    if (!Node()) {
+        *out = nullptr;
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    *out = new WinTextRange(root, id, start, end);
+    return S_OK;
+}
+
+HRESULT WinTextRange::Compare(ITextRangeProvider* range, BOOL* out) {
+    if (!range || !out) {
+        return E_INVALIDARG;
+    }
+    WinTextRange* other = static_cast<WinTextRange*>(range);
+    Clamp();
+    other->Clamp();
+    *out = other->root == root && other->id == id && other->start == start &&
+                   other->end == end
+               ? TRUE
+               : FALSE;
+    return S_OK;
+}
+
+HRESULT WinTextRange::CompareEndpoints(TextPatternRangeEndpoint endpoint,
+                                       ITextRangeProvider* target,
+                                       TextPatternRangeEndpoint targetEndpoint,
+                                       int* out) {
+    if (!target || !out) {
+        return E_INVALIDARG;
+    }
+    WinTextRange* other = static_cast<WinTextRange*>(target);
+    if (other->root != root || other->id != id) {
+        return E_INVALIDARG;
+    }
+    Clamp();
+    other->Clamp();
+    int a = endpoint == TextPatternRangeEndpoint_Start ? start : end;
+    int b = targetEndpoint == TextPatternRangeEndpoint_Start ? other->start
+                                                             : other->end;
+    *out = a - b;
+    return S_OK;
+}
+
+static bool AccessibilityWideSpace(wchar_t ch) {
+    return ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n';
+}
+
+static void AccessibilityUnitBounds(BSTR text, int length, int at,
+                                    TextUnit unit, int* lo, int* hi) {
+    at = std::max(0, std::min(at, length));
+    *lo = at;
+    *hi = at;
+    if (unit == TextUnit_Character) {
+        *hi = std::min(length, at + 1);
+    } else if (unit == TextUnit_Word) {
+        while (*lo > 0 && !AccessibilityWideSpace(text[*lo - 1])) {
+            (*lo)--;
+        }
+        while (*hi < length && !AccessibilityWideSpace(text[*hi])) {
+            (*hi)++;
+        }
+    } else if (unit == TextUnit_Line) {
+        while (*lo > 0 && text[*lo - 1] != L'\n') {
+            (*lo)--;
+        }
+        while (*hi < length && text[*hi] != L'\n') {
+            (*hi)++;
+        }
+        if (*hi < length) {
+            (*hi)++;
+        }
+    } else {
+        *lo = 0;
+        *hi = length;
+    }
+}
+
+HRESULT WinTextRange::ExpandToEnclosingUnit(TextUnit unit) {
+    const AccessibilityNode* node = Node();
+    if (!node || !AccessibilityTextPattern(*node)) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    BSTR text = AccessibilityBstr(Text());
+    if (!text) {
+        return E_OUTOFMEMORY;
+    }
+    AccessibilityUnitBounds(text, (int)SysStringLen(text), start, unit, &start,
+                            &end);
+    SysFreeString(text);
+    return S_OK;
+}
+
+HRESULT WinTextRange::FindAttribute(TEXTATTRIBUTEID attribute, VARIANT value,
+                                    BOOL backward, ITextRangeProvider** out) {
+    (void)attribute;
+    (void)value;
+    (void)backward;
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    return Node() ? S_OK : UIA_E_ELEMENTNOTAVAILABLE;
+}
+
+HRESULT WinTextRange::FindText(BSTR needle, BOOL backward, BOOL ignoreCase,
+                               ITextRangeProvider** out) {
+    if (!needle || !out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    if (!Node()) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    BSTR doc = AccessibilityBstr(Text());
+    if (!doc) {
+        return E_OUTOFMEMORY;
+    }
+    int needleLen = (int)SysStringLen(needle);
+    int found = -1;
+    int first = backward ? end - needleLen : start;
+    int last = backward ? start : end - needleLen;
+    int step = backward ? -1 : 1;
+    for (int at = first; needleLen >= 0 && (backward ? at >= last : at <= last);
+         at += step) {
+        bool same = ignoreCase
+                        ? CompareStringOrdinal(doc + at, needleLen, needle,
+                                               needleLen, TRUE) == CSTR_EQUAL
+                        : memcmp(doc + at, needle,
+                                 (size_t)needleLen * sizeof(wchar_t)) == 0;
+        if (same) {
+            found = at;
+            break;
+        }
+    }
+    SysFreeString(doc);
+    if (found >= 0) {
+        *out = new WinTextRange(root, id, found, found + needleLen);
+    }
+    return S_OK;
+}
+
+HRESULT WinTextRange::GetAttributeValue(TEXTATTRIBUTEID attribute,
+                                        VARIANT* out) {
+    (void)attribute;
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    VariantInit(out);
+    if (!Node()) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    out->vt = VT_UNKNOWN;
+    return UiaGetReservedNotSupportedValue(&out->punkVal);
+}
+
+HRESULT WinTextRange::GetBoundingRectangles(SAFEARRAY** out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    const AccessibilityNode* node = Node();
+    if (!node || !root->hwnd) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    *out = SafeArrayCreateVector(VT_R8, 0, start == end ? 0 : 4);
+    if (!*out) {
+        return E_OUTOFMEMORY;
+    }
+    if (start != end) {
+        POINT origin = {};
+        ClientToScreen(root->hwnd, &origin);
+        double values[4] = {(double)origin.x + node->bounds.x,
+                            (double)origin.y + node->bounds.y, node->bounds.w,
+                            node->bounds.h};
+        for (LONG i = 0; i < 4; i++) {
+            HRESULT hr = SafeArrayPutElement(*out, &i, &values[i]);
+            if (FAILED(hr)) {
+                SafeArrayDestroy(*out);
+                *out = nullptr;
+                return hr;
+            }
+        }
+    }
+    return S_OK;
+}
+
+HRESULT WinTextRange::GetEnclosingElement(IRawElementProviderSimple** out) {
+    return AccessibilitySimpleAt(root, root->NodeIndex(id), out);
+}
+
+HRESULT WinTextRange::GetText(int maxLength, BSTR* out) {
+    if (!out || maxLength < -1) {
+        return E_INVALIDARG;
+    }
+    *out = nullptr;
+    if (!Node()) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    BSTR doc = AccessibilityBstr(Text());
+    if (!doc) {
+        return E_OUTOFMEMORY;
+    }
+    int n = end - start;
+    if (maxLength >= 0) {
+        n = std::min(n, maxLength);
+    }
+    *out = SysAllocStringLen(doc + start, (UINT)n);
+    SysFreeString(doc);
+    return *out ? S_OK : E_OUTOFMEMORY;
+}
+
+HRESULT WinTextRange::Move(TextUnit unit, int count, int* out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    Clamp();
+    int before = start;
+    int moved = 0;
+    HRESULT hr =
+        MoveEndpointByUnit(TextPatternRangeEndpoint_Start, unit, count, &moved);
+    if (FAILED(hr)) {
+        return hr;
+    }
+    int width = end - before;
+    end = std::min(Length(), start + std::max(0, width));
+    *out = moved;
+    return S_OK;
+}
+
+HRESULT WinTextRange::MoveEndpointByUnit(TextPatternRangeEndpoint endpoint,
+                                         TextUnit unit, int count, int* out) {
+    if (!out) {
+        return E_INVALIDARG;
+    }
+    if (!Node()) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    int* value = endpoint == TextPatternRangeEndpoint_Start ? &start : &end;
+    int old = *value;
+    int length = Length();
+    if (unit == TextUnit_Character) {
+        *value = std::max(0, std::min(length, *value + count));
+        *out = *value - old;
+    } else {
+        BSTR text = AccessibilityBstr(Text());
+        if (!text) {
+            return E_OUTOFMEMORY;
+        }
+        int direction = count < 0 ? -1 : 1;
+        int wanted = count < 0 ? -count : count;
+        int moved = 0;
+        while (moved < wanted) {
+            int lo = 0;
+            int hi = 0;
+            int probe = direction < 0 ? std::max(0, *value - 1) : *value;
+            AccessibilityUnitBounds(text, length, probe, unit, &lo, &hi);
+            int next = direction < 0 ? lo : hi;
+            if (next == *value) {
+                break;
+            }
+            *value = next;
+            moved++;
+        }
+        SysFreeString(text);
+        *out = direction * moved;
+    }
+    if (start > end) {
+        if (endpoint == TextPatternRangeEndpoint_Start) {
+            end = start;
+        } else {
+            start = end;
+        }
+    }
+    return S_OK;
+}
+
+HRESULT WinTextRange::MoveEndpointByRange(
+    TextPatternRangeEndpoint endpoint, ITextRangeProvider* target,
+    TextPatternRangeEndpoint targetEndpoint) {
+    if (!target) {
+        return E_INVALIDARG;
+    }
+    WinTextRange* other = static_cast<WinTextRange*>(target);
+    if (other->root != root || other->id != id) {
+        return E_INVALIDARG;
+    }
+    other->Clamp();
+    int value = targetEndpoint == TextPatternRangeEndpoint_Start ? other->start
+                                                                 : other->end;
+    if (endpoint == TextPatternRangeEndpoint_Start) {
+        start = value;
+        if (start > end) {
+            end = start;
+        }
+    } else {
+        end = value;
+        if (end < start) {
+            start = end;
+        }
+    }
+    return S_OK;
+}
+
+HRESULT WinTextRange::Select() {
+    const AccessibilityNode* node = Node();
+    if (!node || !node->input || !root->win || !root->win->app) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    Str text = InputValue(node->input);
+    int lo = RopeOffsetUtf16ToOffset(text, start);
+    int hi = RopeOffsetUtf16ToOffset(text, end);
+    InputSetSelectedRange(node->input, root->win->app, root->win, lo, hi);
+    AppInvalidate(root->win);
+    return S_OK;
+}
+
+HRESULT WinTextRange::AddToSelection() {
+    return UIA_E_INVALIDOPERATION;
+}
+
+HRESULT WinTextRange::RemoveFromSelection() {
+    return UIA_E_INVALIDOPERATION;
+}
+
+HRESULT WinTextRange::ScrollIntoView(BOOL alignToTop) {
+    (void)alignToTop;
+    const AccessibilityNode* node = Node();
+    if (!node || !node->input) {
+        return UIA_E_ELEMENTNOTAVAILABLE;
+    }
+    Clamp();
+    InputScrollToOffset(node->input,
+                        RopeOffsetUtf16ToOffset(InputValue(node->input), start),
+                        InputMoveDir::None);
+    if (root->win) {
+        AppInvalidate(root->win);
+    }
+    return S_OK;
+}
+
+HRESULT WinTextRange::GetChildren(SAFEARRAY** out) {
+    return AccessibilityEmptyProviderArray(out);
+}
+
 WinAccessibility* AccessibilityWinNew(Window* win, void* hwnd) {
     if (!win || !hwnd) {
         return nullptr;
@@ -1624,9 +2321,12 @@ bool AccessibilityWinSmokeTest(Window* win, uint32_t nodeId) {
         {UIA_RangeValuePatternId, expected->slider && expected->info
                                                           .hasNumericValue},
         {UIA_ExpandCollapsePatternId, expected->info.hasExpanded},
+        {UIA_SelectionPatternId,
+         AccessibilitySelectionContainerRole(expected->info.role)},
         {UIA_SelectionItemPatternId,
          expected->info.hasSelected &&
              AccessibilitySelectionItemRole(expected->info.role)},
+        {UIA_TextPatternId, AccessibilityTextPattern(*expected)},
         {UIA_GridPatternId, expected->info.role == AccessibilityRole::Table &&
                                 expected->info.hasRowCount &&
                                 expected->info.hasColumnCount},
@@ -1651,6 +2351,39 @@ bool AccessibilityWinSmokeTest(Window* win, uint32_t nodeId) {
         ok = ok && got == pattern.wanted;
         if (provider) {
             provider->Release();
+        }
+    }
+    if (ok && AccessibilityTextPattern(*expected)) {
+        ITextProvider* text = nullptr;
+        ITextRangeProvider* document = nullptr;
+        BSTR value = nullptr;
+        ok = SUCCEEDED(simple->QueryInterface(__uuidof(ITextProvider),
+                                              (void**)&text)) &&
+             text && SUCCEEDED(text->get_DocumentRange(&document)) &&
+             document && SUCCEEDED(document->GetText(-1, &value)) && value;
+        BSTR wanted = AccessibilityBstr(InputValue(expected->input));
+        ok = ok && wanted && value && wcscmp(wanted, value) == 0;
+        SysFreeString(wanted);
+        SysFreeString(value);
+        if (document) {
+            document->Release();
+        }
+        if (text) {
+            text->Release();
+        }
+    }
+    if (ok && AccessibilitySelectionContainerRole(expected->info.role)) {
+        ISelectionProvider* selection = nullptr;
+        SAFEARRAY* selected = nullptr;
+        ok = SUCCEEDED(simple->QueryInterface(__uuidof(ISelectionProvider),
+                                              (void**)&selection)) &&
+             selection && SUCCEEDED(selection->GetSelection(&selected)) &&
+             selected && SafeArrayGetDim(selected) == 1;
+        if (selected) {
+            SafeArrayDestroy(selected);
+        }
+        if (selection) {
+            selection->Release();
         }
     }
     if (ok && expected->info.role == AccessibilityRole::Table) {

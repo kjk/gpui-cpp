@@ -18,6 +18,7 @@
 
 @class GpuiView;
 @class GpuiWindowDelegate;
+@class GpuiAccessibilityElement;
 
 namespace gpui {
 
@@ -27,6 +28,12 @@ struct PlatWindow {
     // The window does not retain its delegate; this reference is what keeps
     // it alive.
     GpuiWindowDelegate* delegate = nil;
+    // Native semantic handles are cached by the portable node id. They keep
+    // no frame strings or element pointers and resolve every query against
+    // Window::accessibility, so VoiceOver gets stable identity without
+    // retaining an arena frame.
+    NSMutableDictionary<NSNumber*, GpuiAccessibilityElement*>*
+        accessibilityElements = nil;
     bool dirty = true;
     // Monotonic deadline for the next tick; 0 when the timer is off.
     double nextTick = 0;
@@ -54,6 +61,405 @@ bool WindowMacKeyDown(Window* win, NSEvent* event);
 void WindowMacKeyUp(Window* win, NSEvent* event);
 
 } // namespace gpui
+
+@interface GpuiAccessibilityElement : NSAccessibilityElement {
+  @public
+    gpui::Window* gpuiWindow;
+    uint32_t gpuiNodeId;
+}
+@end
+
+static const gpui::AccessibilityNode* GpuiAccessibilityNode(
+    GpuiAccessibilityElement* element) {
+    return element && element->gpuiWindow
+               ? gpui::WindowAccessibilityNode(element->gpuiWindow,
+                                               element->gpuiNodeId)
+               : nullptr;
+}
+
+static NSString* GpuiAccessibilityString(gpui::Str value) {
+    if (!value.s || value.len <= 0) {
+        return @"";
+    }
+    return [[NSString alloc] initWithBytes:value.s
+                                    length:(NSUInteger)value.len
+                                  encoding:NSUTF8StringEncoding];
+}
+
+static NSString* GpuiAccessibilityRole(gpui::AccessibilityRole role) {
+    using gpui::AccessibilityRole;
+    switch (role) {
+        case AccessibilityRole::Alert:
+        case AccessibilityRole::Heading:
+        case AccessibilityRole::Label:
+        case AccessibilityRole::Paragraph:
+        case AccessibilityRole::TextRun:
+            return NSAccessibilityStaticTextRole;
+        case AccessibilityRole::Button:
+        case AccessibilityRole::DefaultButton:
+        case AccessibilityRole::DisclosureTriangle:
+            return NSAccessibilityButtonRole;
+        case AccessibilityRole::CheckBox:
+        case AccessibilityRole::Switch:
+            return NSAccessibilityCheckBoxRole;
+        case AccessibilityRole::RadioButton:
+            return NSAccessibilityRadioButtonRole;
+        case AccessibilityRole::TextInput:
+        case AccessibilityRole::SearchInput:
+        case AccessibilityRole::DateInput:
+        case AccessibilityRole::DateTimeInput:
+        case AccessibilityRole::WeekInput:
+        case AccessibilityRole::MonthInput:
+        case AccessibilityRole::TimeInput:
+        case AccessibilityRole::EmailInput:
+        case AccessibilityRole::NumberInput:
+        case AccessibilityRole::PhoneNumberInput:
+        case AccessibilityRole::UrlInput:
+            return NSAccessibilityTextFieldRole;
+        case AccessibilityRole::PasswordInput:
+            return NSAccessibilityTextFieldRole;
+        case AccessibilityRole::MultilineTextInput:
+            return NSAccessibilityTextAreaRole;
+        case AccessibilityRole::Link:
+            return NSAccessibilityLinkRole;
+        case AccessibilityRole::Image:
+        case AccessibilityRole::GraphicsObject:
+        case AccessibilityRole::GraphicsSymbol:
+            return NSAccessibilityImageRole;
+        case AccessibilityRole::Row:
+        case AccessibilityRole::LayoutTableRow:
+            return NSAccessibilityRowRole;
+        case AccessibilityRole::Cell:
+        case AccessibilityRole::GridCell:
+        case AccessibilityRole::LayoutTableCell:
+            return NSAccessibilityCellRole;
+        case AccessibilityRole::ColumnHeader:
+            return NSAccessibilityColumnRole;
+        case AccessibilityRole::Table:
+        case AccessibilityRole::Grid:
+        case AccessibilityRole::LayoutTable:
+        case AccessibilityRole::TreeGrid:
+            return NSAccessibilityTableRole;
+        case AccessibilityRole::List:
+        case AccessibilityRole::ListBox:
+        case AccessibilityRole::Tree:
+            return NSAccessibilityListRole;
+        case AccessibilityRole::ListItem:
+        case AccessibilityRole::ListBoxOption:
+        case AccessibilityRole::TreeItem:
+            return NSAccessibilityRowRole;
+        case AccessibilityRole::Menu:
+        case AccessibilityRole::MenuBar:
+        case AccessibilityRole::MenuListPopup:
+            return NSAccessibilityMenuRole;
+        case AccessibilityRole::MenuItem:
+        case AccessibilityRole::MenuItemCheckBox:
+        case AccessibilityRole::MenuItemRadio:
+        case AccessibilityRole::MenuListOption:
+            return NSAccessibilityMenuItemRole;
+        case AccessibilityRole::Slider:
+        case AccessibilityRole::ScrollBar:
+            return NSAccessibilitySliderRole;
+        case AccessibilityRole::ProgressIndicator:
+        case AccessibilityRole::Meter:
+            return NSAccessibilityProgressIndicatorRole;
+        case AccessibilityRole::Tab:
+            return NSAccessibilityRadioButtonRole;
+        case AccessibilityRole::TabList:
+            return NSAccessibilityTabGroupRole;
+        case AccessibilityRole::Toolbar:
+            return NSAccessibilityToolbarRole;
+        case AccessibilityRole::Window:
+            return NSAccessibilityWindowRole;
+        default:
+            return NSAccessibilityGroupRole;
+    }
+}
+
+static int GpuiAccessibilityNodeIndex(gpui::Window* win, uint32_t id) {
+    if (!win) {
+        return -1;
+    }
+    for (int i = 0; i < win->accessibility.len; i++) {
+        if (win->accessibility[i].id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static GpuiAccessibilityElement* GpuiAccessibilityElementFor(gpui::Window* win,
+                                                             uint32_t id) {
+    if (!win || !win->plat || !id) {
+        return nil;
+    }
+    if (!win->plat->accessibilityElements) {
+        win->plat->accessibilityElements = [[NSMutableDictionary alloc] init];
+    }
+    NSNumber* key = [NSNumber numberWithUnsignedInt:id];
+    GpuiAccessibilityElement* element =
+        [win->plat->accessibilityElements objectForKey:key];
+    if (!element) {
+        element = [[GpuiAccessibilityElement alloc] init];
+        element->gpuiWindow = win;
+        element->gpuiNodeId = id;
+        [win->plat->accessibilityElements setObject:element forKey:key];
+    }
+    return element;
+}
+
+static NSArray* GpuiAccessibilityChildren(gpui::Window* win, int parent) {
+    if (!win) {
+        return @[];
+    }
+    NSMutableArray* children = [[NSMutableArray alloc] init];
+    for (int i = 0; i < win->accessibility.len; i++) {
+        if (win->accessibility[i].parent == parent) {
+            GpuiAccessibilityElement* child =
+                GpuiAccessibilityElementFor(win, win->accessibility[i].id);
+            if (child) {
+                [children addObject:child];
+            }
+        }
+    }
+    return children;
+}
+
+@implementation GpuiAccessibilityElement
+
+- (BOOL)isAccessibilityElement {
+    return GpuiAccessibilityNode(self) != nullptr;
+}
+- (NSString*)accessibilityRole {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node ? GpuiAccessibilityRole(node->info.role)
+                : NSAccessibilityUnknownRole;
+}
+- (NSString*)accessibilityLabel {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node ? GpuiAccessibilityString(node->info.label) : @"";
+}
+- (NSString*)accessibilityIdentifier {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node ? GpuiAccessibilityString(node->info.authorId) : @"";
+}
+- (NSString*)accessibilityHelp {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node) {
+        return @"";
+    }
+    return GpuiAccessibilityString(node->info.placeholder);
+}
+- (id)accessibilityValue {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node) {
+        return nil;
+    }
+    if (node->info.hasNumericValue) {
+        return [NSNumber numberWithDouble:node->info.numericValue];
+    }
+    if (node->info.toggled != gpui::AccessibilityToggled::Unset) {
+        return [NSNumber
+            numberWithInt:node->info.toggled == gpui::AccessibilityToggled::True
+                              ? 1
+                          : node->info.toggled ==
+                                  gpui::AccessibilityToggled::Mixed
+                              ? 2
+                              : 0];
+    }
+    return GpuiAccessibilityString(node->info.value);
+}
+- (id)accessibilityMinValue {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && node->info.hasMinNumericValue
+               ? [NSNumber numberWithDouble:node->info.minNumericValue]
+               : nil;
+}
+- (id)accessibilityMaxValue {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && node->info.hasMaxNumericValue
+               ? [NSNumber numberWithDouble:node->info.maxNumericValue]
+               : nil;
+}
+- (BOOL)isAccessibilityEnabled {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && !node->info.disabled;
+}
+- (BOOL)isAccessibilityFocused {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && node->focusId && node->focusId == gpuiWindow->focusId;
+}
+- (void)setAccessibilityFocused:(BOOL)focused {
+    if (focused && gpuiWindow) {
+        gpui::WindowAccessibilityPerform(gpuiWindow, gpuiNodeId,
+                                         gpui::AccessibilityAction::Focus);
+    }
+}
+- (BOOL)isAccessibilitySelected {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && node->info.hasSelected && node->info.selected;
+}
+- (BOOL)isAccessibilityExpanded {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && node->info.hasExpanded && node->info.expanded;
+}
+- (NSAccessibilityOrientation)accessibilityOrientation {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    return node && node->info.orientation ==
+                       gpui::AccessibilityOrientation::Vertical
+               ? NSAccessibilityOrientationVertical
+               : NSAccessibilityOrientationHorizontal;
+}
+- (NSRect)accessibilityFrame {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node || !gpuiWindow->plat || !gpuiWindow->plat->view) {
+        return NSZeroRect;
+    }
+    const gpui::Bounds& b = node->bounds;
+    NSRect local = NSMakeRect(b.x, b.y, b.w, b.h);
+    NSView* view = (NSView*)gpuiWindow->plat->view;
+    NSRect inWindow = [view convertRect:local toView:nil];
+    return [[view window] convertRectToScreen:inWindow];
+}
+- (id)accessibilityParent {
+    int index = GpuiAccessibilityNodeIndex(gpuiWindow, gpuiNodeId);
+    if (index < 0) {
+        return nil;
+    }
+    int parent = gpuiWindow->accessibility[index].parent;
+    return parent >= 0 ? (id)GpuiAccessibilityElementFor(
+                             gpuiWindow, gpuiWindow->accessibility[parent].id)
+                       : (id)gpuiWindow->plat->view;
+}
+- (NSArray*)accessibilityChildren {
+    int index = GpuiAccessibilityNodeIndex(gpuiWindow, gpuiNodeId);
+    return GpuiAccessibilityChildren(gpuiWindow, index);
+}
+- (NSArray<NSString*>*)accessibilityActionNames {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node) {
+        return @[];
+    }
+    NSMutableArray<NSString*>* actions = [[NSMutableArray alloc] init];
+    if (node->actions & gpui::AccessibilityActionDefault) {
+        [actions addObject:NSAccessibilityPressAction];
+    }
+    if (node->actions & gpui::AccessibilityActionIncrement) {
+        [actions addObject:NSAccessibilityIncrementAction];
+    }
+    if (node->actions & gpui::AccessibilityActionDecrement) {
+        [actions addObject:NSAccessibilityDecrementAction];
+    }
+    return actions;
+}
+- (void)accessibilityPerformAction:(NSString*)action {
+    if ([action isEqualToString:NSAccessibilityPressAction]) {
+        gpui::WindowAccessibilityPerform(gpuiWindow, gpuiNodeId,
+                                         gpui::AccessibilityAction::Default);
+    } else if ([action isEqualToString:NSAccessibilityIncrementAction]) {
+        gpui::WindowAccessibilityPerform(gpuiWindow, gpuiNodeId,
+                                         gpui::AccessibilityAction::Increment);
+    } else if ([action isEqualToString:NSAccessibilityDecrementAction]) {
+        gpui::WindowAccessibilityPerform(gpuiWindow, gpuiNodeId,
+                                         gpui::AccessibilityAction::Decrement);
+    }
+}
+- (BOOL)accessibilityPerformPress {
+    return gpui::WindowAccessibilityPerform(gpuiWindow, gpuiNodeId,
+                                            gpui::AccessibilityAction::Default);
+}
+- (BOOL)accessibilityPerformIncrement {
+    return gpui::WindowAccessibilityPerform(
+        gpuiWindow, gpuiNodeId, gpui::AccessibilityAction::Increment);
+}
+- (BOOL)accessibilityPerformDecrement {
+    return gpui::WindowAccessibilityPerform(
+        gpuiWindow, gpuiNodeId, gpui::AccessibilityAction::Decrement);
+}
+- (void)setAccessibilityValue:(id)value {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node || !(node->actions & gpui::AccessibilityActionSetValue)) {
+        return;
+    }
+    if ([value isKindOfClass:[NSNumber class]]) {
+        gpui::WindowAccessibilitySetNumericValue(gpuiWindow, gpuiNodeId,
+                                                 [value floatValue]);
+        return;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        const char* utf8 = [(NSString*)value UTF8String];
+        gpui::WindowAccessibilityPerform(
+            gpuiWindow, gpuiNodeId, gpui::AccessibilityAction::SetValue,
+            utf8 ? gpui::Str(utf8, (int)strlen(utf8)) : gpui::Str{});
+    }
+}
+- (NSInteger)accessibilityNumberOfCharacters {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    gpui::Str text =
+        node && node->input ? gpui::InputValue(node->input) : gpui::Str{};
+    return gpui::RopeOffsetToOffsetUtf16(text, text.len);
+}
+- (NSRange)accessibilitySelectedTextRange {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node || !node->input) {
+        return NSMakeRange(NSNotFound, 0);
+    }
+    gpui::Str text = gpui::InputValue(node->input);
+    int lo =
+        gpui::RopeOffsetToOffsetUtf16(text, node->input->selectedRange.start);
+    int hi =
+        gpui::RopeOffsetToOffsetUtf16(text, node->input->selectedRange.end);
+    return NSMakeRange((NSUInteger)std::min(lo, hi),
+                       (NSUInteger)(std::max(lo, hi) - std::min(lo, hi)));
+}
+- (void)setAccessibilitySelectedTextRange:(NSRange)range {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node || !node->input || range.location == NSNotFound) {
+        return;
+    }
+    gpui::Str text = gpui::InputValue(node->input);
+    int lo = gpui::RopeOffsetUtf16ToOffset(text, (int)range.location);
+    int hi = gpui::RopeOffsetUtf16ToOffset(
+        text, (int)(range.location + range.length));
+    gpui::InputSetSelectedRange(node->input, gpuiWindow->app, gpuiWindow, lo,
+                                hi);
+    gpui::AppInvalidate(gpuiWindow);
+}
+- (NSRange)accessibilityVisibleCharacterRange {
+    NSInteger length = [self accessibilityNumberOfCharacters];
+    return NSMakeRange(0, (NSUInteger)length);
+}
+- (NSString*)accessibilityStringForRange:(NSRange)range {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node || !node->input || range.location == NSNotFound) {
+        return nil;
+    }
+    gpui::Str text = gpui::InputValue(node->input);
+    int lo = gpui::RopeOffsetUtf16ToOffset(text, (int)range.location);
+    int hi = gpui::RopeOffsetUtf16ToOffset(
+        text, (int)(range.location + range.length));
+    return GpuiAccessibilityString(gpui::Str(text.s + lo, hi - lo));
+}
+- (NSRange)accessibilityRangeForPosition:(NSPoint)point {
+    const gpui::AccessibilityNode* node = GpuiAccessibilityNode(self);
+    if (!node || !node->input || !gpuiWindow->plat || !gpuiWindow->plat->view) {
+        return NSMakeRange(NSNotFound, 0);
+    }
+    NSView* view = (NSView*)gpuiWindow->plat->view;
+    NSPoint inWindow = [[view window] convertPointFromScreen:point];
+    NSPoint local = [view convertPoint:inWindow fromView:nil];
+    int offset = gpui::InputIndexForPosition(node->input, &gpuiWindow->paint,
+                                             (float)local.x, (float)local.y);
+    gpui::Str text = gpui::InputValue(node->input);
+    return NSMakeRange((NSUInteger)gpui::RopeOffsetToOffsetUtf16(text, offset),
+                       0);
+}
+- (NSRect)accessibilityFrameForRange:(NSRange)range {
+    (void)range;
+    return [self accessibilityFrame];
+}
+
+@end
 
 // ─── the view ─────────────────────────────────────────────────────────────
 
@@ -110,6 +516,45 @@ static bool PressedButton(MouseButton* out) {
 @end
 
 @implementation GpuiView
+
+- (BOOL)isAccessibilityElement {
+    return NO;
+}
+- (NSArray*)accessibilityChildren {
+    return GpuiAccessibilityChildren(win, -1);
+}
+- (id)accessibilityHitTest:(NSPoint)point {
+    if (!win) {
+        return self;
+    }
+    NSPoint inWindow = [[self window] convertPointFromScreen:point];
+    NSPoint local = [self convertPoint:inWindow fromView:nil];
+    int found = -1;
+    for (int i = 0; i < win->accessibility.len; i++) {
+        const gpui::Bounds& b = win->accessibility[i].bounds;
+        if ((float)local.x >= b.x && (float)local.x <= b.Right() &&
+            (float)local.y >= b.y && (float)local.y <= b.Bottom()) {
+            // The flat tree is preorder. A later containing node is the
+            // deepest semantic descendant or the later painted sibling.
+            found = i;
+        }
+    }
+    return found >= 0 ? (id)GpuiAccessibilityElementFor(
+                            win, win->accessibility[found].id)
+                      : (id)self;
+}
+- (id)accessibilityFocusedUIElement {
+    if (!win) {
+        return self;
+    }
+    for (int i = 0; i < win->accessibility.len; i++) {
+        const gpui::AccessibilityNode& node = win->accessibility[i];
+        if (node.focusId && node.focusId == win->focusId) {
+            return GpuiAccessibilityElementFor(win, node.id);
+        }
+    }
+    return self;
+}
 
 - (BOOL)isFlipped {
     return YES;
@@ -497,7 +942,21 @@ static bool PressedButton(MouseButton* out) {
 
 - (void)windowWillClose:(NSNotification*)note {
     (void)note;
+    __attribute__((objc_precise_lifetime)) GpuiWindowDelegate* keepAlive = self;
+    gpui::PlatWindow* plat = win ? win->plat : nullptr;
+    if (plat) {
+        for (GpuiAccessibilityElement* element in
+             [plat->accessibilityElements allValues]) {
+            element->gpuiWindow = nullptr;
+        }
+        plat->accessibilityElements = nil;
+        if (plat->view) {
+            plat->view->win = nullptr;
+        }
+    }
     gpui::WindowClosed(win);
+    delete plat;
+    (void)keepAlive;
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)note {
@@ -820,12 +1279,40 @@ void PlatInstallAccessibilityHitTest(Window* win) {
 }
 
 void PlatAccessibilityTreeChanged(Window* win) {
-    (void)win;
+    if (!win || !win->plat || !win->plat->view) {
+        return;
+    }
+    NSMutableArray<NSNumber*>* stale = [[NSMutableArray alloc] init];
+    for (NSNumber* key in win->plat->accessibilityElements) {
+        if (!WindowAccessibilityNode(win, [key unsignedIntValue])) {
+            GpuiAccessibilityElement* element =
+                [win->plat->accessibilityElements objectForKey:key];
+            element->gpuiWindow = nullptr;
+            [stale addObject:key];
+        }
+    }
+    [win->plat->accessibilityElements removeObjectsForKeys:stale];
+    NSAccessibilityPostNotification(win->plat->view,
+                                    NSAccessibilityLayoutChangedNotification);
 }
 
 void PlatAccessibilityFocusChanged(Window* win, int focusId) {
-    (void)win;
-    (void)focusId;
+    if (!win || !win->plat || !focusId) {
+        return;
+    }
+    for (int i = 0; i < win->accessibility.len; i++) {
+        const AccessibilityNode& node = win->accessibility[i];
+        if (node.focusId == focusId) {
+            GpuiAccessibilityElement* element =
+                GpuiAccessibilityElementFor(win, node.id);
+            if (element) {
+                NSAccessibilityPostNotification(
+                    element,
+                    NSAccessibilityFocusedUIElementChangedNotification);
+            }
+            return;
+        }
+    }
 }
 
 bool PlatHasMenu() {

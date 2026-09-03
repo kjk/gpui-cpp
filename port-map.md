@@ -70,11 +70,10 @@ builders must not silently truncate at a fixed C++ capacity.
 ## Next fidelity order
 
 The audit currently reports no partial modules and no missing declaration
-spellings, so the remaining fidelity work is in the GPUI platform adapters
-rather than in the Base/UI ledger: export the portable accessibility tree
-through Linux AT-SPI and macOS NSAccessibility, then deepen Windows with the
-Text and selection-container patterns. Windows already has the core UIA
-fragment/action and table export reached from `WM_GETOBJECT`. None of that
-changes Base/UI semantics.
+spellings. The portable accessibility tree now reaches all three desktop
+APIs: Windows UIA (including Text, selection, grid and table patterns), macOS
+NSAccessibility, and Linux AT-SPI without adding a D-Bus library dependency.
+The remaining fidelity work is behavioural depth and native assistive-
+technology testing rather than another Base/UI surface port.
 
 Behavioural gaps live in `port-status.md`.

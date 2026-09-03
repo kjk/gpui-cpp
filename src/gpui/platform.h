@@ -146,8 +146,9 @@ void* PlatWindowHandle(Window* win);
 // AppKit's NSWindow answers for itself rather than asking the view that drew
 // everything, so nothing inside is reachable. This adds an
 // accessibilityHitTest: install the native adapter that publishes the
-// portable semantic tree. Windows answers WM_GETOBJECT; macOS currently only
-// forwards hit-testing to its content view; Linux and wasm are no-ops.
+// portable semantic tree. Windows answers WM_GETOBJECT, macOS publishes
+// NSAccessibility elements, and Linux serves AT-SPI over its private D-Bus.
+// wasm is the intentional no-op: a canvas has no native accessibility API.
 // C++ portable spelling of Base's public
 // `install_window_hit_test_forwarder`; the macOS implementation is the source
 // operation and the other platform definitions are intentional no-ops.
