@@ -114,16 +114,48 @@ profile requires it.
 
 The worthwhile near-term work is narrower:
 
-1. Benchmark real scrolling, hover, caret, popup and chart-tick invalidations.
-   Keep damage mode only if those workloads demonstrate a useful total-frame
-   improvement without stale output.
-2. If path construction remains material, key paths relative to their origin
+1. If path construction remains material, key paths relative to their origin
    and draw cached geometry with a translation.
-3. Enable the recorder on Linux, macOS and wasm only after measuring its cost
+2. Enable the recorder on Linux, macOS and wasm only after measuring its cost
    on those backends.
-4. Port `BoundsTree` and typed batches only when an ordering problem or a new
+3. Port `BoundsTree` and typed batches only when an ordering problem or a new
    renderer needs them.
 
 Per-window ownership and stable resource generations were the first
 implementations following this analysis. The remaining items do not commit the
 project to the full retained-scene architecture.
+
+## Interaction measurements
+
+`bun cmd/bench-scene.ts -n=12` now drives the release Direct2D build with real
+Win32 wheel, pointer and button input, plus the caret and chart timers. It
+captures the already-presented client surface rather than using `PrintWindow`,
+which would request another draw and conceal a stale frame. Startup frames are
+excluded before each interaction starts. This run was made on 3 September 2026
+on the Windows development machine used for the measurements above:
+
+| interaction | skip median / p95 | damage median / p95 | median change | mean redraw area |
+| --- | ---: | ---: | ---: | ---: |
+| table scroll | 1.920 / 2.844 ms | 1.434 / 2.994 ms | -25% | 62.7% |
+| button hover movement | 0.266 / 0.341 ms | 0.163 / 0.397 ms | not material | 0% |
+| blinking caret | 0.686 / 1.277 ms | 0.789 / 1.890 ms | +15% | 20.8% |
+| popup open/close | 0.235 / 0.867 ms | 0.264 / 1.150 ms | +12% | 13.2% |
+| chart tick | 1.290 / 1.633 ms | 1.183 / 1.710 ms | -8% | 90.1% |
+
+The hover moves caused invalidated frames but no primitive changes in this
+showcase page, so both scene modes skipped every present; their sub-millisecond
+difference is noise, not a damage win. Popup also produced an unchanged frame
+after each changed frame, which `skip` and `damage` both rejected.
+
+The final popup and hover captures were pixel-identical between `skip` and
+`damage`. The scroll captures had no visible stale region: 0.27% of pixels had
+some channel difference and only 18 pixels (less than 0.004%) exceeded the
+image comparator's antialiasing tolerance. The changed pixels were spread over
+text and scrollbars, consistent with partial ClearType redraw rather than old
+content left on screen.
+
+Damage therefore remains an opt-in mode, while `skip` remains the default. It
+earns that limited place through the 25% scrolling median improvement, not as a
+general default: caret and popup regress, chart's small median improvement does
+not improve its p95, and scrolling's p95 is also slightly worse. A future
+renderer or workload should rerun the command before relying on damage mode.

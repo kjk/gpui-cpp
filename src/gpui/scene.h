@@ -184,6 +184,9 @@ struct SceneStats {
     float damageFracSum = 0;
     // The primitives that differed from the previous frame, this frame.
     int primsChanged = 0;
+    // Fraction of the view redrawn by the most recent frame: zero when it was
+    // skipped, one for a full replay, and between them for damage replay.
+    float damageFraction = 1;
 };
 const SceneStats& Stats(PaintCtx* ctx);
 

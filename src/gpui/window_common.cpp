@@ -78,6 +78,35 @@ static double gFrameBuildSecs = 0;
 static double gFrameLayoutSecs = 0;
 static double gFramePaintSecs = 0;
 
+// GPUI_INTERACTION_BENCH records frames requested by actual input and timers.
+// Unlike GPUI_FRAME_BENCH it neither manufactures frames nor quits the app;
+// cmd/bench-scene.ts drives the window and consumes these machine-readable
+// lines. Timing stops before this log, so file I/O is outside the sample.
+static bool InteractionBenchOn() {
+    static int on = -1;
+    if (on < 0) {
+        const char* value = getenv("GPUI_INTERACTION_BENCH");
+        on = value && value[0] && value[0] != '0';
+    }
+    return on != 0;
+}
+
+static void InteractionBenchRecord(Window* win, const FrameTiming& timing) {
+    if (!InteractionBenchOn()) {
+        return;
+    }
+    const scene::SceneStats& sc = scene::Stats(&win->paint);
+    logf(
+        "interaction-bench frame=%llu draw=%.6f build=%.6f layout=%.6f "
+        "paint=%.6f presented=%d invalidations=%llu prims=%d changed=%d "
+        "damage=%.6f",
+        (unsigned long long)win->frameSeq, timing.drawSecs * 1000.f,
+        gFrameBuildSecs * 1000.0, gFrameLayoutSecs * 1000.0,
+        gFramePaintSecs * 1000.0, timing.presentAt >= 0 ? 1 : 0,
+        (unsigned long long)timing.invalidations, SceneOn() ? sc.prims : -1,
+        SceneOn() ? sc.primsChanged : -1, SceneOn() ? sc.damageFraction : -1.f);
+}
+
 static void FrameBenchTick(Window* win, float secs) {
     static int want = -1;
     static int seen = 0;
@@ -591,6 +620,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     bool presented = !(SceneOn() && scene::SkipPresent(&win->paint));
     timing.presentAt = presented ? drawEnd : -1;
     win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
+    InteractionBenchRecord(win, timing);
     win->frameSeq++;
     FrameBenchTick(win, timing.drawSecs);
 }

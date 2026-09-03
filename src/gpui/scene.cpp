@@ -1047,6 +1047,9 @@ bool FrameEnd(PaintCtx* ctx, Bounds* damage) {
 
     bool skip = identical && SceneLevelOn() >= kSceneSkip;
     gSkipPresent = skip;
+    float wholeArea = whole.w * whole.h;
+    gStats.damageFraction =
+        skip ? 0.f : (wholeArea > 0 ? (dmg.w * dmg.h) / wholeArea : 1.f);
     if (identical) {
         gStats.framesUnchanged++;
     } else if (dmg.w < whole.w || dmg.h < whole.h) {

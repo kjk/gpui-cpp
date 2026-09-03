@@ -22,6 +22,7 @@ const user32 = dlopen("user32.dll", {
   SetForegroundWindow: { args: [FFIType.ptr], returns: FFIType.bool },
   GetForegroundWindow: { args: [], returns: FFIType.ptr },
   GetCursorPos: { args: [FFIType.ptr], returns: FFIType.bool },
+  GetDC: { args: [FFIType.ptr], returns: FFIType.u64 },
   GetWindowDC: { args: [FFIType.ptr], returns: FFIType.u64 },
   ReleaseDC: { args: [FFIType.ptr, FFIType.u64], returns: FFIType.i32 },
   PrintWindow: { args: [FFIType.ptr, FFIType.u64, FFIType.u32], returns: FFIType.bool },
@@ -41,6 +42,20 @@ const gdi32 = dlopen("gdi32.dll", {
   CreateCompatibleDC: { args: [FFIType.u64], returns: FFIType.u64 },
   CreateCompatibleBitmap: { args: [FFIType.u64, FFIType.i32, FFIType.i32], returns: FFIType.u64 },
   SelectObject: { args: [FFIType.u64, FFIType.u64], returns: FFIType.u64 },
+  BitBlt: {
+    args: [
+      FFIType.u64,
+      FFIType.i32,
+      FFIType.i32,
+      FFIType.i32,
+      FFIType.i32,
+      FFIType.u64,
+      FFIType.i32,
+      FFIType.i32,
+      FFIType.u32,
+    ],
+    returns: FFIType.bool,
+  },
   DeleteObject: { args: [FFIType.u64], returns: FFIType.bool },
   DeleteDC: { args: [FFIType.u64], returns: FFIType.bool },
 });
@@ -442,6 +457,51 @@ export function captureWindowToPng(hwnd: number, outPath: string): boolean {
   gdi32.symbols.DeleteObject(bmp);
   gdi32.symbols.DeleteDC(memDC);
   user32.symbols.ReleaseDC(hwnd, winDC);
+  return status === 0;
+}
+
+// Capture the pixels already in the visible client area without PrintWindow.
+// PrintWindow asks GPUI to draw again, which hides exactly the stale-present
+// failure an interaction/damage benchmark needs to preserve in its evidence.
+// The caller must keep the window visible and unobscured.
+export function captureWindowSurfaceToPng(hwnd: number, outPath: string): boolean {
+  ensureGdiplus();
+  const r = getClientRect(hwnd);
+  const origin = clientToScreen(hwnd, 0, 0);
+  const w = r.right - r.left;
+  const h = r.bottom - r.top;
+  if (w <= 0 || h <= 0) {
+    return false;
+  }
+  // A flip-model swap chain is not readable through GetWindowDC. Read the
+  // compositor's already-visible desktop surface at the window coordinates.
+  const screenDC = user32.symbols.GetDC(null);
+  const memDC = gdi32.symbols.CreateCompatibleDC(screenDC);
+  const bmp = gdi32.symbols.CreateCompatibleBitmap(screenDC, w, h);
+  const oldObj = gdi32.symbols.SelectObject(memDC, bmp);
+  const copied = gdi32.symbols.BitBlt(
+    memDC,
+    0,
+    0,
+    w,
+    h,
+    screenDC,
+    origin.x,
+    origin.y,
+    0x40cc0020 /* CAPTUREBLT | SRCCOPY */,
+  );
+  gdi32.symbols.SelectObject(memDC, oldObj);
+
+  const gpBmp = new BigUint64Array(1);
+  gdiplus.symbols.GdipCreateBitmapFromHBITMAP(bmp, 0n, ptr(gpBmp));
+  const status = copied
+    ? gdiplus.symbols.GdipSaveImageToFile(gpBmp[0]!, ptr(wideZ(outPath)), ptr(PNG_ENCODER_CLSID), 0)
+    : 1;
+  gdiplus.symbols.GdipDisposeImage(gpBmp[0]!);
+
+  gdi32.symbols.DeleteObject(bmp);
+  gdi32.symbols.DeleteDC(memDC);
+  user32.symbols.ReleaseDC(null, screenDC);
   return status === 0;
 }
 
