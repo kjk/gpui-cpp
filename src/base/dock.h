@@ -690,6 +690,9 @@ struct DockRenderer {
     El* (*tabContentFrame)(Ctx* cx, void* data,
                            const DockTabGroup* g) = nullptr;
     El* (*tabBar)(Ctx* cx, void* data, const DockTabGroup* g) = nullptr;
+    // TabGroupRenderer::render_empty: what a group with nothing to show says.
+    // Null leaves the content region empty, which is base's own default.
+    El* (*emptyGroup)(Ctx* cx, void* data, const DockTabGroup* g) = nullptr;
     // render_drop_indicator: the paint over the half a drop would take.
     // `to` is in the group's own coordinates, already sprung.
     El* (*dropIndicator)(Ctx* cx, void* data, Bounds to) = nullptr;

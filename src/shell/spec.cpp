@@ -34,6 +34,24 @@ const char* ComponentName(const Component& component) {
             return "OtpInput";
         case ComponentKind::Svg:
             return "svg";
+        case ComponentKind::Accordion:
+            return "Accordion";
+        case ComponentKind::AccordionItem:
+            return "AccordionItem";
+        case ComponentKind::AccordionHeader:
+            return "AccordionHeader";
+        case ComponentKind::AccordionPanel:
+            return "AccordionPanel";
+        case ComponentKind::AccordionTrigger:
+            return "AccordionTrigger";
+        case ComponentKind::Pagination:
+            return "Pagination";
+        case ComponentKind::Avatar:
+            return "Avatar";
+        case ComponentKind::AvatarImage:
+            return "AvatarImage";
+        case ComponentKind::AvatarFallback:
+            return "AvatarFallback";
         case ComponentKind::Image:
             return "image";
         case ComponentKind::PathFill:
@@ -102,6 +120,10 @@ const char* ComponentName(const Component& component) {
             return "Combobox";
         case ComponentKind::DatePicker:
             return "DatePicker";
+        case ComponentKind::DockArea:
+            return "dock_area";
+        case ComponentKind::DockContent:
+            return "dock_content";
         case ComponentKind::VVirtualList:
             return "v_virtual_list";
         case ComponentKind::HVirtualList:
@@ -229,6 +251,22 @@ bool SpecArena::PushChildView(const Component& component, SpecId* out,
     return true;
 }
 
+bool SpecArena::PushDockArea(uint64_t handle, SpecId* out, SpecError* error) {
+    for (int i = 0; i < mountedViews.len; i++) {
+        if (mountedViews[i] == handle) {
+            SetSpecError(error, SpecErrorKind::DuplicateChildView);
+            return false;
+        }
+    }
+    VecAppend(mountedViews, handle);
+    Component component;
+    component.kind = ComponentKind::DockArea;
+    component.handle = handle;
+    SpecId id = Push(component);
+    if (out) *out = id;
+    return true;
+}
+
 const SpecNode* SpecArena::Node(SpecId id) const {
     return id < (SpecId)nodes.len ? nodes[(int)id] : nullptr;
 }
@@ -284,8 +322,7 @@ bool SpecArena::ClaimVirtualItems(uint64_t count, uint64_t limit) {
 }
 
 static void Indent(Arena* a, StrBuilder* out, int depth) {
-    for (int i = 0; i < depth; i++)
-        StrBuilderAppend(a, *out, StrL("  "));
+    for (int i = 0; i < depth; i++) StrBuilderAppend(a, *out, StrL("  "));
 }
 
 static void AppendBridged(Arena* a, StrBuilder* out, const Bridged& value) {
@@ -333,6 +370,12 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
         case ComponentKind::Scrollbar:
         case ComponentKind::Svg:
         case ComponentKind::Image:
+        case ComponentKind::Accordion:
+        case ComponentKind::AccordionTrigger:
+        case ComponentKind::Pagination:
+        // The path is what an avatar image *is*; without it the dump says an
+        // image is there but not which one.
+        case ComponentKind::AvatarImage:
         case ComponentKind::Tabs:
         case ComponentKind::Tab:
         case ComponentKind::Progress:
@@ -359,14 +402,12 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
         case ComponentKind::TableHead:
         case ComponentKind::TableCell:
             StrBuilderAppend(
-                a, *out,
-                fmt(" \"%s\" #%u", component.text, component.index));
+                a, *out, fmt(" \"%s\" #%u", component.text, component.index));
             break;
         case ComponentKind::DatePicker:
-            StrBuilderAppend(
-                a, *out,
-                fmt(" \"%s\" #%llu", component.text,
-                    (unsigned long long)component.handle));
+            StrBuilderAppend(a, *out,
+                             fmt(" \"%s\" #%llu", component.text,
+                                 (unsigned long long)component.handle));
             break;
         case ComponentKind::ChildView:
         case ComponentKind::Input:
@@ -378,16 +419,14 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
         case ComponentKind::SliderIndicator:
         case ComponentKind::SliderThumb:
             StrBuilderAppend(
-                a, *out,
-                fmt(" #%llu", (unsigned long long)component.handle));
+                a, *out, fmt(" #%llu", (unsigned long long)component.handle));
             break;
         case ComponentKind::VVirtualList:
         case ComponentKind::HVirtualList:
             if (component.virtualList) {
-                StrBuilderAppend(
-                    a, *out,
-                    fmt(" \"%s\" ×%d", component.virtualList->id,
-                        component.virtualList->sizeCount));
+                StrBuilderAppend(a, *out,
+                                 fmt(" \"%s\" ×%d", component.virtualList->id,
+                                     component.virtualList->sizeCount));
             }
             break;
         default:
@@ -410,6 +449,10 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
             StrBuilderAppend(a, *out, StrL(" :"));
             StrBuilderAppend(a, *out, op.name);
             StrBuilderAppend(a, *out, StrL("(fn)"));
+        } else if (op.kind == SpecOpKind::ActionCallback) {
+            StrBuilderAppend(a, *out, StrL(" :on_action("));
+            StrBuilderAppend(a, *out, op.name);
+            StrBuilderAppend(a, *out, StrL(", fn)"));
         } else if (op.kind == SpecOpKind::StateStyle) {
             StrBuilderAppend(a, *out, StrL(" :"));
             StrBuilderAppend(a, *out, op.name);
@@ -441,8 +484,7 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
         StrBuilderAppendChar(a, *out, '\n');
         WriteTree(a, out, op.node, depth + 2);
     }
-    for (SpecId child : node->children)
-        WriteTree(a, out, child, depth + 1);
+    for (SpecId child : node->children) WriteTree(a, out, child, depth + 1);
 }
 
 Str SpecArena::DebugTree(Arena* into, SpecId root) const {

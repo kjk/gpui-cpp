@@ -11,10 +11,19 @@ struct PolicyShared {
     ~PolicyShared() { HostModulesRelease(modules); }
 };
 
+// The application name a policy carries when the host named none.
+static const char* const kDefaultApplication = "app";
+
 struct Policy {
     uint32_t refs = 1;
     Capabilities capabilities;
+    // Owned, and carried by every copy: the name is what the application's
+    // persisted panels are filed under, and a copy that renamed them would
+    // lose the layout the user had.
+    Str application = StrDup(Str(kDefaultApplication));
     PolicyShared* shared = nullptr;
+
+    ~Policy() { StrFree(application); }
 };
 
 static PolicyShared* SharedRetain(PolicyShared* shared) {
@@ -49,6 +58,18 @@ void PolicyRelease(Policy* policy) {
     delete policy;
 }
 
+Str PolicyApplication(const Policy* policy) {
+    return policy ? policy->application : Str(kDefaultApplication);
+}
+
+void PolicySetApplication(Policy* policy, Str name) {
+    if (!policy) return;
+    Str trimmed = StrTrimAscii(name);
+    StrFree(policy->application);
+    policy->application =
+        StrDup(trimmed && trimmed.len > 0 ? trimmed : Str(kDefaultApplication));
+}
+
 const Capabilities& PolicyCapabilities(const Policy* policy) {
     static const Capabilities denied;
     return policy ? policy->capabilities : denied;
@@ -75,6 +96,17 @@ void PolicyUpdateDefaultCapabilities(const Capabilities& capabilities) {
     Policy* current = EnsureDefault();
     Policy* replacement = new Policy();
     replacement->capabilities = capabilities;
+    PolicySetApplication(replacement, current->application);
+    replacement->shared = SharedRetain(current->shared);
+    gDefaultPolicy = replacement;
+    PolicyRelease(current);
+}
+
+void PolicyUpdateDefaultApplication(Str name) {
+    Policy* current = EnsureDefault();
+    Policy* replacement = new Policy();
+    replacement->capabilities = current->capabilities;
+    PolicySetApplication(replacement, name);
     replacement->shared = SharedRetain(current->shared);
     gDefaultPolicy = replacement;
     PolicyRelease(current);
@@ -98,20 +130,19 @@ bool ShellSetStoragePath(Str path, Str* error) {
 }
 
 HostModules* PolicyHostModules(Policy* policy) {
-    return policy && policy->shared
-               ? HostModulesRetain(policy->shared->modules)
-               : HostModulesNew();
+    return policy && policy->shared ? HostModulesRetain(policy->shared->modules)
+                                    : HostModulesNew();
 }
 
-bool PolicyAddHostModule(Policy* policy, HostModule* module,
-                         HostError* error) {
+bool PolicyAddHostModule(Policy* policy, HostModule* module, HostError* error) {
     if (error) error->Clear();
     if (!policy || !policy->shared || !module || !module->Validate(error))
         return false;
     HostModules* replacement = HostModulesClone(policy->shared->modules);
     if (!replacement || !HostModulesInsert(replacement, module)) {
         HostModulesRelease(replacement);
-        if (error) error->Set(StrL("could not add HostModule within memory limits"));
+        if (error)
+            error->Set(StrL("could not add HostModule within memory limits"));
         return false;
     }
     HostModulesRelease(policy->shared->modules);

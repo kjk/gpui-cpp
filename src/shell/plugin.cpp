@@ -839,6 +839,10 @@ bool PluginManager::Load(ShellRuntime* runtime, Str id,
     }
     Capabilities capabilities = selected->manifest->Grant(selected->root, data);
     Policy* policy = PolicyNew(capabilities);
+    // The manifest id is already unique among loaded plugins, which is exactly
+    // what a dock layout needs to keep two plugins' panels of the same name
+    // apart.
+    PolicySetApplication(policy, id);
     Str store = Join(scratch, data, StrL("store.json"));
     if (capabilities.HasStorage()) {
         Str storageError;

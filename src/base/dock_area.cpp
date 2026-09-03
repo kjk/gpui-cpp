@@ -369,6 +369,13 @@ El* RenderTabs(const AreaCtx& ac, int node) {
             if (def.render) {
                 body->Child(def.render(cx, def.data));
             }
+        } else if (ac.r->emptyGroup) {
+            // render_empty: a group with nothing to show is the one place a
+            // skin can say so — "drop a panel here" — and base draws nothing
+            // of its own for it.
+            if (El* empty = ac.r->emptyGroup(cx, ac.r->data, &g)) {
+                body->Child(empty);
+            }
         }
         box->Child(body);
     }

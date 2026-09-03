@@ -855,9 +855,22 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
 
 void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt,
                  bool platform) {
-    (void)platform;
     if (!win) {
         return;
+    }
+    // div().on_key_up: the focused element's own listener and the ones above
+    // it, before the release is read as a keyboard activation. It never eats
+    // the activation — GPUI's `on_key_up` observes the release rather than
+    // claiming it — so what a handler stops is only the rest of this chain.
+    {
+        KeyEvent ku = {};
+        ku.vk = key;
+        ku.down = false;
+        ku.shift = shift;
+        ku.ctrl = ctrl;
+        ku.alt = alt;
+        ku.platform = platform;
+        WindowDispatchKeyUpEvent(win, &ku);
     }
     // The release consumes the pending press whatever it is: a clean
     // activation makes the click, and anything else — another key coming up
@@ -2099,6 +2112,29 @@ static Point ScrollMaskDelta(Window* win, const ScrollRect& s,
 }
 
 static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
+    // div().on_scroll_wheel: the element chain under the pointer, innermost
+    // first, before anything scrolls. GPUI offers the gesture to the
+    // interactive elements it passes through and only then to whatever would
+    // scroll; a handler that clears `propagate` keeps it.
+    {
+        Vec<int> chain;
+        HitChain(win, in.x, in.y, &chain);
+        for (int k = 0; k < chain.len; k++) {
+            const HitRect& hr = win->paint.hits[chain[k]];
+            if (!hr.onScrollWheel.IsValid()) {
+                continue;
+            }
+            ScrollWheelEvent ev = in;
+            ev.propagate = true;
+            ListenerCall(win->app, win, hr.onScrollWheel, &ev);
+            if (!ev.propagate) {
+                VecReset(chain);
+                AppInvalidate(win);
+                return;
+            }
+        }
+        VecReset(chain);
+    }
     // A multi-line field takes the wheel before anything around it, the way
     // the editor's own scroll handle does in Rust.
     InputState* field = InputAtPosition(&win->paint, in.x, in.y);

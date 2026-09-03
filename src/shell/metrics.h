@@ -10,6 +10,9 @@ struct RuntimeMetrics {
     uint64_t scriptRenderNanos = 0;
     uint64_t slowestScriptRenderNanos = 0;
     uint64_t nativeNanos = 0;
+    // Calls into JavaScript made from GPUI's frame path: a window of a
+    // virtualized list's items, or one piece of a dock's chrome.
+    uint64_t frameScriptCalls = 0;
     uint64_t materializations = 0;
     uint64_t materializeNanos = 0;
 
@@ -29,7 +32,13 @@ struct Metrics {
 enum class MetricsTimerKind : uint8_t {
     ScriptRender,
     Native,
-    VirtualItems,
+    // One script call GPUI makes from inside a frame. Added to the
+    // materialize total without moving the materialize count: the count is
+    // materializations *of a snapshot*, and these are not — they happen
+    // several times inside a single frame, from inside the layout pass. The
+    // time belongs there all the same, since it is spent on the frame's
+    // budget.
+    FrameScript,
     Materialize,
 };
 

@@ -48,7 +48,7 @@ static void RuntimeMetricsSeparateScriptNativeAndFrames() {
     MetricsAdd(&metrics, MetricsTimerKind::ScriptRender, 300);
     MetricsAdd(&metrics, MetricsTimerKind::Native, 80);
     MetricsAdd(&metrics, MetricsTimerKind::Materialize, 40);
-    MetricsAdd(&metrics, MetricsTimerKind::VirtualItems, 10);
+    MetricsAdd(&metrics, MetricsTimerKind::FrameScript, 10);
     RuntimeMetrics reading = MetricsRead(&metrics);
     utassert(reading.scriptRenders == 2);
     utassert(reading.MeanScriptRenderNanos() == 200);
@@ -57,6 +57,9 @@ static void RuntimeMetricsSeparateScriptNativeAndFrames() {
     utassert(reading.slowestScriptRenderNanos == 300);
     utassert(reading.materializations == 1);
     utassert(reading.MeanMaterializeNanos() == 50);
+    // A frame script call adds its time to the materialize total without
+    // moving the materialize count, and is counted on its own.
+    utassert(reading.frameScriptCalls == 1);
 
     RuntimeMetrics earlier = {};
     earlier.scriptRenders = 1;

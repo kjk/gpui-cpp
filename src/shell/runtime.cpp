@@ -138,9 +138,8 @@ struct CallbackArena {
         return buildingGeneration;
     }
 
-    shell::CallbackId Push(JSContext* ctx, JSValueConst function,
-                           EntityId view, Policy* policy,
-                           uint64_t registeredIn,
+    shell::CallbackId Push(JSContext* ctx, JSValueConst function, EntityId view,
+                           Policy* policy, uint64_t registeredIn,
                            AppModule* application) {
         if (!building || nextCallback == UINT64_MAX) return UINT64_MAX;
         CallbackEntry* entry = new CallbackEntry();
@@ -270,6 +269,21 @@ struct CallbackArena {
     }
 };
 
+struct ScriptPanelClass;
+
+// One piece of a dock's chrome, described once and replayed until its handler
+// or the container's own state moves. See ShellRuntime::DescribeDockChrome.
+struct ChromeCacheEntry {
+    shell::EntityHandle dock = 0;
+    shell::DockChromeSlot slot = shell::DockChromeSlot::TabBar;
+    uint64_t key = 0;
+    shell::CallbackId callback = 0;
+    Str payload = {};
+    shell::SpecArena* arena = nullptr;
+    shell::SpecId root = 0;
+    bool hasRoot = false;
+};
+
 struct ShellRuntimeImpl {
     ShellRuntime* owner = nullptr;
     JSRuntime* jsRuntime = nullptr;
@@ -281,6 +295,13 @@ struct ShellRuntimeImpl {
     Vec<AppModule*> modules;
     Vec<ScriptViewRegistration> views;
     Vec<NestedViewEntry> nestedViews;
+    // The panel builders this runtime registered. Declared here rather than
+    // only in the process-wide panel registry because a panel the script
+    // *adds* needs the same serialize/deserialize hooks a restored one gets,
+    // and each holds a live JS class that must be released while the context
+    // is still alive.
+    Vec<ScriptPanelClass*> panelClasses;
+    Vec<ChromeCacheEntry*> chromeCache;
     Vec<ShellTask*> tasks;
     Entity<ShellTaskDriver> taskDriver = {};
     App* taskApp = nullptr;
@@ -321,8 +342,8 @@ static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
                                      JSValueConst props, ShellError* error,
                                      EntityId view);
 
-static NestedViewEntry* FindNestedView(ShellRuntimeImpl* impl,
-                                       uint32_t token, int* index = nullptr) {
+static NestedViewEntry* FindNestedView(ShellRuntimeImpl* impl, uint32_t token,
+                                       int* index = nullptr) {
     if (!impl || token == 0) return nullptr;
     for (int i = 0; i < impl->nestedViews.len; i++) {
         if (impl->nestedViews[i].token != token) continue;
@@ -334,8 +355,7 @@ static NestedViewEntry* FindNestedView(ShellRuntimeImpl* impl,
 
 static bool NestedViewIsCurrent(const NestedViewEntry* entry) {
     return entry && entry->policy == shell::ScopeCurrentPolicy() &&
-           entry->application ==
-               (AppModule*)shell::ScopeCurrentApplication();
+           entry->application == (AppModule*)shell::ScopeCurrentApplication();
 }
 
 static void DropNestedViewAt(ShellRuntimeImpl* impl, int at) {
@@ -349,8 +369,7 @@ static void DropNestedViewAt(ShellRuntimeImpl* impl, int at) {
     PolicyRelease(entry.policy);
 }
 
-static void RollbackNestedViews(ShellRuntimeImpl* impl,
-                                uint32_t checkpoint) {
+static void RollbackNestedViews(ShellRuntimeImpl* impl, uint32_t checkpoint) {
     for (;;) {
         int found = -1;
         for (int i = impl ? impl->nestedViews.len - 1 : -1; i >= 0; i--) {
@@ -600,32 +619,28 @@ static void ProcessJobDone(ProcessJob* job) {
     ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
     ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
     ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
-    if (task && task->kind == ShellTaskKind::Process &&
-        TaskWindowLive(task) &&
+    if (task && task->kind == ShellTaskKind::Process && TaskWindowLive(task) &&
         (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
         Window* window = task->window;
         App* app = task->app;
         EntityId owner = task->owner;
         Policy* policy = PolicyRetain(task->policy);
         AppModule* application = task->application;
-        JSValue settle = JS_DupValue(impl->context,
-                                     job->error ? task->reject
-                                                : task->callback);
+        JSValue settle = JS_DupValue(
+            impl->context, job->error ? task->reject : task->callback);
         task->processJob = nullptr;
         ForgetTask(impl, task->id, false);
 
         shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime,
-            application);
+            window, app, ScopePhase::Task, owner, policy, runtime, application);
         PolicyRelease(policy);
         BeginExecution(impl);
         JSValue value = JS_UNDEFINED;
         if (job->error) {
             value = JS_NewError(impl->context);
-            JS_SetPropertyStr(
-                impl->context, value, "message",
-                JS_NewStringLen(impl->context, job->error.s,
-                                (size_t)job->error.len));
+            JS_SetPropertyStr(impl->context, value, "message",
+                              JS_NewStringLen(impl->context, job->error.s,
+                                              (size_t)job->error.len));
         } else {
             value = JS_NewObject(impl->context);
             JS_SetPropertyStr(impl->context, value, "code",
@@ -641,8 +656,8 @@ static void ProcessJobDone(ProcessJob* job) {
                                 job->output.err.s ? job->output.err.s : "",
                                 (size_t)job->output.err.len));
         }
-        JSValue settled = JS_Call(impl->context, settle, JS_UNDEFINED, 1,
-                                  &value);
+        JSValue settled =
+            JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
         JS_FreeValue(impl->context, value);
         JS_FreeValue(impl->context, settle);
         if (JS_IsException(settled)) {
@@ -668,8 +683,8 @@ static void ProcessJobDone(ProcessJob* job) {
 }
 
 static void FsJobWork(FsJob* job) {
-    shell::FsRun(job->operation, job->path.root, job->path.relative,
-                 job->input, job->recursive, &job->result, &job->error);
+    shell::FsRun(job->operation, job->path.root, job->path.relative, job->input,
+                 job->recursive, &job->result, &job->error);
 }
 
 static void FetchJobWork(ShellFetchJob* job) {
@@ -683,16 +698,13 @@ static void StorageWriteWork(StorageWriteJob* job) {
 static JSValue FsJobValue(JSContext* context, FsJob* job) {
     if (job->operation == shell::FsOperation::Read) {
         if (job->text) {
-            return JS_NewStringLen(context,
-                                   job->result.bytes.s
-                                       ? job->result.bytes.s
-                                       : "",
-                                   (size_t)job->result.bytes.len);
+            return JS_NewStringLen(
+                context, job->result.bytes.s ? job->result.bytes.s : "",
+                (size_t)job->result.bytes.len);
         }
         return JS_NewUint8ArrayCopy(
-            context, (const uint8_t*)(job->result.bytes.s
-                                          ? job->result.bytes.s
-                                          : ""),
+            context,
+            (const uint8_t*)(job->result.bytes.s ? job->result.bytes.s : ""),
             (size_t)job->result.bytes.len);
     }
     if (job->operation == shell::FsOperation::Exists) {
@@ -704,17 +716,15 @@ static JSValue FsJobValue(JSContext* context, FsJob* job) {
     JSValue array = JS_NewArray(context);
     JSValue global = JS_GetGlobalObject(context);
     JSValue make = job->withFileTypes
-                       ? JS_GetPropertyStr(context, global,
-                                           "__shell_fs_dirent")
+                       ? JS_GetPropertyStr(context, global, "__shell_fs_dirent")
                        : JS_UNDEFINED;
     for (int i = 0; i < job->result.entries.len; i++) {
         const shell::FsEntry& entry = job->result.entries[i];
-        JSValue name = JS_NewStringLen(context, entry.name.s,
-                                       (size_t)entry.name.len);
+        JSValue name =
+            JS_NewStringLen(context, entry.name.s, (size_t)entry.name.len);
         JSValue value = name;
         if (job->withFileTypes) {
-            JSValue args[2] = {name,
-                               JS_NewBool(context, entry.isDirectory)};
+            JSValue args[2] = {name, JS_NewBool(context, entry.isDirectory)};
             value = JS_Call(context, make, JS_UNDEFINED, 2, args);
             JS_FreeValue(context, args[0]);
             JS_FreeValue(context, args[1]);
@@ -743,31 +753,28 @@ static void FsJobDone(FsJob* job) {
         EntityId owner = task->owner;
         Policy* policy = PolicyRetain(task->policy);
         AppModule* application = task->application;
-        JSValue settle = JS_DupValue(impl->context,
-                                     job->error ? task->reject
-                                                : task->callback);
+        JSValue settle = JS_DupValue(
+            impl->context, job->error ? task->reject : task->callback);
         task->fsJob = nullptr;
         ForgetTask(impl, task->id, false);
 
         shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime,
-            application);
+            window, app, ScopePhase::Task, owner, policy, runtime, application);
         PolicyRelease(policy);
         BeginExecution(impl);
         JSValue value = JS_UNDEFINED;
         if (job->error) {
             value = JS_NewError(impl->context);
-            JS_SetPropertyStr(
-                impl->context, value, "message",
-                JS_NewStringLen(impl->context, job->error.s,
-                                (size_t)job->error.len));
+            JS_SetPropertyStr(impl->context, value, "message",
+                              JS_NewStringLen(impl->context, job->error.s,
+                                              (size_t)job->error.len));
         } else {
             value = FsJobValue(impl->context, job);
         }
-        JSValue settled = JS_IsException(value)
-                              ? JS_EXCEPTION
-                              : JS_Call(impl->context, settle, JS_UNDEFINED,
-                                        1, &value);
+        JSValue settled =
+            JS_IsException(value)
+                ? JS_EXCEPTION
+                : JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
         JS_FreeValue(impl->context, value);
         JS_FreeValue(impl->context, settle);
         if (JS_IsException(settled)) {
@@ -794,15 +801,12 @@ static void FsJobDone(FsJob* job) {
 
 static JSValue FetchJobValue(JSContext* context, ShellFetchJob* job) {
     JSValue global = JS_GetGlobalObject(context);
-    JSValue make = JS_GetPropertyStr(context, global,
-                                     "__shell_fetch_response");
+    JSValue make = JS_GetPropertyStr(context, global, "__shell_fetch_response");
     JSValue args[3] = {
         JS_NewInt32(context, job->result.status),
-        JS_NewStringLen(context,
-                        job->result.url.s ? job->result.url.s : "",
+        JS_NewStringLen(context, job->result.url.s ? job->result.url.s : "",
                         (size_t)job->result.url.len),
-        JS_NewStringLen(context,
-                        job->result.body.s ? job->result.body.s : "",
+        JS_NewStringLen(context, job->result.body.s ? job->result.body.s : "",
                         (size_t)job->result.body.len),
     };
     JSValue value = JS_IsException(make)
@@ -818,8 +822,7 @@ static void FetchJobDone(ShellFetchJob* job) {
     ShellRuntime* runtime = job->control ? job->control->runtime : nullptr;
     ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
     ShellTask* task = impl ? FindTask(impl, job->task) : nullptr;
-    if (task && task->kind == ShellTaskKind::Fetch &&
-        TaskWindowLive(task) &&
+    if (task && task->kind == ShellTaskKind::Fetch && TaskWindowLive(task) &&
         (!task->owner.IsValid() || EntityGet(task->app, task->owner))) {
         Window* window = task->window;
         App* app = task->app;
@@ -827,14 +830,12 @@ static void FetchJobDone(ShellFetchJob* job) {
         Policy* policy = PolicyRetain(task->policy);
         AppModule* application = task->application;
         bool failed = job->result.error.s != nullptr;
-        JSValue settle = JS_DupValue(impl->context,
-                                     failed ? task->reject
-                                            : task->callback);
+        JSValue settle =
+            JS_DupValue(impl->context, failed ? task->reject : task->callback);
         ForgetTask(impl, task->id, false);
 
         shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime,
-            application);
+            window, app, ScopePhase::Task, owner, policy, runtime, application);
         PolicyRelease(policy);
         BeginExecution(impl);
         JSValue value = JS_UNDEFINED;
@@ -847,10 +848,10 @@ static void FetchJobDone(ShellFetchJob* job) {
         } else {
             value = FetchJobValue(impl->context, job);
         }
-        JSValue settled = JS_IsException(value)
-                              ? JS_EXCEPTION
-                              : JS_Call(impl->context, settle, JS_UNDEFINED,
-                                        1, &value);
+        JSValue settled =
+            JS_IsException(value)
+                ? JS_EXCEPTION
+                : JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
         JS_FreeValue(impl->context, value);
         JS_FreeValue(impl->context, settle);
         if (JS_IsException(settled)) {
@@ -888,15 +889,13 @@ static void StorageFlushDone(StorageFlushState* state,
         EntityId owner = task->owner;
         Policy* policy = PolicyRetain(task->policy);
         AppModule* application = task->application;
-        JSValue settle = JS_DupValue(impl->context,
-                                     outcome.ok ? task->callback
-                                                : task->reject);
+        JSValue settle = JS_DupValue(
+            impl->context, outcome.ok ? task->callback : task->reject);
         task->storageFlush = nullptr;
         ForgetTask(impl, task->id, false);
 
         shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime,
-            application);
+            window, app, ScopePhase::Task, owner, policy, runtime, application);
         PolicyRelease(policy);
         BeginExecution(impl);
         JSValue value = JS_UNDEFINED;
@@ -907,15 +906,13 @@ static void StorageFlushDone(StorageFlushState* state,
             JS_SetPropertyStr(
                 impl->context, value, "message",
                 JS_NewStringLen(impl->context,
-                                outcome.error.s ? outcome.error.s :
-                                                  fallback,
-                                (size_t)(outcome.error.s
-                                             ? outcome.error.len
-                                             : strlen(fallback))));
+                                outcome.error.s ? outcome.error.s : fallback,
+                                (size_t)(outcome.error.s ? outcome.error.len
+                                                         : strlen(fallback))));
             argc = 1;
         }
-        JSValue settled = JS_Call(impl->context, settle, JS_UNDEFINED,
-                                  argc, argc ? &value : nullptr);
+        JSValue settled = JS_Call(impl->context, settle, JS_UNDEFINED, argc,
+                                  argc ? &value : nullptr);
         JS_FreeValue(impl->context, value);
         JS_FreeValue(impl->context, settle);
         if (JS_IsException(settled)) {
@@ -1045,10 +1042,9 @@ static Str ExceptionText(Arena* arena, JSContext* ctx) {
                     StrBuilderAppendChar(arena, out, '\n');
                     StrBuilderAppend(arena, out, stackText);
                 } else if ((int)stackLen > (int)messageLen) {
-                    StrBuilderAppend(
-                        arena, out,
-                        Str(text + messageLen,
-                            (int)stackLen - (int)messageLen));
+                    StrBuilderAppend(arena, out,
+                                     Str(text + messageLen,
+                                         (int)stackLen - (int)messageLen));
                 }
                 JS_FreeCString(ctx, text);
             }
@@ -1085,7 +1081,8 @@ static bool Await(ShellRuntimeImpl* impl, JSValueConst value,
         return CaptureException(impl, error);
     }
     if (state == JS_PROMISE_PENDING) {
-        SetError(error, StrL("module evaluation left a pending promise with no host work able to settle it"));
+        SetError(error, StrL("module evaluation left a pending promise with no "
+                             "host work able to settle it"));
         return false;
     }
     return true;
@@ -1139,42 +1136,46 @@ static bool IsBuiltin(const char* name) {
     return strcmp(name, "gpui") == 0 || strcmp(name, "gpui-base") == 0 ||
            strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0 ||
            strcmp(name, "buffer") == 0 || strcmp(name, "console") == 0 ||
-           strcmp(name, "crypto") == 0 ||
-           strcmp(name, "fs/promises") == 0 || strcmp(name, "os") == 0 ||
-           strcmp(name, "path") == 0 || strcmp(name, "process") == 0 ||
-           strcmp(name, "url") == 0 || strcmp(name, "zlib") == 0;
+           strcmp(name, "crypto") == 0 || strcmp(name, "fs/promises") == 0 ||
+           strcmp(name, "os") == 0 || strcmp(name, "path") == 0 ||
+           strcmp(name, "process") == 0 || strcmp(name, "url") == 0 ||
+           strcmp(name, "zlib") == 0;
 }
 
 static const char* const kGpuiExports[] = {
-    "View", "div", "svg", "image", "PathBuilder", "Background",
-    "with_cx"};
+    "View", "div", "svg", "image", "PathBuilder", "Background", "with_cx"};
 static const char* const kBaseExports[] = {
-    "h_flex", "v_flex", "Button", "Link", "Checkbox", "Switch",
-    "Tabs", "Tab", "Progress", "ProgressTrack", "ProgressIndicator",
-    "Radio", "Toggle", "RadioGroup", "ToggleGroup", "Table",
-    "TableHeader", "TableBody", "TableRow", "TableHead", "TableCell",
-    "TableCaption", "h_resizable", "v_resizable", "resizable_panel",
-    "Collapsible", "Popover", "HoverCard", "Popup", "Select", "Combobox",
-    "DatePicker", "Scrollbar", "v_virtual_list", "h_virtual_list",
-    "VirtualListScrollHandle", "Input", "InputState", "NumberInput",
-    "Textarea", "TextareaState", "SliderState", "Slider", "SliderTrack",
-    "SliderIndicator", "SliderThumb", "OtpState", "OtpInput", "set_theme"};
+    "h_flex", "v_flex", "Button", "Link", "Checkbox", "Switch", "Tabs", "Tab",
+    "Progress", "ProgressTrack", "ProgressIndicator", "Radio", "Toggle",
+    "RadioGroup", "ToggleGroup", "Table", "TableHeader", "TableBody",
+    "TableRow", "TableHead", "TableCell", "TableCaption", "h_resizable",
+    "v_resizable", "resizable_panel", "Collapsible", "Popover", "HoverCard",
+    "Popup", "Select", "Combobox", "DatePicker", "Scrollbar", "v_virtual_list",
+    "h_virtual_list", "VirtualListScrollHandle", "Input", "InputState",
+    "NumberInput", "Textarea", "TextareaState", "SliderState", "Slider",
+    "SliderTrack", "SliderIndicator", "SliderThumb", "OtpState", "OtpInput",
+    "Avatar", "AvatarImage", "AvatarFallback", "Pagination", "pagination_items",
+    "CalendarState", "Accordion", "AccordionItem", "AccordionHeader",
+    "AccordionPanel", "AccordionTrigger",
+    // Dock. The area is the state and `dock_area` is one description of it,
+    // which is the split `v_virtual_list` already has.
+    "DockArea", "dock_area", "dock_content", "set_theme"};
 static const char* const kFpsExports[] = {"fps_monitor"};
 static const char* const kBufferExports[] = {"default", "Buffer"};
 static const char* const kConsoleExports[] = {"default"};
 static const char* const kCryptoExports[] = {
-    "default", "createHash", "randomBytes", "randomUUID",
-    "getRandomValues", "crypto", "webcrypto"};
+    "default",         "createHash", "randomBytes", "randomUUID",
+    "getRandomValues", "crypto",     "webcrypto"};
 static const char* const kFsExports[] = {"default", "readFile", "writeFile",
-                                         "readdir", "exists", "unlink",
-                                         "rmdir", "mkdir"};
+                                         "readdir", "exists",   "unlink",
+                                         "rmdir",   "mkdir"};
 static const char* const kOsExports[] = {"default", "platform", "arch", "EOL"};
 static const char* const kPathExports[] = {
-    "default", "sep", "delimiter", "basename", "dirname", "extname",
-    "isAbsolute", "join", "normalize", "relative", "resolve", "parse",
-    "format"};
-static const char* const kProcessExports[] = {"default", "run", "nextTick",
-                                              "exit", "platform", "arch"};
+    "default", "sep",        "delimiter", "basename",  "dirname",
+    "extname", "isAbsolute", "join",      "normalize", "relative",
+    "resolve", "parse",      "format"};
+static const char* const kProcessExports[] = {"default", "run",      "nextTick",
+                                              "exit",    "platform", "arch"};
 static const char* const kUrlExports[] = {"default", "URL", "URLSearchParams",
                                           "fileURLToPath", "pathToFileURL"};
 static const char* const kZlibExports[] = {
@@ -1246,8 +1247,8 @@ static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
     int count = 0;
     ModuleExports(name ? name : "", &exports, &count);
     JSValue global = JS_GetGlobalObject(ctx);
-    JSValue api = JS_GetPropertyStr(ctx, global,
-                                    BuiltinObject(name ? name : ""));
+    JSValue api =
+        JS_GetPropertyStr(ctx, global, BuiltinObject(name ? name : ""));
     int result = 0;
     for (int i = 0; i < count; i++) {
         JSValue value = strcmp(exports[i], "default") == 0
@@ -1267,8 +1268,7 @@ static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
     return result;
 }
 
-static AppModule* ApplicationForBase(ShellRuntimeImpl* impl,
-                                     const char* base) {
+static AppModule* ApplicationForBase(ShellRuntimeImpl* impl, const char* base) {
     const char* tag = strrchr(base, '?');
     if (!tag || strncmp(tag, "?v=", 3) != 0) return nullptr;
     uint32_t generation = 0;
@@ -1285,7 +1285,7 @@ static AppModule* ApplicationForBase(ShellRuntimeImpl* impl,
 static void Untag(const char* name, char* out, int cap) {
     const char* tag = strrchr(name, '?');
     int len = tag && strncmp(tag, "?v=", 3) == 0 ? (int)(tag - name)
-                                                  : (int)strlen(name);
+                                                 : (int)strlen(name);
     if (len >= cap) len = cap - 1;
     memcpy(out, name, (size_t)len);
     out[len] = 0;
@@ -1311,8 +1311,8 @@ static bool WithinRoot(Str root, Str path) {
     return path.len == root.len || path.s[root.len] == '/';
 }
 
-static char* ModuleNormalize(JSContext* ctx, const char* base,
-                             const char* name, void* opaque) {
+static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
+                             void* opaque) {
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)opaque;
     if (IsBuiltin(name)) {
         size_t len = strlen(name);
@@ -1336,8 +1336,9 @@ static char* ModuleNormalize(JSContext* ctx, const char* base,
             int n = snprintf(nullptr, 0, "host:%s?m=%llu", name,
                              (unsigned long long)generation);
             char* out = n > 0 ? (char*)js_malloc(ctx, (size_t)n + 1) : nullptr;
-            if (out) snprintf(out, (size_t)n + 1, "host:%s?m=%llu", name,
-                              (unsigned long long)generation);
+            if (out)
+                snprintf(out, (size_t)n + 1, "host:%s?m=%llu", name,
+                         (unsigned long long)generation);
             return out;
         }
     }
@@ -1395,8 +1396,7 @@ static bool HostModuleTag(const char* tagged, Str* module,
                           uint64_t* generation) {
     if (!tagged || strncmp(tagged, "host:", 5) != 0) return false;
     const char* tag = strrchr(tagged + 5, '?');
-    if (!tag || strncmp(tag, "?m=", 3) != 0 || tag == tagged + 5)
-        return false;
+    if (!tag || strncmp(tag, "?m=", 3) != 0 || tag == tagged + 5) return false;
     uint64_t value = 0;
     for (const char* at = tag + 3; *at; at++) {
         if (*at < '0' || *at > '9' ||
@@ -1450,7 +1450,8 @@ static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
         if (release) PolicyRelease(policy);
         JS_ThrowReferenceError(
             ctx,
-            "the HostModule registry changed while `%.*s` was being imported; export modules before loading an application",
+            "the HostModule registry changed while `%.*s` was being imported; "
+            "export modules before loading an application",
             moduleName.len, moduleName.s);
         return nullptr;
     }
@@ -1460,18 +1461,18 @@ static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
         if (!HostIsIdentifier(function)) {
             HostModulesRelease(modules);
             if (release) PolicyRelease(policy);
-            JS_ThrowReferenceError(
-                ctx,
-                "HostModule `%.*s` registered `%.*s`, which is not a JavaScript identifier",
-                moduleName.len, moduleName.s, function.len, function.s);
+            JS_ThrowReferenceError(ctx,
+                                   "HostModule `%.*s` registered `%.*s`, which "
+                                   "is not a JavaScript identifier",
+                                   moduleName.len, moduleName.s, function.len,
+                                   function.s);
             return nullptr;
         }
         source.Append(StrL("export const "));
         source.Append(function);
         source.Append(StrL("=(...args)=>"));
-        source.Append(module->IsAsync(function)
-                          ? StrL("__host_async_call(")
-                          : StrL("__host_call("));
+        source.Append(module->IsAsync(function) ? StrL("__host_async_call(")
+                                                : StrL("__host_call("));
         AppendJsQuoted(&source, moduleName);
         source.AppendChar(',');
         AppendJsQuoted(&source, function);
@@ -1480,9 +1481,9 @@ static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
     HostModulesRelease(modules);
     if (release) PolicyRelease(policy);
     Str script = source.TakeStr();
-    JSValue value = JS_Eval(ctx, script.s ? script.s : "",
-                            (size_t)script.len, name,
-                            JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue value =
+        JS_Eval(ctx, script.s ? script.s : "", (size_t)script.len, name,
+                JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     StrFree(script);
     if (JS_IsException(value)) return nullptr;
     JSModuleDef* definition = (JSModuleDef*)JS_VALUE_GET_PTR(value);
@@ -1508,8 +1509,9 @@ static JSModuleDef* ModuleLoad(JSContext* ctx, const char* name, void*) {
     Str source = {};
     ShellError error = {};
     if (!ReadFileBounded(Str(path), &source, &error)) {
-        JS_ThrowReferenceError(ctx, "%.*s", error.message.len,
-                               error.message.s ? error.message.s : "module load failed");
+        JS_ThrowReferenceError(
+            ctx, "%.*s", error.message.len,
+            error.message.s ? error.message.s : "module load failed");
         ShellErrorClear(&error);
         return nullptr;
     }
@@ -1574,6 +1576,16 @@ static shell::ComponentKind ComponentKindOf(Str name) {
         {"Select", shell::ComponentKind::Select},
         {"Combobox", shell::ComponentKind::Combobox},
         {"DatePicker", shell::ComponentKind::DatePicker},
+        {"Accordion", shell::ComponentKind::Accordion},
+        {"AccordionItem", shell::ComponentKind::AccordionItem},
+        {"AccordionHeader", shell::ComponentKind::AccordionHeader},
+        {"AccordionPanel", shell::ComponentKind::AccordionPanel},
+        {"AccordionTrigger", shell::ComponentKind::AccordionTrigger},
+        {"Pagination", shell::ComponentKind::Pagination},
+        {"Avatar", shell::ComponentKind::Avatar},
+        {"AvatarImage", shell::ComponentKind::AvatarImage},
+        {"AvatarFallback", shell::ComponentKind::AvatarFallback},
+        {"dock_content", shell::ComponentKind::DockContent},
     };
     for (const NamedKind& named : kinds) {
         if (StrEq(name, named.name)) return named.kind;
@@ -1594,7 +1606,8 @@ static bool JsString(JSContext* ctx, JSValueConst value, Arena* arena,
 static JSValue NativeComponent(JSContext* ctx, JSValueConst, int argc,
                                JSValueConst* argv) {
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
-    if (!impl || argc < 1) return JS_ThrowTypeError(ctx, "component kind is missing");
+    if (!impl || argc < 1)
+        return JS_ThrowTypeError(ctx, "component kind is missing");
     Arena* arena = ArenaNew();
     Str kind;
     if (!JsString(ctx, argv[0], arena, &kind)) {
@@ -1612,7 +1625,8 @@ static JSValue NativeComponent(JSContext* ctx, JSValueConst, int argc,
         int64_t handle = 0;
         if (JS_ToInt64(ctx, &handle, argv[2]) < 0 || handle < 0) {
             ArenaDelete(arena);
-            return JS_ThrowTypeError(ctx, "component handle must be non-negative");
+            return JS_ThrowTypeError(ctx,
+                                     "component handle must be non-negative");
         }
         component.handle = (uint64_t)handle;
     }
@@ -1657,10 +1671,10 @@ static JSValue NativePath(JSContext* ctx, JSValueConst, int argc,
         return JS_EXCEPTION;
     if (!isfinite(opacity) || opacity < 0 || !isfinite(width) || width < 0)
         return JS_ThrowTypeError(
-            ctx, "path opacity and stroke width must be finite and non-negative");
+            ctx,
+            "path opacity and stroke width must be finite and non-negative");
     int64_t count64 = 0;
-    if (JS_GetLength(ctx, argv[2], &count64) < 0 || count64 < 0 ||
-        count64 > 8)
+    if (JS_GetLength(ctx, argv[2], &count64) < 0 || count64 < 0 || count64 > 8)
         return JS_ThrowTypeError(ctx, "path background has invalid values");
     Arena* arena = ArenaNew();
     Str kind, colorSpace;
@@ -1677,9 +1691,8 @@ static JSValue NativePath(JSContext* ctx, JSValueConst, int argc,
         }
     }
     shell::Component component = {};
-    component.kind = JS_ToBool(ctx, argv[0])
-                         ? shell::ComponentKind::PathFill
-                         : shell::ComponentKind::PathStroke;
+    component.kind = JS_ToBool(ctx, argv[0]) ? shell::ComponentKind::PathFill
+                                             : shell::ComponentKind::PathStroke;
     component.strokeWidth = (float)width;
     component.background.opacity = (float)opacity;
     component.background.colorSpace = colorSpace;
@@ -1690,12 +1703,11 @@ static JSValue NativePath(JSContext* ctx, JSValueConst, int argc,
         if (valid) component.background.color = values[0];
     } else if (StrEq(kind, "linear-gradient")) {
         component.background.kind = shell::BackgroundKind::LinearGradient;
-        valid = count64 >= 5 &&
-                ParseFiniteText(values[0], &component.background.angle) &&
-                ParseFiniteText(values[2],
-                                &component.background.fromPosition) &&
-                ParseFiniteText(values[4],
-                                &component.background.toPosition);
+        valid =
+            count64 >= 5 &&
+            ParseFiniteText(values[0], &component.background.angle) &&
+            ParseFiniteText(values[2], &component.background.fromPosition) &&
+            ParseFiniteText(values[4], &component.background.toPosition);
         if (valid) {
             component.background.fromColor = values[1];
             component.background.toColor = values[3];
@@ -1816,11 +1828,52 @@ static JSValue NativeSlot(JSContext* ctx, JSValueConst, int argc,
 static bool IsCallbackMethod(Str name) {
     static const char names[] =
         "on_click\0on_mouse_move\0on_hover\0on_item_click\0on_change\0"
-        "on_open_change\0on_confirm\0on_dismiss\0on_step\0on_resize\0";
+        "on_open_change\0on_confirm\0on_dismiss\0on_step\0on_resize\0"
+        "on_key_down\0on_key_up\0on_mouse_down_out\0on_scroll_wheel\0"
+        // A dock's chrome handlers. They are callbacks like any other; what
+        // makes them different is that they are asked from inside the frame
+        // rather than from render, which the Layout scope around the call and
+        // the description cache behind it are for.
+        "tab_bar\0empty_group\0drop_indicator\0dock\0tile_drag_bar\0"
+        "tile_resize_handles\0";
     for (const char* at = names; *at; at += strlen(at) + 1) {
         if (StrEq(name, at)) return true;
     }
     return false;
+}
+
+// A dock command carries no script value: it names a container in the area
+// and what to ask it. That is why a tab can report its click at all — a chrome
+// handler runs once per frame for as long as the dock is on screen, so a
+// callback registered inside one would pile up the way a virtual list's row
+// handlers would.
+static bool IsDockCommand(Str name) {
+    static const char names[] =
+        "select_tab\0close_panel\0toggle_zoom\0drag_tab\0drop_tab\0"
+        "toggle_dock\0resize_dock\0move_tile\0resize_tile\0raise_tile\0"
+        "toggle_tile_zoom\0close_tile\0";
+    for (const char* at = names; *at; at += strlen(at) + 1) {
+        if (StrEq(name, at)) return true;
+    }
+    return false;
+}
+
+// The two element methods that take an argument *and* a handler. The button
+// is folded into the recorded op name — three fixed names GPUI's own
+// MouseButton maps onto — so the op stays the name-and-id pair every other
+// callback uses.
+static const char* MouseButtonCallbackName(Str method, Str button) {
+    bool down = StrEq(method, "on_mouse_down");
+    if (StrEq(button, "left")) {
+        return down ? "on_mouse_down_left" : "on_mouse_up_left";
+    }
+    if (StrEq(button, "right")) {
+        return down ? "on_mouse_down_right" : "on_mouse_up_right";
+    }
+    if (StrEq(button, "middle")) {
+        return down ? "on_mouse_down_middle" : "on_mouse_up_middle";
+    }
+    return nullptr;
 }
 
 static bool IsParamStyle(Str name) {
@@ -1852,7 +1905,8 @@ static bool IsBehavior(Str name) {
         "start\0value\0indeterminate\0axis\0row_count\0column_count\0"
         "open\0default_open\0overlay_closable\0anchor\0mouse_button\0"
         "open_delay\0close_delay\0transition\0spring\0"
-        "with_item_to_measure_index\0close\0";
+        "with_item_to_measure_index\0close\0"
+        "key_context\0aria_level\0keep_mounted\0";
     for (const char* at = names; *at; at += strlen(at) + 1) {
         if (StrEq(name, at)) return true;
     }
@@ -1881,7 +1935,9 @@ static bool BridgeValue(JSContext* ctx, JSValueConst value, Arena* arena,
         *out = shell::Bridged::String(text);
         return true;
     }
-    JS_ThrowTypeError(ctx, "script values crossing into an element method must be nil, boolean, number or string");
+    JS_ThrowTypeError(ctx,
+                      "script values crossing into an element method must be "
+                      "nil, boolean, number or string");
     return false;
 }
 
@@ -1907,19 +1963,68 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
     int argCount = (int)argCount64;
     shell::SpecOp op = {};
     op.name = name;
-    if (IsCallbackMethod(name)) {
+    // The script's own name for an action, plus the handler, and the two
+    // pointer builders that take a button before theirs. Both are rewritten
+    // into the ordinary shapes before the table below sees them: an action is
+    // an ActionCallback carrying the name, a button press is a Callback under
+    // one of six fixed names.
+    bool actionCallback = StrEq(name, "on_action");
+    bool buttonCallback =
+        StrEq(name, "on_mouse_down") || StrEq(name, "on_mouse_up");
+    if (actionCallback || buttonCallback) {
         if (shell::ScopeCurrentPhase() == ScopePhase::Layout) {
+            JSValue thrown = JS_ThrowTypeError(
+                ctx,
+                "`%.*s` cannot be registered from a virtual list's item "
+                "renderer or a dock's chrome handler: those are rebuilt every "
+                "frame, so a handler registered there would pile up for as "
+                "long as the view stood",
+                name.len, name.s);
             ArenaDelete(arena);
-            return JS_ThrowTypeError(ctx, "callbacks cannot be registered from a virtual list item renderer");
+            return thrown;
         }
-        JSValue handler = argCount > 0
-                              ? JS_GetPropertyUint32(ctx, argv[2], 0)
-                              : JS_UNDEFINED;
+        Str first;
+        JSValue firstValue =
+            argCount > 0 ? JS_GetPropertyUint32(ctx, argv[2], 0) : JS_UNDEFINED;
+        bool haveFirst =
+            JS_IsString(firstValue) && JsString(ctx, firstValue, arena, &first);
+        JS_FreeValue(ctx, firstValue);
+        // The message names strings the arena holds, so it is built before the
+        // arena goes rather than after it.
+        if (!haveFirst || first.len == 0) {
+            JSValue thrown = JS_ThrowTypeError(
+                ctx,
+                actionCallback
+                    ? "on_action(action, handler) expects the action's name "
+                      "first, as a non-empty string"
+                    : "%.*s(button, handler) expects a button first: "
+                      "\"left\", \"right\" or \"middle\"",
+                name.len, name.s);
+            ArenaDelete(arena);
+            return thrown;
+        }
+        const char* recorded = nullptr;
+        if (buttonCallback) {
+            recorded = MouseButtonCallbackName(name, first);
+            if (!recorded) {
+                JSValue thrown = JS_ThrowTypeError(
+                    ctx,
+                    "`%.*s` is not a mouse button; expected \"left\", "
+                    "\"right\" or \"middle\"",
+                    first.len, first.s);
+                ArenaDelete(arena);
+                return thrown;
+            }
+        }
+        JSValue handler =
+            argCount > 1 ? JS_GetPropertyUint32(ctx, argv[2], 1) : JS_UNDEFINED;
         if (!JS_IsFunction(ctx, handler)) {
             JS_FreeValue(ctx, handler);
+            JSValue thrown = JS_ThrowTypeError(
+                ctx, "%.*s(%s, handler) expects a function second", name.len,
+                name.s, actionCallback ? "action" : "button");
             ArenaDelete(arena);
-            return JS_ThrowTypeError(ctx, "%.*s(handler) expects a function",
-                                     name.len, name.s);
+            return thrown;
         }
         shell::CallbackId callback = impl->callbacks.Push(
             ctx, handler, shell::ScopeCurrentView(),
@@ -1928,7 +2033,52 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
         JS_FreeValue(ctx, handler);
         if (callback == UINT64_MAX) {
             ArenaDelete(arena);
-            return JS_ThrowInternalError(ctx, "a callback was registered outside a snapshot build");
+            return JS_ThrowInternalError(
+                ctx, "a callback was registered outside a snapshot build");
+        }
+        op.callback = callback;
+        if (actionCallback) {
+            op.kind = shell::SpecOpKind::ActionCallback;
+            op.name = first;
+        } else {
+            op.kind = shell::SpecOpKind::Callback;
+            op.name = Str(recorded);
+        }
+        shell::SpecError buttonFailure = {};
+        if (!impl->scratch->PushOp(id, op, &buttonFailure)) {
+            ArenaDelete(arena);
+            return SpecFailure(ctx, buttonFailure);
+        }
+        ArenaDelete(arena);
+        return JS_UNDEFINED;
+    }
+    if (IsCallbackMethod(name)) {
+        if (shell::ScopeCurrentPhase() == ScopePhase::Layout) {
+            ArenaDelete(arena);
+            return JS_ThrowTypeError(ctx,
+                                     "callbacks cannot be registered from a "
+                                     "virtual list item renderer");
+        }
+        JSValue handler =
+            argCount > 0 ? JS_GetPropertyUint32(ctx, argv[2], 0) : JS_UNDEFINED;
+        if (!JS_IsFunction(ctx, handler)) {
+            JS_FreeValue(ctx, handler);
+            // Built before the arena goes: the message names a string it
+            // holds.
+            JSValue thrown = JS_ThrowTypeError(
+                ctx, "%.*s(handler) expects a function", name.len, name.s);
+            ArenaDelete(arena);
+            return thrown;
+        }
+        shell::CallbackId callback = impl->callbacks.Push(
+            ctx, handler, shell::ScopeCurrentView(),
+            shell::ScopeCurrentPolicy(), shell::ScopeCurrentGeneration(),
+            (AppModule*)shell::ScopeCurrentApplication());
+        JS_FreeValue(ctx, handler);
+        if (callback == UINT64_MAX) {
+            ArenaDelete(arena);
+            return JS_ThrowInternalError(
+                ctx, "a callback was registered outside a snapshot build");
         }
         op.kind = shell::SpecOpKind::Callback;
         op.callback = callback;
@@ -1952,8 +2102,25 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
                 }
             }
         }
+        if (IsDockCommand(name)) {
+            // Every command takes the dock handle first, because it is
+            // resolved against *that* area: the script passes the container
+            // object it was handed and the prelude unpacks the handle out of
+            // it. What follows names the container inside the area.
+            if (argCount < 1 || op.args[0].kind != shell::BridgedKind::Number ||
+                op.args[0].number < 0) {
+                JSValue thrown = JS_ThrowTypeError(
+                    ctx,
+                    "%.*s(...) expects the group, dock or tile its chrome "
+                    "handler was given as its first argument",
+                    name.len, name.s);
+                ArenaDelete(arena);
+                return thrown;
+            }
+        }
         if (StrEq(name, "role")) {
-            if (argCount != 1 || op.args[0].kind != shell::BridgedKind::String) {
+            if (argCount != 1 || op.args[0]
+                                         .kind != shell::BridgedKind::String) {
                 ArenaDelete(arena);
                 return JS_ThrowTypeError(
                     ctx, "role(name) expects one snake_case role string");
@@ -1968,10 +2135,11 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
             }
             if (shell::AccessibilityRoleFromName(roleName) ==
                 AccessibilityRole::None) {
+                JSValue thrown =
+                    JS_ThrowRangeError(ctx, "unknown accessibility role `%.*s`",
+                                       roleName.len, roleName.s);
                 ArenaDelete(arena);
-                return JS_ThrowRangeError(
-                    ctx, "unknown accessibility role `%.*s`", roleName.len,
-                    roleName.s);
+                return thrown;
             }
         }
     }
@@ -1993,9 +2161,9 @@ static bool JsHandle(JSContext* ctx, JSValueConst value,
 }
 
 static shell::RetainedEntry* LiveRetained(JSContext* ctx,
-                                           shell::EntityHandle handle,
-                                           shell::RetainedKind kind,
-                                           const char* what) {
+                                          shell::EntityHandle handle,
+                                          shell::RetainedKind kind,
+                                          const char* what) {
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
     if (!entry || entry->kind != kind) {
@@ -2042,10 +2210,11 @@ static bool RefuseRetainedMutation(JSContext* ctx, const char* what) {
 
 static JSValue ThrowNestedError(JSContext* ctx, ShellError* error,
                                 const char* fallback) {
-    JSValue result = error && error->IsSet()
-                         ? JS_ThrowInternalError(ctx, "%.*s", error->message.len,
-                                                 error->message.s)
-                         : JS_ThrowInternalError(ctx, "%s", fallback);
+    JSValue result =
+        error && error->IsSet()
+            ? JS_ThrowInternalError(ctx, "%.*s", error->message.len,
+                                    error->message.s)
+            : JS_ThrowInternalError(ctx, "%s", fallback);
     ShellErrorClear(error);
     return result;
 }
@@ -2062,8 +2231,8 @@ static JSValue NativeViewNew(JSContext* ctx, JSValueConst, int argc,
     }
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     if (!impl || argc < 1 || !JS_IsFunction(ctx, argv[0])) {
-        return JS_ThrowTypeError(ctx,
-                                 "cx.new(Class, props) expects a View subclass");
+        return JS_ThrowTypeError(
+            ctx, "cx.new(Class, props) expects a View subclass");
     }
     EntityId owner = shell::ScopeCurrentView();
     if (!owner.IsValid() || shell::ScopeCurrentRuntime() != impl->owner) {
@@ -2078,8 +2247,7 @@ static JSValue NativeViewNew(JSContext* ctx, JSValueConst, int argc,
         shell::ScopeHostContext host = shell::ScopeCurrentHost();
         if (!host.IsSet()) {
             return JS_ThrowTypeError(
-                ctx,
-                "cx.new(Class, props) needs a live Window/App context");
+                ctx, "cx.new(Class, props) needs a live Window/App context");
         }
         window = host.GetWindow();
         app = host.GetApp();
@@ -2095,13 +2263,12 @@ static JSValue NativeViewNew(JSContext* ctx, JSValueConst, int argc,
     type->value = JS_DupValue(ctx, argv[0]);
     type->application = (AppModule*)shell::ScopeCurrentApplication();
     Policy* policy = shell::ScopeCurrentPolicy();
-    Entity<ScriptView> entity =
-        ScriptView::New(app, impl->owner, type, policy);
+    Entity<ScriptView> entity = ScriptView::New(app, impl->owner, type, policy);
     ScriptView* view = entity.Get(app);
     if (!view) {
         ViewTypeRelease(type);
-        return JS_ThrowInternalError(ctx,
-                                     "could not allocate the nested script view");
+        return JS_ThrowInternalError(
+            ctx, "could not allocate the nested script view");
     }
     ShellError error = {};
     JSValueConst props = argc > 1 ? argv[1] : JS_UNDEFINED;
@@ -2166,17 +2333,17 @@ static JSValue NativeViewSetProps(JSContext* ctx, JSValueConst, int argc,
             ctx, "this Entity has been released and can no longer be updated");
     }
 
-    shell::CallScopeGuard scope = shell::ScopeEnter(
-        window, app, ScopePhase::Event, current.view, current.policy,
-        impl->owner, current.application);
+    shell::CallScopeGuard scope =
+        shell::ScopeEnter(window, app, ScopePhase::Event, current.view,
+                          current.policy, impl->owner, current.application);
     uint32_t retainedCheckpoint = impl->retained.Checkpoint();
     uint32_t nestedCheckpoint = impl->nextNestedView;
     int taskCheckpoint = impl->tasks.len;
     BeginExecution(impl);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue checkpoint = JS_GetPropertyStr(ctx, global, "__checkpoint_view");
-    JSValue restore = JS_Call(ctx, checkpoint, JS_UNDEFINED, 1,
-                              &view->object->value);
+    JSValue restore =
+        JS_Call(ctx, checkpoint, JS_UNDEFINED, 1, &view->object->value);
     JS_FreeValue(ctx, checkpoint);
     JS_FreeValue(ctx, global);
     if (JS_IsException(restore)) {
@@ -2207,8 +2374,10 @@ static JSValue NativeViewSetProps(JSContext* ctx, JSValueConst, int argc,
         BeginExecution(impl);
         JSValue restored = JS_Call(ctx, restore, JS_UNDEFINED, 0, nullptr);
         ShellError restoreError = {};
-        if (JS_IsException(restored)) CaptureException(impl, &restoreError);
-        else JS_FreeValue(ctx, restored);
+        if (JS_IsException(restored))
+            CaptureException(impl, &restoreError);
+        else
+            JS_FreeValue(ctx, restored);
         while (impl->tasks.len > taskCheckpoint) {
             ForgetTask(impl, impl->tasks[impl->tasks.len - 1]->id);
         }
@@ -2221,9 +2390,9 @@ static JSValue NativeViewSetProps(JSContext* ctx, JSValueConst, int argc,
         RollbackNestedViews(impl, nestedCheckpoint);
         JS_FreeValue(ctx, restore);
         if (restoreError.IsSet()) {
-            Str message = StrDup(fmt("%s; failed to restore child state: %s",
-                                     updateError.message,
-                                     restoreError.message));
+            Str message =
+                StrDup(fmt("%s; failed to restore child state: %s",
+                           updateError.message, restoreError.message));
             ShellErrorClear(&updateError);
             ShellErrorClear(&restoreError);
             JSValue thrown = JS_ThrowInternalError(ctx, "%s", message.s);
@@ -2299,9 +2468,9 @@ static bool OverlayMutationAllowed(JSContext* ctx, const char* api) {
         ctx,
         "%s is not allowed during the `%s` phase; overlays may only be "
         "opened or closed while handling an event or a task",
-        api, shell::ScopeHasCurrent()
-                 ? ScopePhaseName(shell::ScopeCurrentPhase())
-                 : "none");
+        api,
+        shell::ScopeHasCurrent() ? ScopePhaseName(shell::ScopeCurrentPhase())
+                                 : "none");
     return false;
 }
 
@@ -2385,14 +2554,11 @@ static bool DialogOptionsFromJs(JSContext* ctx, JSValueConst value,
                           "options object");
         return false;
     }
-    static const char* keys[] = {"escape_dismissable",
-                                 "backdrop_dismissable"};
+    static const char* keys[] = {"escape_dismissable", "backdrop_dismissable"};
     return KnownOptions(ctx, value, keys, 2,
                         "window.open_dialog(content, options)") &&
-           OptionalBoolProperty(ctx, value, keys[0],
-                                &out->escapeDismissable) &&
-           OptionalBoolProperty(ctx, value, keys[1],
-                                &out->backdropDismissable);
+           OptionalBoolProperty(ctx, value, keys[0], &out->escapeDismissable) &&
+           OptionalBoolProperty(ctx, value, keys[1], &out->backdropDismissable);
 }
 
 static JSValue NativeOpenDialog(JSContext* ctx, JSValueConst, int argc,
@@ -2402,15 +2568,15 @@ static JSValue NativeOpenDialog(JSContext* ctx, JSValueConst, int argc,
     uint32_t token = 0;
     DialogOptions options;
     if (argc < 1 || JS_ToUint32(ctx, &token, argv[0]) < 0 ||
-        !DialogOptionsFromJs(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
-                             &options))
+        !DialogOptionsFromJs(ctx, argc > 1 ? argv[1] : JS_UNDEFINED, &options))
         return JS_EXCEPTION;
     ShellRuntimeImpl* impl = nullptr;
     Ctx native = {};
     if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
     Entity<ScriptView> content;
     if (!TakeNestedView(impl, token, &content))
-        return JS_ThrowTypeError(ctx, "dialog content has already been released");
+        return JS_ThrowTypeError(ctx,
+                                 "dialog content has already been released");
     int depth = ShellRootOpenDialog(&native, content, options);
     if (depth <= 0) {
         EntityDrop(native.app, content.id);
@@ -2458,15 +2624,19 @@ static bool SheetPlacementFromJs(JSContext* ctx, JSValueConst value,
     Str name;
     bool ok = JsString(ctx, value, arena, &name);
     if (ok) {
-        if (StrEq(name, "left")) *out = component::SheetPlacement::Left;
-        else if (StrEq(name, "right")) *out = component::SheetPlacement::Right;
-        else if (StrEq(name, "top")) *out = component::SheetPlacement::Top;
-        else if (StrEq(name, "bottom")) *out = component::SheetPlacement::Bottom;
+        if (StrEq(name, "left"))
+            *out = component::SheetPlacement::Left;
+        else if (StrEq(name, "right"))
+            *out = component::SheetPlacement::Right;
+        else if (StrEq(name, "top"))
+            *out = component::SheetPlacement::Top;
+        else if (StrEq(name, "bottom"))
+            *out = component::SheetPlacement::Bottom;
         else {
-            JS_ThrowTypeError(
-                ctx,
-                "unknown sheet placement `%.*s`; expected left, right, top or bottom",
-                name.len, name.s);
+            JS_ThrowTypeError(ctx,
+                              "unknown sheet placement `%.*s`; expected left, "
+                              "right, top or bottom",
+                              name.len, name.s);
             ok = false;
         }
     }
@@ -2491,7 +2661,8 @@ static JSValue NativeOpenSheet(JSContext* ctx, JSValueConst, int argc,
     if (!OverlayHost(ctx, api, &impl, &native)) return JS_EXCEPTION;
     Entity<ScriptView> content;
     if (!TakeNestedView(impl, token, &content))
-        return JS_ThrowTypeError(ctx, "sheet content has already been released");
+        return JS_ThrowTypeError(ctx,
+                                 "sheet content has already been released");
     if (!ShellRootOpenSheet(&native, content, placement)) {
         EntityDrop(native.app, content.id);
         return JS_ThrowInternalError(ctx, "could not mount sheet content");
@@ -2535,51 +2706,52 @@ static JSValue NativePushToast(JSContext* ctx, JSValueConst, int argc,
     if (!OverlayMutationAllowed(ctx, api)) return JS_EXCEPTION;
     if (argc < 1 || !JS_IsObject(argv[0]))
         return JS_ThrowTypeError(
-            ctx,
-            "%s expects an object, such as { title: \"Saved\" }", api);
+            ctx, "%s expects an object, such as { title: \"Saved\" }", api);
     static const char* keys[] = {"title", "description", "level", "timeout",
                                  "id"};
     if (!KnownOptions(ctx, argv[0], keys, 5, api)) return JS_EXCEPTION;
     Arena* arena = ArenaNew();
     ToastRequest toast;
     bool title = false, description = false, level = false;
-    bool ok = OptionalStringProperty(ctx, argv[0], "title", arena,
-                                     &toast.title, &title) &&
+    bool ok = OptionalStringProperty(ctx, argv[0], "title", arena, &toast.title,
+                                     &title) &&
               OptionalStringProperty(ctx, argv[0], "description", arena,
                                      &toast.description, &description);
     if (ok && !title) {
-        JS_ThrowTypeError(ctx,
-                          "%s requires a `title`; it is the sentence the user reads",
-                          api);
+        JS_ThrowTypeError(
+            ctx, "%s requires a `title`; it is the sentence the user reads",
+            api);
         ok = false;
     }
     Str levelName;
     if (ok)
-        ok = OptionalStringProperty(ctx, argv[0], "level", arena,
-                                    &levelName, &level);
+        ok = OptionalStringProperty(ctx, argv[0], "level", arena, &levelName,
+                                    &level);
     if (ok && level && !ToastLevelFromName(levelName, &toast.level)) {
-        JS_ThrowTypeError(
-            ctx,
-            "unknown toast level `%.*s`; expected info, success, warning or error",
-            levelName.len, levelName.s);
+        JS_ThrowTypeError(ctx,
+                          "unknown toast level `%.*s`; expected info, success, "
+                          "warning or error",
+                          levelName.len, levelName.s);
         ok = false;
     }
     bool id = false;
     if (ok)
-        ok = OptionalStringProperty(ctx, argv[0], "id", arena, &toast.id,
-                                    &id);
+        ok = OptionalStringProperty(ctx, argv[0], "id", arena, &toast.id, &id);
     toast.hasId = id;
     if (ok) {
         JSValue timeout = JS_GetPropertyStr(ctx, argv[0], "timeout");
-        if (JS_IsException(timeout)) ok = false;
-        else if (JS_IsNull(timeout)) toast.timeoutMs = 0;
+        if (JS_IsException(timeout))
+            ok = false;
+        else if (JS_IsNull(timeout))
+            toast.timeoutMs = 0;
         else if (!JS_IsUndefined(timeout)) {
             double value = 0;
             if (JS_ToFloat64(ctx, &value, timeout) < 0 || !isfinite(value) ||
                 value < 0 || value > INT32_MAX) {
                 JS_ThrowTypeError(
                     ctx,
-                    "%s expects `timeout` to be a number of milliseconds, or null to keep the toast until it is dismissed",
+                    "%s expects `timeout` to be a number of milliseconds, or "
+                    "null to keep the toast until it is dismissed",
                     api);
                 ok = false;
             } else {
@@ -2636,16 +2808,21 @@ static JSValue NativeInputStateNew(JSContext* ctx, JSValueConst, int argc,
     if (RefuseRetainedCreation(ctx, "InputState.new(...)")) return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
-        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+        return JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "InputState.new(...) needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx,
+                                 "InputState.new(...) needs a live host call");
     Arena* arena = ArenaNew();
     Str placeholder, value;
-    bool ok = OptionalJsString(ctx, argc > 0 ? argv[0] : JS_UNDEFINED,
-                               arena, &placeholder) &&
-              OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
-                               arena, &value);
+    bool ok =
+        OptionalJsString(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, arena,
+                         &placeholder) &&
+        OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED, arena, &value);
     shell::EntityHandle handle =
         ok ? impl->retained.CreateInput(
                  false, placeholder, value, 0, host.GetApp(),
@@ -2653,29 +2830,38 @@ static JSValue NativeInputStateNew(JSContext* ctx, JSValueConst, int argc,
            : 0;
     ArenaDelete(arena);
     if (!ok) return JS_EXCEPTION;
-    if (!handle) return JS_ThrowInternalError(ctx, "creating input state failed");
+    if (!handle)
+        return JS_ThrowInternalError(ctx, "creating input state failed");
     return JS_NewInt64(ctx, (int64_t)handle);
 }
 
 static JSValue NativeTextareaStateNew(JSContext* ctx, JSValueConst, int argc,
                                       JSValueConst* argv) {
-    if (RefuseRetainedCreation(ctx, "TextareaState.new(...)")) return JS_EXCEPTION;
+    if (RefuseRetainedCreation(ctx, "TextareaState.new(...)"))
+        return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
-        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+        return JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "TextareaState.new(...) needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(
+            ctx, "TextareaState.new(...) needs a live host call");
     Arena* arena = ArenaNew();
     Str placeholder, value;
     int32_t rows = 0;
-    bool ok = OptionalJsString(ctx, argc > 0 ? argv[0] : JS_UNDEFINED,
-                               arena, &placeholder) &&
-              OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
-                               arena, &value);
+    bool ok =
+        OptionalJsString(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, arena,
+                         &placeholder) &&
+        OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED, arena, &value);
     if (ok && argc > 2 && !JS_IsNull(argv[2]) && !JS_IsUndefined(argv[2])) {
         ok = JS_ToInt32(ctx, &rows, argv[2]) == 0 && rows > 0;
-        if (!ok) JS_ThrowTypeError(ctx, "TextareaState.new rows must be a positive whole number");
+        if (!ok)
+            JS_ThrowTypeError(
+                ctx, "TextareaState.new rows must be a positive whole number");
     }
     shell::EntityHandle handle =
         ok ? impl->retained.CreateInput(
@@ -2684,7 +2870,8 @@ static JSValue NativeTextareaStateNew(JSContext* ctx, JSValueConst, int argc,
            : 0;
     ArenaDelete(arena);
     if (!ok) return JS_EXCEPTION;
-    if (!handle) return JS_ThrowInternalError(ctx, "creating textarea state failed");
+    if (!handle)
+        return JS_ThrowInternalError(ctx, "creating textarea state failed");
     return JS_NewInt64(ctx, (int64_t)handle);
 }
 
@@ -2699,7 +2886,8 @@ static JSValue NativeInputValue(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowTypeError(ctx, "this text state has been released");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "value() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "value() needs a live host call");
     Str value = InputValue(entry->input);
     return JS_NewStringLen(ctx, value.s ? value.s : "", (size_t)value.len);
 }
@@ -2716,7 +2904,8 @@ static JSValue NativeInputSetValue(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowTypeError(ctx, "this text state has been released");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
     Arena* arena = ArenaNew();
     Str value;
     bool ok = JsString(ctx, argv[1], arena, &value);
@@ -2727,21 +2916,24 @@ static JSValue NativeInputSetValue(JSContext* ctx, JSValueConst, int argc,
     return JS_UNDEFINED;
 }
 
-static JSValue NativeInputNumberOption(JSContext* ctx, JSValueConst,
-                                       int argc, JSValueConst* argv,
-                                       int magic) {
-    if (RefuseRetainedMutation(ctx, "numeric input setter")) return JS_EXCEPTION;
+static JSValue NativeInputNumberOption(JSContext* ctx, JSValueConst, int argc,
+                                       JSValueConst* argv, int magic) {
+    if (RefuseRetainedMutation(ctx, "numeric input setter"))
+        return JS_EXCEPTION;
     shell::EntityHandle handle = 0;
     if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Input, "input");
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Input, "input");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "numeric input setter needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx,
+                                 "numeric input setter needs a live host call");
     bool set = !JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1]);
     double value = 0;
     if (set && (JS_ToFloat64(ctx, &value, argv[1]) < 0 || !isfinite(value))) {
-        return JS_ThrowTypeError(ctx, "numeric input option must be finite or null");
+        return JS_ThrowTypeError(ctx,
+                                 "numeric input option must be finite or null");
     }
     if (magic == 0) {
         entry->number.hasStep = set;
@@ -2762,14 +2954,17 @@ static JSValue NativeInputFlag(JSContext* ctx, JSValueConst, int argc,
     if (RefuseRetainedMutation(ctx, "input setter")) return JS_EXCEPTION;
     shell::EntityHandle handle = 0;
     if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Input, "input");
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Input, "input");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "input setter needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "input setter needs a live host call");
     bool value = JS_ToBool(ctx, argv[1]) != 0;
-    if (magic == 0) entry->input->masked = value;
-    else entry->input->loading = value;
+    if (magic == 0)
+        entry->input->masked = value;
+    else
+        entry->input->loading = value;
     AppInvalidate(host.GetWindow());
     return JS_UNDEFINED;
 }
@@ -2779,11 +2974,12 @@ static JSValue NativeTextareaRows(JSContext* ctx, JSValueConst, int argc,
     if (RefuseRetainedMutation(ctx, "textarea setter")) return JS_EXCEPTION;
     shell::EntityHandle handle = 0;
     if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Textarea, "textarea");
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Textarea, "textarea");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "textarea setter needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "textarea setter needs a live host call");
     if (magic == 2) {
         entry->input->softWrap = JS_ToBool(ctx, argv[1]) != 0;
     } else {
@@ -2797,7 +2993,8 @@ static JSValue NativeTextareaRows(JSContext* ctx, JSValueConst, int argc,
         } else {
             if (argc < 3 || JS_ToInt32(ctx, &second, argv[2]) < 0 ||
                 second < first) {
-                return JS_ThrowTypeError(ctx, "auto-grow max rows must not be below min rows");
+                return JS_ThrowTypeError(
+                    ctx, "auto-grow max rows must not be below min rows");
             }
             entry->input->mode.kind = LayoutModeKind::AutoGrow;
             entry->input->mode.minRows = first;
@@ -2813,7 +3010,8 @@ static bool ReadSliderValue(JSContext* ctx, JSValueConst value,
                             SliderValue* out) {
     int64_t count = 0;
     if (JS_GetLength(ctx, value, &count) < 0 || (count != 1 && count != 2)) {
-        JS_ThrowTypeError(ctx, "slider value must contain one number or a [start, end] pair");
+        JS_ThrowTypeError(
+            ctx, "slider value must contain one number or a [start, end] pair");
         return false;
     }
     double values[2] = {};
@@ -2846,10 +3044,14 @@ static JSValue SliderValueJs(JSContext* ctx, SliderValue value) {
 
 static JSValue NativeSliderStateNew(JSContext* ctx, JSValueConst, int argc,
                                     JSValueConst* argv) {
-    if (RefuseRetainedCreation(ctx, "SliderState.new(...)")) return JS_EXCEPTION;
+    if (RefuseRetainedCreation(ctx, "SliderState.new(...)"))
+        return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
-        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+        return JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
     }
     double min = 0, max = 0, step = 0;
     Arena* arena = ArenaNew();
@@ -2867,20 +3069,25 @@ static JSValue NativeSliderStateNew(JSContext* ctx, JSValueConst, int argc,
          step > 0 && (nativeScale == SliderScale::Linear || min > 0) &&
          (StrEq(scale, "linear") || StrEq(scale, "logarithmic"));
     if (!ok && !JS_HasException(ctx)) {
-        JS_ThrowTypeError(ctx, "SliderState.new needs a finite min below max, a positive step and a valid scale");
+        JS_ThrowTypeError(ctx,
+                          "SliderState.new needs a finite min below max, a "
+                          "positive step and a valid scale");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     shell::EntityHandle handle =
         ok && host.IsSet()
-            ? impl->retained.CreateSlider(
-                  (float)min, (float)max, (float)step, nativeScale, value,
-                  host.GetApp(), shell::ScopeCurrentView(),
-                  shell::ScopeCurrentApplication())
+            ? impl->retained.CreateSlider((float)min, (float)max, (float)step,
+                                          nativeScale, value, host.GetApp(),
+                                          shell::ScopeCurrentView(),
+                                          shell::ScopeCurrentApplication())
             : 0;
     ArenaDelete(arena);
     if (!ok) return JS_EXCEPTION;
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "SliderState.new(...) needs a live host call");
-    if (!handle) return JS_ThrowInternalError(ctx, "creating slider state failed");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx,
+                                 "SliderState.new(...) needs a live host call");
+    if (!handle)
+        return JS_ThrowInternalError(ctx, "creating slider state failed");
     return JS_NewInt64(ctx, (int64_t)handle);
 }
 
@@ -2888,29 +3095,32 @@ static JSValue NativeSliderValue(JSContext* ctx, JSValueConst, int argc,
                                  JSValueConst* argv) {
     shell::EntityHandle handle = 0;
     if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Slider, "slider");
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Slider, "slider");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "value() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "value() needs a live host call");
     return SliderValueJs(ctx, entry->slider->value);
 }
 
 static JSValue NativeSliderSetValue(JSContext* ctx, JSValueConst, int argc,
                                     JSValueConst* argv) {
-    if (RefuseRetainedMutation(ctx, "SliderState.set_value()")) return JS_EXCEPTION;
+    if (RefuseRetainedMutation(ctx, "SliderState.set_value()"))
+        return JS_EXCEPTION;
     shell::EntityHandle handle = 0;
     SliderValue value = {};
     if (argc < 2 || !JsHandle(ctx, argv[0], &handle) ||
-        !ReadSliderValue(ctx, argv[1], &value)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Slider, "slider");
+        !ReadSliderValue(ctx, argv[1], &value))
+        return JS_EXCEPTION;
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Slider, "slider");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
-    SliderSetValue(entry->slider, SliderValueClamp(
-                                      value, entry->slider->min,
-                                      entry->slider->max));
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
+    SliderSetValue(entry->slider, SliderValueClamp(value, entry->slider->min,
+                                                   entry->slider->max));
     AppInvalidate(host.GetWindow());
     return JS_UNDEFINED;
 }
@@ -2919,11 +3129,12 @@ static JSValue NativeSliderBounds(JSContext* ctx, JSValueConst, int argc,
                                   JSValueConst* argv) {
     shell::EntityHandle handle = 0;
     if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Slider, "slider");
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Slider, "slider");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "min_value() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "min_value() needs a live host call");
     JSValue out = JS_NewArray(ctx);
     JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, entry->slider->min));
     JS_SetPropertyUint32(ctx, out, 1, JS_NewFloat64(ctx, entry->slider->max));
@@ -2936,28 +3147,35 @@ static JSValue NativeOtpStateNew(JSContext* ctx, JSValueConst, int argc,
     if (RefuseRetainedCreation(ctx, "OtpState.new(...)")) return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     if (!impl || impl->retained.Len() >= shell::kMaxLiveEntities) {
-        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+        return JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
     }
     int32_t length = 0;
     if (argc < 1 || JS_ToInt32(ctx, &length, argv[0]) < 0 || length < 1 ||
         length > 64) {
-        return JS_ThrowTypeError(ctx, "OtpState.new(length) expects a whole number between 1 and 64");
+        return JS_ThrowTypeError(
+            ctx,
+            "OtpState.new(length) expects a whole number between 1 and 64");
     }
     Arena* arena = ArenaNew();
     Str value;
-    bool ok = OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
-                               arena, &value);
+    bool ok =
+        OptionalJsString(ctx, argc > 1 ? argv[1] : JS_UNDEFINED, arena, &value);
     bool masked = argc > 2 && JS_ToBool(ctx, argv[2]) != 0;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     shell::EntityHandle handle =
         ok && host.IsSet()
-            ? impl->retained.CreateOtp(
-                  length, value, masked, host.GetApp(),
-                  shell::ScopeCurrentView(), shell::ScopeCurrentApplication())
+            ? impl->retained.CreateOtp(length, value, masked, host.GetApp(),
+                                       shell::ScopeCurrentView(),
+                                       shell::ScopeCurrentApplication())
             : 0;
     ArenaDelete(arena);
     if (!ok) return JS_EXCEPTION;
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "OtpState.new(...) needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx,
+                                 "OtpState.new(...) needs a live host call");
     if (!handle) return JS_ThrowInternalError(ctx, "creating OTP state failed");
     return JS_NewInt64(ctx, (int64_t)handle);
 }
@@ -2972,15 +3190,18 @@ static JSValue NativeOtpValue(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowTypeError(ctx, "this OTP state has been released");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "value() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "value() needs a live host call");
     OtpState* state = entry->otp.Get(entry->app);
-    if (!state) return JS_ThrowTypeError(ctx, "this OTP state has been released");
+    if (!state)
+        return JS_ThrowTypeError(ctx, "this OTP state has been released");
     return JS_NewStringLen(ctx, state->value, (size_t)state->len);
 }
 
 static JSValue NativeOtpSetValue(JSContext* ctx, JSValueConst, int argc,
                                  JSValueConst* argv) {
-    if (RefuseRetainedMutation(ctx, "OtpState.set_value()")) return JS_EXCEPTION;
+    if (RefuseRetainedMutation(ctx, "OtpState.set_value()"))
+        return JS_EXCEPTION;
     shell::EntityHandle handle = 0;
     if (argc < 2 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
@@ -2989,14 +3210,16 @@ static JSValue NativeOtpSetValue(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowTypeError(ctx, "this OTP state has been released");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "set_value() needs a live host call");
     OtpState* state = entry->otp.Get(entry->app);
     Arena* arena = ArenaNew();
     Str value;
     bool ok = state && JsString(ctx, argv[1], arena, &value);
     if (ok) {
         int n = value.len;
-        if (n > (int)sizeof(state->value) - 1) n = (int)sizeof(state->value) - 1;
+        if (n > (int)sizeof(state->value) - 1)
+            n = (int)sizeof(state->value) - 1;
         if (n > 0) memcpy(state->value, value.s, (size_t)n);
         state->len = n;
         state->value[n] = 0;
@@ -3017,17 +3240,23 @@ static JSValue NativeOtpProperty(JSContext* ctx, JSValueConst, int argc,
     OtpState* state = entry && entry->kind == shell::RetainedKind::Otp
                           ? entry->otp.Get(entry->app)
                           : nullptr;
-    if (!state) return JS_ThrowTypeError(ctx, "this OTP state has been released");
+    if (!state)
+        return JS_ThrowTypeError(ctx, "this OTP state has been released");
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "OTP state access needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx,
+                                 "OTP state access needs a live host call");
     if (magic == 0) return JS_NewInt32(ctx, state->length);
     if (magic == 1) return JS_NewBool(ctx, state->masked);
     if (magic == 2) {
-        if (RefuseRetainedMutation(ctx, "OtpState.set_masked()")) return JS_EXCEPTION;
-        if (argc < 2) return JS_ThrowTypeError(ctx, "set_masked expects a boolean");
+        if (RefuseRetainedMutation(ctx, "OtpState.set_masked()"))
+            return JS_EXCEPTION;
+        if (argc < 2)
+            return JS_ThrowTypeError(ctx, "set_masked expects a boolean");
         state->masked = JS_ToBool(ctx, argv[1]) != 0;
         AppInvalidate(host.GetWindow());
-        if (entry->owner.IsValid()) impl->owner->InvalidateScriptView(entry->owner);
+        if (entry->owner.IsValid())
+            impl->owner->InvalidateScriptView(entry->owner);
         return JS_UNDEFINED;
     }
     if (RefuseRetainedMutation(ctx, "OtpState.focus()")) return JS_EXCEPTION;
@@ -3042,26 +3271,39 @@ static bool RetainedEventOf(shell::RetainedKind kind, Str name,
     *replace = false;
     if (kind == shell::RetainedKind::Input ||
         kind == shell::RetainedKind::Textarea) {
-        if (StrEq(name, "change")) *event = shell::RetainedEvent::InputChange;
-        else if (StrEq(name, "submit")) *event = shell::RetainedEvent::InputSubmit;
-        else if (StrEq(name, "focus")) *event = shell::RetainedEvent::InputFocus;
-        else if (StrEq(name, "blur")) *event = shell::RetainedEvent::InputBlur;
-        else return false;
+        if (StrEq(name, "change"))
+            *event = shell::RetainedEvent::InputChange;
+        else if (StrEq(name, "submit"))
+            *event = shell::RetainedEvent::InputSubmit;
+        else if (StrEq(name, "focus"))
+            *event = shell::RetainedEvent::InputFocus;
+        else if (StrEq(name, "blur"))
+            *event = shell::RetainedEvent::InputBlur;
+        else
+            return false;
         return true;
     }
     if (kind == shell::RetainedKind::Slider) {
-        if (StrEq(name, "change")) *event = shell::RetainedEvent::SliderChange;
-        else if (StrEq(name, "release")) *event = shell::RetainedEvent::SliderRelease;
-        else return false;
+        if (StrEq(name, "change"))
+            *event = shell::RetainedEvent::SliderChange;
+        else if (StrEq(name, "release"))
+            *event = shell::RetainedEvent::SliderRelease;
+        else
+            return false;
         return true;
     }
     if (kind == shell::RetainedKind::Otp) {
         *replace = true;
-        if (StrEq(name, "change")) *event = shell::RetainedEvent::OtpChange;
-        else if (StrEq(name, "complete")) *event = shell::RetainedEvent::OtpComplete;
-        else if (StrEq(name, "focus")) *event = shell::RetainedEvent::OtpFocus;
-        else if (StrEq(name, "blur")) *event = shell::RetainedEvent::OtpBlur;
-        else return false;
+        if (StrEq(name, "change"))
+            *event = shell::RetainedEvent::OtpChange;
+        else if (StrEq(name, "complete"))
+            *event = shell::RetainedEvent::OtpComplete;
+        else if (StrEq(name, "focus"))
+            *event = shell::RetainedEvent::OtpFocus;
+        else if (StrEq(name, "blur"))
+            *event = shell::RetainedEvent::OtpBlur;
+        else
+            return false;
         return true;
     }
     return false;
@@ -3073,31 +3315,38 @@ static JSValue NativeRetainedOn(JSContext* ctx, JSValueConst, int argc,
     shell::EntityHandle handle = 0;
     if (argc < 3 || !JsHandle(ctx, argv[0], &handle) ||
         !JS_IsFunction(ctx, argv[2])) {
-        return JS_ThrowTypeError(ctx, "state.on(event, handler) expects a function");
+        return JS_ThrowTypeError(ctx,
+                                 "state.on(event, handler) expects a function");
     }
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
-    if (!entry) return JS_ThrowTypeError(ctx, "this retained state has been released");
+    if (!entry)
+        return JS_ThrowTypeError(ctx, "this retained state has been released");
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     if (!host.IsSet()) {
-        return JS_ThrowTypeError(ctx, "on(...) needs a live host call; subscribe from init() or an event handler");
+        return JS_ThrowTypeError(ctx,
+                                 "on(...) needs a live host call; subscribe "
+                                 "from init() or an event handler");
     }
     Arena* arena = ArenaNew();
     Str name;
     bool converted = JsString(ctx, argv[1], arena, &name);
     shell::RetainedEvent event = {};
     bool replace = false;
-    bool known = converted && RetainedEventOf(entry->kind, name, &event, &replace);
+    bool known =
+        converted && RetainedEventOf(entry->kind, name, &event, &replace);
     ArenaDelete(arena);
     if (!converted) return JS_EXCEPTION;
-    if (!known) return JS_ThrowTypeError(ctx, "unknown retained-state event name");
+    if (!known)
+        return JS_ThrowTypeError(ctx, "unknown retained-state event name");
     shell::CallbackId callback = impl->callbacks.PushPersistent(
         ctx, argv[2], entry->owner, shell::ScopeCurrentPolicy(),
         (AppModule*)entry->application);
-    if (callback == UINT64_MAX) return JS_ThrowInternalError(ctx, "callback id space is exhausted");
+    if (callback == UINT64_MAX)
+        return JS_ThrowInternalError(ctx, "callback id space is exhausted");
     shell::CallbackId replaced = 0;
-    if (!impl->retained.AddCallback(handle, event, callback, replace,
-                                    &replaced)) {
+    if (!impl->retained
+             .AddCallback(handle, event, callback, replace, &replaced)) {
         impl->callbacks.RetireId(ctx, callback);
         return JS_ThrowTypeError(ctx, "this retained state has been released");
     }
@@ -3119,8 +3368,8 @@ static JSValue NativeRetainedRelease(JSContext* ctx, JSValueConst, int argc,
     return JS_NewBool(ctx, released);
 }
 
-static JSValue NativeRetainedComponent(JSContext* ctx, JSValueConst,
-                                       int argc, JSValueConst* argv) {
+static JSValue NativeRetainedComponent(JSContext* ctx, JSValueConst, int argc,
+                                       JSValueConst* argv) {
     shell::EntityHandle handle = 0;
     if (argc < 2 || !JsHandle(ctx, argv[1], &handle)) return JS_EXCEPTION;
     Arena* arena = ArenaNew();
@@ -3132,16 +3381,21 @@ static JSValue NativeRetainedComponent(JSContext* ctx, JSValueConst,
     component.kind = ComponentKindOf(name);
     component.handle = handle;
     shell::RetainedKind expected = shell::RetainedKind::Input;
-    if (component.kind == shell::ComponentKind::Textarea) expected = shell::RetainedKind::Textarea;
+    if (component.kind == shell::ComponentKind::Textarea)
+        expected = shell::RetainedKind::Textarea;
     else if (component.kind == shell::ComponentKind::Slider ||
              component.kind == shell::ComponentKind::SliderTrack ||
              component.kind == shell::ComponentKind::SliderIndicator ||
-             component.kind == shell::ComponentKind::SliderThumb) expected = shell::RetainedKind::Slider;
-    else if (component.kind == shell::ComponentKind::OtpInput) expected = shell::RetainedKind::Otp;
+             component.kind == shell::ComponentKind::SliderThumb)
+        expected = shell::RetainedKind::Slider;
+    else if (component.kind == shell::ComponentKind::OtpInput)
+        expected = shell::RetainedKind::Otp;
     bool valid = converted && entry && entry->kind == expected;
     ArenaDelete(arena);
     if (!converted) return JS_EXCEPTION;
-    if (!valid) return JS_ThrowTypeError(ctx, "this retained state has been released or has the wrong type");
+    if (!valid)
+        return JS_ThrowTypeError(
+            ctx, "this retained state has been released or has the wrong type");
     return JS_NewUint32(ctx, impl->scratch->Push(component));
 }
 
@@ -3150,12 +3404,18 @@ static JSValue NativeFocusNew(JSContext* ctx, JSValueConst, int,
     if (RefuseRetainedCreation(ctx, "cx.focus_handle()")) return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!impl || !host.IsSet()) return JS_ThrowTypeError(ctx, "cx.focus_handle() needs a live host call");
+    if (!impl || !host.IsSet())
+        return JS_ThrowTypeError(ctx,
+                                 "cx.focus_handle() needs a live host call");
     if (impl->retained.Len() >= shell::kMaxLiveEntities) {
-        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+        return JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
     }
-    shell::EntityHandle handle = impl->retained.CreateFocus(
-        host.GetApp(), shell::ScopeCurrentView(), shell::ScopeCurrentApplication());
+    shell::EntityHandle handle =
+        impl->retained.CreateFocus(host.GetApp(), shell::ScopeCurrentView(),
+                                   shell::ScopeCurrentApplication());
     return handle ? JS_NewInt64(ctx, (int64_t)handle)
                   : JS_ThrowInternalError(ctx, "creating focus handle failed");
 }
@@ -3164,33 +3424,44 @@ static JSValue NativeFocusOp(JSContext* ctx, JSValueConst, int argc,
                              JSValueConst* argv, int magic) {
     shell::EntityHandle handle = 0;
     if (argc < 1 || !JsHandle(ctx, argv[0], &handle)) return JS_EXCEPTION;
-    shell::RetainedEntry* entry = LiveRetained(
-        ctx, handle, shell::RetainedKind::Focus, "focus handle");
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Focus, "focus handle");
     if (!entry) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "focus operation needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "focus operation needs a live host call");
     if (magic == 0) {
-        if (RefuseRetainedMutation(ctx, "FocusHandle.focus()")) return JS_EXCEPTION;
+        if (RefuseRetainedMutation(ctx, "FocusHandle.focus()"))
+            return JS_EXCEPTION;
         FocusHandleFocus(host.GetWindow(), entry->focus);
         AppInvalidate(host.GetWindow());
         return JS_UNDEFINED;
     }
-    return JS_NewBool(ctx, FocusHandleIsFocused(host.GetWindow(), entry->focus));
+    return JS_NewBool(ctx,
+                      FocusHandleIsFocused(host.GetWindow(), entry->focus));
 }
 
 static JSValue NativeVirtualScrollNew(JSContext* ctx, JSValueConst, int,
                                       JSValueConst*) {
-    if (RefuseRetainedCreation(ctx, "VirtualListScrollHandle.new()")) return JS_EXCEPTION;
+    if (RefuseRetainedCreation(ctx, "VirtualListScrollHandle.new()"))
+        return JS_EXCEPTION;
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!impl || !host.IsSet()) return JS_ThrowTypeError(ctx, "VirtualListScrollHandle.new() needs a live host call");
+    if (!impl || !host.IsSet())
+        return JS_ThrowTypeError(
+            ctx, "VirtualListScrollHandle.new() needs a live host call");
     if (impl->retained.Len() >= shell::kMaxLiveEntities) {
-        return JS_ThrowRangeError(ctx, "the application reached gpui-shell's retained entity limit; release unused handles");
+        return JS_ThrowRangeError(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; "
+            "release unused handles");
     }
     shell::EntityHandle handle = impl->retained.CreateVirtualScroll(
-        host.GetApp(), shell::ScopeCurrentView(), shell::ScopeCurrentApplication());
+        host.GetApp(), shell::ScopeCurrentView(),
+        shell::ScopeCurrentApplication());
     return handle ? JS_NewInt64(ctx, (int64_t)handle)
-                  : JS_ThrowInternalError(ctx, "creating virtual scroll handle failed");
+                  : JS_ThrowInternalError(
+                        ctx, "creating virtual scroll handle failed");
 }
 
 static JSValue NativeVirtualScrollOp(JSContext* ctx, JSValueConst, int argc,
@@ -3206,14 +3477,15 @@ static JSValue NativeVirtualScrollOp(JSContext* ctx, JSValueConst, int argc,
     }
     int32_t index = 0;
     if (argc < 2 || JS_ToInt32(ctx, &index, argv[1]) < 0 || index < 0) {
-        return JS_ThrowTypeError(ctx, "scroll_to_item index must be non-negative");
+        return JS_ThrowTypeError(ctx,
+                                 "scroll_to_item index must be non-negative");
     }
     Arena* arena = ArenaNew();
     Str strategy;
-    bool ok = OptionalJsString(ctx, argc > 2 ? argv[2] : JS_UNDEFINED,
-                               arena, &strategy);
+    bool ok = OptionalJsString(ctx, argc > 2 ? argv[2] : JS_UNDEFINED, arena,
+                               &strategy);
     ScrollStrategy native = StrEq(strategy, "center") ? ScrollStrategy::Center
-                                                       : ScrollStrategy::Top;
+                                                      : ScrollStrategy::Top;
     if (strategy && !StrEq(strategy, "top") && !StrEq(strategy, "center")) {
         ok = false;
         JS_ThrowTypeError(ctx, "scroll strategy must be top or center");
@@ -3228,7 +3500,9 @@ static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
                                  JSValueConst* argv, int magic) {
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
     if (!impl || argc < 5 || shell::ScopeCurrentPhase() == ScopePhase::Layout) {
-        return JS_ThrowTypeError(ctx, "a virtual list cannot be built from inside another list's item renderer");
+        return JS_ThrowTypeError(ctx,
+                                 "a virtual list cannot be built from inside "
+                                 "another list's item renderer");
     }
     Arena* arena = ArenaNew();
     Str id;
@@ -3239,16 +3513,21 @@ static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
               JS_IsFunction(ctx, argv[4]);
     if (!ok) {
         ArenaDelete(arena);
-        return JS_ThrowTypeError(ctx, "virtual list needs an id, a count up to 1000000, item sizes, get_key and render functions");
+        return JS_ThrowTypeError(
+            ctx,
+            "virtual list needs an id, a count up to 1000000, item sizes, "
+            "get_key and render functions");
     }
     int count = (int)count64;
     if (!impl->scratch->ClaimVirtualItems((uint64_t)count, 1000000)) {
         ArenaDelete(arena);
-        return JS_ThrowRangeError(ctx, "the virtual lists in one render may describe at most 1000000 items in total");
+        return JS_ThrowRangeError(ctx,
+                                  "the virtual lists in one render may "
+                                  "describe at most 1000000 items in total");
     }
-    Size* sizes = count > 0 ? (Size*)Alloc(
-                                  arena, (int)(sizeof(Size) * (size_t)count))
-                            : nullptr;
+    Size* sizes = count > 0
+                      ? (Size*)Alloc(arena, (int)(sizeof(Size) * (size_t)count))
+                      : nullptr;
     if (count > 0 && !sizes) {
         ArenaDelete(arena);
         return JS_ThrowOutOfMemory(ctx);
@@ -3264,21 +3543,24 @@ static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
                  JS_ToFloat64(ctx, &extent, item) == 0 && isfinite(extent) &&
                  extent >= 0;
             JS_FreeValue(ctx, item);
-            if (ok) sizes[i] = horizontal ? Size{(float)extent, 0}
-                                          : Size{0, (float)extent};
+            if (ok)
+                sizes[i] = horizontal ? Size{(float)extent, 0}
+                                      : Size{0, (float)extent};
         }
     } else {
         double extent = 0;
         ok = JS_ToFloat64(ctx, &extent, argv[2]) == 0 && isfinite(extent) &&
              extent >= 0;
         for (int i = 0; ok && i < count; i++) {
-            sizes[i] = horizontal ? Size{(float)extent, 0}
-                                  : Size{0, (float)extent};
+            sizes[i] =
+                horizontal ? Size{(float)extent, 0} : Size{0, (float)extent};
         }
     }
     if (!ok) {
         ArenaDelete(arena);
-        return JS_ThrowTypeError(ctx, "virtual-list item sizes must be one finite non-negative number or one per item");
+        return JS_ThrowTypeError(ctx,
+                                 "virtual-list item sizes must be one finite "
+                                 "non-negative number or one per item");
     }
     shell::CallbackId getKey = impl->callbacks.Push(
         ctx, argv[3], shell::ScopeCurrentView(), shell::ScopeCurrentPolicy(),
@@ -3290,7 +3572,9 @@ static JSValue NativeVirtualList(JSContext* ctx, JSValueConst, int argc,
         (AppModule*)shell::ScopeCurrentApplication());
     if (getKey == UINT64_MAX || render == UINT64_MAX) {
         ArenaDelete(arena);
-        return JS_ThrowInternalError(ctx, "virtual-list callbacks were registered outside a snapshot build");
+        return JS_ThrowInternalError(
+            ctx,
+            "virtual-list callbacks were registered outside a snapshot build");
     }
     shell::VirtualListSpec list = {};
     list.id = id;
@@ -3355,8 +3639,7 @@ static void AppendThemeColor(StrBuilder* out, Str name, bool comma) {
     if (!shell::ThemeTokenColor(name, &color)) return;
     Rgba rgba = ShellThemeRgba(color);
     if (comma) out->AppendChar(',');
-    out->Append(fmt("\"%s\":\"#%02x%02x%02x\"", name, rgba.r, rgba.g,
-                    rgba.b));
+    out->Append(fmt("\"%s\":\"#%02x%02x%02x\"", name, rgba.r, rgba.g, rgba.b));
 }
 
 static void AppendThemeColors(StrBuilder* out) {
@@ -3526,8 +3809,7 @@ static bool ReadThemeScale(JSContext* ctx, JSValueConst object,
         Str name = SeqStrAt(names, offset);
         if (!name) break;
         JSValue property = JS_UNDEFINED;
-        if (!ThemeRequiredProperty(ctx, object, name.s, &property,
-                                   container)) {
+        if (!ThemeRequiredProperty(ctx, object, name.s, &property, container)) {
             return false;
         }
         double number = 0;
@@ -3536,9 +3818,9 @@ static bool ReadThemeScale(JSContext* ctx, JSValueConst object,
                   isfinite(number) && number >= 0;
         JS_FreeValue(ctx, property);
         if (!ok) {
-            JS_ThrowTypeError(ctx,
-                              "theme token `%.*s` must be finite and non-negative",
-                              name.len, name.s);
+            JS_ThrowTypeError(
+                ctx, "theme token `%.*s` must be finite and non-negative",
+                name.len, name.s);
             return false;
         }
         if (spacing)
@@ -3555,14 +3837,19 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
     if (shell::ScopeHasCurrent() &&
         (shell::ScopeCurrentPhase() == ScopePhase::Render ||
          shell::ScopeCurrentPhase() == ScopePhase::Layout)) {
-        return JS_ThrowTypeError(ctx, "set_theme(theme) cannot run during render or layout; switch themes from an event handler or task");
+        return JS_ThrowTypeError(
+            ctx,
+            "set_theme(theme) cannot run during render or layout; switch "
+            "themes from an event handler or task");
     }
     if (argc < 1 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0])) {
         return JS_ThrowTypeError(ctx, "set_theme(theme) expects an object");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     if (!host.IsSet()) {
-        return JS_ThrowTypeError(ctx, "set_theme(theme) needs a live host call; call it from an event handler");
+        return JS_ThrowTypeError(ctx,
+                                 "set_theme(theme) needs a live host call; "
+                                 "call it from an event handler");
     }
 
     JSValue appearanceValue = JS_UNDEFINED;
@@ -3589,8 +3876,7 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
     }
 
     JSValue tokensValue = JS_UNDEFINED;
-    if (!ThemeRequiredProperty(ctx, argv[0], "tokens", &tokensValue,
-                               "theme")) {
+    if (!ThemeRequiredProperty(ctx, argv[0], "tokens", &tokensValue, "theme")) {
         return JS_EXCEPTION;
     }
     if (!JS_IsObject(tokensValue) || JS_IsArray(tokensValue)) {
@@ -3600,13 +3886,12 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
     JSValue colorsValue = JS_UNDEFINED;
     JSValue spacingValue = JS_UNDEFINED;
     JSValue radiusValue = JS_UNDEFINED;
-    bool properties =
-        ThemeRequiredProperty(ctx, tokensValue, "colors", &colorsValue,
-                              "theme tokens") &&
-        ThemeRequiredProperty(ctx, tokensValue, "spacing", &spacingValue,
-                              "theme tokens") &&
-        ThemeRequiredProperty(ctx, tokensValue, "radius", &radiusValue,
-                              "theme tokens");
+    bool properties = ThemeRequiredProperty(ctx, tokensValue, "colors",
+                                            &colorsValue, "theme tokens") &&
+                      ThemeRequiredProperty(ctx, tokensValue, "spacing",
+                                            &spacingValue, "theme tokens") &&
+                      ThemeRequiredProperty(ctx, tokensValue, "radius",
+                                            &radiusValue, "theme tokens");
     JS_FreeValue(ctx, tokensValue);
     if (!properties) {
         JS_FreeValue(ctx, colorsValue);
@@ -3626,21 +3911,19 @@ static JSValue NativeSetTheme(JSContext* ctx, JSValueConst, int argc,
 
     BaseTheme base = BaseTheme::Global(host.GetApp());
     SemanticThemeTokens tokens = base.tokens;
-    bool ok = ReadThemeColors(ctx, colorsValue, &tokens.colors) &&
-              ReadThemeScale(ctx, spacingValue,
-                             shell::ThemeSpacingTokenNames(),
-                             "theme tokens.spacing", &tokens.spacing,
-                             nullptr) &&
-              ReadThemeScale(ctx, radiusValue,
-                             shell::ThemeRadiusTokenNames(),
-                             "theme tokens.radius", nullptr, &tokens.radius);
+    bool ok =
+        ReadThemeColors(ctx, colorsValue, &tokens.colors) &&
+        ReadThemeScale(ctx, spacingValue, shell::ThemeSpacingTokenNames(),
+                       "theme tokens.spacing", &tokens.spacing, nullptr) &&
+        ReadThemeScale(ctx, radiusValue, shell::ThemeRadiusTokenNames(),
+                       "theme tokens.radius", nullptr, &tokens.radius);
     JS_FreeValue(ctx, colorsValue);
     JS_FreeValue(ctx, spacingValue);
     JS_FreeValue(ctx, radiusValue);
     if (!ok) return JS_EXCEPTION;
 
-    base.appearance = dark ? BaseThemeAppearance::Dark
-                           : BaseThemeAppearance::Light;
+    base.appearance =
+        dark ? BaseThemeAppearance::Dark : BaseThemeAppearance::Light;
     base.tokens = tokens;
     BaseThemeSet(host.GetApp(), base);
     shell::ThemeTokensSync(host.GetApp());
@@ -3657,9 +3940,8 @@ static JSValue NativeThemeSnapshot(JSContext* ctx, JSValueConst, int argc,
         if (JS_ToIndex(ctx, &generation, argv[0]) < 0) return JS_EXCEPTION;
     }
     shell::ScopeHostContext host =
-        explicitGeneration
-            ? shell::ScopeHostForGeneration(generation, &error)
-            : shell::ScopeCurrentHost();
+        explicitGeneration ? shell::ScopeHostForGeneration(generation, &error)
+                           : shell::ScopeCurrentHost();
     if (!host.IsSet()) {
         Str message = error.IsSet() ? error.message
                                     : StrL("cx.theme() needs a live host call");
@@ -3695,8 +3977,7 @@ static bool ValidOpenUrl(Str url) {
     int schemeEnd = StrFind(url, StrL("://"));
     if (schemeEnd <= 0) return false;
     Str scheme(url.s, schemeEnd);
-    if (!StrEqI(scheme, StrL("http")) &&
-        !StrEqI(scheme, StrL("https"))) {
+    if (!StrEqI(scheme, StrL("http")) && !StrEqI(scheme, StrL("https"))) {
         return false;
     }
     int authorityStart = schemeEnd + 3;
@@ -3731,7 +4012,8 @@ static JSValue NativeOpenUrl(JSContext* ctx, JSValueConst, int argc,
                              JSValueConst* argv) {
     if (argc < 2) {
         return JS_ThrowTypeError(
-            ctx, "cx.open_url(url) expects an absolute HTTP(S) URL with a host");
+            ctx,
+            "cx.open_url(url) expects an absolute HTTP(S) URL with a host");
     }
     uint64_t generation = 0;
     bool explicitGeneration = !JS_IsUndefined(argv[0]);
@@ -3747,19 +4029,18 @@ static JSValue NativeOpenUrl(JSContext* ctx, JSValueConst, int argc,
     if (!ValidOpenUrl(url)) {
         ArenaDelete(arena);
         return JS_ThrowTypeError(
-            ctx, "cx.open_url(url) expects an absolute HTTP(S) URL with a host");
+            ctx,
+            "cx.open_url(url) expects an absolute HTTP(S) URL with a host");
     }
     ShellError error = {};
     shell::ScopeHostContext host =
-        explicitGeneration
-            ? shell::ScopeHostForGeneration(generation, &error)
-            : shell::ScopeCurrentHost();
+        explicitGeneration ? shell::ScopeHostForGeneration(generation, &error)
+                           : shell::ScopeCurrentHost();
     if (!host.IsSet()) {
         Str message = error.IsSet()
                           ? error.message
                           : StrL("cx.open_url(url) needs a live host call");
-        JSValue result = JS_ThrowTypeError(ctx, "%.*s", message.len,
-                                           message.s);
+        JSValue result = JS_ThrowTypeError(ctx, "%.*s", message.len, message.s);
         ShellErrorClear(&error);
         ArenaDelete(arena);
         return result;
@@ -3780,17 +4061,21 @@ static JSValue NativeNotify(JSContext* ctx, JSValueConst, int argc,
     shell::ScopeHostContext host =
         shell::ScopeHostForGeneration(generation, &error);
     if (!host.IsSet()) {
-        JSValue result = JS_ThrowTypeError(ctx, "%.*s", error.message.len,
-                                           error.message.s);
+        JSValue result =
+            JS_ThrowTypeError(ctx, "%.*s", error.message.len, error.message.s);
         ShellErrorClear(&error);
         return result;
     }
     if (!ScopePhaseAllowsNotify(shell::ScopeCurrentPhase())) {
-        return JS_ThrowTypeError(ctx, "cx.notify() is available only from an event handler or task, not during render or layout");
+        return JS_ThrowTypeError(
+            ctx,
+            "cx.notify() is available only from an event handler or task, not "
+            "during render or layout");
     }
     EntityId view = shell::ScopeCurrentView();
     if (!view.IsValid()) {
-        return JS_ThrowTypeError(ctx, "cx.notify() needs a current script view");
+        return JS_ThrowTypeError(ctx,
+                                 "cx.notify() needs a current script view");
     }
     ShellRuntime* runtime = shell::ScopeCurrentRuntime();
     if (runtime) runtime->InvalidateScriptView(view);
@@ -3802,7 +4087,8 @@ static JSValue NativeNotifyCurrent(JSContext* ctx, JSValueConst, int,
                                    JSValueConst*) {
     uint64_t current = shell::ScopeCurrentGeneration();
     if (current == 0) {
-        return JS_ThrowTypeError(ctx, "cx.notify() was called with no host call in progress");
+        return JS_ThrowTypeError(
+            ctx, "cx.notify() was called with no host call in progress");
     }
     JSValue generation = JS_NewInt64(ctx, (int64_t)current);
     JSValue result = NativeNotify(ctx, JS_UNDEFINED, 1, &generation);
@@ -3810,8 +4096,8 @@ static JSValue NativeNotifyCurrent(JSContext* ctx, JSValueConst, int,
     return result;
 }
 
-static bool TaskOwnerless(JSContext* ctx, int argc, JSValueConst* argv,
-                          int at, bool* ownerless) {
+static bool TaskOwnerless(JSContext* ctx, int argc, JSValueConst* argv, int at,
+                          bool* ownerless) {
     *ownerless = false;
     if (argc <= at || JS_IsUndefined(argv[at]) || JS_IsNull(argv[at])) {
         *ownerless = argc > at && JS_IsNull(argv[at]);
@@ -3838,7 +4124,8 @@ static bool TaskDelay(JSContext* ctx, JSValueConst value, int* ms) {
     double number = 0;
     if (JS_ToFloat64(ctx, &number, value) < 0 || !isfinite(number) ||
         number < 0 || number > 2147483647.0) {
-        JS_ThrowTypeError(ctx, "timer expects a finite non-negative number of milliseconds");
+        JS_ThrowTypeError(
+            ctx, "timer expects a finite non-negative number of milliseconds");
         return false;
     }
     *ms = number < 1 ? 1 : (int)number;
@@ -3854,7 +4141,9 @@ static JSValue NativeTaskNew(JSContext* ctx, JSValueConst, int argc,
     }
     uint32_t id = NewTask(impl, ShellTaskKind::Spawn, JS_UNDEFINED, nullptr,
                           nullptr, ownerless);
-    if (!id) return JS_ThrowRangeError(ctx, "the runtime reached its 1024 outstanding task limit");
+    if (!id)
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its 1024 outstanding task limit");
     return JS_NewUint32(ctx, id);
 }
 
@@ -3907,10 +4196,13 @@ static JSValue NativeSleep(JSContext* ctx, JSValueConst, int argc,
     if (!impl || argc < 1 || !TaskDelay(ctx, argv[0], &ms)) return JS_EXCEPTION;
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     if (!host.IsSet()) {
-        return JS_ThrowTypeError(ctx, "cx.sleep(ms) was called with no host call in progress");
+        return JS_ThrowTypeError(
+            ctx, "cx.sleep(ms) was called with no host call in progress");
     }
     Entity<ShellTaskDriver> driver = TaskDriver(impl, host.GetApp());
-    if (!driver.IsValid()) return JS_ThrowInternalError(ctx, "creating the shell task driver failed");
+    if (!driver.IsValid())
+        return JS_ThrowInternalError(ctx,
+                                     "creating the shell task driver failed");
     JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
     JSValue promise = JS_NewPromiseCapability(ctx, resolving);
     if (JS_IsException(promise)) return promise;
@@ -3920,7 +4212,8 @@ static JSValue NativeSleep(JSContext* ctx, JSValueConst, int argc,
     JS_FreeValue(ctx, resolving[1]);
     if (!id) {
         JS_FreeValue(ctx, promise);
-        return JS_ThrowRangeError(ctx, "the runtime reached its 1024 outstanding task limit");
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its 1024 outstanding task limit");
     }
     ShellTask* task = FindTask(impl, id);
     task->timer = WindowSetTimeout(
@@ -3942,7 +4235,8 @@ static JSValue NativeTimer(JSContext* ctx, JSValueConst, int argc,
     if (!impl || argc < 2 || !TaskDelay(ctx, argv[0], &ms) ||
         !JS_IsFunction(ctx, argv[1]) ||
         !TaskOwnerless(ctx, argc, argv, 2, &ownerless)) {
-        if (!JS_HasException(ctx)) JS_ThrowTypeError(ctx, "timer needs a delay and callback function");
+        if (!JS_HasException(ctx))
+            JS_ThrowTypeError(ctx, "timer needs a delay and callback function");
         return JS_EXCEPTION;
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
@@ -3950,15 +4244,19 @@ static JSValue NativeTimer(JSContext* ctx, JSValueConst, int argc,
         return JS_ThrowTypeError(ctx, "cx.timer needs a live host call");
     }
     Entity<ShellTaskDriver> driver = TaskDriver(impl, host.GetApp());
-    if (!driver.IsValid()) return JS_ThrowInternalError(ctx, "creating the shell task driver failed");
-    ShellTaskKind kind = magic ? ShellTaskKind::TimerEvery
-                               : ShellTaskKind::TimerOnce;
-    uint32_t id = NewTask(impl, kind, argv[1], host.GetApp(),
-                          host.GetWindow(), ownerless);
-    if (!id) return JS_ThrowRangeError(ctx, "the runtime reached its 1024 outstanding task limit");
+    if (!driver.IsValid())
+        return JS_ThrowInternalError(ctx,
+                                     "creating the shell task driver failed");
+    ShellTaskKind kind =
+        magic ? ShellTaskKind::TimerEvery : ShellTaskKind::TimerOnce;
+    uint32_t id = NewTask(impl, kind, argv[1], host.GetApp(), host.GetWindow(),
+                          ownerless);
+    if (!id)
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its 1024 outstanding task limit");
     ShellTask* task = FindTask(impl, id);
-    Listener listener = ListenTo(driver, &ShellTaskDriver::OnTimer,
-                                 (intptr_t)id);
+    Listener listener =
+        ListenTo(driver, &ShellTaskDriver::OnTimer, (intptr_t)id);
     task->timer = magic ? WindowSetInterval(host.GetWindow(), ms, listener)
                         : WindowSetTimeout(host.GetWindow(), ms, listener);
     if (!task->timer) {
@@ -3980,7 +4278,8 @@ static shell::Storage* AllowedStorage(JSContext* ctx, bool session,
     Policy* policy = CurrentPolicy(&release);
     if (!session && !PolicyCapabilities(policy).HasStorage()) {
         if (release) PolicyRelease(policy);
-        JS_ThrowTypeError(ctx, "storage is not granted; set capabilities.storage to true");
+        JS_ThrowTypeError(
+            ctx, "storage is not granted; set capabilities.storage to true");
         return nullptr;
     }
     *held = release ? policy : nullptr;
@@ -3988,7 +4287,9 @@ static shell::Storage* AllowedStorage(JSContext* ctx, bool session,
     if (!storage || (!session && !storage->HasPath())) {
         if (release) PolicyRelease(policy);
         *held = nullptr;
-        JS_ThrowTypeError(ctx, "localStorage has no backing file; call ShellSetStoragePath before loading the application");
+        JS_ThrowTypeError(ctx,
+                          "localStorage has no backing file; call "
+                          "ShellSetStoragePath before loading the application");
         return nullptr;
     }
     return storage;
@@ -4004,9 +4305,9 @@ static JSValue NativeStorageGet(JSContext* ctx, JSValueConst, int argc,
     Str key;
     bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &key);
     Str value = ok ? storage->Get(key) : Str{};
-    JSValue result = !ok ? JS_EXCEPTION
-                         : value ? JS_NewStringLen(ctx, value.s, (size_t)value.len)
-                                 : JS_NULL;
+    JSValue result = !ok     ? JS_EXCEPTION
+                     : value ? JS_NewStringLen(ctx, value.s, (size_t)value.len)
+                             : JS_NULL;
     ArenaDelete(arena);
     PolicyRelease(held);
     return result;
@@ -4026,9 +4327,10 @@ static JSValue NativeStorageSet(JSContext* ctx, JSValueConst, int argc,
     if (ok && !session) {
         DriveStorage(held ? held : shell::ScopeCurrentPolicy());
     }
-    JSValue result = ok ? JS_UNDEFINED
-                        : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
-                                : JS_EXCEPTION;
+    JSValue result =
+        ok      ? JS_UNDEFINED
+        : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
+                : JS_EXCEPTION;
     StrFree(error);
     ArenaDelete(arena);
     PolicyRelease(held);
@@ -4048,9 +4350,10 @@ static JSValue NativeStorageRemove(JSContext* ctx, JSValueConst, int argc,
     if (ok && !session) {
         DriveStorage(held ? held : shell::ScopeCurrentPolicy());
     }
-    JSValue result = ok ? JS_UNDEFINED
-                        : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
-                                : JS_EXCEPTION;
+    JSValue result =
+        ok      ? JS_UNDEFINED
+        : error ? JS_ThrowInternalError(ctx, "%.*s", error.len, error.s)
+                : JS_EXCEPTION;
     StrFree(error);
     ArenaDelete(arena);
     PolicyRelease(held);
@@ -4068,8 +4371,9 @@ static JSValue NativeStorageClear(JSContext* ctx, JSValueConst, int,
     if (ok && !session) {
         DriveStorage(held ? held : shell::ScopeCurrentPolicy());
     }
-    JSValue result = ok ? JS_UNDEFINED
-                        : JS_ThrowInternalError(ctx, "%.*s", error.len, error.s);
+    JSValue result =
+        ok ? JS_UNDEFINED
+           : JS_ThrowInternalError(ctx, "%.*s", error.len, error.s);
     StrFree(error);
     PolicyRelease(held);
     return result;
@@ -4095,9 +4399,9 @@ static JSValue NativeStorageKey(JSContext* ctx, JSValueConst, int argc,
     int32_t index = -1;
     bool ok = argc >= 1 && JS_ToInt32(ctx, &index, argv[0]) == 0;
     Str key = ok ? storage->Key(index) : Str{};
-    JSValue result = !ok ? JS_EXCEPTION
-                         : key ? JS_NewStringLen(ctx, key.s, (size_t)key.len)
-                               : JS_NULL;
+    JSValue result = !ok   ? JS_EXCEPTION
+                     : key ? JS_NewStringLen(ctx, key.s, (size_t)key.len)
+                           : JS_NULL;
     PolicyRelease(held);
     return result;
 }
@@ -4137,9 +4441,9 @@ static JSValue NativeStorageFlush(JSContext* ctx, JSValueConst, int,
         return JS_EXCEPTION;
     }
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
-    uint32_t taskId = NewTask(impl, ShellTaskKind::StorageFlush,
-                              resolving[0], host.GetApp(), host.GetWindow(),
-                              false, resolving[1]);
+    uint32_t taskId =
+        NewTask(impl, ShellTaskKind::StorageFlush, resolving[0], host.GetApp(),
+                host.GetWindow(), false, resolving[1]);
     JS_FreeValue(ctx, resolving[0]);
     JS_FreeValue(ctx, resolving[1]);
     if (!taskId) {
@@ -4157,8 +4461,8 @@ static JSValue NativeStorageFlush(JSContext* ctx, JSValueConst, int,
     task->storageFlush = state;
     Str error;
     bool immediate = false;
-    bool ok = storage->Wait(MkFunc1(StorageFlushDone, state),
-                            &state->waiter, &immediate, &error);
+    bool ok = storage->Wait(MkFunc1(StorageFlushDone, state), &state->waiter,
+                            &immediate, &error);
     if (!ok) {
         task->storageFlush = nullptr;
         ForgetTask(impl, taskId, false);
@@ -4190,21 +4494,23 @@ static JSValue NativeClipboard(JSContext* ctx, JSValueConst, int argc,
     if (!allowed) {
         if (release) PolicyRelease(policy);
         return JS_ThrowTypeError(
-            ctx, magic == 0
-                     ? "reading the clipboard is not granted; declare capabilities.clipboard.read"
-                     : "writing the clipboard is not granted; declare capabilities.clipboard.write");
+            ctx, magic == 0 ? "reading the clipboard is not granted; declare "
+                              "capabilities.clipboard.read"
+                            : "writing the clipboard is not granted; declare "
+                              "capabilities.clipboard.write");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
     if (!host.IsSet()) {
         if (release) PolicyRelease(policy);
-        return JS_ThrowTypeError(ctx, "clipboard access needs a live host call");
+        return JS_ThrowTypeError(ctx,
+                                 "clipboard access needs a live host call");
     }
     JSValue result = JS_UNDEFINED;
     if (magic == 0) {
         Arena* arena = ArenaNew();
         Str value = ClipboardGetText(arena, host.GetWindow());
-        result = value ? JS_NewStringLen(ctx, value.s, (size_t)value.len)
-                       : JS_NULL;
+        result =
+            value ? JS_NewStringLen(ctx, value.s, (size_t)value.len) : JS_NULL;
         ArenaDelete(arena);
     } else {
         Arena* arena = ArenaNew();
@@ -4222,7 +4528,8 @@ static JSValue NativeConsole(JSContext* ctx, JSValueConst, int argc,
                              JSValueConst* argv, int magic) {
     StrBuilder out;
     static const char* levels[] = {"log", "debug", "info", "warn", "error"};
-    out.Append(fmt("[script %s]", Str(levels[magic >= 0 && magic < 5 ? magic : 0])));
+    out.Append(
+        fmt("[script %s]", Str(levels[magic >= 0 && magic < 5 ? magic : 0])));
     for (int i = 0; i < argc; i++) {
         size_t n = 0;
         const char* value = JS_ToCStringLen(ctx, &n, argv[i]);
@@ -4248,8 +4555,8 @@ constexpr int kHostBridgeMaxItems = 10000;
 static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
                        HostValue* out) {
     if (depth > kHostBridgeMaxDepth) {
-        JS_ThrowTypeError(ctx,
-                          "a host argument may not nest more than 16 levels deep");
+        JS_ThrowTypeError(
+            ctx, "a host argument may not nest more than 16 levels deep");
         return false;
     }
     if (JS_IsNull(value) || JS_IsUndefined(value)) {
@@ -4270,8 +4577,7 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
         size_t len = 0;
         const char* text = JS_ToCStringLen(ctx, &len, value);
         if (!text) return false;
-        bool ok = len <= (size_t)INT_MAX &&
-                  out->SetString(Str(text, (int)len));
+        bool ok = len <= (size_t)INT_MAX && out->SetString(Str(text, (int)len));
         JS_FreeCString(ctx, text);
         if (!ok) JS_ThrowOutOfMemory(ctx);
         return ok;
@@ -4280,8 +4586,7 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
         int64_t count = 0;
         if (JS_GetLength(ctx, value, &count) < 0) return false;
         if (count < 0 || count > kHostBridgeMaxItems) {
-            JS_ThrowRangeError(ctx,
-                               "host arrays accept at most 10000 items");
+            JS_ThrowRangeError(ctx, "host arrays accept at most 10000 items");
             return false;
         }
         out->Free();
@@ -4307,9 +4612,9 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
         return true;
     }
     if (JS_IsFunction(ctx, value)) {
-        JS_ThrowTypeError(
-            ctx,
-            "a host function cannot be passed a callback; host calls take and return plain data only");
+        JS_ThrowTypeError(ctx,
+                          "a host function cannot be passed a callback; host "
+                          "calls take and return plain data only");
         return false;
     }
     if (JS_IsObject(value)) {
@@ -4320,8 +4625,7 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
             return false;
         if (count > kHostBridgeMaxItems) {
             JS_FreePropertyEnum(ctx, properties, count);
-            JS_ThrowRangeError(ctx,
-                               "host objects accept at most 10000 fields");
+            JS_ThrowRangeError(ctx, "host objects accept at most 10000 fields");
             return false;
         }
         out->Free();
@@ -4348,9 +4652,9 @@ static bool HostFromJs(JSContext* ctx, JSValueConst value, int depth,
         if (!ok && !JS_HasException(ctx)) JS_ThrowOutOfMemory(ctx);
         return ok;
     }
-    JS_ThrowTypeError(
-        ctx,
-        "unsupported host argument; expected null, a boolean, a number, a string, an array or a plain object");
+    JS_ThrowTypeError(ctx,
+                      "unsupported host argument; expected null, a boolean, a "
+                      "number, a string, an array or a plain object");
     return false;
 }
 
@@ -4389,19 +4693,22 @@ static bool HostArgumentsFromJs(JSContext* ctx, JSValueConst array,
 static JSValue HostIntoJs(JSContext* ctx, const HostValue& value,
                           int depth = 0) {
     if (depth > kHostBridgeMaxDepth)
-        return JS_ThrowRangeError(ctx,
-                                  "a host result may not nest more than 16 levels deep");
+        return JS_ThrowRangeError(
+            ctx, "a host result may not nest more than 16 levels deep");
     switch (value.kind) {
-        case HostValueKind::Null: return JS_NULL;
-        case HostValueKind::Bool: return JS_NewBool(ctx, value.boolean);
-        case HostValueKind::Number: return JS_NewFloat64(ctx, value.number);
+        case HostValueKind::Null:
+            return JS_NULL;
+        case HostValueKind::Bool:
+            return JS_NewBool(ctx, value.boolean);
+        case HostValueKind::Number:
+            return JS_NewFloat64(ctx, value.number);
         case HostValueKind::String:
             return JS_NewStringLen(ctx, value.string.s ? value.string.s : "",
                                    (size_t)value.string.len);
         case HostValueKind::Array: {
             if (value.array.len > kHostBridgeMaxItems)
-                return JS_ThrowRangeError(ctx,
-                                          "host result array exceeds 10000 items");
+                return JS_ThrowRangeError(
+                    ctx, "host result array exceeds 10000 items");
             JSValue array = JS_NewArray(ctx);
             for (int i = 0; i < value.array.len; i++) {
                 JSValue item = value.array[i]
@@ -4417,8 +4724,8 @@ static JSValue HostIntoJs(JSContext* ctx, const HostValue& value,
         }
         case HostValueKind::Object: {
             if (value.object.len > kHostBridgeMaxItems)
-                return JS_ThrowRangeError(ctx,
-                                          "host result object exceeds 10000 fields");
+                return JS_ThrowRangeError(
+                    ctx, "host result object exceeds 10000 fields");
             JSValue object = JS_NewObject(ctx);
             for (int i = 0; i < value.object.len; i++) {
                 const HostField& field = value.object[i];
@@ -4467,12 +4774,10 @@ static JSValue NativeHostCall(JSContext* ctx, JSValueConst, int argc,
     shell::MetricsEnd(&timer);
     JSValue result = JS_EXCEPTION;
     if (!ok) {
-        result = JS_ThrowTypeError(ctx, "`%.*s.%.*s`: %.*s", module.len,
-                                   module.s, function.len, function.s,
-                                   call.error.message.len,
-                                   call.error.message.s
-                                       ? call.error.message.s
-                                       : "host call failed");
+        result = JS_ThrowTypeError(
+            ctx, "`%.*s.%.*s`: %.*s", module.len, module.s, function.len,
+            function.s, call.error.message.len,
+            call.error.message.s ? call.error.message.s : "host call failed");
     } else {
         result = HostIntoJs(ctx, call.result);
     }
@@ -4520,13 +4825,11 @@ static void HostAsyncDone(HostAsyncJob* job) {
         EntityId owner = task->owner;
         Policy* policy = PolicyRetain(task->policy);
         AppModule* application = task->application;
-        JSValue settle = JS_DupValue(impl->context,
-                                     job->error.IsSet() ? task->reject
-                                                        : task->callback);
+        JSValue settle = JS_DupValue(
+            impl->context, job->error.IsSet() ? task->reject : task->callback);
         ForgetTask(impl, task->id, false);
         shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Task, owner, policy, runtime,
-            application);
+            window, app, ScopePhase::Task, owner, policy, runtime, application);
         PolicyRelease(policy);
         BeginExecution(impl);
         JSValue value = JS_UNDEFINED;
@@ -4539,10 +4842,10 @@ static void HostAsyncDone(HostAsyncJob* job) {
         } else {
             value = HostIntoJs(impl->context, job->result);
         }
-        JSValue settled = JS_IsException(value)
-                              ? JS_EXCEPTION
-                              : JS_Call(impl->context, settle, JS_UNDEFINED,
-                                        1, &value);
+        JSValue settled =
+            JS_IsException(value)
+                ? JS_EXCEPTION
+                : JS_Call(impl->context, settle, JS_UNDEFINED, 1, &value);
         JS_FreeValue(impl->context, value);
         JS_FreeValue(impl->context, settle);
         if (JS_IsException(settled)) {
@@ -4605,8 +4908,8 @@ static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
         HostModulesRelease(request.registry);
         arguments.Free();
         ArenaDelete(arena);
-        return JS_ThrowTypeError(ctx,
-                                 "an asynchronous HostModule call needs a live host task");
+        return JS_ThrowTypeError(
+            ctx, "an asynchronous HostModule call needs a live host task");
     }
 
     HostAsyncJob* job = new HostAsyncJob();
@@ -4630,9 +4933,9 @@ static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
         delete job;
         return JS_EXCEPTION;
     }
-    uint32_t task = NewTask(impl, ShellTaskKind::HostAsync, resolving[0],
-                            host.GetApp(), host.GetWindow(), false,
-                            resolving[1]);
+    uint32_t task =
+        NewTask(impl, ShellTaskKind::HostAsync, resolving[0], host.GetApp(),
+                host.GetWindow(), false, resolving[1]);
     JS_FreeValue(ctx, resolving[0]);
     JS_FreeValue(ctx, resolving[1]);
     if (!task) {
@@ -4645,8 +4948,7 @@ static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
     job->control = ShellRuntimeAccess::Control(impl->owner);
     ControlRetain(job->control);
     job->task = task;
-    if (!ExecSpawn(MkFunc0(HostAsyncWork, job),
-                   MkFunc0(HostAsyncDone, job))) {
+    if (!ExecSpawn(MkFunc0(HostAsyncWork, job), MkFunc0(HostAsyncDone, job))) {
         ForgetTask(impl, task, false);
         ControlRelease(job->control);
         JS_FreeValue(ctx, promise);
@@ -4694,11 +4996,14 @@ static bool FsReadTextOption(JSContext* ctx, JSValueConst value, Arena* arena,
             return false;
         encoding = JS_GetPropertyStr(ctx, value, "encoding");
     } else {
-        JS_ThrowTypeError(ctx, "fs.readFile encoding must be \"utf8\" or { encoding: \"utf8\" }");
+        JS_ThrowTypeError(
+            ctx,
+            "fs.readFile encoding must be \"utf8\" or { encoding: \"utf8\" }");
         return false;
     }
     Str name;
-    bool ok = !JS_IsException(encoding) && JsString(ctx, encoding, arena, &name);
+    bool ok =
+        !JS_IsException(encoding) && JsString(ctx, encoding, arena, &name);
     JS_FreeValue(ctx, encoding);
     if (!ok) return false;
     if (!StrEqI(name, StrL("utf8")) && !StrEqI(name, StrL("utf-8"))) {
@@ -4709,8 +5014,8 @@ static bool FsReadTextOption(JSContext* ctx, JSValueConst value, Arena* arena,
     return true;
 }
 
-static bool FsBoolOption(JSContext* ctx, JSValueConst value,
-                         const char* key, const char* what, bool* result) {
+static bool FsBoolOption(JSContext* ctx, JSValueConst value, const char* key,
+                         const char* what, bool* result) {
     *result = false;
     if (JS_IsUndefined(value) || JS_IsNull(value)) return true;
     if (!JS_IsObject(value)) {
@@ -4738,17 +5043,16 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
     bool release = false;
     Policy* policy = CurrentPolicy(&release);
     Str authorizationError;
-    bool allowed = converted && shell::FetchAuthorizeGet(
-                                  url, PolicyCapabilities(policy),
-                                  &authorizationError);
+    bool allowed =
+        converted && shell::FetchAuthorizeGet(url, PolicyCapabilities(policy),
+                                              &authorizationError);
     if (!allowed) {
-        JSValue result = converted
-                             ? JS_ThrowTypeError(
-                                   ctx, "%.*s", authorizationError.len,
-                                   authorizationError.s
-                                       ? authorizationError.s
-                                       : "fetch URL is not granted")
-                             : JS_EXCEPTION;
+        JSValue result =
+            converted ? JS_ThrowTypeError(ctx, "%.*s", authorizationError.len,
+                                          authorizationError.s
+                                              ? authorizationError.s
+                                              : "fetch URL is not granted")
+                      : JS_EXCEPTION;
         StrFree(authorizationError);
         if (release) PolicyRelease(policy);
         ArenaDelete(arena);
@@ -4780,9 +5084,9 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
         return JS_EXCEPTION;
     }
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
-    uint32_t task = NewTask(impl, ShellTaskKind::Fetch, resolving[0],
-                            host.GetApp(), host.GetWindow(), false,
-                            resolving[1]);
+    uint32_t task =
+        NewTask(impl, ShellTaskKind::Fetch, resolving[0], host.GetApp(),
+                host.GetWindow(), false, resolving[1]);
     JS_FreeValue(ctx, resolving[0]);
     JS_FreeValue(ctx, resolving[1]);
     if (!task) {
@@ -4795,8 +5099,7 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
     job->control = ShellRuntimeAccess::Control(impl->owner);
     ControlRetain(job->control);
     job->task = task;
-    if (!ExecSpawn(MkFunc0(FetchJobWork, job),
-                   MkFunc0(FetchJobDone, job))) {
+    if (!ExecSpawn(MkFunc0(FetchJobWork, job), MkFunc0(FetchJobDone, job))) {
         ForgetTask(impl, task, false);
         ControlRelease(job->control);
         JS_FreeValue(ctx, promise);
@@ -4810,13 +5113,15 @@ static JSValue NativeFetch(JSContext* ctx, JSValueConst, int argc,
 
 static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
                         JSValueConst* argv, int magic) {
-    if (magic < 0 || magic > 6) return JS_ThrowInternalError(ctx, "invalid filesystem operation");
+    if (magic < 0 || magic > 6)
+        return JS_ThrowInternalError(ctx, "invalid filesystem operation");
     shell::FsOperation operation = (shell::FsOperation)magic;
-    CapabilityAccess access = operation == shell::FsOperation::Read ||
-                                      operation == shell::FsOperation::ReadDirectory ||
-                                      operation == shell::FsOperation::Exists
-                                  ? CapabilityAccess::Read
-                                  : CapabilityAccess::Write;
+    CapabilityAccess access =
+        operation == shell::FsOperation::Read ||
+                operation == shell::FsOperation::ReadDirectory ||
+                operation == shell::FsOperation::Exists
+            ? CapabilityAccess::Read
+            : CapabilityAccess::Write;
     Arena* arena = ArenaNew();
     Str requested;
     bool ok = argc >= 1 && JsString(ctx, argv[0], arena, &requested);
@@ -4828,8 +5133,8 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
     Policy* policy = CurrentPolicy(&release);
     CapabilityPath path;
     CapabilityError capabilityError;
-    ok = PolicyCapabilities(policy).ResolvePath(requested, access, &path,
-                                                 &capabilityError);
+    ok = PolicyCapabilities(policy)
+             .ResolvePath(requested, access, &path, &capabilityError);
     if (release) PolicyRelease(policy);
     if (!ok) {
         Str message = CapabilityErrorMessage(arena, capabilityError);
@@ -4850,14 +5155,15 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
                           "withFileTypes", "fs.readdir(path, options)",
                           &job->withFileTypes);
     } else if (operation == shell::FsOperation::MakeDirectory) {
-        ok = FsBoolOption(ctx, argc > 1 ? argv[1] : JS_UNDEFINED,
-                          "recursive", "fs.mkdir(path, options)",
-                          &job->recursive);
+        ok = FsBoolOption(ctx, argc > 1 ? argv[1] : JS_UNDEFINED, "recursive",
+                          "fs.mkdir(path, options)", &job->recursive);
     } else if (operation == shell::FsOperation::Write) {
         if (argc < 2 ||
             (!JS_IsString(argv[1]) &&
              JS_GetTypedArrayType(argv[1]) != JS_TYPED_ARRAY_UINT8)) {
-            JS_ThrowTypeError(ctx, "fs.writeFile(path, contents) expects a string or Uint8Array");
+            JS_ThrowTypeError(
+                ctx,
+                "fs.writeFile(path, contents) expects a string or Uint8Array");
             ok = false;
         } else if (JS_IsString(argv[1])) {
             Str input;
@@ -4875,7 +5181,9 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
             }
         }
         if (ok && job->input.len > shell::kFsMaxWriteBytes) {
-            JS_ThrowRangeError(ctx, "fs.writeFile contents exceed the 8388608-byte write limit");
+            JS_ThrowRangeError(
+                ctx,
+                "fs.writeFile contents exceed the 8388608-byte write limit");
             ok = false;
         }
         if (ok && !job->input.s && job->input.len != 0) {
@@ -4894,7 +5202,8 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
     if (!host.IsSet()) {
         job->Free();
         delete job;
-        return JS_ThrowTypeError(ctx, "filesystem access needs a live host task");
+        return JS_ThrowTypeError(ctx,
+                                 "filesystem access needs a live host task");
     }
     JSValue resolving[2] = {JS_UNDEFINED, JS_UNDEFINED};
     JSValue promise = JS_NewPromiseCapability(ctx, resolving);
@@ -4904,16 +5213,17 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
         return JS_EXCEPTION;
     }
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
-    uint32_t task = NewTask(impl, ShellTaskKind::Filesystem, resolving[0],
-                            host.GetApp(), host.GetWindow(), false,
-                            resolving[1]);
+    uint32_t task =
+        NewTask(impl, ShellTaskKind::Filesystem, resolving[0], host.GetApp(),
+                host.GetWindow(), false, resolving[1]);
     JS_FreeValue(ctx, resolving[0]);
     JS_FreeValue(ctx, resolving[1]);
     if (!task) {
         JS_FreeValue(ctx, promise);
         job->Free();
         delete job;
-        return JS_ThrowRangeError(ctx, "the runtime reached its outstanding host task limit");
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its outstanding host task limit");
     }
     job->control = ShellRuntimeAccess::Control(impl->owner);
     ControlRetain(job->control);
@@ -4927,7 +5237,8 @@ static JSValue NativeFs(JSContext* ctx, JSValueConst, int argc,
         JS_FreeValue(ctx, promise);
         job->Free();
         delete job;
-        return JS_ThrowInternalError(ctx, "filesystem operation could not start background work");
+        return JS_ThrowInternalError(
+            ctx, "filesystem operation could not start background work");
     }
     return promise;
 }
@@ -4943,7 +5254,8 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
     if (release) PolicyRelease(policy);
     if (converted && !allowed) {
         JSValue result = JS_ThrowTypeError(
-            ctx, "running `%.*s` is not granted; add it to capabilities.fs.execute",
+            ctx,
+            "running `%.*s` is not granted; add it to capabilities.fs.execute",
             command.len, command.s);
         ArenaDelete(arena);
         return result;
@@ -4964,10 +5276,14 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
     int64_t argCount = 0;
     if (ok && argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
         if (!JS_IsArray(argv[1]) || JS_GetLength(ctx, argv[1], &argCount) < 0) {
-            JS_ThrowTypeError(ctx, "process.run(command, args) expects args to be an array of strings");
+            JS_ThrowTypeError(ctx,
+                              "process.run(command, args) expects args to be "
+                              "an array of strings");
             ok = false;
         } else if (argCount < 0 || argCount > 4096) {
-            JS_ThrowRangeError(ctx, "process.run(command, args) accepts at most 4096 arguments");
+            JS_ThrowRangeError(
+                ctx,
+                "process.run(command, args) accepts at most 4096 arguments");
             ok = false;
         }
     }
@@ -4975,15 +5291,16 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
     for (int64_t i = 0; ok && i < argCount; i++) {
         JSValue value = JS_GetPropertyUint32(ctx, argv[1], (uint32_t)i);
         Str argument;
-        bool stringOk = !JS_IsException(value) &&
-                        JsString(ctx, value, arena, &argument);
+        bool stringOk =
+            !JS_IsException(value) && JsString(ctx, value, arena, &argument);
         JS_FreeValue(ctx, value);
         if (!stringOk) {
             ok = false;
             break;
         }
         if (argument.len > 1024 * 1024 - totalBytes) {
-            JS_ThrowRangeError(ctx, "process.run arguments exceed the 1 MiB limit");
+            JS_ThrowRangeError(ctx,
+                               "process.run arguments exceed the 1 MiB limit");
             ok = false;
             break;
         }
@@ -5011,16 +5328,17 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
         return JS_EXCEPTION;
     }
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
-    uint32_t task = NewTask(impl, ShellTaskKind::Process, resolving[0],
-                            host.GetApp(), host.GetWindow(), false,
-                            resolving[1]);
+    uint32_t task =
+        NewTask(impl, ShellTaskKind::Process, resolving[0], host.GetApp(),
+                host.GetWindow(), false, resolving[1]);
     JS_FreeValue(ctx, resolving[0]);
     JS_FreeValue(ctx, resolving[1]);
     if (!task) {
         JS_FreeValue(ctx, promise);
         job->Free();
         delete job;
-        return JS_ThrowRangeError(ctx, "the runtime reached its outstanding host task limit");
+        return JS_ThrowRangeError(
+            ctx, "the runtime reached its outstanding host task limit");
     }
     job->control = ShellRuntimeAccess::Control(impl->owner);
     ControlRetain(job->control);
@@ -5035,7 +5353,8 @@ static JSValue NativeProcessRun(JSContext* ctx, JSValueConst, int argc,
         JS_FreeValue(ctx, promise);
         job->Free();
         delete job;
-        return JS_ThrowInternalError(ctx, "process.run could not start background work");
+        return JS_ThrowInternalError(
+            ctx, "process.run could not start background work");
     }
     return promise;
 }
@@ -5049,13 +5368,18 @@ static JSValue NativeProcessExit(JSContext* ctx, JSValueConst, int argc,
     bool allowed = PolicyCapabilities(policy).MayExit();
     if (release) PolicyRelease(policy);
     if (!allowed) {
-        return JS_ThrowTypeError(ctx, "process.exit() is not granted; set capabilities.process.exit to true");
+        return JS_ThrowTypeError(ctx,
+                                 "process.exit() is not granted; set "
+                                 "capabilities.process.exit to true");
     }
     if (!gShellExitHandler) {
-        return JS_ThrowInternalError(ctx, "process.exit() is granted but the host installed no ShellOnExitRequest handler");
+        return JS_ThrowInternalError(ctx,
+                                     "process.exit() is granted but the host "
+                                     "installed no ShellOnExitRequest handler");
     }
     shell::ScopeHostContext host = shell::ScopeCurrentHost();
-    if (!host.IsSet()) return JS_ThrowTypeError(ctx, "process.exit() needs a live host call");
+    if (!host.IsSet())
+        return JS_ThrowTypeError(ctx, "process.exit() needs a live host call");
     Ctx native = {};
     native.app = host.GetApp();
     native.win = host.GetWindow();
@@ -5075,8 +5399,7 @@ static bool StandardBytes(JSContext* ctx, JSValueConst value,
     size_t count = 0;
     uint8_t* data = JS_GetUint8Array(ctx, &count, value);
     if ((!data && count != 0) || count > (size_t)shell::kStandardDataLimit) {
-        JS_ThrowRangeError(ctx, "%s input exceeds the 64 MiB limit",
-                           operation);
+        JS_ThrowRangeError(ctx, "%s input exceeds the 64 MiB limit", operation);
         return false;
     }
     *bytes = Str((const char*)data, (int)count);
@@ -5086,8 +5409,7 @@ static bool StandardBytes(JSContext* ctx, JSValueConst value,
 static JSValue NativeSha256(JSContext* ctx, JSValueConst, int argc,
                             JSValueConst* argv) {
     Str input;
-    if (argc < 1 ||
-        !StandardBytes(ctx, argv[0], "crypto.createHash", &input)) {
+    if (argc < 1 || !StandardBytes(ctx, argv[0], "crypto.createHash", &input)) {
         return JS_EXCEPTION;
     }
     uint8_t digest[32];
@@ -5104,23 +5426,24 @@ static JSValue NativeRandom(JSContext* ctx, JSValueConst, int argc,
     if (!isfinite(requested) || requested < 0 ||
         requested > shell::kStandardDataLimit ||
         requested != (double)(int)requested) {
-        return JS_ThrowRangeError(
-            ctx, "crypto.randomBytes size must be a whole number from 0 to 67108864");
+        return JS_ThrowRangeError(ctx,
+                                  "crypto.randomBytes size must be a whole "
+                                  "number from 0 to 67108864");
     }
     int count = (int)requested;
     Vec<uint8_t> bytes;
     if ((count > 0 && !VecAppendBlanks(bytes, count)) ||
         !shell::SecureRandom(bytes.els, count)) {
-        return JS_ThrowInternalError(ctx, "the platform secure random generator failed");
+        return JS_ThrowInternalError(
+            ctx, "the platform secure random generator failed");
     }
     return JS_NewUint8ArrayCopy(ctx, bytes.els, (size_t)bytes.len);
 }
 
 static JSValue NativeZlib(JSContext* ctx, JSValueConst, int argc,
                           JSValueConst* argv, int magic) {
-    static const char* names[4] = {
-        "zlib.deflateSync", "zlib.inflateSync", "zlib.gzipSync",
-        "zlib.gunzipSync"};
+    static const char* names[4] = {"zlib.deflateSync", "zlib.inflateSync",
+                                   "zlib.gzipSync", "zlib.gunzipSync"};
     if (magic < 0 || magic >= 4) {
         return JS_ThrowInternalError(ctx, "invalid compression operation");
     }
@@ -5135,7 +5458,8 @@ static JSValue NativeZlib(JSContext* ctx, JSValueConst, int argc,
     bool ok = inflate ? shell::ZlibInflate(input, gzip, &output, &error)
                       : shell::ZlibDeflate(input, gzip, &output, &error);
     if (!ok) {
-        const char* message = error.s ? error.s : "compression operation failed";
+        const char* message =
+            error.s ? error.s : "compression operation failed";
         int messageLen = error.s ? error.len : (int)strlen(message);
         JSValue result = JS_ThrowTypeError(ctx, "%.*s", messageLen, message);
         StrFree(error);
@@ -5143,8 +5467,7 @@ static JSValue NativeZlib(JSContext* ctx, JSValueConst, int argc,
         return result;
     }
     JSValue result = JS_NewUint8ArrayCopy(
-        ctx, (const uint8_t*)(output.s ? output.s : ""),
-        (size_t)output.len);
+        ctx, (const uint8_t*)(output.s ? output.s : ""), (size_t)output.len);
     StrFree(error);
     StrFree(output);
     return result;
@@ -5158,9 +5481,8 @@ static void SetGlobalFunction(JSContext* ctx, JSValueConst global,
 }
 
 static void SetGlobalMagicFunction(JSContext* ctx, JSValueConst global,
-                                   const char* name,
-                                   JSCFunctionMagic* function, int length,
-                                   int magic) {
+                                   const char* name, JSCFunctionMagic* function,
+                                   int length, int magic) {
     JS_SetPropertyStr(ctx, global, name,
                       JS_NewCFunctionMagic(ctx, function, name, length,
                                            JS_CFUNC_generic_magic, magic));
@@ -5206,12 +5528,28 @@ globalThis.__gpui = (() => {
     if (produced === undefined || produced === null) throw new Error("when(...) must return the element");
     return produced;
   };
+  // Focus is held by handle, so the element records the handle rather than
+  // the wrapper object around it — the same unwrapping `Input.new(state)`
+  // does. Without it a script writes `.track_focus(handle.__handle)`, and a
+  // keyboard handler on an element that never took focus hears nothing.
+  explicit.track_focus = function (handle) {
+    const value = typeof handle === "number" ? handle : handle?.__handle;
+    if (typeof value !== "number") {
+      throw new TypeError("track_focus(handle) expects a handle from cx.focus_handle()");
+    }
+    __apply(this.__id, "track_focus", [value]);
+    return this;
+  };
   explicit.track_scroll = function (handle) {
     if (typeof handle?.__handle !== "number") throw new TypeError("track_scroll(handle) expects a VirtualListScrollHandle");
     __apply(this.__id, "track_scroll", [handle.__handle]);
     return this;
   };
-  for (const name of ["content", "trigger", "input", "decrement_button", "increment_button"]) {
+  // An avatar's two — base renders the image, or the fallback when there is
+  // no image, and never both — and an accordion item's two, which are read
+  // back for their own type rather than rendered.
+  for (const name of ["content", "trigger", "input", "decrement_button", "increment_button",
+                      "image", "fallback", "header", "panel"]) {
     explicit[name] = function (value) { __slot(this.__id, name, childId(value)); return this; };
   }
   for (const name of ["hover", "active", "focus", "range_style", "cell_style", "cell_active_style", "caret_style"]) {
@@ -5401,6 +5739,8 @@ globalThis.__gpui = (() => {
     };
     Object.defineProperty(object, "length", { get: () => __storage_length(session) });
     return Object.freeze(object);
+)JS"
+                               R"JS(
   };
   const localStorage = storage(false);
   const sessionStorage = storage(true);
@@ -5447,6 +5787,21 @@ globalThis.__gpui = (() => {
     sleep: (ms = 0) => __sleep(Number(ms)),
     spawn,
     timer,
+    // GPUI dispatches an event to every handler on the path unless one of
+    // them says otherwise, so a script that puts a handler on a row inside a
+    // list hears both. These are the two halves of App's own answer to that,
+    // under their own names.
+    stop_propagation: () => __stop_propagation(),
+    propagate: () => __propagate(),
+    // App::bind_keys, so cx. The keymap belongs to the application rather
+    // than to a window, which is why binding a chord in one view makes it
+    // live everywhere its `context` predicate matches.
+    bind_keys: (bindings) => {
+      if (!Array.isArray(bindings)) {
+        throw new TypeError("cx.bind_keys(bindings) expects an array of { keystroke, action, context? }");
+      }
+      return __bind_keys(bindings);
+    },
     read_from_clipboard: () => __clipboard_read_text(),
     write_to_clipboard: (text) => __clipboard_write_text(String(text)),
   });
@@ -5462,6 +5817,21 @@ globalThis.__gpui = (() => {
     sleep: (ms = 0) => __sleep(Number(ms)),
     spawn,
     timer,
+    // GPUI dispatches an event to every handler on the path unless one of
+    // them says otherwise, so a script that puts a handler on a row inside a
+    // list hears both. These are the two halves of App's own answer to that,
+    // under their own names.
+    stop_propagation: () => __stop_propagation(),
+    propagate: () => __propagate(),
+    // App::bind_keys, so cx. The keymap belongs to the application rather
+    // than to a window, which is why binding a chord in one view makes it
+    // live everywhere its `context` predicate matches.
+    bind_keys: (bindings) => {
+      if (!Array.isArray(bindings)) {
+        throw new TypeError("cx.bind_keys(bindings) expects an array of { keystroke, action, context? }");
+      }
+      return __bind_keys(bindings);
+    },
     read_from_clipboard: () => __clipboard_read_text(),
     write_to_clipboard: (text) => __clipboard_write_text(String(text)),
   });
@@ -5484,11 +5854,40 @@ globalThis.__gpui = (() => {
     localStorage,
     sessionStorage,
     paint_path: paintPath,
+
+    // What the window measures. All legal from render(): a view that sizes
+    // itself from the viewport, or spaces itself in rems, has to ask during
+    // the pass that draws it.
+    rem_size: () => __window_rem_size(),
+    line_height: () => __window_line_height(),
+    viewport_size: () => __window_viewport_size(),
+    bounds: () => __window_bounds(),
+    mouse_position: () => __window_mouse_position(),
+    appearance: () => __window_appearance(),
+    is_window_active: () => __window_is_active(),
+    is_fullscreen: () => __window_is_fullscreen(),
+    is_maximized: () => __window_is_maximized(),
+
+    // What the window can be told. Refused from render() for the reason
+    // cx.notify() is: a frame that changes the window it is drawing into is a
+    // frame arguing with itself. `Window::dispatch_action` in GPUI, so
+    // `window` here — it walks the focus path of *this* window;
+    // `cx.bind_keys` is the other half and is on cx because the keymap is
+    // App's.
+    dispatch_action: (action) => __dispatch_action(String(action)),
+    set_rem_size: (size) => __window_set_rem_size(Number(size)),
+    refresh: () => __window_refresh(),
+    focus_next: () => __window_focus_next(),
+    focus_prev: () => __window_focus_prev(),
+    activate_window: () => __window_activate(),
+    minimize_window: () => __window_minimize(),
+    zoom_window: () => __window_zoom(),
+    toggle_fullscreen: () => __window_toggle_fullscreen(),
   });
   globalThis.localStorage = localStorage;
   globalThis.sessionStorage = sessionStorage;
 )JS"
-R"JS(
+                               R"JS(
   globalThis.console = Object.freeze({
     log: (...args) => __console_log(...args),
     debug: (...args) => __console_debug(...args),
@@ -5669,7 +6068,7 @@ R"JS(
     deflateSync, inflateSync, gzipSync, gunzipSync,
   });
 )JS"
-R"JS(
+                               R"JS(
   const pathSep = __shell_is_windows ? "\\" : "/";
   const pathDelimiter = __shell_is_windows ? ";" : ":";
   const pathParts = (value) => String(value).replace(/\\/g, "/").split("/");
@@ -5707,7 +6106,7 @@ R"JS(
   };
   globalThis.__shell_path = Object.freeze(pathApi);
 )JS"
-R"JS(
+                               R"JS(
   class URLSearchParams {
     constructor(value = "") { this.items = []; const text = String(value).replace(/^\?/, ""); if (text) for (const part of text.split("&")) { const at = part.indexOf("="); this.append(decodeURIComponent(at < 0 ? part : part.slice(0, at)), decodeURIComponent(at < 0 ? "" : part.slice(at + 1))); } }
     append(key, value) { this.items.push([String(key), String(value)]); }
@@ -5794,7 +6193,7 @@ R"JS(
     arch: __shell_arch,
   });
 )JS"
-R"JS(
+                               R"JS(
   const component = (kind, text, handle, index) =>
     element(__component(kind, text, handle, index));
   const named = (kind) => ({ new: (id) => component(kind, String(id)) });
@@ -5846,6 +6245,48 @@ R"JS(
     on: (event, handler) => __otp_on(handle, String(event), handler),
     release: () => __otp_release(handle),
   });
+  // A calendar's month, and the date chosen in it.
+  //
+  // month_days() is the reason this is bound at all: which dates fall in which
+  // week, where the neighbouring months' days go, and how many weeks this
+  // month needs. Everything else here is what it takes to move that grid and
+  // read what was picked from it. The element is deliberately not bound — it
+  // walks the month grid calling a renderer once per cell, up to forty-two
+  // crossings per frame for cells that carry no behavior at all.
+  //
+  // The wire is a flat array either way; the narrowing to null, a string or a
+  // pair happens here so a script never sees the flat form. The slot *count*
+  // is what says which variant was meant: a single day and a range whose end
+  // is not chosen yet hold the same one date and read back as the same string,
+  // but base branches on the difference in is_single, is_complete and
+  // is_in_range.
+  const calendarDate = (parts) => {
+    if (parts.length === 2) return [parts[0] ?? null, parts[1] ?? null];
+    return parts[0] ?? null;
+  };
+  const calendarParts = (value, api) => {
+    if (value === null || value === undefined) return [null];
+    if (Array.isArray(value)) {
+      if (value.length !== 2) throw new TypeError(api + " range expects a two-element array [start, end]");
+      return [value[0] ?? null, value[1] ?? null];
+    }
+    if (typeof value !== "string") throw new TypeError(api + ' expects null, a "YYYY-MM-DD" string, or a pair of those');
+    return [value];
+  };
+  const calendarState = (handle) => ({
+    __handle: handle,
+    month_days: () => __calendar_month_days(handle),
+    year: () => __calendar_year(handle),
+    month: () => __calendar_month(handle),
+    today: () => __calendar_today(handle),
+    value: () => calendarDate(__calendar_value(handle)),
+    set_value: (next) => __calendar_set_value(handle, calendarParts(next, "set_value(value)")),
+    next_month: () => __calendar_next_month(handle),
+    prev_month: () => __calendar_prev_month(handle),
+    on: (event, handler) =>
+      __calendar_on(handle, String(event), (parts, cx) => handler(calendarDate(parts), cx)),
+    release: () => __calendar_release(handle),
+  });
   const focusHandle = (handle) => ({
     __handle: handle,
     focus: () => __focus_focus(handle),
@@ -5858,6 +6299,174 @@ R"JS(
     set_props: (props) => __view_set_props(handle, props),
     release: () => __view_release(handle),
   });
+  // A dockable layout, and the commands its chrome carries.
+  //
+  // Retained for a reason none of the other handles share: the layout is what
+  // the *user* changed. A drag, a resize, a closed tab and a collapsed dock all
+  // happen without this script rendering, so a dock rebuilt from a description
+  // would put every one of them back the way the last render described it.
+  const dockPlacement = (value, api) => {
+    const name = String(value ?? "center");
+    if (!["center", "left", "right", "bottom"].includes(name)) {
+      throw new TypeError(api + ' expects "center", "left", "right" or "bottom"');
+    }
+    return name;
+  };
+  const wholeAt = (value, api) => {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new TypeError(api + " expects a whole, non-negative position");
+    }
+    return value;
+  };
+  const finiteDockNumber = (value, api) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new TypeError(api + " expects a finite number");
+    }
+    return value;
+  };
+  const nonNegativeDockNumber = (value, api) => {
+    const number = finiteDockNumber(value, api);
+    if (number < 0) throw new RangeError(api + " expects a non-negative number");
+    return number;
+  };
+  // Every chrome handler is given base's own state for one container, with the
+  // area it belongs to added on this side — the commands need it, and this
+  // side already knows it, so it never has to cross.
+  const dockTarget = (value, api) => {
+    const handle = value?.__dock;
+    if (typeof handle !== "number") {
+      throw new TypeError(api + " expects the group, dock or tile your chrome handler was given as its first argument");
+    }
+    return handle;
+  };
+  const groupNode = (group, api) => {
+    if (typeof group?.node !== "number") {
+      throw new TypeError(api + " expects a tab group, which is what tab_bar and empty_group are given");
+    }
+    return group.node;
+  };
+  // Commands, not callbacks. A chrome handler runs once per frame for as long
+  // as the dock is on screen, so a handler registered inside one would pile up
+  // exactly the way a virtual list's row handlers would. A command carries no
+  // script value at all: it names a container and what to ask it.
+  explicit.select_tab = function (group, index) {
+    const api = "select_tab(group, index)";
+    __apply(this.__id, "select_tab", [dockTarget(group, api), groupNode(group, api), wholeAt(index, api)]);
+    return this;
+  };
+  explicit.close_panel = function (group, panel) {
+    const api = "close_panel(group, panel_id)";
+    __apply(this.__id, "close_panel", [dockTarget(group, api), groupNode(group, api), Number(panel)]);
+    return this;
+  };
+  explicit.toggle_zoom = function (group) {
+    const api = "toggle_zoom(group)";
+    __apply(this.__id, "toggle_zoom", [dockTarget(group, api), groupNode(group, api)]);
+    return this;
+  };
+  explicit.drag_tab = function (group, index) {
+    const api = "drag_tab(group, index)";
+    __apply(this.__id, "drag_tab", [dockTarget(group, api), groupNode(group, api), wholeAt(index, api)]);
+    return this;
+  };
+  // The one command with an optional argument: a tab bar that names no slot
+  // means "append", which is what a drop past the last tab is.
+  explicit.drop_tab = function (group, index) {
+    const api = "drop_tab(group, index)";
+    const at = index === undefined || index === null ? -1 : wholeAt(index, api);
+    __apply(this.__id, "drop_tab", [dockTarget(group, api), groupNode(group, api), at]);
+    return this;
+  };
+  explicit.toggle_dock = function (dock) {
+    const api = "toggle_dock(dock)";
+    __apply(this.__id, "toggle_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
+    return this;
+  };
+  explicit.resize_dock = function (dock) {
+    const api = "resize_dock(dock)";
+    __apply(this.__id, "resize_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
+    return this;
+  };
+
+  const DOCK_CHROME = ["tab_bar", "empty_group", "drop_indicator", "dock"];
+
+)JS"
+                               R"JS(
+  // The chrome hooks are own properties of the one element that has them,
+  // rather than prototype methods: every other element in the tree would
+  // otherwise carry a `dock` and a `tab_bar` that mean nothing on it.
+  const dockAreaElement = (area) => {
+    const handle = area?.__dock;
+    if (typeof handle !== "number") {
+      throw new TypeError("dock_area(area) expects a DockArea from DockArea.new(id)");
+    }
+    const object = element(__dock_area_element(handle));
+    for (const hook of DOCK_CHROME) {
+      object[hook] = function (handler) {
+        if (typeof handler !== "function") {
+          throw new TypeError(hook + "(handler) expects a function returning an element");
+        }
+        __apply(this.__id, hook, [
+          (payload, cx) => {
+            payload.__dock = handle;
+            return handler(payload, cx);
+          },
+        ]);
+        return this;
+      };
+    }
+    return object;
+  };
+
+  const dockArea = (handle) => ({
+    __dock: handle,
+    __handle: handle,
+    add_panel: (view, options) => {
+      if (typeof view?.__handle !== "number" || !view.__entity) {
+        throw new TypeError("add_panel(view, options) expects a view from cx.new(Class): a panel's body is a view, not an element");
+      }
+      const settings = options ?? {};
+      if (typeof settings.name !== "string" || settings.name.length === 0) {
+        throw new TypeError("add_panel(view, options) needs a name: it is what the panel is filed under in a saved layout, and what register_panel finds it again by");
+      }
+      // No id comes back: the view is still being constructed when this is
+      // called, so the panel it will hold does not exist yet. panels() names
+      // every panel once the call that added them has returned.
+      __dock_add_panel(handle, view.__handle, settings.name,
+        dockPlacement(settings.placement, "add_panel placement"),
+        settings.size === undefined || settings.size === null
+          ? -1
+          : nonNegativeDockNumber(settings.size, "add_panel(view, options) size"),
+        settings.closable === undefined ? true : Boolean(settings.closable),
+        settings.zoomable === undefined ? true : Boolean(settings.zoomable),
+        settings.visible === undefined ? true : Boolean(settings.visible));
+    },
+    remove_panel: (id) => __dock_remove_panel(handle, wholeAt(id, "remove_panel(id)")),
+    panels: () => JSON.parse(__dock_panels(handle)),
+    // The layout as plain data, and back. `load` takes effect once this call
+    // has returned: rebuilding a panel constructs a view, and a view cannot be
+    // constructed while script is running.
+    dump: () => JSON.parse(__dock_dump(handle)),
+    load: (state) => __dock_load(handle, JSON.stringify(state)),
+    has_dock: (placement) => __dock_has(handle, dockPlacement(placement, "has_dock(placement)")),
+    is_dock_open: (placement) => __dock_is_open(handle, dockPlacement(placement, "is_dock_open(placement)")),
+    toggle_dock: (placement) => __dock_toggle(handle, dockPlacement(placement, "toggle_dock(placement)")),
+    remove_dock: (placement) => __dock_remove(handle, dockPlacement(placement, "remove_dock(placement)")),
+    dock_size: (placement) => __dock_size(handle, dockPlacement(placement, "dock_size(placement)")),
+    set_dock_size: (placement, size) => __dock_set_size(handle,
+      dockPlacement(placement, "set_dock_size(placement, size)"),
+      nonNegativeDockNumber(size, "set_dock_size(placement, size)")),
+    set_dock_collapsible: (placement, collapsible) => __dock_set_collapsible(handle,
+      dockPlacement(placement, "set_dock_collapsible(placement, collapsible)"),
+      Boolean(collapsible)),
+    is_locked: () => __dock_is_locked(handle),
+    set_locked: (locked) => __dock_set_locked(handle, Boolean(locked)),
+    is_zoomed: () => __dock_is_zoomed(handle),
+    zoom_out: () => __dock_zoom_out(handle),
+    on: (event, handler) => __dock_on(handle, String(event), handler),
+    release: () => __dock_release(handle),
+  });
+
   const virtualScrollHandle = (handle) => ({
     __handle: handle,
     scroll_to_item: (index, strategy = "top") => __virtual_scroll_to_item(handle, Number(index), String(strategy)),
@@ -5935,6 +6544,59 @@ R"JS(
     SliderThumb: retained("SliderThumb"),
     OtpState: { new: (length, options = {}) => otpState(__otp_state_new(Number(length), options.value ?? null, Boolean(options.masked))) }, OtpInput: retained("OtpInput"),
     fps_monitor: () => component("FpsMonitor"),
+    // Base's own shape: a root that chooses between two slots, and two slot
+    // types that are not elements on their own.
+    Avatar: plain("Avatar"),
+    AvatarImage: { new: (path) => component("AvatarImage", String(path)) },
+    AvatarFallback: plain("AvatarFallback"),
+    Accordion: named("Accordion"),
+    AccordionItem: plain("AccordionItem"),
+    // AccordionHeader.new takes the trigger, exactly as Popup.new takes its
+    // own: a heading whose button arrived later would be a heading that
+    // announced nothing for a frame.
+    AccordionHeader: {
+      new: (trigger) => {
+        if (typeof trigger?.__id !== "number") {
+          throw new TypeError("AccordionHeader.new(trigger) expects an AccordionTrigger element: the heading owns the button that opens the item, and base has none of its own");
+        }
+        return component("AccordionHeader").trigger(trigger);
+      },
+    },
+    AccordionPanel: plain("AccordionPanel"),
+    AccordionTrigger: named("AccordionTrigger"),
+    Pagination: named("Pagination"),
+    // Not a component: the one thing base contributes that a script cannot
+    // write for itself is which page numbers to show, and that is arithmetic.
+    pagination_items: (current_page, total_pages, visible_pages) =>
+      __pagination_items(Number(current_page), Number(total_pages),
+        visible_pages === undefined ? 7 : Number(visible_pages)),
+    CalendarState: { new: () => calendarState(__calendar_state_new()) },
+    DockArea: {
+      new: (id, options) => {
+        const version = options?.version;
+        if (version !== undefined && version !== null && (!Number.isSafeInteger(version) || version < 0)) {
+          throw new TypeError("DockArea.new(id, options) version expects a whole, non-negative safe integer");
+        }
+        return dockArea(__dock_area_new(String(id), version ?? -1));
+      },
+      // Not a method on an area: a builder is registered for the whole
+      // application, and a layout is restored into whichever area asks for
+      // it. Registering the same name twice replaces the class, which is what
+      // a hot reload does.
+      register_panel: (name, Class) => {
+        if (typeof name !== "string" || name.length === 0) {
+          throw new TypeError("DockArea.register_panel(name, Class) needs the name the panel is added under");
+        }
+        if (typeof Class !== "function" || !(Class.prototype instanceof View)) {
+          throw new TypeError("DockArea.register_panel(name, Class) expects the View subclass the panel is rebuilt from");
+        }
+        return __dock_register_panel(name, Class);
+      },
+    },
+    // Free functions, not DockArea.element(...): the area is the state and
+    // this is one description of it, the same split v_virtual_list has.
+    dock_area: dockAreaElement,
+    dock_content: () => component("dock_content"),
     set_theme: (theme) => __set_theme(theme),
   };
   return Object.freeze(api);
@@ -5977,6 +6639,1415 @@ static const char kSandbox[] = R"JS(
 })();
 )JS";
 
+// ─── The window's own measurements and controls ───────────────────────────
+//
+// crates/shell/src/engine/quickjs/window_api.rs. The split between the two
+// halves is the one render enforces everywhere else: reading a measurement
+// during a render pass is the point — a view that sizes itself from the
+// viewport has to ask while it is drawing — while changing the window is a
+// mutation, and a mutation from inside render is a frame arguing with itself.
+
+static bool WindowHost(JSContext* ctx, const char* api, bool mutation,
+                       Window** window, App** app) {
+    if (mutation && shell::ScopeHasCurrent() &&
+        !ScopePhaseAllowsNotify(shell::ScopeCurrentPhase())) {
+        JS_ThrowTypeError(
+            ctx,
+            "%s is not allowed during the `%s` phase; the window may only be "
+            "changed while handling an event or a task",
+            api, ScopePhaseName(shell::ScopeCurrentPhase()));
+        return false;
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet() || !host.GetWindow() || !host.GetApp()) {
+        JS_ThrowTypeError(ctx,
+                          "%s needs a live host call; call it from render(), "
+                          "init(), an event handler or a task",
+                          api);
+        return false;
+    }
+    *window = host.GetWindow();
+    *app = host.GetApp();
+    return true;
+}
+
+// The port's rem is fixed at 16, which is what a `1rem` length resolves to
+// everywhere in this tree; there is no `Window::rem_size` to move, so
+// `set_rem_size` has nothing to set and is not bound. Reported here rather
+// than left out of the prelude, so a script that asks gets the number the
+// lengths it writes are actually resolved against.
+static const float kShellRemSize = 16.f;
+
+static JSValue NativeWindowRemSize(JSContext* ctx, JSValueConst, int,
+                                   JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.rem_size()", false, &window, &app))
+        return JS_EXCEPTION;
+    return JS_NewFloat64(ctx, kShellRemSize);
+}
+
+static JSValue NativeWindowLineHeight(JSContext* ctx, JSValueConst, int,
+                                      JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.line_height()", false, &window, &app))
+        return JS_EXCEPTION;
+    return JS_NewFloat64(ctx, kShellRemSize * kLineHeight);
+}
+
+static JSValue JsSize(JSContext* ctx, float width, float height) {
+    JSValue object = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, object, "width", JS_NewFloat64(ctx, width));
+    JS_SetPropertyStr(ctx, object, "height", JS_NewFloat64(ctx, height));
+    return object;
+}
+
+static JSValue JsPoint(JSContext* ctx, float x, float y) {
+    JSValue object = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, object, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, object, "y", JS_NewFloat64(ctx, y));
+    return object;
+}
+
+static JSValue JsBounds(JSContext* ctx, Bounds bounds) {
+    JSValue object = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, object, "x", JS_NewFloat64(ctx, bounds.x));
+    JS_SetPropertyStr(ctx, object, "y", JS_NewFloat64(ctx, bounds.y));
+    JS_SetPropertyStr(ctx, object, "width", JS_NewFloat64(ctx, bounds.w));
+    JS_SetPropertyStr(ctx, object, "height", JS_NewFloat64(ctx, bounds.h));
+    return object;
+}
+
+static JSValue NativeWindowViewportSize(JSContext* ctx, JSValueConst, int,
+                                        JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.viewport_size()", false, &window, &app))
+        return JS_EXCEPTION;
+    WinSize size = WindowSize(window);
+    return JsSize(ctx, size.dipW, size.dipH);
+}
+
+static JSValue NativeWindowBounds(JSContext* ctx, JSValueConst, int,
+                                  JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.bounds()", false, &window, &app))
+        return JS_EXCEPTION;
+    // The client box, which is what every coordinate a script sees is in.
+    WinSize size = WindowSize(window);
+    return JsBounds(ctx, Bounds{0, 0, size.dipW, size.dipH});
+}
+
+static JSValue NativeWindowMousePosition(JSContext* ctx, JSValueConst, int,
+                                         JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.mouse_position()", false, &window, &app))
+        return JS_EXCEPTION;
+    return JsPoint(ctx, window->mouseX, window->mouseY);
+}
+
+// The platform appearance, reduced to the two a script can act on. The port's
+// window has no vibrancy variants, so the semantic theme mode is the whole of
+// the answer: what a script needs to know is whether it is drawing on light or
+// on dark.
+static JSValue NativeWindowAppearance(JSContext* ctx, JSValueConst, int,
+                                      JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.appearance()", false, &window, &app))
+        return JS_EXCEPTION;
+    return JS_NewString(ctx,
+                        ThemeGet(app) == ThemeMode::Dark ? "dark" : "light");
+}
+
+static JSValue NativeWindowIsActive(JSContext* ctx, JSValueConst, int,
+                                    JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.is_window_active()", false, &window, &app))
+        return JS_EXCEPTION;
+    return JS_NewBool(ctx, window->active);
+}
+
+static JSValue NativeWindowIsMaximized(JSContext* ctx, JSValueConst, int,
+                                       JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.is_maximized()", false, &window, &app))
+        return JS_EXCEPTION;
+    return JS_NewBool(ctx, AppIsMaximized(window));
+}
+
+static JSValue NativeWindowRefresh(JSContext* ctx, JSValueConst, int,
+                                   JSValueConst*) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.refresh()", true, &window, &app))
+        return JS_EXCEPTION;
+    AppRefreshWindows(app);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeWindowFocusMove(JSContext* ctx, JSValueConst, int,
+                                     JSValueConst*, int magic) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    const char* api = magic ? "window.focus_prev()" : "window.focus_next()";
+    if (!WindowHost(ctx, api, true, &window, &app)) return JS_EXCEPTION;
+    FocusTrapTab(window, magic != 0);
+    AppInvalidate(window);
+    return JS_UNDEFINED;
+}
+
+// Activate, minimize and zoom. `zoom_window` is GPUI's name for the maximise
+// toggle, which is what the port's own title bar button runs.
+static JSValue NativeWindowCommand(JSContext* ctx, JSValueConst, int,
+                                   JSValueConst*, int magic) {
+    Window* window = nullptr;
+    App* app = nullptr;
+    static const char* const names[] = {"window.activate_window()",
+                                        "window.minimize_window()",
+                                        "window.zoom_window()"};
+    if (!WindowHost(ctx, names[magic], true, &window, &app))
+        return JS_EXCEPTION;
+    if (magic == 0) {
+        AppActivate(window);
+    } else if (magic == 1) {
+        AppMinimize(window);
+    } else {
+        AppToggleMaximize(window);
+    }
+    return JS_UNDEFINED;
+}
+
+// cx.stop_propagation() / cx.propagate(). GPUI answers them on the App; here
+// the flag belongs to the event being dispatched, so the dispatch that is
+// running installs its own and these two write through it.
+static bool* gShellPropagate = nullptr;
+
+struct ShellPropagationGuard {
+    bool* saved = nullptr;
+    explicit ShellPropagationGuard(bool* flag) {
+        saved = gShellPropagate;
+        gShellPropagate = flag;
+    }
+    ~ShellPropagationGuard() { gShellPropagate = saved; }
+};
+
+static JSValue NativeStopPropagation(JSContext* ctx, JSValueConst, int,
+                                     JSValueConst*) {
+    if (gShellPropagate) *gShellPropagate = false;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (host.IsSet() && host.GetWindow()) {
+        host.GetWindow()->stopPropagation = true;
+    }
+    (void)ctx;
+    return JS_UNDEFINED;
+}
+
+static JSValue NativePropagate(JSContext* ctx, JSValueConst, int,
+                               JSValueConst*) {
+    if (gShellPropagate) *gShellPropagate = true;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (host.IsSet() && host.GetWindow()) {
+        host.GetWindow()->stopPropagation = false;
+    }
+    (void)ctx;
+    return JS_UNDEFINED;
+}
+
+// App::bind_keys, from a list of { keystroke, action, context? }.
+//
+// Whole-list rather than one at a time, and validated before any of it is
+// installed: a keymap half applied because the fourth entry had a typo is a
+// worse state than one not applied at all, and the script has no way to see
+// which half made it.
+static JSValue NativeBindKeys(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    if (shell::ScopeHasCurrent() &&
+        !ScopePhaseAllowsNotify(shell::ScopeCurrentPhase())) {
+        return JS_ThrowTypeError(
+            ctx,
+            "cx.bind_keys() is not allowed during the `%s` phase; bind keys "
+            "from init(), an event handler or a task",
+            ScopePhaseName(shell::ScopeCurrentPhase()));
+    }
+    int64_t count = 0;
+    if (argc < 1 || JS_GetLength(ctx, argv[0], &count) < 0 || count < 0) {
+        return JS_ThrowTypeError(
+            ctx,
+            "cx.bind_keys(bindings) expects an array of { keystroke, action, "
+            "context? }");
+    }
+    if (count > 4096) {
+        return JS_ThrowRangeError(ctx,
+                                  "cx.bind_keys(bindings) has too many "
+                                  "bindings");
+    }
+    Arena* arena = ArenaNew();
+    Vec<KeyBinding> parsed;
+    for (int64_t i = 0; i < count; i++) {
+        JSValue entry = JS_GetPropertyUint32(ctx, argv[0], (uint32_t)i);
+        JSValue strokeValue = JS_GetPropertyStr(ctx, entry, "keystroke");
+        JSValue actionValue = JS_GetPropertyStr(ctx, entry, "action");
+        JSValue contextValue = JS_GetPropertyStr(ctx, entry, "context");
+        Str stroke, action, context;
+        bool ok = JS_IsString(strokeValue) &&
+                  JsString(ctx, strokeValue, arena, &stroke) &&
+                  JS_IsString(actionValue) &&
+                  JsString(ctx, actionValue, arena, &action);
+        bool hasContext = ok && JS_IsString(contextValue) &&
+                          JsString(ctx, contextValue, arena, &context);
+        JS_FreeValue(ctx, strokeValue);
+        JS_FreeValue(ctx, actionValue);
+        JS_FreeValue(ctx, contextValue);
+        JS_FreeValue(ctx, entry);
+        if (!ok || action.len == 0 || stroke.len == 0) {
+            VecReset(parsed);
+            ArenaDelete(arena);
+            return JS_ThrowTypeError(
+                ctx,
+                "binding %d needs a `keystroke`, such as \"cmd-s\", and a "
+                "non-empty `action`",
+                (int)i);
+        }
+        // KeyChordsParse answers 0 for a spec it cannot read, and a script
+        // typo must not install a binding nothing can reach.
+        KeyChord chords[kMaxStrokes] = {};
+        if (KeyChordsParse(stroke, chords, kMaxStrokes) == 0) {
+            JSValue thrown = JS_ThrowTypeError(
+                ctx, "binding %d has an unparsable keystroke `%.*s`", (int)i,
+                stroke.len, stroke.s);
+            VecReset(parsed);
+            ArenaDelete(arena);
+            return thrown;
+        }
+        KeyBinding binding = {};
+        binding.stroke = shell::ShellActionInternText(stroke);
+        binding.action = shell::ShellActionOf(action);
+        binding.context = hasContext && context.len > 0
+                              ? shell::ShellActionInternText(context)
+                              : nullptr;
+        VecAppend(parsed, binding);
+    }
+    if (parsed.len > 0) KeymapBind(&parsed[0], parsed.len);
+    uint32_t installed = (uint32_t)parsed.len;
+    VecReset(parsed);
+    ArenaDelete(arena);
+    return JS_NewUint32(ctx, installed);
+}
+
+static JSValue NativeDispatchAction(JSContext* ctx, JSValueConst, int argc,
+                                    JSValueConst* argv) {
+    Arena* arena = ArenaNew();
+    Str action;
+    if (argc < 1 || !JsString(ctx, argv[0], arena, &action) ||
+        action.len == 0) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(
+            ctx,
+            "window.dispatch_action(action) expects a non-empty action name");
+    }
+    Window* window = nullptr;
+    App* app = nullptr;
+    if (!WindowHost(ctx, "window.dispatch_action()", true, &window, &app)) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    uint32_t id = shell::ShellActionOf(action);
+    ArenaDelete(arena);
+    WindowDispatchAction(window, id);
+    AppInvalidate(window);
+    return JS_UNDEFINED;
+}
+
+// pagination_items(current, total, visible). A plain calculation rather than a
+// component: what it answers is which page numbers to draw and where the gaps
+// fall, and the buttons themselves are the script's.
+static JSValue NativePaginationItems(JSContext* ctx, JSValueConst, int argc,
+                                     JSValueConst* argv) {
+    double current = 0, total = 0, visible = 7;
+    if (argc < 2 || JS_ToFloat64(ctx, &current, argv[0]) < 0 ||
+        JS_ToFloat64(ctx, &total, argv[1]) < 0 ||
+        (argc > 2 && JS_ToFloat64(ctx, &visible, argv[2]) < 0)) {
+        return JS_EXCEPTION;
+    }
+    if (!isfinite(current) || current < 0 || !isfinite(total) || total < 0 ||
+        !isfinite(visible) || visible < 0) {
+        return JS_ThrowTypeError(ctx,
+                                 "pagination_items(current_page, total_pages, "
+                                 "visible_pages?) expects non-negative "
+                                 "numbers");
+    }
+    PaginationState state = PaginationStateNew((int)current, (int)total);
+    if (visible > 0) state.visiblePages = (int)visible;
+    PaginationItem items[64] = {};
+    int count =
+        PaginationItems(&state, items, (int)(sizeof(items) / sizeof(items[0])));
+    JSValue out = JS_NewArray(ctx);
+    for (int i = 0; i < count; i++) {
+        JSValue object = JS_NewObject(ctx);
+        if (items[i].page != 0) {
+            JS_SetPropertyStr(ctx, object, "page",
+                              JS_NewUint32(ctx, (uint32_t)items[i].page));
+        } else {
+            // The span an ellipsis stands for, inclusive at both ends — a
+            // script showing "pages 4–8" wants the last page the gap covers.
+            JSValue bounds = JS_NewArray(ctx);
+            JS_SetPropertyUint32(ctx, bounds, 0,
+                                 JS_NewUint32(ctx, (uint32_t)items[i].from));
+            JS_SetPropertyUint32(ctx, bounds, 1,
+                                 JS_NewUint32(ctx, (uint32_t)items[i].to));
+            JS_SetPropertyStr(ctx, object, "ellipsis", bounds);
+        }
+        JS_SetPropertyUint32(ctx, out, (uint32_t)i, object);
+    }
+    return out;
+}
+
+// ─── CalendarState ────────────────────────────────────────────────────────
+//
+// The state is bound; base's Calendar element is not, and that is a decision
+// rather than an omission. The element walks the month grid calling an item
+// renderer once per cell — up to forty-two calls into the VM per frame, from
+// inside the layout pass, for cells whose default renderer draws an unstyled
+// box. What a script cannot work out for itself is the grid, and month_days()
+// answers exactly that.
+//
+// Dates cross as "YYYY-MM-DD": sortable as text and readable by `new Date(s)`,
+// so weekday names and localized month labels are the script's without this
+// boundary inventing a date type.
+
+static JSValue JsDate(JSContext* ctx, LocalDate date) {
+    if (date.year == 0 || date.month == 0 || date.day == 0) {
+        return JS_NULL;
+    }
+    char text[16] = {};
+    snprintf(text, sizeof(text), "%04d-%02d-%02d", date.year, date.month,
+             date.day);
+    return JS_NewString(ctx, text);
+}
+
+static bool JsToDate(Str text, LocalDate* out) {
+    if (text.len != 10 || text.s[4] != '-' || text.s[7] != '-') return false;
+    int year = 0, month = 0, day = 0;
+    for (int i = 0; i < 10; i++) {
+        if (i == 4 || i == 7) continue;
+        if (text.s[i] < '0' || text.s[i] > '9') return false;
+    }
+    for (int i = 0; i < 4; i++) year = year * 10 + (text.s[i] - '0');
+    for (int i = 5; i < 7; i++) month = month * 10 + (text.s[i] - '0');
+    for (int i = 8; i < 10; i++) day = day * 10 + (text.s[i] - '0');
+    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+    *out = LocalDate{year, month, day};
+    return true;
+}
+
+// A Date on the wire: one slot for a single day, two for a range.
+//
+// The slot *count* is what carries the variant, and it has to. A single day
+// and a range whose end is not chosen yet hold the same one date and both
+// render as the same string — but base branches on the difference in
+// IsSingle, IsComplete and IsInRange, so a wire that dropped it would quietly
+// turn every set_value("2026-08-15") into a half-open range.
+static JSValue DateToParts(JSContext* ctx, Date date) {
+    JSValue parts = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx, parts, 0, JsDate(ctx, date.start));
+    if (date.kind == DateKind::Range) {
+        JS_SetPropertyUint32(ctx, parts, 1, JsDate(ctx, date.end));
+    }
+    return parts;
+}
+
+static bool DateFromParts(JSContext* ctx, JSValueConst parts, Date* out) {
+    int64_t count = 0;
+    if (JS_GetLength(ctx, parts, &count) < 0 || count < 1 || count > 2) {
+        JS_ThrowTypeError(ctx,
+                          "set_value(value) expects null, a \"YYYY-MM-DD\" "
+                          "string, or a pair of those");
+        return false;
+    }
+    LocalDate slots[2] = {};
+    for (int64_t i = 0; i < count; i++) {
+        JSValue value = JS_GetPropertyUint32(ctx, parts, (uint32_t)i);
+        if (JS_IsNull(value) || JS_IsUndefined(value)) {
+            JS_FreeValue(ctx, value);
+            continue;
+        }
+        Arena* arena = ArenaNew();
+        Str text;
+        bool ok =
+            JsString(ctx, value, arena, &text) && JsToDate(text, &slots[i]);
+        ArenaDelete(arena);
+        JS_FreeValue(ctx, value);
+        if (!ok) {
+            JS_ThrowTypeError(ctx, "a calendar date must be \"YYYY-MM-DD\"");
+            return false;
+        }
+    }
+    *out =
+        count == 2 ? Date::Range(slots[0], slots[1]) : Date::Single(slots[0]);
+    return true;
+}
+
+static CalendarState* LiveCalendar(JSContext* ctx, JSValueConst value,
+                                   App** app, Window** window) {
+    shell::EntityHandle handle = 0;
+    if (!JsHandle(ctx, value, &handle)) return nullptr;
+    shell::RetainedEntry* entry =
+        LiveRetained(ctx, handle, shell::RetainedKind::Calendar, "calendar");
+    if (!entry) return nullptr;
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        JS_ThrowTypeError(ctx,
+                          "a CalendarState needs a live host call; call it "
+                          "from render(), init() or an event handler");
+        return nullptr;
+    }
+    if (app) *app = host.GetApp();
+    if (window) *window = host.GetWindow();
+    return entry->calendar.Get(host.GetApp());
+}
+
+static JSValue NativeCalendarNew(JSContext* ctx, JSValueConst, int,
+                                 JSValueConst*) {
+    if (RefuseRetainedCreation(ctx, "CalendarState.new()")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!impl || !host.IsSet()) {
+        return JS_ThrowTypeError(ctx,
+                                 "CalendarState.new() needs a live host call; "
+                                 "call it from init() or an event handler");
+    }
+    Ctx cx = {host.GetApp(),
+              host.GetWindow(),
+              host.GetWindow() ? host.GetWindow()->frameArena : nullptr,
+              {}};
+    shell::EntityHandle handle = impl->retained.CreateCalendar(
+        &cx, shell::ScopeCurrentView(), shell::ScopeCurrentApplication());
+    if (!handle) {
+        return JS_ThrowRangeError(ctx,
+                                  "the application reached gpui-shell's "
+                                  "retained entity limit; release unused "
+                                  "handles");
+    }
+    return JS_NewFloat64(ctx, (double)handle);
+}
+
+// month_days(): the grid, as weeks of "YYYY-MM-DD" days. One array per month
+// the state is showing, so the shape matches base's own `month_days`.
+static JSValue NativeCalendarMonthDays(JSContext* ctx, JSValueConst, int argc,
+                                       JSValueConst* argv) {
+    App* app = nullptr;
+    CalendarState* state =
+        argc >= 1 ? LiveCalendar(ctx, argv[0], &app, nullptr) : nullptr;
+    if (!state) return JS_EXCEPTION;
+    JSValue months = JS_NewArray(ctx);
+    for (int m = 0; m < (state->numberOfMonths > 0 ? state->numberOfMonths : 1);
+         m++) {
+        int year = state->currentYear;
+        int month = state->currentMonth + m;
+        while (month > 12) {
+            month -= 12;
+            year++;
+        }
+        LocalDate first = {year, month, 1};
+        int weekday = CalendarWeekday(year, month, 1);
+        int offset = CalendarGridOffset(weekday);
+        int days = CalendarDaysInMonth(year, month);
+        int cells = CalendarGridCells(offset, days);
+        LocalDate start = DateAddDays(first, -offset);
+        JSValue weeks = JS_NewArray(ctx);
+        uint32_t weekIndex = 0;
+        for (int i = 0; i < cells; i += 7) {
+            JSValue week = JS_NewArray(ctx);
+            for (int d = 0; d < 7; d++) {
+                JS_SetPropertyUint32(ctx, week, (uint32_t)d,
+                                     JsDate(ctx, DateAddDays(start, i + d)));
+            }
+            JS_SetPropertyUint32(ctx, weeks, weekIndex++, week);
+        }
+        JS_SetPropertyUint32(ctx, months, (uint32_t)m, weeks);
+    }
+    return months;
+}
+
+// year(), month() and today(). Three readers rather than one answering all
+// three: the prelude spells each as its own method, so a combined call would
+// have every one of them pay for the other two.
+static JSValue NativeCalendarRead(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv, int magic) {
+    App* app = nullptr;
+    CalendarState* state =
+        argc >= 1 ? LiveCalendar(ctx, argv[0], &app, nullptr) : nullptr;
+    if (!state) return JS_EXCEPTION;
+    if (magic == 0) return JS_NewInt32(ctx, state->currentYear);
+    if (magic == 1) return JS_NewUint32(ctx, (uint32_t)state->currentMonth);
+    if (magic == 2) return JsDate(ctx, state->today);
+    return DateToParts(ctx, state->date);
+}
+
+static JSValue NativeCalendarSetValue(JSContext* ctx, JSValueConst, int argc,
+                                      JSValueConst* argv) {
+    App* app = nullptr;
+    Window* window = nullptr;
+    CalendarState* state =
+        argc >= 2 ? LiveCalendar(ctx, argv[0], &app, &window) : nullptr;
+    if (!state) return JS_EXCEPTION;
+    Date date = {};
+    if (!DateFromParts(ctx, argv[1], &date)) return JS_EXCEPTION;
+    Ctx cx = {app, window, window ? window->frameArena : nullptr, {}};
+    CalendarStateSetDate(state, date, &cx);
+    return JS_UNDEFINED;
+}
+
+// Moving the month is a mutation, so it is refused during a render pass for
+// the reason every other one is: a frame that moved the month it was drawing
+// would draw one month and describe another.
+static JSValue NativeCalendarStep(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv, int magic) {
+    if (RefuseRetainedMutation(ctx, magic ? "prev_month()" : "next_month()")) {
+        return JS_EXCEPTION;
+    }
+    App* app = nullptr;
+    Window* window = nullptr;
+    CalendarState* state =
+        argc >= 1 ? LiveCalendar(ctx, argv[0], &app, &window) : nullptr;
+    if (!state) return JS_EXCEPTION;
+    if (magic) {
+        CalendarPrevMonth(state);
+    } else {
+        CalendarNextMonth(state);
+    }
+    if (window) AppInvalidate(window);
+    return JS_UNDEFINED;
+}
+
+// A calendar's one event: a date was selected. One subscription and one
+// handler, because CalendarEvent has one variant — there is nothing to key by
+// and nothing a second registration could mean but "also this", which is not
+// what every other `on(...)` in this API means.
+static JSValue NativeCalendarOn(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    App* app = nullptr;
+    CalendarState* state =
+        argc >= 3 ? LiveCalendar(ctx, argv[0], &app, nullptr) : nullptr;
+    if (!state) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str name;
+    bool named = JsString(ctx, argv[1], arena, &name);
+    bool isChange = named && StrEq(name, "change");
+    ArenaDelete(arena);
+    if (!named) return JS_EXCEPTION;
+    if (!isChange) {
+        return JS_ThrowTypeError(
+            ctx,
+            "unknown calendar event; the only one is \"change\", which fires "
+            "when a date is selected");
+    }
+    if (!JS_IsFunction(ctx, argv[2])) {
+        return JS_ThrowTypeError(ctx,
+                                 "on(\"change\", handler) expects a function");
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::EntityHandle handle = 0;
+    JsHandle(ctx, argv[0], &handle);
+    shell::RetainedEntry* entry = impl->retained.Find(handle);
+    if (!entry) return JS_NewBool(ctx, false);
+    shell::CallbackId callback = impl->callbacks.PushPersistent(
+        ctx, argv[2], shell::ScopeCurrentView(), shell::ScopeCurrentPolicy(),
+        (AppModule*)shell::ScopeCurrentApplication());
+    if (callback == UINT64_MAX) {
+        return JS_ThrowInternalError(ctx,
+                                     "a calendar handler was registered "
+                                     "outside a live application");
+    }
+    shell::CallbackId replaced = 0;
+    impl->retained.AddCallback(handle, shell::RetainedEvent::CalendarChange,
+                               callback, true, &replaced);
+    if (replaced) impl->callbacks.RetireId(ctx, replaced);
+    if (entry->subscription.IsValid()) {
+        EntityUnsubscribe(app, entry->subscription);
+        entry->subscription = {};
+    }
+    entry->subscription = EntitySubscribeRaw(
+        app, entry->calendar.id,
+        ListenTo(Entity<ScriptView>{shell::ScopeCurrentView()},
+                 &ScriptView::OnCalendarEvent, (intptr_t)handle));
+    return JS_NewBool(ctx, true);
+}
+
+static JSValue NativeCalendarRelease(JSContext* ctx, JSValueConst, int argc,
+                                     JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::EntityHandle handle = 0;
+    if (!impl || argc < 1 || !JsHandle(ctx, argv[0], &handle)) {
+        return JS_NewBool(ctx, false);
+    }
+    Vec<shell::CallbackId> retired;
+    bool released = impl->retained.Release(handle, &retired);
+    for (int i = 0; i < retired.len; i++)
+        impl->callbacks.RetireId(ctx, retired[i]);
+    VecReset(retired);
+    return JS_NewBool(ctx, released);
+}
+
+// ─── Panels come back after a restart ─────────────────────────────────────
+//
+// DockArea.register_panel(name, Class) teaches the panel registry to rebuild
+// the panel from a persisted layout: it constructs Class, then hands the
+// payload the last save wrote to the instance's own deserialize(data). Its
+// serialize() is read on the way out. Both are ordinary methods on the view
+// class, because a panel *is* a view — there is no second object to introduce.
+
+struct ScriptPanelClass {
+    ShellRuntimeImpl* impl = nullptr;
+    Str name = {};
+    JSValue klass = JS_UNDEFINED;
+    Policy* policy = nullptr;
+    AppModule* application = nullptr;
+};
+
+static Entity<ScriptView> BuildScriptPanel(Window* window, App* app,
+                                           void* data) {
+    auto* registered = (ScriptPanelClass*)data;
+    if (!registered || !registered->impl || JS_IsUndefined(registered->klass)) {
+        return {};
+    }
+    ShellRuntimeImpl* impl = registered->impl;
+    ViewType* type = new ViewType();
+    type->runtime = impl->owner->Retain();
+    type->value = JS_DupValue(impl->context, registered->klass);
+    type->application = registered->application;
+    Entity<ScriptView> entity =
+        ScriptView::New(app, impl->owner, type, registered->policy);
+    ScriptView* view = entity.Get(app);
+    if (!view) {
+        ViewTypeRelease(type);
+        return {};
+    }
+    ShellError error = {};
+    ViewObject* object =
+        InstantiateObject(impl->owner, type, window, app, registered->policy,
+                          JS_UNDEFINED, &error, entity.id);
+    if (!object) {
+        log(error.IsSet() ? error.message
+                          : StrL("a dock panel's script could not be built"));
+        ShellErrorClear(&error);
+        EntityDrop(app, entity.id);
+        ViewTypeRelease(type);
+        return {};
+    }
+    view = entity.Get(app);
+    if (!view) {
+        ViewObjectRelease(object);
+        ViewTypeRelease(type);
+        return {};
+    }
+    view->object = object;
+    // ScriptView::New retained the type; this reference was ours.
+    ViewTypeRelease(type);
+    return entity;
+}
+
+// The instance's own serialize(), if it has one. No call scope is opened, and
+// none can be: a dump is a read, so there is no window to open one with. A
+// serialize() that calls back into the host therefore fails the way any host
+// call outside a scope does, which is the documented contract.
+static bool SerializeScriptPanel(Entity<ScriptView> handle, App* app,
+                                 void* data, StrBuilder* out) {
+    auto* registered = (ScriptPanelClass*)data;
+    ScriptView* view = registered ? handle.Get(app) : nullptr;
+    if (!view || !view->object) return false;
+    JSContext* ctx = registered->impl->context;
+    JSValue instance = view->object->value;
+    JSValue method = JS_GetPropertyStr(ctx, instance, "serialize");
+    if (!JS_IsFunction(ctx, method)) {
+        JS_FreeValue(ctx, method);
+        return false;
+    }
+    JSValue produced = JS_Call(ctx, method, instance, 0, nullptr);
+    JS_FreeValue(ctx, method);
+    if (JS_IsException(produced) || JS_IsUndefined(produced) ||
+        JS_IsNull(produced)) {
+        if (JS_IsException(produced)) {
+            Arena* arena = ArenaNew();
+            log(ExceptionText(arena, ctx));
+            ArenaDelete(arena);
+        } else {
+            JS_FreeValue(ctx, produced);
+        }
+        return false;
+    }
+    JSValue text = JS_JSONStringify(ctx, produced, JS_UNDEFINED, JS_UNDEFINED);
+    JS_FreeValue(ctx, produced);
+    if (!JS_IsString(text)) {
+        JS_FreeValue(ctx, text);
+        return false;
+    }
+    size_t len = 0;
+    const char* encoded = JS_ToCStringLen(ctx, &len, text);
+    if (encoded) out->Append(Str(encoded, (int)len));
+    JS_FreeCString(ctx, encoded);
+    JS_FreeValue(ctx, text);
+    return encoded != nullptr;
+}
+
+static void DeserializeScriptPanel(Entity<ScriptView> handle, Str json,
+                                   Window* window, App* app, void* data) {
+    auto* registered = (ScriptPanelClass*)data;
+    ScriptView* view = registered ? handle.Get(app) : nullptr;
+    if (!view || !view->object) return;
+    JSContext* ctx = registered->impl->context;
+    JSValue instance = view->object->value;
+    JSValue method = JS_GetPropertyStr(ctx, instance, "deserialize");
+    if (!JS_IsFunction(ctx, method)) {
+        JS_FreeValue(ctx, method);
+        return;
+    }
+    shell::CallScopeGuard scope = shell::ScopeEnter(
+        window, app, ScopePhase::Event, handle.id, view->policy,
+        registered->impl->owner, registered->application);
+    (void)scope;
+    JSValue payload = JS_ParseJSON(ctx, json.s, (size_t)json.len, "<panel>");
+    if (JS_IsException(payload)) {
+        Arena* arena = ArenaNew();
+        log(ExceptionText(arena, ctx));
+        ArenaDelete(arena);
+        JS_FreeValue(ctx, method);
+        return;
+    }
+    JSValue result = JS_Call(ctx, method, instance, 1, &payload);
+    JS_FreeValue(ctx, payload);
+    JS_FreeValue(ctx, method);
+    if (JS_IsException(result)) {
+        Arena* arena = ArenaNew();
+        log(ExceptionText(arena, ctx));
+        ArenaDelete(arena);
+    } else {
+        JS_FreeValue(ctx, result);
+    }
+    // The view described itself before the payload arrived, so what it
+    // described is now out of date.
+    view->dirty = true;
+}
+
+// The registration owns this: it is replaced by a later register_panel(name)
+// and dropped when the panel manager goes. A class the runtime already retired
+// is left alone — its JS value went with the context.
+static void ReleaseScriptPanelClass(void* data) {
+    auto* registered = (ScriptPanelClass*)data;
+    if (!registered) return;
+    if (registered->impl) {
+        for (int i = 0; i < registered->impl->panelClasses.len; i++) {
+            if (registered->impl->panelClasses[i] != registered) continue;
+            for (int j = i + 1; j < registered->impl->panelClasses.len; j++) {
+                registered->impl->panelClasses[j - 1] = registered->impl
+                                                            ->panelClasses[j];
+            }
+            registered->impl->panelClasses.len--;
+            break;
+        }
+        if (!JS_IsUndefined(registered->klass)) {
+            JS_FreeValue(registered->impl->context, registered->klass);
+        }
+    }
+    registered->klass = JS_UNDEFINED;
+    PolicyRelease(registered->policy);
+    delete registered;
+}
+
+static Str ShellRegisterPanelClass(ShellRuntimeImpl* impl, JSContext* ctx,
+                                   App* app, Str panel, JSValueConst klass) {
+    if (!app) {
+        JS_ThrowTypeError(ctx,
+                          "DockArea.register_panel(name, Class) needs a live "
+                          "host call");
+        return {};
+    }
+    auto* registered = new ScriptPanelClass();
+    registered->impl = impl;
+    registered->klass = JS_DupValue(ctx, klass);
+    registered->policy = PolicyRetain(shell::ScopeCurrentPolicy());
+    registered->application = (AppModule*)shell::ScopeCurrentApplication();
+    VecAppend(impl->panelClasses, registered);
+
+    shell::ShellPanelScript script = {};
+    script.data = registered;
+    script.build = BuildScriptPanel;
+    script.serialize = SerializeScriptPanel;
+    script.deserialize = DeserializeScriptPanel;
+    script.release = ReleaseScriptPanelClass;
+    // The registration outlives this runtime — it is filed in an App global —
+    // so the class it holds is dropped from the runtime's own teardown rather
+    // than through `release`. Registering the same name twice replaces the
+    // class, which is what a hot reload does.
+    registered->name = shell::ShellRegisterPanel(
+        app, PolicyApplication(shell::ScopeCurrentPolicy()), panel, script);
+    return registered->name;
+}
+
+// ─── The dockable layout ──────────────────────────────────────────────────
+//
+// crates/shell/src/engine/quickjs/dock_api.rs. `DockArea.new(id)` creates a
+// base DockArea in the retained store and hands back a handle, for the reason
+// an input's text is retained rather than described: the layout is what the
+// *user* changed.
+//
+// Upstream queues `add_panel` and `load` until QuickJS has released its
+// runtime lock, because both construct views and Rust cannot do that from
+// inside a host call. This binding constructs a nested view directly — the
+// same deviation `cx.new(Class)` already documents — so both apply where they
+// are written, and a failure is catchable at the line that caused it.
+
+static DockPlacement DockPlacementOf(Str name) {
+    if (StrEq(name, "left")) return DockPlacement::Left;
+    if (StrEq(name, "right")) return DockPlacement::Right;
+    if (StrEq(name, "bottom")) return DockPlacement::Bottom;
+    return DockPlacement::Center;
+}
+
+static const char* DockPlacementWord(DockPlacement placement) {
+    switch (placement) {
+        case DockPlacement::Left:
+            return "left";
+        case DockPlacement::Right:
+            return "right";
+        case DockPlacement::Bottom:
+            return "bottom";
+        default:
+            return "center";
+    }
+}
+
+static shell::RetainedEntry* LiveDock(JSContext* ctx, JSValueConst value,
+                                      App** app, Window** window,
+                                      DockState** state) {
+    shell::EntityHandle handle = 0;
+    if (!JsHandle(ctx, value, &handle)) return nullptr;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::RetainedEntry* entry = impl ? impl->retained.Find(handle) : nullptr;
+    if (!entry || entry->kind != shell::RetainedKind::Dock) {
+        JS_ThrowTypeError(ctx,
+                          "this dock area has been released; a handle cannot "
+                          "be used after release()");
+        return nullptr;
+    }
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!host.IsSet()) {
+        JS_ThrowTypeError(ctx,
+                          "a DockArea needs a live host call; call it from "
+                          "render(), init() or an event handler");
+        return nullptr;
+    }
+    if (app) *app = host.GetApp();
+    if (window) *window = host.GetWindow();
+    if (state) {
+        *state = entry->dock.Get(host.GetApp());
+        if (!*state) {
+            JS_ThrowTypeError(ctx, "this dock area is no longer live");
+            return nullptr;
+        }
+    }
+    return entry;
+}
+
+// Mutations are refused during a render pass for the reason every other one
+// is: a frame that changed the layout it was describing would describe one
+// layout and draw another. Layout is refused too, because a chrome handler
+// runs inside the pass laying the frame out.
+static bool RefuseDockChange(JSContext* ctx, const char* api) {
+    if (shell::ScopeHasCurrent() &&
+        (shell::ScopeCurrentPhase() == ScopePhase::Render ||
+         shell::ScopeCurrentPhase() == ScopePhase::Layout)) {
+        JS_ThrowTypeError(ctx,
+                          "%s changes the layout and cannot be called while "
+                          "one is being described or laid out; call it from "
+                          "init(), an event handler or a task",
+                          api);
+        return true;
+    }
+    return false;
+}
+
+static JSValue NativeDockNew(JSContext* ctx, JSValueConst, int argc,
+                             JSValueConst* argv) {
+    if (RefuseDockChange(ctx, "DockArea.new(id)")) return JS_EXCEPTION;
+    if (RefuseRetainedCreation(ctx, "DockArea.new(id)")) return JS_EXCEPTION;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!impl || argc < 1 || !host.IsSet()) {
+        return JS_ThrowTypeError(ctx,
+                                 "DockArea.new(id) needs a live host call; "
+                                 "call it from init() or an event handler");
+    }
+    Arena* arena = ArenaNew();
+    Str id;
+    if (!JsString(ctx, argv[0], arena, &id)) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    int32_t version = -1;
+    if (argc > 1 && !JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1]) &&
+        JS_ToInt32(ctx, &version, argv[1]) < 0) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    Ctx cx = {host.GetApp(),
+              host.GetWindow(),
+              host.GetWindow() ? host.GetWindow()->frameArena : nullptr,
+              {}};
+    shell::EntityHandle handle = impl->retained.CreateDock(
+        id, version >= 0, version, &cx, shell::ScopeCurrentView(),
+        shell::ScopeCurrentApplication());
+    ArenaDelete(arena);
+    if (!handle) {
+        return JS_ThrowRangeError(ctx,
+                                  "the application reached gpui-shell's "
+                                  "retained entity limit; release unused "
+                                  "handles");
+    }
+    return JS_NewFloat64(ctx, (double)handle);
+}
+
+// The group a panel is added to: the Dock's own node, or the centre's first
+// tab group, made if the area has none yet.
+static int DockGroupFor(DockState* state, DockPlacement placement) {
+    DockSide* side = DockSideOf(state, placement);
+    if (side) {
+        if (side->node < 0) side->node = DockNewTabs(state);
+        return side->node;
+    }
+    int node = state->center;
+    if (node < 0 || state->nodes[node].split) {
+        node = node >= 0 && state->nodes[node].child.len > 0
+                   ? state->nodes[node].child[0]
+                   : DockNewTabs(state);
+        if (state->center < 0) state->center = node;
+    }
+    return node;
+}
+
+static JSValue NativeDockAddPanel(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv) {
+    if (RefuseDockChange(ctx, "add_panel(view, options)")) return JS_EXCEPTION;
+    App* app = nullptr;
+    Window* window = nullptr;
+    DockState* state = nullptr;
+    if (argc < 8 || !LiveDock(ctx, argv[0], &app, &window, &state)) {
+        return JS_EXCEPTION;
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    uint32_t token = 0;
+    if (JS_ToUint32(ctx, &token, argv[1]) < 0) return JS_EXCEPTION;
+    NestedViewEntry* nested = FindNestedView(impl, token);
+    if (!nested || !NestedViewIsCurrent(nested)) {
+        return JS_ThrowTypeError(
+            ctx,
+            "add_panel(view, options) expects a view from cx.new(Class); this "
+            "one has been released or belongs to another application");
+    }
+    Arena* arena = ArenaNew();
+    Str name, placementName;
+    if (!JsString(ctx, argv[2], arena, &name) ||
+        !JsString(ctx, argv[3], arena, &placementName)) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    double size = -1;
+    if (JS_ToFloat64(ctx, &size, argv[4]) < 0) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    DockPlacement placement = DockPlacementOf(placementName);
+    // `shell:<application>/<panel>`, which is what the layout file holds and
+    // what register_panel finds the class again by.
+    Str qualified = shell::ShellPanelName(
+        PolicyApplication(shell::ScopeCurrentPolicy()), name);
+    shell::ShellPanelScript script = {};
+    script.closable = JS_ToBool(ctx, argv[5]) != 0;
+    script.zoomable = JS_ToBool(ctx, argv[6]) != 0;
+    script.visible = JS_ToBool(ctx, argv[7]) != 0;
+    // A panel the script *adds* gets the same serialize/deserialize hooks a
+    // restored one does — otherwise a layout would round-trip only after a
+    // restart, which is the one time nobody is watching. The registration
+    // owns the class, so this borrows its hooks and does not free them.
+    for (int i = 0; i < impl->panelClasses.len; i++) {
+        ScriptPanelClass* registered = impl->panelClasses[i];
+        if (!StrEq(registered->name, qualified)) continue;
+        script.data = registered;
+        script.serialize = SerializeScriptPanel;
+        script.deserialize = DeserializeScriptPanel;
+        break;
+    }
+    DockPanelDef def = shell::ScriptPanelNew(
+        app, qualified, Entity<ScriptView>{nested->view}, &script);
+    ArenaDelete(arena);
+    if (!def.render) {
+        return JS_ThrowInternalError(ctx, "could not build the dock panel");
+    }
+    int panel = DockAddPanelDef(state, def);
+    int node = DockGroupFor(state, placement);
+    DockTabsAdd(state, node, panel);
+    DockSide* side = DockSideOf(state, placement);
+    if (side && size >= 0) side->size = (float)size;
+    if (window) AppInvalidate(window);
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeDockRemovePanel(JSContext* ctx, JSValueConst, int argc,
+                                     JSValueConst* argv) {
+    if (RefuseDockChange(ctx, "remove_panel(id)")) return JS_EXCEPTION;
+    App* app = nullptr;
+    Window* window = nullptr;
+    DockState* state = nullptr;
+    if (argc < 2 || !LiveDock(ctx, argv[0], &app, &window, &state)) {
+        return JS_EXCEPTION;
+    }
+    double id = 0;
+    if (JS_ToFloat64(ctx, &id, argv[1]) < 0) return JS_EXCEPTION;
+    // Base removes a panel by index, which a script has no way to name — it
+    // holds the id the area reported. Answers whether anything was removed, so
+    // a script asking for a panel that has already gone hears about it.
+    for (int i = 0; i < state->panels.len; i++) {
+        if ((double)state->panels[i].id.AsU64() != id) continue;
+        int node = DockNodeOfPanel(state, i);
+        if (node < 0) return JS_NewBool(ctx, false);
+        const DockNode& group = state->nodes[node];
+        for (int ix = 0; ix < group.panel.len; ix++) {
+            if (group.panel[ix] != i) continue;
+            Ctx cx = {app, window, window ? window->frameArena : nullptr, {}};
+            DockClosePanel(state, &cx, node, ix);
+            return JS_NewBool(ctx, true);
+        }
+        return JS_NewBool(ctx, false);
+    }
+    return JS_NewBool(ctx, false);
+}
+
+// Walked node by node rather than through the panel list, because where a
+// panel sits is half of what a script asks this for: which container holds it,
+// where in that container it is, and whether it is the one on screen.
+static JSValue NativeDockPanels(JSContext* ctx, JSValueConst, int argc,
+                                JSValueConst* argv) {
+    App* app = nullptr;
+    DockState* state = nullptr;
+    if (argc < 1 || !LiveDock(ctx, argv[0], &app, nullptr, &state)) {
+        return JS_EXCEPTION;
+    }
+    StrBuilder out;
+    JsonWriter json;
+    json.out = &out;
+    json.BeginArray();
+    for (int node = 0; node < state->nodes.len; node++) {
+        const DockNode& group = state->nodes[node];
+        if (!group.used || group.split) continue;
+        int active = DockActiveIx(state, node);
+        DockPlacement placement = DockPlacementOfNode(state, node);
+        for (int ix = 0; ix < group.panel.len; ix++) {
+            int at = group.panel[ix];
+            if (at < 0 || at >= state->panels.len) continue;
+            const DockPanelDef& def = state->panels[at];
+            json.BeginObject();
+            json.Number("id", (double)def.id.AsU64());
+            json.String("name", def.name);
+            json.String("placement", Str(DockPlacementWord(placement)));
+            json.Number("node", node);
+            json.Number("index", ix);
+            json.Bool("active", ix == active);
+            json.Bool("visible", def.visible);
+            json.Bool("closable", def.closable);
+            json.Bool("zoomable", def.canZoom);
+            json.EndObject();
+        }
+    }
+    json.EndArray();
+    Str text = out.TakeStr();
+    JSValue result = JS_NewStringLen(ctx, text.s, (size_t)text.len);
+    StrFree(text);
+    return result;
+}
+
+static JSValue NativeDockDump(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    App* app = nullptr;
+    DockState* state = nullptr;
+    if (argc < 1 || !LiveDock(ctx, argv[0], &app, nullptr, &state)) {
+        return JS_EXCEPTION;
+    }
+    DockAreaState saved;
+    DockDump(state, &saved);
+    StrBuilder out;
+    DockAreaStateWrite(&saved, &out);
+    Str text = out.TakeStr();
+    JSValue result = JS_NewStringLen(ctx, text.s, (size_t)text.len);
+    StrFree(text);
+    return result;
+}
+
+static JSValue NativeDockLoad(JSContext* ctx, JSValueConst, int argc,
+                              JSValueConst* argv) {
+    if (RefuseDockChange(ctx, "load(state)")) return JS_EXCEPTION;
+    App* app = nullptr;
+    Window* window = nullptr;
+    DockState* state = nullptr;
+    shell::RetainedEntry* entry =
+        argc >= 2 ? LiveDock(ctx, argv[0], &app, &window, &state) : nullptr;
+    if (!entry) return JS_EXCEPTION;
+    Arena* text = ArenaNew();
+    Str json;
+    if (!JsString(ctx, argv[1], text, &json)) {
+        ArenaDelete(text);
+        return JS_EXCEPTION;
+    }
+    // The parsed layout's strings outlive the call: DockLoad keeps the panel
+    // names it was handed. The previous load's arena goes with the new one.
+    Arena* arena = ArenaNew();
+    DockAreaState parsed;
+    bool ok = DockAreaStateParse(arena, json, &parsed);
+    ArenaDelete(text);
+    if (!ok) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx, "this is not a layout written by dump()");
+    }
+    if (!DockLoad(state, &parsed, arena, nullptr, app, window, entry->dock)) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(ctx,
+                                 "this layout has no centre to build from");
+    }
+    if (entry->dockArena) ArenaDelete(entry->dockArena);
+    entry->dockArena = arena;
+    if (window) AppInvalidate(window);
+    return JS_UNDEFINED;
+}
+
+// The dock-by-dock properties. One entry point per verb rather than one taking
+// a name, because that is how the prelude spells them and a combined call
+// would make every reader pay for the others.
+enum class DockVerb : int {
+    Has,
+    IsOpen,
+    Toggle,
+    Remove,
+    Size,
+    SetSize,
+    SetCollapsible,
+};
+
+static JSValue NativeDockSideVerb(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv, int magic) {
+    DockVerb verb = (DockVerb)magic;
+    static const char* const names[] = {
+        "has_dock(placement)",
+        "is_dock_open(placement)",
+        "toggle_dock(placement)",
+        "remove_dock(placement)",
+        "dock_size(placement)",
+        "set_dock_size(placement, size)",
+        "set_dock_collapsible(placement, collapsible)"};
+    bool mutation = verb == DockVerb::Toggle || verb == DockVerb::Remove ||
+                    verb == DockVerb::SetSize ||
+                    verb == DockVerb::SetCollapsible;
+    if (mutation && RefuseDockChange(ctx, names[magic])) return JS_EXCEPTION;
+    App* app = nullptr;
+    Window* window = nullptr;
+    DockState* state = nullptr;
+    if (argc < 2 || !LiveDock(ctx, argv[0], &app, &window, &state)) {
+        return JS_EXCEPTION;
+    }
+    Arena* arena = ArenaNew();
+    Str placementName;
+    if (!JsString(ctx, argv[1], arena, &placementName)) {
+        ArenaDelete(arena);
+        return JS_EXCEPTION;
+    }
+    DockPlacement placement = DockPlacementOf(placementName);
+    ArenaDelete(arena);
+    DockSide* side = DockSideOf(state, placement);
+    Ctx cx = {app, window, window ? window->frameArena : nullptr, {}};
+    switch (verb) {
+        case DockVerb::Has:
+            return JS_NewBool(ctx, side && side->node >= 0);
+        case DockVerb::IsOpen:
+            return JS_NewBool(ctx, side && side->node >= 0 && side->open);
+        case DockVerb::Toggle:
+            if (side && side->node >= 0) DockToggleSide(state, &cx, placement);
+            if (window) AppInvalidate(window);
+            return JS_UNDEFINED;
+        case DockVerb::Remove:
+            if (side) {
+                side->node = -1;
+                side->open = true;
+            }
+            if (window) AppInvalidate(window);
+            return JS_UNDEFINED;
+        case DockVerb::Size:
+            return side && side->node >= 0 ? JS_NewFloat64(ctx, side->size)
+                                           : JS_NULL;
+        case DockVerb::SetSize: {
+            double size = 0;
+            if (argc < 3 || JS_ToFloat64(ctx, &size, argv[2]) < 0) {
+                return JS_EXCEPTION;
+            }
+            if (side) side->size = (float)size;
+            if (window) AppInvalidate(window);
+            return JS_UNDEFINED;
+        }
+        case DockVerb::SetCollapsible:
+            DockSetCollapsible(state, placement,
+                               argc > 2 && JS_ToBool(ctx, argv[2]) != 0);
+            if (window) AppInvalidate(window);
+            return JS_UNDEFINED;
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue NativeDockAreaVerb(JSContext* ctx, JSValueConst, int argc,
+                                  JSValueConst* argv, int magic) {
+    static const char* const names[] = {"is_locked()", "set_locked(locked)",
+                                        "is_zoomed()", "zoom_out()",
+                                        "release()"};
+    bool mutation = magic == 1 || magic == 3;
+    if (mutation && RefuseDockChange(ctx, names[magic])) return JS_EXCEPTION;
+    if (magic == 4) {
+        shell::EntityHandle handle = 0;
+        ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+        if (argc < 1 || !impl || !JsHandle(ctx, argv[0], &handle)) {
+            return JS_NewBool(ctx, false);
+        }
+        Vec<shell::CallbackId> retired;
+        bool released = impl->retained.Release(handle, &retired);
+        for (int i = 0; i < retired.len; i++) {
+            impl->callbacks.RetireId(ctx, retired[i]);
+        }
+        VecReset(retired);
+        return JS_NewBool(ctx, released);
+    }
+    App* app = nullptr;
+    Window* window = nullptr;
+    DockState* state = nullptr;
+    if (argc < 1 || !LiveDock(ctx, argv[0], &app, &window, &state)) {
+        return JS_EXCEPTION;
+    }
+    Ctx cx = {app, window, window ? window->frameArena : nullptr, {}};
+    switch (magic) {
+        case 0:
+            return JS_NewBool(ctx, state->locked);
+        case 1:
+            state->locked = argc > 1 && JS_ToBool(ctx, argv[1]) != 0;
+            if (window) AppInvalidate(window);
+            return JS_UNDEFINED;
+        case 2:
+            return JS_NewBool(ctx, state->zoomPanel >= 0);
+        default:
+            if (state->zoomPanel >= 0) {
+                DockToggleZoom(state, &cx, state->zoomPanel);
+            }
+            if (window) AppInvalidate(window);
+            return JS_UNDEFINED;
+    }
+}
+
+static JSValue NativeDockOn(JSContext* ctx, JSValueConst, int argc,
+                            JSValueConst* argv) {
+    App* app = nullptr;
+    Window* window = nullptr;
+    DockState* state = nullptr;
+    shell::RetainedEntry* entry =
+        argc >= 3 ? LiveDock(ctx, argv[0], &app, &window, &state) : nullptr;
+    if (!entry) return JS_EXCEPTION;
+    Arena* arena = ArenaNew();
+    Str name;
+    bool named = JsString(ctx, argv[1], arena, &name);
+    bool isLayout = named && StrEq(name, "layout_changed");
+    ArenaDelete(arena);
+    if (!named) return JS_EXCEPTION;
+    if (!isLayout) {
+        return JS_ThrowTypeError(
+            ctx,
+            "unknown dock event; the only one is \"layout_changed\", which "
+            "fires on every edit — including each step of a drag, so save on "
+            "a timer rather than on every one");
+    }
+    if (!JS_IsFunction(ctx, argv[2])) {
+        return JS_ThrowTypeError(
+            ctx, "on(\"layout_changed\", handler) expects a function");
+    }
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    // Persistent: a long-lived subscription outlives the snapshot that
+    // registered it, the way an input's `on(...)` does, and is retired with
+    // the retained state rather than with the render pass.
+    shell::CallbackId callback = impl->callbacks.PushPersistent(
+        ctx, argv[2], shell::ScopeCurrentView(), shell::ScopeCurrentPolicy(),
+        (AppModule*)shell::ScopeCurrentApplication());
+    if (callback == UINT64_MAX) {
+        return JS_ThrowInternalError(ctx,
+                                     "a dock handler was registered outside a "
+                                     "live application");
+    }
+    // Replaces rather than appends, matching every other on(...) in this API:
+    // registering twice means the second handler, not both of them.
+    shell::CallbackId replaced = 0;
+    shell::EntityHandle handle = 0;
+    JsHandle(ctx, argv[0], &handle);
+    impl->retained.AddCallback(handle, shell::RetainedEvent::DockLayoutChanged,
+                               callback, true, &replaced);
+    if (replaced) impl->callbacks.RetireId(ctx, replaced);
+    state->onEvent = ListenTo(Entity<ScriptView>{shell::ScopeCurrentView()},
+                              &ScriptView::OnDockEvent, (intptr_t)callback);
+    return JS_NewBool(ctx, true);
+}
+
+static JSValue NativeDockAreaElement(JSContext* ctx, JSValueConst, int argc,
+                                     JSValueConst* argv) {
+    shell::EntityHandle handle = 0;
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    if (!impl || argc < 1 || !JsHandle(ctx, argv[0], &handle)) {
+        return JS_EXCEPTION;
+    }
+    shell::RetainedEntry* entry = impl->retained.Find(handle);
+    if (!entry || entry->kind != shell::RetainedKind::Dock) {
+        return JS_ThrowTypeError(
+            ctx, "this dock area has been released and can no longer be drawn");
+    }
+    shell::SpecId id = 0;
+    shell::SpecError failure = {};
+    if (!impl->scratch->PushDockArea(handle, &id, &failure)) {
+        return SpecFailure(ctx, failure);
+    }
+    return JS_NewUint32(ctx, id);
+}
+
+static JSValue NativeDockRegisterPanel(JSContext* ctx, JSValueConst, int argc,
+                                       JSValueConst* argv) {
+    ShellRuntimeImpl* impl = (ShellRuntimeImpl*)JS_GetContextOpaque(ctx);
+    shell::ScopeHostContext host = shell::ScopeCurrentHost();
+    if (!impl || argc < 2 || !host.IsSet()) {
+        return JS_ThrowTypeError(
+            ctx,
+            "DockArea.register_panel(name, Class) needs a live host call; "
+            "call it from init() or an event handler");
+    }
+    Arena* arena = ArenaNew();
+    Str panel;
+    if (!JsString(ctx, argv[0], arena, &panel) ||
+        !JS_IsFunction(ctx, argv[1])) {
+        ArenaDelete(arena);
+        return JS_ThrowTypeError(
+            ctx,
+            "DockArea.register_panel(name, Class) expects the View subclass "
+            "the panel is rebuilt from");
+    }
+    Str name =
+        ShellRegisterPanelClass(impl, ctx, host.GetApp(), panel, argv[1]);
+    ArenaDelete(arena);
+    if (!name) return JS_EXCEPTION;
+    return JS_NewStringLen(ctx, name.s, (size_t)name.len);
+}
+
 static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     JSValue global = JS_GetGlobalObject(impl->context);
 #if GPUI_OS_WINDOWS
@@ -6003,6 +8074,107 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                       JS_NewString(impl->context, platform));
     JS_SetPropertyStr(impl->context, global, "__shell_arch",
                       JS_NewString(impl->context, architecture));
+    // The window's own measurements and controls, and the two halves of
+    // GPUI's propagation answer. Installed before the prelude, which builds
+    // the `window` object over them.
+    SetGlobalFunction(impl->context, global, "__window_rem_size",
+                      NativeWindowRemSize, 0);
+    SetGlobalFunction(impl->context, global, "__window_line_height",
+                      NativeWindowLineHeight, 0);
+    SetGlobalFunction(impl->context, global, "__window_viewport_size",
+                      NativeWindowViewportSize, 0);
+    SetGlobalFunction(impl->context, global, "__window_bounds",
+                      NativeWindowBounds, 0);
+    SetGlobalFunction(impl->context, global, "__window_mouse_position",
+                      NativeWindowMousePosition, 0);
+    SetGlobalFunction(impl->context, global, "__window_appearance",
+                      NativeWindowAppearance, 0);
+    SetGlobalFunction(impl->context, global, "__window_is_active",
+                      NativeWindowIsActive, 0);
+    SetGlobalFunction(impl->context, global, "__window_is_maximized",
+                      NativeWindowIsMaximized, 0);
+    SetGlobalFunction(impl->context, global, "__window_refresh",
+                      NativeWindowRefresh, 0);
+    SetGlobalMagicFunction(impl->context, global, "__window_focus_next",
+                           NativeWindowFocusMove, 0, 0);
+    SetGlobalMagicFunction(impl->context, global, "__window_focus_prev",
+                           NativeWindowFocusMove, 0, 1);
+    SetGlobalMagicFunction(impl->context, global, "__window_activate",
+                           NativeWindowCommand, 0, 0);
+    SetGlobalMagicFunction(impl->context, global, "__window_minimize",
+                           NativeWindowCommand, 0, 1);
+    SetGlobalMagicFunction(impl->context, global, "__window_zoom",
+                           NativeWindowCommand, 0, 2);
+    SetGlobalFunction(impl->context, global, "__stop_propagation",
+                      NativeStopPropagation, 0);
+    SetGlobalFunction(impl->context, global, "__propagate", NativePropagate, 0);
+    SetGlobalFunction(impl->context, global, "__bind_keys", NativeBindKeys, 1);
+    SetGlobalFunction(impl->context, global, "__dispatch_action",
+                      NativeDispatchAction, 1);
+    SetGlobalFunction(impl->context, global, "__pagination_items",
+                      NativePaginationItems, 3);
+    SetGlobalFunction(impl->context, global, "__calendar_state_new",
+                      NativeCalendarNew, 0);
+    SetGlobalFunction(impl->context, global, "__calendar_month_days",
+                      NativeCalendarMonthDays, 1);
+    SetGlobalMagicFunction(impl->context, global, "__calendar_year",
+                           NativeCalendarRead, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__calendar_month",
+                           NativeCalendarRead, 1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__calendar_today",
+                           NativeCalendarRead, 1, 2);
+    SetGlobalMagicFunction(impl->context, global, "__calendar_value",
+                           NativeCalendarRead, 1, 3);
+    SetGlobalFunction(impl->context, global, "__calendar_set_value",
+                      NativeCalendarSetValue, 2);
+    SetGlobalMagicFunction(impl->context, global, "__calendar_next_month",
+                           NativeCalendarStep, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__calendar_prev_month",
+                           NativeCalendarStep, 1, 1);
+    SetGlobalFunction(impl->context, global, "__calendar_on", NativeCalendarOn,
+                      3);
+    SetGlobalFunction(impl->context, global, "__calendar_release",
+                      NativeCalendarRelease, 1);
+    SetGlobalFunction(impl->context, global, "__dock_area_new", NativeDockNew,
+                      2);
+    SetGlobalFunction(impl->context, global, "__dock_add_panel",
+                      NativeDockAddPanel, 8);
+    SetGlobalFunction(impl->context, global, "__dock_remove_panel",
+                      NativeDockRemovePanel, 2);
+    SetGlobalFunction(impl->context, global, "__dock_panels", NativeDockPanels,
+                      1);
+    SetGlobalFunction(impl->context, global, "__dock_dump", NativeDockDump, 1);
+    SetGlobalFunction(impl->context, global, "__dock_load", NativeDockLoad, 2);
+    SetGlobalMagicFunction(impl->context, global, "__dock_has",
+                           NativeDockSideVerb, 2, (int)DockVerb::Has);
+    SetGlobalMagicFunction(impl->context, global, "__dock_is_open",
+                           NativeDockSideVerb, 2, (int)DockVerb::IsOpen);
+    SetGlobalMagicFunction(impl->context, global, "__dock_toggle",
+                           NativeDockSideVerb, 2, (int)DockVerb::Toggle);
+    SetGlobalMagicFunction(impl->context, global, "__dock_remove",
+                           NativeDockSideVerb, 2, (int)DockVerb::Remove);
+    SetGlobalMagicFunction(impl->context, global, "__dock_size",
+                           NativeDockSideVerb, 2, (int)DockVerb::Size);
+    SetGlobalMagicFunction(impl->context, global, "__dock_set_size",
+                           NativeDockSideVerb, 3, (int)DockVerb::SetSize);
+    SetGlobalMagicFunction(impl->context, global, "__dock_set_collapsible",
+                           NativeDockSideVerb, 3,
+                           (int)DockVerb::SetCollapsible);
+    SetGlobalMagicFunction(impl->context, global, "__dock_is_locked",
+                           NativeDockAreaVerb, 1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__dock_set_locked",
+                           NativeDockAreaVerb, 2, 1);
+    SetGlobalMagicFunction(impl->context, global, "__dock_is_zoomed",
+                           NativeDockAreaVerb, 1, 2);
+    SetGlobalMagicFunction(impl->context, global, "__dock_zoom_out",
+                           NativeDockAreaVerb, 1, 3);
+    SetGlobalMagicFunction(impl->context, global, "__dock_release",
+                           NativeDockAreaVerb, 1, 4);
+    SetGlobalFunction(impl->context, global, "__dock_on", NativeDockOn, 3);
+    SetGlobalFunction(impl->context, global, "__dock_area_element",
+                      NativeDockAreaElement, 1);
+    SetGlobalFunction(impl->context, global, "__dock_register_panel",
+                      NativeDockRegisterPanel, 2);
     SetGlobalFunction(impl->context, global, "__component", NativeComponent, 4);
     SetGlobalFunction(impl->context, global, "__path", NativePath, 6);
     SetGlobalFunction(impl->context, global, "__attach", NativeAttach, 2);
@@ -6011,8 +8183,7 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
     SetGlobalFunction(impl->context, global, "__apply", NativeApply, 3);
     SetGlobalFunction(impl->context, global, "__theme_snapshot",
                       NativeThemeSnapshot, 1);
-    SetGlobalFunction(impl->context, global, "__set_theme", NativeSetTheme,
-                      1);
+    SetGlobalFunction(impl->context, global, "__set_theme", NativeSetTheme, 1);
     SetGlobalFunction(impl->context, global, "__open_url", NativeOpenUrl, 2);
     SetGlobalFunction(impl->context, global, "__host_call", NativeHostCall, 3);
     SetGlobalFunction(impl->context, global, "__host_async_call",
@@ -6027,8 +8198,8 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                       NativeViewRelease, 1);
     SetGlobalFunction(impl->context, global, "__child_view", NativeChildView,
                       1);
-    SetGlobalFunction(impl->context, global, "__open_dialog",
-                      NativeOpenDialog, 2);
+    SetGlobalFunction(impl->context, global, "__open_dialog", NativeOpenDialog,
+                      2);
     SetGlobalFunction(impl->context, global, "__close_dialog",
                       NativeCloseDialog, 0);
     SetGlobalFunction(impl->context, global, "__close_all_dialogs",
@@ -6037,42 +8208,42 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                       NativeHasDialog, 0);
     SetGlobalFunction(impl->context, global, "__open_sheet", NativeOpenSheet,
                       2);
-    SetGlobalFunction(impl->context, global, "__close_sheet",
-                      NativeCloseSheet, 0);
+    SetGlobalFunction(impl->context, global, "__close_sheet", NativeCloseSheet,
+                      0);
     SetGlobalFunction(impl->context, global, "__has_active_sheet",
                       NativeHasSheet, 0);
-    SetGlobalFunction(impl->context, global, "__push_toast",
-                      NativePushToast, 1);
+    SetGlobalFunction(impl->context, global, "__push_toast", NativePushToast,
+                      1);
     SetGlobalFunction(impl->context, global, "__remove_toast",
                       NativeRemoveToast, 1);
     SetGlobalFunction(impl->context, global, "__clear_toasts",
                       NativeClearToasts, 0);
     SetGlobalFunction(impl->context, global, "__task_new", NativeTaskNew, 1);
-    SetGlobalFunction(impl->context, global, "__task_finish",
-                      NativeTaskFinish, 1);
-    SetGlobalFunction(impl->context, global, "__task_reject",
-                      NativeTaskReject, 2);
-    SetGlobalFunction(impl->context, global, "__task_cancel",
-                      NativeTaskCancel, 1);
-    SetGlobalFunction(impl->context, global, "__task_is_done",
-                      NativeTaskIsDone, 1);
+    SetGlobalFunction(impl->context, global, "__task_finish", NativeTaskFinish,
+                      1);
+    SetGlobalFunction(impl->context, global, "__task_reject", NativeTaskReject,
+                      2);
+    SetGlobalFunction(impl->context, global, "__task_cancel", NativeTaskCancel,
+                      1);
+    SetGlobalFunction(impl->context, global, "__task_is_done", NativeTaskIsDone,
+                      1);
     SetGlobalFunction(impl->context, global, "__sleep", NativeSleep, 1);
-    SetGlobalMagicFunction(impl->context, global, "__timer_after",
-                           NativeTimer, 3, 0);
-    SetGlobalMagicFunction(impl->context, global, "__timer_every",
-                           NativeTimer, 3, 1);
-    SetGlobalFunction(impl->context, global, "__storage_get",
-                      NativeStorageGet, 2);
-    SetGlobalFunction(impl->context, global, "__storage_set",
-                      NativeStorageSet, 3);
+    SetGlobalMagicFunction(impl->context, global, "__timer_after", NativeTimer,
+                           3, 0);
+    SetGlobalMagicFunction(impl->context, global, "__timer_every", NativeTimer,
+                           3, 1);
+    SetGlobalFunction(impl->context, global, "__storage_get", NativeStorageGet,
+                      2);
+    SetGlobalFunction(impl->context, global, "__storage_set", NativeStorageSet,
+                      3);
     SetGlobalFunction(impl->context, global, "__storage_remove",
                       NativeStorageRemove, 2);
     SetGlobalFunction(impl->context, global, "__storage_clear",
                       NativeStorageClear, 1);
     SetGlobalFunction(impl->context, global, "__storage_length",
                       NativeStorageLength, 1);
-    SetGlobalFunction(impl->context, global, "__storage_key",
-                      NativeStorageKey, 2);
+    SetGlobalFunction(impl->context, global, "__storage_key", NativeStorageKey,
+                      2);
     SetGlobalFunction(impl->context, global, "__storage_flush",
                       NativeStorageFlush, 1);
     SetGlobalMagicFunction(impl->context, global, "__clipboard_read_text",
@@ -6089,25 +8260,25 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeConsole, 1, 3);
     SetGlobalMagicFunction(impl->context, global, "__console_error",
                            NativeConsole, 1, 4);
-    SetGlobalFunction(impl->context, global, "__crypto_sha256",
-                      NativeSha256, 1);
-    SetGlobalFunction(impl->context, global, "__crypto_random",
-                      NativeRandom, 1);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_deflate",
-                           NativeZlib, 1, 0);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_inflate",
-                           NativeZlib, 1, 1);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_gzip",
-                           NativeZlib, 1, 2);
-    SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip",
-                           NativeZlib, 1, 3);
+    SetGlobalFunction(impl->context, global, "__crypto_sha256", NativeSha256,
+                      1);
+    SetGlobalFunction(impl->context, global, "__crypto_random", NativeRandom,
+                      1);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_deflate", NativeZlib,
+                           1, 0);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_inflate", NativeZlib,
+                           1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_gzip", NativeZlib, 1,
+                           2);
+    SetGlobalMagicFunction(impl->context, global, "__zlib_gunzip", NativeZlib,
+                           1, 3);
     SetGlobalFunction(impl->context, global, "__fetch_get", NativeFetch, 1);
     SetGlobalMagicFunction(impl->context, global, "__fs_read", NativeFs, 2,
                            (int)shell::FsOperation::Read);
     SetGlobalMagicFunction(impl->context, global, "__fs_write", NativeFs, 2,
                            (int)shell::FsOperation::Write);
-    SetGlobalMagicFunction(impl->context, global, "__fs_readdir", NativeFs,
-                           2, (int)shell::FsOperation::ReadDirectory);
+    SetGlobalMagicFunction(impl->context, global, "__fs_readdir", NativeFs, 2,
+                           (int)shell::FsOperation::ReadDirectory);
     SetGlobalMagicFunction(impl->context, global, "__fs_exists", NativeFs, 1,
                            (int)shell::FsOperation::Exists);
     SetGlobalMagicFunction(impl->context, global, "__fs_unlink", NativeFs, 1,
@@ -6116,8 +8287,8 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            (int)shell::FsOperation::RemoveDirectory);
     SetGlobalMagicFunction(impl->context, global, "__fs_mkdir", NativeFs, 2,
                            (int)shell::FsOperation::MakeDirectory);
-    SetGlobalFunction(impl->context, global, "__process_run",
-                      NativeProcessRun, 2);
+    SetGlobalFunction(impl->context, global, "__process_run", NativeProcessRun,
+                      2);
     SetGlobalFunction(impl->context, global, "__process_exit",
                       NativeProcessExit, 1);
     SetGlobalFunction(impl->context, global, "__input_state_new",
@@ -6169,8 +8340,7 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                            NativeOtpProperty, 2, 2);
     SetGlobalMagicFunction(impl->context, global, "__otp_focus",
                            NativeOtpProperty, 1, 3);
-    SetGlobalFunction(impl->context, global, "__input_on", NativeRetainedOn,
-                      3);
+    SetGlobalFunction(impl->context, global, "__input_on", NativeRetainedOn, 3);
     SetGlobalFunction(impl->context, global, "__textarea_on", NativeRetainedOn,
                       3);
     SetGlobalFunction(impl->context, global, "__slider_on", NativeRetainedOn,
@@ -6196,12 +8366,10 @@ static bool InstallRuntime(ShellRuntimeImpl* impl, ShellError* error) {
                       NativeRetainedRelease, 1);
     SetGlobalFunction(impl->context, global, "__virtual_scroll_new",
                       NativeVirtualScrollNew, 0);
-    SetGlobalMagicFunction(impl->context, global,
-                           "__virtual_scroll_to_item", NativeVirtualScrollOp,
-                           3, 0);
-    SetGlobalMagicFunction(impl->context, global,
-                           "__virtual_scroll_to_bottom", NativeVirtualScrollOp,
-                           1, 1);
+    SetGlobalMagicFunction(impl->context, global, "__virtual_scroll_to_item",
+                           NativeVirtualScrollOp, 3, 0);
+    SetGlobalMagicFunction(impl->context, global, "__virtual_scroll_to_bottom",
+                           NativeVirtualScrollOp, 1, 1);
     SetGlobalFunction(impl->context, global, "__virtual_scroll_release",
                       NativeRetainedRelease, 1);
     SetGlobalMagicFunction(impl->context, global, "__v_virtual_list",
@@ -6248,6 +8416,29 @@ ShellRuntime::~ShellRuntime() {
             VecReset(retired);
             impl->callbacks.Clear(impl->context);
         }
+        // Each holds a live view class, which must be released while the
+        // context still exists — and the panel registry keeps a second
+        // reference to every one of them in an App global that outlives this,
+        // so clearing the vector is not enough on its own. Retiring the class
+        // leaves the registration in place, answering with a draw-nothing
+        // placeholder that still carries the panel's persisted state forward.
+        for (int i = 0; i < impl->panelClasses.len; i++) {
+            ScriptPanelClass* registered = impl->panelClasses[i];
+            if (impl->context && !JS_IsUndefined(registered->klass)) {
+                JS_FreeValue(impl->context, registered->klass);
+            }
+            registered->klass = JS_UNDEFINED;
+            registered->impl = nullptr;
+            PolicyRelease(registered->policy);
+            registered->policy = nullptr;
+        }
+        VecReset(impl->panelClasses);
+        for (int i = 0; i < impl->chromeCache.len; i++) {
+            StrFree(impl->chromeCache[i]->payload);
+            delete impl->chromeCache[i]->arena;
+            delete impl->chromeCache[i];
+        }
+        VecReset(impl->chromeCache);
         delete impl->scratch;
         for (int i = 0; i < impl->modules.len; i++) {
             StrFree(impl->modules[i]->root);
@@ -6283,8 +8474,8 @@ ShellRuntime* ShellRuntime::New(App*, ShellError* error) {
     JS_SetMemoryLimit(runtime->impl->jsRuntime, (size_t)256 * 1024 * 1024);
     JS_SetMaxStackSize(runtime->impl->jsRuntime, (size_t)1024 * 1024);
     JS_SetInterruptHandler(runtime->impl->jsRuntime, Interrupt, runtime->impl);
-    JS_SetModuleLoaderFunc(runtime->impl->jsRuntime, ModuleNormalize, ModuleLoad,
-                           runtime->impl);
+    JS_SetModuleLoaderFunc(runtime->impl->jsRuntime, ModuleNormalize,
+                           ModuleLoad, runtime->impl);
     runtime->impl->context = JS_NewContext(runtime->impl->jsRuntime);
     if (!runtime->impl->context) {
         SetError(error, StrL("could not create the QuickJS context"));
@@ -6315,16 +8506,16 @@ static ViewType* LoadModule(ShellRuntime* runtime, Str name, Str source,
     shell::CallScopeGuard scope = shell::ScopeEnter(
         nullptr, nullptr, ScopePhase::Task, {}, policy, runtime, application);
     BeginExecution(impl);
-    JSValue module = JS_Eval(
-        impl->context, source.s, (size_t)source.len, name.s,
-        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue module =
+        JS_Eval(impl->context, source.s, (size_t)source.len, name.s,
+                JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (JS_IsException(module)) {
         CaptureException(impl, error);
         return nullptr;
     }
     JSModuleDef* definition = (JSModuleDef*)JS_VALUE_GET_PTR(module);
-    JSValue evaluated = JS_EvalFunction(impl->context,
-                                        JS_DupValue(impl->context, module));
+    JSValue evaluated =
+        JS_EvalFunction(impl->context, JS_DupValue(impl->context, module));
     if (JS_IsException(evaluated)) {
         JS_FreeValue(impl->context, module);
         CaptureException(impl, error);
@@ -6346,7 +8537,9 @@ static ViewType* LoadModule(ShellRuntime* runtime, Str name, Str source,
     }
     if (!JS_IsFunction(impl->context, value)) {
         JS_FreeValue(impl->context, value);
-        SetError(error, StrL("main.js must `export default` a class that extends View"));
+        SetError(
+            error,
+            StrL("main.js must `export default` a class that extends View"));
         return nullptr;
     }
     ViewType* type = new ViewType();
@@ -6386,7 +8579,8 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
     char input[kMaxPath] = {};
     memcpy(input, directory.s, (size_t)directory.len);
     if (!PlatCanonicalPath(input, dir, kMaxPath) || !PlatDirExists(dir)) {
-        SetError(error, fmt("application directory `%s` does not exist", directory));
+        SetError(error,
+                 fmt("application directory `%s` does not exist", directory));
         return nullptr;
     }
     char entryPath[kMaxPath] = {};
@@ -6396,8 +8590,8 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
     if (n <= 0 || n >= kMaxPath ||
         !PlatCanonicalPath(entryPath, canonical, kMaxPath) ||
         !PlatFileExists(canonical) || !WithinRoot(Str(dir), Str(canonical))) {
-        SetError(error, fmt("entry module `%s` is not a file inside `%s`", entry,
-                            directory));
+        SetError(error, fmt("entry module `%s` is not a file inside `%s`",
+                            entry, directory));
         return nullptr;
     }
     AppModule* application = new AppModule();
@@ -6410,7 +8604,8 @@ ViewType* ShellRuntime::LoadApp(Str directory, Str entry, Policy* policy,
 
     Str source = {};
     if (!ReadFileBounded(Str(canonical), &source, error)) return nullptr;
-    Str tagged = StrDup(fmt("%s?v=%u", Str(canonical), application->generation));
+    Str tagged =
+        StrDup(fmt("%s?v=%u", Str(canonical), application->generation));
     ViewType* result =
         LoadModule(this, tagged, source, application, policy, error);
     StrFree(tagged);
@@ -6426,7 +8621,8 @@ static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
     ShellRuntimeImpl* impl = ShellRuntimeAccess::Impl(runtime);
     if (!runtime || !impl || !type || type->runtime != runtime || !window ||
         !app) {
-        SetError(error, StrL("instantiate needs a view type from this runtime and a live Window/App"));
+        SetError(error, StrL("instantiate needs a view type from this runtime "
+                             "and a live Window/App"));
         return nullptr;
     }
     shell::CallScopeGuard scope =
@@ -6438,8 +8634,8 @@ static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
     BeginExecution(impl);
     JSValue global = JS_GetGlobalObject(impl->context);
     JSValue construct = JS_GetPropertyStr(impl->context, global, "__construct");
-    JSValue object = JS_Call(impl->context, construct, JS_UNDEFINED, 1,
-                             &type->value);
+    JSValue object =
+        JS_Call(impl->context, construct, JS_UNDEFINED, 1, &type->value);
     JS_FreeValue(impl->context, construct);
     if (JS_IsException(object)) {
         Vec<shell::CallbackId> retired;
@@ -6456,9 +8652,11 @@ static ViewObject* InstantiateObject(ShellRuntime* runtime, ViewType* type,
         CaptureException(impl, error);
         return nullptr;
     }
-    JSValue initialize = JS_GetPropertyStr(impl->context, global, "__initialize");
+    JSValue initialize =
+        JS_GetPropertyStr(impl->context, global, "__initialize");
     JSValue context = JS_GetPropertyStr(impl->context, global, "__context");
-    JSValue generation = JS_NewInt64(impl->context, (int64_t)scope.Generation());
+    JSValue generation =
+        JS_NewInt64(impl->context, (int64_t)scope.Generation());
     JSValue cx = JS_Call(impl->context, context, JS_UNDEFINED, 1, &generation);
     JSValue args[3] = {object, JS_DupValue(impl->context, props), cx};
     JSValue initialized =
@@ -6513,11 +8711,11 @@ static bool ElementId(JSContext* ctx, JSValueConst value, shell::SpecId* id) {
 
 RenderSnapshot* ShellRuntime::BuildSnapshot(ViewObject* object, Window* window,
                                             App* app, EntityId view,
-                                            Policy* policy,
-                                            ShellError* error) {
+                                            Policy* policy, ShellError* error) {
     ShellErrorClear(error);
     if (!object || object->runtime != this || !window || !app) {
-        SetError(error, StrL("snapshot build needs a view object from this runtime and a live Window/App"));
+        SetError(error, StrL("snapshot build needs a view object from this "
+                             "runtime and a live Window/App"));
         return nullptr;
     }
     impl->scratch->Reset();
@@ -6526,19 +8724,22 @@ RenderSnapshot* ShellRuntime::BuildSnapshot(ViewObject* object, Window* window,
     shell::SpecId root = 0;
     bool succeeded = false;
     {
-        shell::CallScopeGuard scope = shell::ScopeEnter(
-            window, app, ScopePhase::Render, view, policy, this,
-            object->application);
+        shell::CallScopeGuard scope =
+            shell::ScopeEnter(window, app, ScopePhase::Render, view, policy,
+                              this, object->application);
         BeginExecution(impl);
-        JSValue render = JS_GetPropertyStr(impl->context, object->value, "render");
+        JSValue render =
+            JS_GetPropertyStr(impl->context, object->value, "render");
         if (!JS_IsException(render) && JS_IsFunction(impl->context, render)) {
             JSValue global = JS_GetGlobalObject(impl->context);
-            JSValue context = JS_GetPropertyStr(impl->context, global, "__context");
+            JSValue context =
+                JS_GetPropertyStr(impl->context, global, "__context");
             JSValue generation =
                 JS_NewInt64(impl->context, (int64_t)scope.Generation());
             JSValue cx =
                 JS_Call(impl->context, context, JS_UNDEFINED, 1, &generation);
-            JSValue produced = JS_Call(impl->context, render, object->value, 1, &cx);
+            JSValue produced =
+                JS_Call(impl->context, render, object->value, 1, &cx);
             JS_FreeValue(impl->context, generation);
             JS_FreeValue(impl->context, cx);
             JS_FreeValue(impl->context, context);
@@ -6548,7 +8749,8 @@ RenderSnapshot* ShellRuntime::BuildSnapshot(ViewObject* object, Window* window,
             }
             JS_FreeValue(impl->context, produced);
         } else if (!JS_IsException(render)) {
-            JS_ThrowTypeError(impl->context, "view class has no render(cx) method");
+            JS_ThrowTypeError(impl->context,
+                              "view class has no render(cx) method");
         }
         JS_FreeValue(impl->context, render);
     }
@@ -6619,16 +8821,23 @@ void ShellRuntime::RecordMaterialize(uint64_t nanos) {
                       nanos);
 }
 
-int ShellRuntime::LiveCallbacks() const { return impl->callbacks.Live(); }
+int ShellRuntime::LiveCallbacks() const {
+    return impl->callbacks.Live();
+}
 
-int ShellRuntime::LiveEntities() const { return impl->retained.Len(); }
+int ShellRuntime::LiveEntities() const {
+    return impl->retained.Len();
+}
 
-int ShellRuntime::LiveNestedViews() const { return impl->nestedViews.len; }
+int ShellRuntime::LiveNestedViews() const {
+    return impl->nestedViews.len;
+}
 
-int ShellRuntime::LiveTasks() const { return impl->tasks.len; }
+int ShellRuntime::LiveTasks() const {
+    return impl->tasks.len;
+}
 
-shell::RetainedEntry* ShellRuntime::Retained(
-    shell::EntityHandle handle) const {
+shell::RetainedEntry* ShellRuntime::Retained(shell::EntityHandle handle) const {
     return impl->retained.Find(handle);
 }
 
@@ -6644,14 +8853,16 @@ EntityId ShellRuntime::NestedView(shell::EntityHandle handle, App* app) const {
 void ShellRuntime::RegisterScriptView(EntityId view, bool* dirty) {
     if (!view.IsValid() || !dirty) return;
     for (int i = 0; i < impl->views.len; i++) {
-        if (impl->views[i].view == view && impl->views[i].dirty == dirty) return;
+        if (impl->views[i].view == view && impl->views[i].dirty == dirty)
+            return;
     }
     VecAppend(impl->views, {view, dirty});
 }
 
 void ShellRuntime::UnregisterScriptView(EntityId view, bool* dirty) {
     for (int i = 0; i < impl->views.len; i++) {
-        if (impl->views[i].view != view || impl->views[i].dirty != dirty) continue;
+        if (impl->views[i].view != view || impl->views[i].dirty != dirty)
+            continue;
         for (int j = i + 1; j < impl->views.len; j++) {
             impl->views[j - 1] = impl->views[j];
         }
@@ -6746,8 +8957,8 @@ void ShellRuntime::ResumeTask(uint32_t id, Ctx* cx) {
         result = JS_Call(impl->context, callback, JS_UNDEFINED, 0, nullptr);
     } else {
         JSValue global = JS_GetGlobalObject(impl->context);
-        JSValue ambient = JS_GetPropertyStr(impl->context, global,
-                                             "__ambient_context");
+        JSValue ambient =
+            JS_GetPropertyStr(impl->context, global, "__ambient_context");
         result = JS_Call(impl->context, callback, JS_UNDEFINED, 1, &ambient);
         JS_FreeValue(impl->context, ambient);
         JS_FreeValue(impl->context, global);
@@ -6791,9 +9002,9 @@ static void Dispatch(ShellRuntime* runtime, shell::CallbackId id,
         JS_FreeValue(impl->context, payload);
         return;
     }
-    shell::CallScopeGuard scope = shell::ScopeEnter(
-        window, app, ScopePhase::Event, entry->view, entry->policy, runtime,
-        entry->application);
+    shell::CallScopeGuard scope =
+        shell::ScopeEnter(window, app, ScopePhase::Event, entry->view,
+                          entry->policy, runtime, entry->application);
     BeginExecution(impl);
     JSValue cx = ContextObject(impl, scope.Generation());
     JSValue args[2] = {payload, cx};
@@ -6912,6 +9123,219 @@ void ShellRuntime::DispatchSignal(shell::CallbackId callback, Window* window,
 
 static void RetainedCallbackIds(const shell::RetainedEntry* entry,
                                 shell::RetainedEvent event,
+                                Vec<shell::CallbackId>* out);
+
+// One codepoint as UTF-8. Written out rather than borrowed from
+// src/markdown/, which is a ported crate this tree keeps to itself.
+static int ShellUtf8(uint32_t cp, char* out) {
+    if (cp < 0x80) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+// One wheel notch, in the DIPs a ScrollWheelEvent reports — see the comment on
+// its `deltaY`. What `delta_lines` divides by to recover the count a wheel
+// with detents actually reported.
+static const float kShellWheelNotch = 48.f;
+
+// One chord, spelled the same way on every platform.
+//
+// Not the port's own `KeyName` plus its modifier order: GPUI spells the
+// platform modifier for the platform it was built for — `cmd-` on macOS,
+// `super-` on Linux, `win-` on Windows — which is right for a keymap a person
+// reads and wrong for a string a program compares. A script is one file
+// running on all three, so `event.keystroke === "cmd-s"` would work on macOS
+// and silently do nothing everywhere else. `cmd` is the spelling because
+// `KeyChordParse`, which `cx.bind_keys` goes through, takes `cmd`, `super`
+// and `win` on every platform, so a binding and the event it produces agree by
+// construction. The modifier order is GPUI's own, so a chord round-trips.
+static Str ScriptKeystroke(Arena* arena, const KeyEvent& event) {
+    StrBuilder out;
+    if (event.ctrl) StrBuilderAppend(arena, out, StrL("ctrl-"));
+    if (event.alt) StrBuilderAppend(arena, out, StrL("alt-"));
+    if (event.platform) StrBuilderAppend(arena, out, StrL("cmd-"));
+    if (event.shift) StrBuilderAppend(arena, out, StrL("shift-"));
+    Str key = event.vk ? KeyName(event.vk) : Str{};
+    if (key) {
+        StrBuilderAppend(arena, out, key);
+    } else if (event.ch) {
+        char utf8[8] = {};
+        int n = ShellUtf8(event.ch, utf8);
+        StrBuilderAppend(arena, out, Str(utf8, n));
+    }
+    return StrBuilderTakeStr(arena, out);
+}
+
+static JSValue JsModifiers(JSContext* ctx, bool shift, bool control, bool alt,
+                           bool platform) {
+    JSValue modifiers = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, modifiers, "shift", JS_NewBool(ctx, shift));
+    JS_SetPropertyStr(ctx, modifiers, "control", JS_NewBool(ctx, control));
+    JS_SetPropertyStr(ctx, modifiers, "alt", JS_NewBool(ctx, alt));
+    JS_SetPropertyStr(ctx, modifiers, "platform", JS_NewBool(ctx, platform));
+    return modifiers;
+}
+
+// The window position, and the element-relative position and box when the
+// element has been painted. `local_position` and `bounds` are omitted rather
+// than zeroed for an element with no geometry yet, so a script reading
+// `undefined` knows the geometry was unavailable instead of being told the
+// press landed at its top-left corner.
+static void SetPointerGeometry(JSContext* ctx, JSValue payload, float x,
+                               float y, Bounds bounds, bool hasBounds) {
+    JS_SetPropertyStr(ctx, payload, "position", JsPoint(ctx, x, y));
+    if (hasBounds) {
+        JS_SetPropertyStr(ctx, payload, "local_position",
+                          JsPoint(ctx, x - bounds.x, y - bounds.y));
+        JS_SetPropertyStr(ctx, payload, "bounds", JsBounds(ctx, bounds));
+    } else {
+        JS_SetPropertyStr(ctx, payload, "local_position", JS_UNDEFINED);
+        JS_SetPropertyStr(ctx, payload, "bounds", JS_UNDEFINED);
+    }
+}
+
+void ShellRuntime::DispatchKey(shell::CallbackId callback,
+                               const KeyEvent& event, bool* propagate,
+                               Window* window, App* app) {
+    Arena* arena = ArenaNew();
+    Str keystroke = ScriptKeystroke(arena, event);
+    Str key = event.vk ? KeyName(event.vk) : keystroke;
+    JSValue payload = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, payload, "key",
+                      JS_NewStringLen(impl->context, key.s, (size_t)key.len));
+    JS_SetPropertyStr(
+        impl->context, payload, "keystroke",
+        JS_NewStringLen(impl->context, keystroke.s, (size_t)keystroke.len));
+    if (event.ch) {
+        char utf8[8] = {};
+        int n = ShellUtf8(event.ch, utf8);
+        JS_SetPropertyStr(impl->context, payload, "key_char",
+                          JS_NewStringLen(impl->context, utf8, (size_t)n));
+    } else {
+        JS_SetPropertyStr(impl->context, payload, "key_char", JS_UNDEFINED);
+    }
+    // `is_held` distinguishes the two events rather than a second method doing
+    // it: a release carries no repeat state, so `undefined` is what "this was
+    // a release" looks like on the wire.
+    if (event.down) {
+        JS_SetPropertyStr(impl->context, payload, "is_held",
+                          JS_NewBool(impl->context, false));
+    }
+    JS_SetPropertyStr(impl->context, payload, "modifiers",
+                      JsModifiers(impl->context, event.shift, event.ctrl,
+                                  event.alt, event.platform));
+    ArenaDelete(arena);
+    ShellPropagationGuard guard(propagate);
+    Dispatch(this, callback, payload, window, app);
+}
+
+void ShellRuntime::DispatchMouseButton(shell::CallbackId callback,
+                                       MouseButton button, float x, float y,
+                                       int clickCount, Modifiers modifiers,
+                                       Bounds bounds, bool hasBounds,
+                                       Window* window, App* app) {
+    JSValue payload = JS_NewObject(impl->context);
+    const char* name =
+        button == MouseButton::Right
+            ? "right"
+            : (button == MouseButton::Middle ? "middle" : "left");
+    JS_SetPropertyStr(impl->context, payload, "button",
+                      JS_NewString(impl->context, name));
+    JS_SetPropertyStr(impl->context, payload, "click_count",
+                      JS_NewInt32(impl->context, clickCount));
+    SetPointerGeometry(impl->context, payload, x, y, bounds, hasBounds);
+    JS_SetPropertyStr(
+        impl->context, payload, "modifiers",
+        JsModifiers(impl->context, modifiers.shift, modifiers.control,
+                    modifiers.alt, modifiers.platform));
+    Dispatch(this, callback, payload, window, app);
+}
+
+void ShellRuntime::DispatchScrollWheel(shell::CallbackId callback,
+                                       const ScrollWheelEvent& event,
+                                       Bounds bounds, bool hasBounds,
+                                       bool* propagate, Window* window,
+                                       App* app) {
+    JSValue payload = JS_NewObject(impl->context);
+    JS_SetPropertyStr(impl->context, payload, "delta",
+                      JsPoint(impl->context, event.deltaX, event.deltaY));
+    // A wheel's delta is already in pixels here, and a device that measures
+    // the gesture itself reports no line count — which is what `precise` says.
+    if (!event.precise) {
+        JS_SetPropertyStr(
+            impl->context, payload, "delta_lines",
+            JsPoint(impl->context, event.deltaX / kShellWheelNotch,
+                    event.deltaY / kShellWheelNotch));
+    } else {
+        JS_SetPropertyStr(impl->context, payload, "delta_lines", JS_UNDEFINED);
+    }
+    const char* phase =
+        event.phase == TouchPhase::Started
+            ? "started"
+            : (event.phase == TouchPhase::Ended ? "ended" : "moved");
+    JS_SetPropertyStr(impl->context, payload, "touch_phase",
+                      JS_NewString(impl->context, phase));
+    SetPointerGeometry(impl->context, payload, event.x, event.y, bounds,
+                       hasBounds);
+    JS_SetPropertyStr(impl->context, payload, "modifiers",
+                      JsModifiers(impl->context, event.modifiers.shift,
+                                  event.modifiers.control, event.modifiers.alt,
+                                  event.modifiers.platform));
+    ShellPropagationGuard guard(propagate);
+    Dispatch(this, callback, payload, window, app);
+}
+
+// The id is handed over even though the handler was registered for one action:
+// a script that routes several ids into one function has the name it needs
+// without closing over it, and a handler that ignores the argument costs
+// nothing.
+void ShellRuntime::DispatchAction(shell::CallbackId callback, Str action,
+                                  bool* propagate, Window* window, App* app) {
+    JSValue payload = JS_NewObject(impl->context);
+    JS_SetPropertyStr(
+        impl->context, payload, "action",
+        JS_NewStringLen(impl->context, action.s, (size_t)action.len));
+    ShellPropagationGuard guard(propagate);
+    Dispatch(this, callback, payload, window, app);
+}
+
+void ShellRuntime::DispatchCalendarEvent(shell::EntityHandle handle,
+                                         const CalendarEvent& event,
+                                         Window* window, App* app) {
+    if (event.kind != CalendarEventKind::Selected) return;
+    shell::RetainedEntry* entry = impl->retained.Find(handle);
+    if (!entry) return;
+    Vec<shell::CallbackId> callbacks;
+    RetainedCallbackIds(entry, shell::RetainedEvent::CalendarChange,
+                        &callbacks);
+    for (int i = 0; i < callbacks.len; i++) {
+        // The same conversion `value()` answers with, so a handler and a read
+        // cannot disagree about the shape of one date.
+        Dispatch(this, callbacks[i], DateToParts(impl->context, event.date),
+                 window, app);
+    }
+    VecReset(callbacks);
+}
+
+static void RetainedCallbackIds(const shell::RetainedEntry* entry,
+                                shell::RetainedEvent event,
                                 Vec<shell::CallbackId>* out) {
     if (!entry) return;
     for (int i = 0; i < entry->callbacks.len; i++) {
@@ -6922,10 +9346,9 @@ static void RetainedCallbackIds(const shell::RetainedEntry* entry,
 }
 
 static shell::RetainedEntry* EventRetained(ShellRuntimeImpl* impl,
-                                            shell::EntityHandle handle) {
-    return (handle >> 32) == 0
-               ? impl->retained.FindLocal((uint32_t)handle)
-               : impl->retained.Find(handle);
+                                           shell::EntityHandle handle) {
+    return (handle >> 32) == 0 ? impl->retained.FindLocal((uint32_t)handle)
+                               : impl->retained.Find(handle);
 }
 
 void ShellRuntime::DispatchInputEvent(shell::EntityHandle handle,
@@ -6955,12 +9378,11 @@ void ShellRuntime::DispatchInputEvent(shell::EntityHandle handle,
 }
 
 void ShellRuntime::DispatchSliderEvent(shell::EntityHandle handle,
-                                       const SliderEvent& event,
-                                       Window* window, App* app) {
-    shell::RetainedEvent wanted =
-        event.kind == SliderEventKind::Release
-            ? shell::RetainedEvent::SliderRelease
-            : shell::RetainedEvent::SliderChange;
+                                       const SliderEvent& event, Window* window,
+                                       App* app) {
+    shell::RetainedEvent wanted = event.kind == SliderEventKind::Release
+                                      ? shell::RetainedEvent::SliderRelease
+                                      : shell::RetainedEvent::SliderChange;
     Vec<shell::CallbackId> callbacks;
     RetainedCallbackIds(EventRetained(impl, handle), wanted, &callbacks);
     for (int i = 0; i < callbacks.len; i++) {
@@ -6993,8 +9415,8 @@ void ShellRuntime::DispatchOtpEvent(shell::EntityHandle handle,
 
 void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                                       shell::CallbackId keyId,
-                                      shell::CallbackId onItemClick,
-                                      int first, int end, Ctx* cx, El** out) {
+                                      shell::CallbackId onItemClick, int first,
+                                      int end, Ctx* cx, El** out) {
     if (!cx || !out || end <= first) return;
     for (int i = 0; i < end - first; i++) out[i] = nullptr;
     CallbackEntry* render = impl->callbacks.Get(renderId);
@@ -7011,8 +9433,8 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
     bool succeeded = true;
     {
         shell::CallScopeGuard scope = shell::ScopeEnter(
-            cx->win, cx->app, ScopePhase::Layout, render->view,
-            render->policy, this, render->application);
+            cx->win, cx->app, ScopePhase::Layout, render->view, render->policy,
+            this, render->application);
         shell::ScopeAdopt(render->registeredIn);
         BeginExecution(impl);
         JSValue payload = JS_NewObject(impl->context);
@@ -7022,14 +9444,15 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                           JS_NewInt32(impl->context, end));
         JSValue context = ContextObject(impl, scope.Generation());
         JSValue args[2] = {payload, context};
-        JSValue produced = JS_Call(impl->context, render->function,
-                                   JS_UNDEFINED, 2, args);
+        JSValue produced =
+            JS_Call(impl->context, render->function, JS_UNDEFINED, 2, args);
         JS_FreeValue(impl->context, context);
         JS_FreeValue(impl->context, payload);
         if (JS_IsException(produced) || !JS_IsArray(produced)) {
             if (!JS_IsException(produced)) {
                 JS_ThrowTypeError(impl->context,
-                                  "a virtual-list item renderer must return an array of elements");
+                                  "a virtual-list item renderer must return an "
+                                  "array of elements");
             }
             succeeded = false;
         } else {
@@ -7038,13 +9461,14 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                 count != end - first) {
                 if (!JS_HasException(impl->context)) {
                     JS_ThrowTypeError(impl->context,
-                                      "a virtual-list item renderer must return one element per item");
+                                      "a virtual-list item renderer must "
+                                      "return one element per item");
                 }
                 succeeded = false;
             }
             for (int i = 0; succeeded && i < (int)count; i++) {
-                JSValue item = JS_GetPropertyUint32(
-                    impl->context, produced, (uint32_t)i);
+                JSValue item =
+                    JS_GetPropertyUint32(impl->context, produced, (uint32_t)i);
                 shell::SpecId root = 0;
                 succeeded = !JS_IsException(item) &&
                             ElementId(impl->context, item, &root);
@@ -7058,8 +9482,8 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
         Vec<Str> seen;
         for (int index = first; succeeded && index < end; index++) {
             JSValue value = JS_NewInt32(impl->context, index);
-            JSValue result = JS_Call(impl->context, key->function,
-                                     JS_UNDEFINED, 1, &value);
+            JSValue result =
+                JS_Call(impl->context, key->function, JS_UNDEFINED, 1, &value);
             JS_FreeValue(impl->context, value);
             Str text;
             succeeded = !JS_IsException(result) &&
@@ -7067,8 +9491,9 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
             JS_FreeValue(impl->context, result);
             for (int i = 0; succeeded && i < seen.len; i++) {
                 if (StrEq(seen[i], text)) {
-                    JS_ThrowTypeError(impl->context,
-                                      "virtual-list get_key returned a duplicate key");
+                    JS_ThrowTypeError(
+                        impl->context,
+                        "virtual-list get_key returned a duplicate key");
                     succeeded = false;
                 }
             }
@@ -7100,14 +9525,14 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
                 binding->value = itemKeys[i];
                 Str rowId = StrDup(
                     cx->a, fmt("gpui-shell-virtual-item:%s", itemKeys[i]));
-                out[i] = Div(cx->a)
-                             ->PathClick(rowId)
-                             ->SizeFull()
-                             ->Child(out[i])
-                             ->OnClick(ListenTo(
-                                 Entity<ScriptView>{render->view},
-                                 &ScriptView::OnBoundString,
-                                 (intptr_t)binding));
+                out[i] =
+                    Div(cx->a)
+                        ->PathClick(rowId)
+                        ->SizeFull()
+                        ->Child(out[i])
+                        ->OnClick(ListenTo(Entity<ScriptView>{render->view},
+                                           &ScriptView::OnBoundString,
+                                           (intptr_t)binding));
             }
         }
     }
@@ -7115,8 +9540,133 @@ void ShellRuntime::RenderVirtualItems(shell::CallbackId renderId,
     VecReset(roots);
     delete batch;
     double elapsed = TimeNow() - started;
-    shell::MetricsAdd(&impl->metrics, shell::MetricsTimerKind::VirtualItems,
+    shell::MetricsAdd(&impl->metrics, shell::MetricsTimerKind::FrameScript,
                       elapsed <= 0 ? 0 : (uint64_t)(elapsed * 1e9));
+}
+
+// Past the bound the whole cache goes rather than one entry: which container
+// is worth keeping is not a question this has an answer to, and an area with
+// thousands of live containers is describing each of them again anyway.
+static const int kMaxChromeCacheEntries = 4096;
+
+static void ClearChromeCache(ShellRuntimeImpl* impl) {
+    for (int i = 0; i < impl->chromeCache.len; i++) {
+        StrFree(impl->chromeCache[i]->payload);
+        delete impl->chromeCache[i]->arena;
+        delete impl->chromeCache[i];
+    }
+    VecReset(impl->chromeCache);
+}
+
+El* ShellRuntime::DescribeDockChrome(Ctx* cx, shell::EntityHandle dock,
+                                     shell::DockChromeSlot slot, uint64_t key,
+                                     shell::CallbackId handler, Str payload) {
+    if (!cx || !cx->win || !cx->app || !handler) return nullptr;
+    CallbackEntry* entry = impl->callbacks.Get(handler);
+    if (!entry) return nullptr;
+    if (entry->view.IsValid() && !EntityGet(cx->app, entry->view)) {
+        return nullptr;
+    }
+
+    ChromeCacheEntry* cached = nullptr;
+    for (int i = 0; i < impl->chromeCache.len; i++) {
+        ChromeCacheEntry* candidate = impl->chromeCache[i];
+        if (candidate->dock != dock || candidate->slot != slot ||
+            candidate->key != key) {
+            continue;
+        }
+        cached = candidate;
+        break;
+    }
+    // The handler runs only when there is no description for this callback and
+    // this state yet. A description that threw is not one — it is retried on
+    // the next frame, and whatever stood before it is left alone, because the
+    // state it answers is the state that just failed. A description that
+    // answered null *is* one: the hook is optional, and nothing is a valid
+    // answer.
+    bool stale = !cached || cached->callback != handler ||
+                 !StrEq(cached->payload, payload);
+    if (stale) {
+        double started = TimeNow();
+        shell::SpecArena* outer = impl->scratch;
+        auto* batch = new shell::SpecArena();
+        impl->scratch = batch;
+        shell::SpecId root = 0;
+        bool hasRoot = false;
+        bool succeeded = true;
+        {
+            // The same three protections a virtual list's item renderer gets:
+            // a Layout scope, which forbids cx.notify() and creating retained
+            // state; an arena of its own, so the description cannot leak into
+            // whichever snapshot is being built; and no job drain on the way
+            // out, because a promise continuation is unbounded application
+            // code and the layout pass is the last place to run one.
+            shell::CallScopeGuard scope = shell::ScopeEnter(
+                cx->win, cx->app, ScopePhase::Layout, entry->view,
+                entry->policy, this, entry->application);
+            // The handler is a closure the script wrote inside render(cx), and
+            // the element helpers it calls take that cx. Layout is a frame of
+            // its own, so without this the enclosing render's cx would read as
+            // stale here.
+            shell::ScopeAdopt(entry->registeredIn);
+            BeginExecution(impl);
+            JSValue state = JS_ParseJSON(impl->context, payload.s,
+                                         (size_t)payload.len, "<dock>");
+            JSValue context = ContextObject(impl, scope.Generation());
+            JSValue args[2] = {state, context};
+            JSValue produced = JS_IsException(state)
+                                   ? JS_EXCEPTION
+                                   : JS_Call(impl->context, entry->function,
+                                             JS_UNDEFINED, 2, args);
+            JS_FreeValue(impl->context, context);
+            if (!JS_IsException(state)) JS_FreeValue(impl->context, state);
+            if (JS_IsException(produced)) {
+                succeeded = false;
+            } else if (!JS_IsNull(produced) && !JS_IsUndefined(produced)) {
+                succeeded = ElementId(impl->context, produced, &root);
+                hasRoot = succeeded;
+            }
+            JS_FreeValue(impl->context, produced);
+        }
+        impl->scratch = outer;
+        double elapsed = TimeNow() - started;
+        shell::MetricsAdd(&impl->metrics, shell::MetricsTimerKind::FrameScript,
+                          elapsed <= 0 ? 0 : (uint64_t)(elapsed * 1e9));
+        if (!succeeded) {
+            Arena* arena = ArenaNew();
+            log(ExceptionText(arena, impl->context));
+            ArenaDelete(arena);
+            delete batch;
+            return nullptr;
+        }
+        if (!cached) {
+            if (impl->chromeCache.len >= kMaxChromeCacheEntries) {
+                ClearChromeCache(impl);
+            }
+            cached = new ChromeCacheEntry();
+            cached->dock = dock;
+            cached->slot = slot;
+            cached->key = key;
+            VecAppend(impl->chromeCache, cached);
+        }
+        StrFree(cached->payload);
+        delete cached->arena;
+        cached->callback = handler;
+        cached->payload = StrDup(payload);
+        cached->arena = batch;
+        cached->root = root;
+        cached->hasRoot = hasRoot;
+    }
+
+    if (!cached->hasRoot) return nullptr;
+    ShellError error = {};
+    El* element =
+        ShellMaterializeSpec(cx, this, cached->arena, cached->root, &error);
+    if (error.IsSet()) {
+        log(error.message);
+        ShellErrorClear(&error);
+    }
+    return element;
 }
 
 ViewType* ViewTypeRetain(ViewType* type) {

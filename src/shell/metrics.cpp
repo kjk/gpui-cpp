@@ -38,6 +38,8 @@ RuntimeMetrics RuntimeMetrics::Since(const RuntimeMetrics& earlier) const {
         SaturatingSub(scriptRenderNanos, earlier.scriptRenderNanos);
     out.slowestScriptRenderNanos = slowestScriptRenderNanos;
     out.nativeNanos = SaturatingSub(nativeNanos, earlier.nativeNanos);
+    out.frameScriptCalls =
+        SaturatingSub(frameScriptCalls, earlier.frameScriptCalls);
     out.materializations =
         SaturatingSub(materializations, earlier.materializations);
     out.materializeNanos =
@@ -67,7 +69,8 @@ void MetricsAdd(Metrics* metrics, MetricsTimerKind kind, uint64_t nanos) {
         case MetricsTimerKind::Native:
             value.nativeNanos = SaturatingAdd(value.nativeNanos, nanos);
             break;
-        case MetricsTimerKind::VirtualItems:
+        case MetricsTimerKind::FrameScript:
+            value.frameScriptCalls = SaturatingAdd(value.frameScriptCalls, 1);
             value.materializeNanos =
                 SaturatingAdd(value.materializeNanos, nanos);
             break;

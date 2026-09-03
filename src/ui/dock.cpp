@@ -547,9 +547,11 @@ static El* SkinDragPreview(Ctx* cx, void*, const DockPanelDef* def) {
 
 static const DockRenderer& ThemedRenderer() {
     static const DockRenderer r = {
-        nullptr,         SkinFrame,         nullptr,        nullptr,
-        SkinSplitHandle, SkinDock,          nullptr,        SkinTabContent,
-        SkinTabBar,      SkinDropIndicator, SkinDragPreview};
+        nullptr, SkinFrame, nullptr, nullptr, SkinSplitHandle, SkinDock,
+        nullptr, SkinTabContent, SkinTabBar,
+        // render_empty: the themed skin draws nothing for a group with
+        // nothing to show, which is what base's own default did.
+        nullptr, SkinDropIndicator, SkinDragPreview};
     return r;
 }
 
