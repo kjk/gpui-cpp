@@ -4766,6 +4766,19 @@ struct WinOpts {
 // `set_frame_trace_enabled`; here it is two QPC reads per frame and always on.
 struct FrameTiming {
     float drawSecs = 0;
+    // How many invalidations were coalesced into this frame: the AppInvalidate
+    // calls since the previous frame was recorded, which is what GPUI's
+    // `invalidations` counts. An animation frame is one of them, the way
+    // `request_animation_frame` is a `refresh()` there.
+    uint64_t invalidations = 0;
+    // When the frame reached the screen, on TimeNow()'s clock, or negative for
+    // a frame that was drawn but not presented — the scene found it identical
+    // to the last one. GPUI stamps `present_end` from inside its renderer;
+    // this tree has no seam under the swap chain, so the stamp is taken as
+    // PaintTargetEnd returns, which is after paint_win.cpp's Present, the X11
+    // flush, the CGContext flush, or the canvas draw of the
+    // requestAnimationFrame callback on wasm.
+    double presentAt = -1;
 };
 
 enum : uint16_t {
@@ -5027,6 +5040,9 @@ struct Window {
     // ever drawn and is what a collector cursors on.
     FrameTiming frameTrace[kFrameTraceCap] = {};
     uint64_t frameSeq = 0;
+    // AppInvalidate calls since the last recorded frame; the next frame takes
+    // them as its `invalidations` and zeroes it.
+    uint64_t invalidations = 0;
 
     Window() = default;
     // Drops the focus registration a field is still holding on this window.

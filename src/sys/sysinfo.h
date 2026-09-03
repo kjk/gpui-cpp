@@ -74,5 +74,24 @@ void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
 
 TempStr FormatBytes(uint64_t bytes);
 TempStr FormatPct(float v, int decimals);
+
+// crates/fps/src/memory.rs: how much memory this process is responsible for,
+// as opposed to how many pages it happens to have mapped. The resident set
+// counts the read-only pages of every shared library — on a windowed
+// application the whole graphics stack, which every other window on the
+// machine maps too, so the number moves when a *different* program starts.
+// Each platform reads the counter its own activity monitor attributes to the
+// process instead:
+//
+//   Windows  PrivateUsage from GetProcessMemoryInfo (Task Manager's commit)
+//   Linux    RssAnon from /proc/self/status (resident anonymous memory)
+//   macOS    ri_phys_footprint from proc_pid_rusage (Activity Monitor's
+//            Memory column)
+//
+// Answers false where the platform publishes no such counter, or for a
+// reading that is momentarily unavailable; the caller then falls back to the
+// resident set PlatSelfUsage reports — a worse number, but a present one. The
+// browser has none: a page only ever sees its own linear heap.
+bool SysSelfPrivateMemory(uint64_t* bytes);
 } // namespace gpui
 #endif // GPUI_SYS_SYSINFO_H_

@@ -200,6 +200,9 @@ extern "C" EMSCRIPTEN_KEEPALIVE void gpui_wasm_paste(void) {
 }
 
 void AppInvalidate(Window* win) {
+    if (win) {
+        win->invalidations++;
+    }
     if (win && win->plat) {
         win->plat->dirty = true;
     }

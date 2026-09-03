@@ -10369,3 +10369,102 @@ for mdast's tab arithmetic, caught by the probe. readme-dist.md documents
 each pair with crate versions filled from the cmd/run.ts pins
 (<taffy-version>, <markdown-version>, <wry-version> beside
 <autocorrect-version>).
+
+## Upstream ingest after `6d07863f`: fps
+
+`e8f54ebf` reports CPU per core and memory as private, and adds the frame
+tail. Four things landed. **CPU** was divided by the core count here too, so
+100 meant the whole machine; the division is gone and
+`ResourceSample::cpuPercent` is on the single core scale `top`, Activity
+Monitor and Task Manager use, with `FpsFormatCpu` showing a tenth below ten and
+whole percent above — a UI thread pinning a core now reads 100%, not 4%.
+**Memory** was `PlatSelfUsage`'s resident set, which counts the read-only pages
+of every DLL the process maps. `SysSelfPrivateMemory` is the new seam in
+`src/sys/sysinfo.h`, one implementation per platform, each reading the counter
+its own activity monitor attributes per process:
+`PROCESS_MEMORY_COUNTERS_EX::PrivateUsage` through `GetProcessMemoryInfo` on
+Windows, `RssAnon` out of `/proc/self/status` on Linux (not `smaps_rollup`'s
+`Private_Dirty`, for the ~425us against ~5us reason the Rust gives),
+`ri_phys_footprint` through `proc_pid_rusage` with `RUSAGE_INFO_V2` on macOS,
+and a plain false on wasm, where a page publishes no such counter and the HUD
+stays on the linear heap. The fallback is Rust's: a platform that answers false
+leaves the reading on the resident set. **P95** and **INV** are the two new
+rows, and INV needed the runtime first — `FrameTiming` gained `invalidations`,
+counted by `AppInvalidate` on all four platform windows and taken by the next
+recorded frame, which is what GPUI's profiler counts under the same name.
+`FrameSample` replaces the bare float the sampler kept, so a retained frame now
+carries its draw time and its invalidation count. `FrameSamplerPercentileDraw`
+is `percentile_draw` at the nearest rank over a sorted copy,
+`FrameSamplerMeanInvalidations` is `mean_invalidations`, and INV is the one
+reading left ungraded, for the reason the Rust comment gives. Finally
+`ResourceHistory` averages the three resource readings over a trailing three
+second window (`RESOURCE_WINDOW`), on the worker side of the thread boundary
+where `ResourceProbeSample` already runs, with the GPU share averaged only over
+the readings that carried one so a gap in the counter does not read as a dip.
+
+`09333c32`'s one line is a `#[cfg(not(target_family = "wasm"))]` on
+`RESOURCE_WINDOW`, keeping the wasm build from warning on a constant it does
+not use. Nothing to port: `ResourceHistory` is compiled on every platform here
+and the wasm build reaches it through the same `ResourceProbe`, whose readings
+come from `PlatSelfUsage`'s tab-shaped answers rather than being cfg'd away.
+
+`d6c10c21`'s fps half exposes `continuous` and `frame_budget` through
+`fps_monitor()`, so an application can make its HUD passive rather than have it
+create the whole-window redraw loop it measures. `FpsOverlayOpts` is the
+overlay's builder as a POD — anchor, `frameBudget` (0 leaves the monitor's
+alone) and `continuous` (-1 leaves it) — and `FpsOverlayEl` applies the two to
+the entity before rendering it, which is what `FpsOverlay::render`'s
+`monitor.update` does. `FpsMonitorSetFrameBudget` and `FpsMonitorSetContinuous`
+are the setters, the budget resetting the chart's axis floor with it. Both
+`FpsOverlayEl` and `FpsMonitorEl` take the options with a default, so every
+existing caller — the story's HUD toggle, the editor's, `fps_monitor.cpp` — is
+unchanged. The shell half of that checkin is another package's.
+
+`598d85a2` grades a window that draws on demand by frame cost rather than by
+rate, adding `passive_fps_color` and a `dropped_ratio` that counts an overrun
+only when another redraw had already been coalesced into it; `ed76af28` reverts
+it whole the same day. Net zero, and neither is in the tree: the port carries
+the reverted-to shape, which is what `30ca3087` then builds on.
+
+`30ca3087` counts presented frames, stamped with their own present time. The
+rate was derived from drawn frames stamped with the moment the sampler read the
+trace, so a batch read late collapsed onto one instant and measured how often
+the HUD looked rather than how often the window presented. `FrameTiming` gained
+`presentAt` and the sampler keeps `presents[]` where it kept `arrivals[]`:
+`FrameSamplerIngest` splits a batch into draws and presents, `FrameSamplerFps`
+divides `n - 1` present intervals by the span they really cover, and
+`FrameSamplerPresentInterval` is the reciprocal behind the new **INTERVAL**
+row. The headline is graded against the target rate only in continuous mode;
+drawing on demand it is printed plain in the foreground colour, as the platform
+overlay prints it. **Where the runtime has no seam Rust does:** GPUI stamps
+`present_end` from inside its renderer, and nothing here sits under the swap
+chain, so `presentAt` is taken in `window_common.cpp` as `PaintTargetEnd`
+returns — after `paint_win.cpp`'s `Present`, the X11 flush, the CGContext
+flush, or the canvas draw of the `requestAnimationFrame` callback. It is the
+same clock and the same side of the present; what it cannot see is the
+compositor's own latency. A frame the scene found identical to the last one is
+not presented at all and carries `presentAt` negative, so it costs a draw time
+and delimits no interval — which is exactly what "presented, not drawn" means
+here.
+
+`0c746dff`'s fps bits swap `instant` for `web-time` in `Cargo.toml` and in four
+files' `use` lines, because GPUI stamps frames with `web_time::Instant` and the
+website's wasm build had been failing since #2919. Nothing to port: `TimeNow()`
+is one monotonic clock on all four platforms, and on wasm it is already the
+page's own — the crate split this port never had.
+
+The sampler tests came over into `tests/FpsTests.cpp` against the
+`FrameSamplerIngestDraws` / `FrameSamplerIngestPresents` seams, the two halves
+`FrameSamplerTick` drains into: the rate tests feed presents and the cost tests
+feed draws, the way the Rust tests do after `30ca3087`. New there: the
+present-time test (61 presents 10 ms apart, read in one batch 600 ms late,
+measure 100 fps and a 10 ms interval, then age out to zero), the four
+percentile tests, `invalidations_average_over_the_retained_frames`, the four
+`ResourceHistory` tests, `format_cpu` and `fps_color` from monitor.rs, and
+memory.rs' unit test — 64 MB of ballast touched a page at a time, the reading
+having to follow it by at least half, which is what separates bytes from
+kibibytes and from pages. Linux additionally asserts the identity `RssAnon <=
+VmRSS`. `ignores_frames_from_other_windows` still has no counterpart (ours is
+already per-window) and neither does lib.rs' `FrameTraceGuard` test, since the
+trace is always on here. 22155 checks pass, and the HUD shot shows the seven
+rows: the headline, INTERVAL, FRAME, P95, DROP/INV, GPU, CPU/MEM.
