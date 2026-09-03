@@ -7,6 +7,28 @@
 
 namespace gpui {
 
+// theme/motion.rs: the numbers every styled component's motion is tuned to.
+// The three curves are CSS cubic Béziers, and both springs carry the
+// tolerance their unit wants — normalized for a control, a tenth of a pixel
+// for something travelling across the screen.
+MotionTokens MotionTokens::Default() {
+    MotionTokens m;
+    m.durationInstantMs = 0.f;
+    m.durationFastMs = 120.f;
+    m.durationNormalMs = 180.f;
+    m.durationSlowMs = 280.f;
+    // Rust `.expect("static enter curve is valid")`: all three are constants
+    // that have been checked, so the unwrap cannot fail.
+    m.easingEnter = Easing::CubicBezier(0.16f, 1.f, 0.3f, 1.f).Unwrap();
+    m.easingExit = Easing::CubicBezier(0.4f, 0.f, 1.f, 1.f).Unwrap();
+    m.easingMove = Easing::CubicBezier(0.2f, 0.f, 0.f, 1.f).Unwrap();
+    m.springControl = Spring::New(180.f);
+    m.springMove = Spring::New(280.f).WithDamping(0.85f).WithEpsilon(0.1f);
+    m.distanceShort = 4.f;
+    m.distanceMedium = 8.f;
+    return m;
+}
+
 ThemeToken ThemeToken::New(Rgba color, Background background) {
     ThemeToken out;
     out.color = color;

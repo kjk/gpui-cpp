@@ -18,13 +18,13 @@ El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx) {
             ->PadX(12)
             ->ItemsCenter()
             ->JustifyBetween()
-            ->Border(1, Rgb(0xa3, 0xa3, 0xa3))
-            ->Bg(Rgb(0xff, 0xff, 0xff))
-            ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+            ->Border(1, ExampleRgb(0xa3a3a3))
+            ->Bg(ExampleRgb(0xffffff))
+            ->HoverBg(ExampleRgb(0xf5f5f5))
             ->Child(TextEl(a, StrL("Aug 12, 2026"))
                         ->Font(12)
-                        ->Fg(Rgb(0x17, 0x17, 0x17)))
-            ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+                        ->Fg(ExampleRgb(0x171717)))
+            ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(ExampleRgb(0x171717)));
     El* cal = app->dateOpen ? ShowcaseCalendarGrid(app, cx) : nullptr;
     return DatePicker::New(cx, StrL("example-date-picker"))
         ->W(250)

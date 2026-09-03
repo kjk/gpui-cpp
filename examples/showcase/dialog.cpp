@@ -32,7 +32,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                     ->Bg(Rgb(0, 0, 0))
                     ->Child(TextEl(a, StrL("Edit profile"))
                                 ->Font(12)
-                                ->Fg(Rgb(0xff, 0xff, 0xff))));
+                                ->Fg(ExampleRgb(0xffffff))));
     if (!app->dialogOpen) {
         return root;
     }
@@ -41,22 +41,22 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->W(288)
             ->Pad(12)
             ->FlexCol()
-            ->Bg(Rgb(0xff, 0xff, 0xff))
-            ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+            ->Bg(ExampleRgb(0xffffff))
+            ->Border(1, ExampleRgb(0xd4d4d4))
             ->Child(DialogTitle::New(cx)->Child(TextEl(a, StrL("Edit profile"))
                                                     ->Font(12)
-                                                    ->Fg(Rgb(0x17, 0x17, 0x17))
+                                                    ->Fg(ExampleRgb(0x171717))
                                                     ->Semibold()))
             ->Child(DialogDescription::New(cx)->Child(
                 TextEl(a,
                        StrL("Update the public details shown on your profile."))
                     ->Font(12)
-                    ->Fg(Rgb(0x73, 0x73, 0x73))
+                    ->Fg(ExampleRgb(0x737373))
                     ->Wrap()
                     ->MaxW(264)))
             ->Child(Div(a)->PadT(12)->Child(TextEl(a, StrL("Display name"))
                                                 ->Font(14)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                                ->Fg(ExampleRgb(0x171717))))
             ->Child(InputBase::New(cx, StrL("dialog-name"), true)
                         ->OnClick(Listen(cx, &FocusDlgField))
                         ->FocusId(0)
@@ -64,7 +64,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                         ->H(28)
                         ->PadX(8)
                         ->ItemsCenter()
-                        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                        ->Border(1, ExampleRgb(0xd4d4d4))
                         ->Child(Input::New(cx, &app->input)))
             ->Child(
                 Div(a)
@@ -85,19 +85,19 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                                     ->H(28)
                                     ->PadX(12)
                                     ->ItemsCenter()
-                                    ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                                    ->Border(1, ExampleRgb(0xd4d4d4))
                                     ->Child(TextEl(a, StrL("Cancel"))
                                                 ->Font(12)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17)))))
+                                                ->Fg(ExampleRgb(0x171717)))))
                     ->Child(Button::New(cx, StrL("dialog-save"), false,
                                         Listen(cx, &CloseDlg))
                                 ->H(28)
                                 ->PadX(12)
                                 ->ItemsCenter()
-                                ->Bg(Rgb(0x17, 0x17, 0x17))
+                                ->Bg(ExampleRgb(0x171717))
                                 ->Child(TextEl(a, StrL("Save changes"))
                                             ->Font(12)
-                                            ->Fg(Rgb(0xff, 0xff, 0xff)))));
+                                            ->Fg(ExampleRgb(0xffffff)))));
     El* backdrop = DialogBackdrop::New(cx)
                        ->Absolute()
                        ->Top(0)

@@ -7,11 +7,11 @@ namespace gpui {
 
 namespace component {
 
-// tab_bar.rs INDICATOR_SPRING: the period the indicator's slide is felt at.
-// Rust keeps the box it is coming from in an epoch-stamped state; a spring
-// here remembers where it had got to and how fast it was going, so what the
-// bar has to keep is only the box it is going to.
-static const float kTabIndicatorMotionMs = 250.f;
+// tab_bar.rs names no spring of its own now: the indicator slides under the
+// theme's `spring_move`. Rust keeps the box it is coming from in an
+// epoch-stamped state; a spring here remembers where it had got to and how
+// fast it was going, so what the bar has to keep is only the box it is going
+// to.
 
 float TabHeight(TabVariant v, UiSize size) {
     bool under = v == TabVariant::Underline;
@@ -678,13 +678,11 @@ El* TabBar::IntoEl() {
     auto* stripBox = (Bounds*)MotionSlot(cx, MotionId(StrL("tab-strip"), id),
                                          (int)sizeof(Bounds));
     strip->BoundsOut(stripBox);
-    // INDICATOR_SPRING: the selection moves again while the indicator is
-    // still travelling — a run down a row of tabs — so it is sprung, and
-    // slightly under critical so it arrives with a little of the overshoot
-    // the eye reads as weight. A tenth of a pixel is arrived.
-    Spring indSpring = SpringNew(kTabIndicatorMotionMs);
-    indSpring.damping = 0.85f;
-    indSpring.epsilon = 0.1f;
+    // spring_move: the selection moves again while the indicator is still
+    // travelling — a run down a row of tabs — so it is sprung, and slightly
+    // under critical so it arrives with a little of the overshoot the eye
+    // reads as weight. A tenth of a pixel is arrived.
+    Spring indSpring = th.motion.springMove;
     float indX = 0;
     float indW = 0;
     bool sliding = false;

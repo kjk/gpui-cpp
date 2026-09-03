@@ -17,7 +17,7 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
         ->Gap(4)
         ->ItemsStart()
         ->Child(Div(a)->H(16)->ItemsCenter()->Child(
-            TextEl(a, StrL("Textarea"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
+            TextEl(a, StrL("Textarea"))->Font(12)->Fg(ExampleRgb(0x171717))))
         ->Child(InputBase::New(cx, StrL("example-textarea"), true)
                     ->OnClick(Listen(cx, &OnTextarea))
                     ->W(224)
@@ -26,8 +26,8 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
                     ->PadY(8)
                     ->ClipY()
                     ->FocusId(0)
-                    ->Border(1, app->textareaOn ? Rgb(0x17, 0x17, 0x17)
-                                                : Rgb(0xd4, 0xd4, 0xd4))
+                    ->Border(1, app->textareaOn ? ExampleRgb(0x171717)
+                                                : ExampleRgb(0xd4d4d4))
                     ->Child(Textarea::New(cx, &app->textarea)));
 }
 

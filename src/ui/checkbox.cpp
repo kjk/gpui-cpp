@@ -5,9 +5,10 @@ namespace gpui {
 
 namespace component {
 
-// checkbox.rs MARK_SPRING: the period the tick's fade is felt at, which
-// upstream sets to 0.2 s where the transition ran for 0.25.
-static const float kCheckboxMotionMs = 200.f;
+// checkbox.rs no longer names a spring of its own: the tick's fade is the
+// theme's `spring_control`, the policy every control that answers a click
+// shares. Critically damped, because an opacity that overshoots would clip
+// at 1 and come back — a flicker rather than a flourish.
 
 Checkbox* Checkbox::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -103,11 +104,11 @@ El* Checkbox::IntoEl() {
     // which one value going the other way says as well.
     float on = checked ? 1.f : 0.f;
     if (!disabled) {
-        // MARK_SPRING: a box clicked twice reverses the fade mid-flight,
+        // spring_control: a box clicked twice reverses the fade mid-flight,
         // which is where a spring beats a curve restarted from the value it
         // happened to be at.
         on = SpringValue(cx, MotionId(id, StrL("checkbox-tick")), on,
-                         SpringNew(kCheckboxMotionMs));
+                         th.motion.springControl);
     }
     if (on > 0.01f) {
         Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;

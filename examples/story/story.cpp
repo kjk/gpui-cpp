@@ -1062,6 +1062,12 @@ static Window* StoryOpenWindow(App* app, int story) {
     // Windows and X11 have none, so component::TitleBar draws the minimize /
     // maximize / close controls there itself.
     opts.clientTitleBar = true;
+    // `story_window_background()`: upstream stopped advertising an alpha
+    // surface on Linux, because a compositor was showing the desktop through
+    // a light theme even though every story is designed against an opaque
+    // canvas. There is nothing to change here — `window_linux.cpp` asks X11
+    // for an ordinary opaque visual and never sets an ARGB one — so this is
+    // where that decision would live if the seam existed.
     Window* win =
         WindowOpenView(app, StoryWindowTitle(), 1600, 1200, view.id, opts);
     if (!win) {

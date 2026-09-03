@@ -16,8 +16,8 @@ static El* RepoRow(Ctx* cx, const char* name) {
         ->H(28)
         ->PadX(8)
         ->ItemsCenter()
-        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-        ->Child(TextEl(a, Str(name))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+        ->Border(1, ExampleRgb(0xd4d4d4))
+        ->Child(TextEl(a, Str(name))->Font(12)->Fg(ExampleRgb(0x171717)));
 }
 
 El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
@@ -33,18 +33,18 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
                     ->JustifyBetween()
                     ->Child(TextEl(a, StrL("@gpui/base · 3 repositories"))
                                 ->Font(12)
-                                ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                ->Fg(ExampleRgb(0x171717)))
                     ->Child(Button::New(cx, StrL("collapsible-trigger"), false,
                                         Listen(cx, &OnCollapsible))
                                 ->W(28)
                                 ->H(28)
                                 ->ItemsCenter()
                                 ->JustifyCenter()
-                                ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                                ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                                ->Border(1, ExampleRgb(0xd4d4d4))
+                                ->HoverBg(ExampleRgb(0xf5f5f5))
                                 ->Child(TextEl(a, open ? StrL("−") : StrL("+"))
                                             ->Font(12)
-                                            ->Fg(Rgb(0x17, 0x17, 0x17)))))
+                                            ->Fg(ExampleRgb(0x171717)))))
         ->Child(Div(a)->PadT(8)->W(256)->Child(RepoRow(cx, "gpui-component")))
         ->Content(Div(a)
                       ->PadT(8)

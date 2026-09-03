@@ -21,7 +21,7 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
                   ->PadX(8)
                   ->PadT(4)
                   ->PadB(1)
-                  ->BorderB(1, Rgb(0xd4, 0xd4, 0xd4));
+                  ->BorderB(1, ExampleRgb(0xd4d4d4));
     for (int i = 0; i < 3; i++) {
         bool on = app->tab == i;
         El* tab =
@@ -30,10 +30,10 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
                 ->H(28)
                 ->PadX(8)
                 ->ItemsCenter()
-                ->BorderB(2, on ? Rgb(0x17, 0x17, 0x17) : Rgb(0xff, 0xff, 0xff))
-                ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
+                ->BorderB(2, on ? ExampleRgb(0x171717) : ExampleRgb(0xffffff))
+                ->HoverBg(ExampleRgb(0xf5f5f5));
         El* lab =
-            TextEl(a, Str(labels[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17));
+            TextEl(a, Str(labels[i]))->Font(12)->Fg(ExampleRgb(0x171717));
         if (on) {
             lab->Semibold();
         }
@@ -63,10 +63,10 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
                     ->Gap(4)
                     ->Child(TextEl(a, Str(title))
                                 ->Font(12)
-                                ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                ->Fg(ExampleRgb(0x171717)))
                     ->Child(TextEl(a, Str(sub))
                                 ->Font(12)
-                                ->Fg(Rgb(0x73, 0x73, 0x73))
+                                ->Fg(ExampleRgb(0x737373))
                                 ->Wrap()
                                 ->MaxW(260)));
 }

@@ -39,24 +39,24 @@ static El* ToggleCell(Ctx* cx, Str id, Listener onChange, const char* label,
                 ->ItemsCenter()
                 ->JustifyCenter();
     if (borderLeft) {
-        b->Border(1, Rgb(0x17, 0x17, 0x17));
+        b->Border(1, ExampleRgb(0x171717));
     } else {
-        b->BorderT(1, Rgb(0x17, 0x17, 0x17))
-            ->BorderR(1, Rgb(0x17, 0x17, 0x17))
-            ->BorderB(1, Rgb(0x17, 0x17, 0x17));
+        b->BorderT(1, ExampleRgb(0x171717))
+            ->BorderR(1, ExampleRgb(0x171717))
+            ->BorderB(1, ExampleRgb(0x171717));
     }
     if (on) {
-        b->Bg(Rgb(0x17, 0x17, 0x17))
+        b->Bg(ExampleRgb(0x171717))
             ->Child(TextEl(a, Str(label))
                         ->Font(12)
-                        ->Fg(Rgb(0xff, 0xff, 0xff))
+                        ->Fg(ExampleRgb(0xffffff))
                         ->Bold());
     } else {
-        b->Bg(Rgb(0xff, 0xff, 0xff))
-            ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+        b->Bg(ExampleRgb(0xffffff))
+            ->HoverBg(ExampleRgb(0xf5f5f5))
             ->Child(TextEl(a, Str(label))
                         ->Font(12)
-                        ->Fg(Rgb(0x17, 0x17, 0x17))
+                        ->Fg(ExampleRgb(0x171717))
                         ->Bold());
     }
     return b;

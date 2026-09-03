@@ -79,7 +79,6 @@ El* Slider::IntoEl() {
     // translucent ring grows outside the thumb while the pointer is over it.
     const float kRingWidth = 3.f;
     const float kRingOpacity = 0.5f;
-    const float kRingMs = 150.f;
     float w = width;
     float mid = (kH - kBar) * 0.5f;
 
@@ -107,14 +106,14 @@ El* Slider::IntoEl() {
         }
         bool active = cx->win &&
                       (cx->win->hoverId == thumbId || (bind && bind->dragging));
-        // THUMB_RING_SPRING: a click presses and releases faster than the
-        // ring finishes growing, so it is sprung to decelerate through the
+        // spring_control: a click presses and releases faster than the ring
+        // finishes growing, so it is sprung to decelerate through the
         // reversal. Critically damped, so it never grows past the width the
-        // thumb reserves for it.
+        // thumb reserves for it. slider.rs names no spring of its own now.
         float progress = SpringValue(
             cx,
             MotionId(StrL("slider-thumb-ring"), StrDup(a, fmt("%d", thumbId))),
-            active ? 1.f : 0.f, SpringNew(kRingMs));
+            active ? 1.f : 0.f, th.motion.springControl);
         if (progress <= 0.f) {
             return thumb;
         }

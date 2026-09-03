@@ -15,7 +15,7 @@ static void OnLink(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 // page used to spell out by hand for the second link.
 static const LinkStyles kLinkStyles = [] {
     LinkStyles s;
-    s.disabled.Border(1, Rgb(0xd4, 0xd4, 0xd4)).Fg(Rgb(0x73, 0x73, 0x73));
+    s.disabled.Border(1, ExampleRgb(0xd4d4d4)).Fg(ExampleRgb(0x737373));
     return s;
 }();
 
@@ -28,18 +28,18 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
         ->Gap(8)
         ->Child(TextEl(a, StrL("Navigation is application-owned"))
                     ->Font(12)
-                    ->Fg(Rgb(0x17, 0x17, 0x17)))
+                    ->Fg(ExampleRgb(0x171717)))
         ->Child(Link::New(cx, StrL("example-link"), false, Listen(cx, &OnLink),
                           &kLinkStyles)
                     ->W(kFill)
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
-                    ->Border(1, Rgb(0x17, 0x17, 0x17))
-                    ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                    ->Border(1, ExampleRgb(0x171717))
+                    ->HoverBg(ExampleRgb(0xf5f5f5))
                     ->Child(TextEl(a, StrL("Open Link documentation  →"))
                                 ->Font(12)
-                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                ->Fg(ExampleRgb(0x171717))))
         // The same chain as the link above; the disabled state is what makes
         // it look different, not a second set of colours here.
         ->Child(
@@ -48,7 +48,7 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
                 ->H(28)
                 ->PadX(12)
                 ->ItemsCenter()
-                ->Border(1, Rgb(0x17, 0x17, 0x17))
+                ->Border(1, ExampleRgb(0x171717))
                 ->Child(TextEl(a, StrL("Disabled destination"))->Font(12)));
 }
 

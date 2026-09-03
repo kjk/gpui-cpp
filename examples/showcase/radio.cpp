@@ -13,9 +13,9 @@ static El* RadioDot(Ctx* cx, bool on) {
     Arena* a = cx->a;
     El* outer =
         Div(a)->W(14)->H(14)->Shrink0()->ItemsCenter()->JustifyCenter()->Border(
-            1, Rgb(0x17, 0x17, 0x17));
+            1, ExampleRgb(0x171717));
     if (on) {
-        outer->Child(Div(a)->W(6)->H(6)->Bg(Rgb(0x17, 0x17, 0x17)));
+        outer->Child(Div(a)->W(6)->H(6)->Bg(ExampleRgb(0x171717)));
     }
     return outer;
 }
@@ -29,8 +29,8 @@ static El* RadioRow(Ctx* cx, Str id, Listener onClick, bool on,
     row->Child(
         Div(a)
             ->FlexCol()
-            ->Child(TextEl(a, Str(title))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-            ->Child(TextEl(a, Str(sub))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73))));
+            ->Child(TextEl(a, Str(title))->Font(12)->Fg(ExampleRgb(0x171717)))
+            ->Child(TextEl(a, Str(sub))->Font(12)->Fg(ExampleRgb(0x737373))));
     return row;
 }
 
@@ -46,14 +46,14 @@ static El* RadioRowDisabled(Ctx* cx, Str id, const char* title,
         ->Gap(8)
         ->Opacity(0.45f)
         ->Child(Div(a)->PadT(2)->Child(
-            Div(a)->W(14)->H(14)->Shrink0()->Border(1, Rgb(0x17, 0x17, 0x17))))
+            Div(a)->W(14)->H(14)->Shrink0()->Border(1, ExampleRgb(0x171717))))
         ->Child(
             Div(a)
                 ->FlexCol()
                 ->Child(
-                    TextEl(a, Str(title))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
+                    TextEl(a, Str(title))->Font(12)->Fg(ExampleRgb(0x171717)))
                 ->Child(
-                    TextEl(a, Str(sub))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+                    TextEl(a, Str(sub))->Font(12)->Fg(ExampleRgb(0x171717))));
 }
 
 El* ShowcaseRadio(ShowcaseApp* app, Ctx* cx) {

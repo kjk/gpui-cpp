@@ -197,7 +197,16 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     BindInput(app, win);
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
-    El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
+    // activate_palette(window) at the top of the render, so every page below
+    // resolves its light literals against the appearance in force. Rust reads
+    // `window.appearance()`; there is no portable seam for the desktop
+    // setting here, so this is the theme mode the example chose — see
+    // examples/showcase/palette.h.
+    PaletteActivate(ThemeNow(cx->app).mode == ThemeMode::Dark);
+
+    // The canvas is its own token: the dark palette darkens it below the
+    // surfaces that sit on it, where the light one has both white.
+    El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ExampleCanvas());
     if (showBack) {
         root->Child(
             Div(frame)

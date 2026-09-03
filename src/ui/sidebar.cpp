@@ -599,8 +599,7 @@ El* Sidebar::IntoEl() {
     // it goes.
     float wrapW = layout.wrapperWidth;
     if (layout.wrapper == SidebarWrapperKind::Animated) {
-        Motion motion = MotionNew(kSidebarMotionMs);
-        motion.ease = EaseInOutCubic;
+        Motion motion = MotionNew(kSidebarMotionMs).Ease(EaseInOutCubic);
         wrapW = MotionValue(cx, MotionId(id, StrL("sidebar-width")),
                             layout.wrapperWidth, motion);
     }

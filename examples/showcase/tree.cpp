@@ -64,9 +64,9 @@ static El* ShowcaseTreeRow(void*, Ctx* cx, int, const TreeEntry& entry,
                   ->PadX(8)
                   ->ItemsCenter()
                   ->Gap(4)
-                  ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
+                  ->HoverBg(ExampleRgb(0xf5f5f5));
     if (entryState.IsSelected()) {
-        row->Bg(Rgb(0xf0, 0xf0, 0xf0));
+        row->Bg(ExampleRgb(0xf0f0f0));
     }
     if (it->depth > 0) {
         row->Child(Div(a)->W((float)it->depth * 12));
@@ -96,7 +96,7 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         // the box's padding instead — the same 4px, and the selected
         // background still stops short of the border.
         ->Pad(4)
-        ->Border(1, Rgb(0xd4, 0xd4, 0xd4));
+        ->Border(1, ExampleRgb(0xd4d4d4));
 }
 
 SHOWCASE_PAGE(CompTree, ShowcaseTree);

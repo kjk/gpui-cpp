@@ -20,47 +20,47 @@ El* ShowcaseTable(ShowcaseApp* app, Ctx* cx) {
     El* t = Table::New(cx, StrL("example-table"))
                 ->FlexCol()
                 ->W(288)
-                ->Border(1, Rgb(0xe5, 0xe7, 0xeb))
+                ->Border(1, ExampleRgb(0xe5e7eb))
                 ->ClipY();
     El* head =
         TableHeader::New(cx, StrL("header"))
             ->Child(TableRow::New(cx, StrL("header-row"))
                         ->FlexRow()
-                        ->Bg(Rgb(0xf5, 0xf5, 0xf5))
+                        ->Bg(ExampleRgb(0xf5f5f5))
                         ->Child(TableHead::New(cx, StrL("name-head"))
                                     ->W(124)
                                     ->PadX(8)
                                     ->PadY(4)
                                     ->Child(TextEl(a, StrL("Component"))
                                                 ->Font(12)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                                ->Fg(ExampleRgb(0x171717))))
                         ->Child(TableHead::New(cx, StrL("status-head"))
                                     ->W(84)
                                     ->PadX(8)
                                     ->PadY(4)
                                     ->Child(TextEl(a, StrL("Status"))
                                                 ->Font(12)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                                                ->Fg(ExampleRgb(0x171717))))
                         ->Child(TableHead::New(cx, StrL("version-head"))
                                     ->W(92)
                                     ->PadX(8)
                                     ->PadY(4)
                                     ->Child(TextEl(a, StrL("Version"))
                                                 ->Font(12)
-                                                ->Fg(Rgb(0x17, 0x17, 0x17)))));
+                                                ->Fg(ExampleRgb(0x171717)))));
     t->Child(head);
     El* body = TableBody::New(cx, StrL("body"))->FlexCol();
     for (int i = 0; i < 4; i++) {
         El* r = TableRow::New(cx, DupFmt(cx, "body-row-%d", i))
                     ->FlexRow()
-                    ->BorderT(1, Rgb(0xe5, 0xe7, 0xeb));
+                    ->BorderT(1, ExampleRgb(0xe5e7eb));
         r->Child(TableCell::New(cx, StrL("name"))
                      ->W(124)
                      ->PadX(8)
                      ->PadY(4)
                      ->Child(TextEl(a, Str(rows[i].name))
                                  ->Font(12)
-                                 ->Fg(Rgb(0x17, 0x17, 0x17))));
+                                 ->Fg(ExampleRgb(0x171717))));
         r->Child(TableCell::New(cx, DupFmt(cx, "status-%d", i))
                      ->W(84)
                      ->PadX(8)
@@ -69,17 +69,17 @@ El* ShowcaseTable(ShowcaseApp* app, Ctx* cx) {
                                  ->PadX(4)
                                  ->PadY(1)
                                  ->MinW(52)
-                                 ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                                 ->Border(1, ExampleRgb(0xd4d4d4))
                                  ->Child(TextEl(a, Str(rows[i].status))
                                              ->Font(12)
-                                             ->Fg(Rgb(0x17, 0x17, 0x17)))));
+                                             ->Fg(ExampleRgb(0x171717)))));
         r->Child(TableCell::New(cx, DupFmt(cx, "version-%d", i))
                      ->W(92)
                      ->PadX(8)
                      ->PadY(4)
                      ->Child(TextEl(a, Str(rows[i].ver))
                                  ->Font(12)
-                                 ->Fg(Rgb(0x73, 0x73, 0x73))));
+                                 ->Fg(ExampleRgb(0x737373))));
         body->Child(r);
     }
     t->Child(body);
