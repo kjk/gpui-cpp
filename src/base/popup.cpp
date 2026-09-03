@@ -35,7 +35,14 @@ El* PopupPlaceContent(El* content, PopupAnchor anchor, float offsetY) {
     // can measure the trigger and child in one layout pass, so it does not
     // need Rust's first-frame prepaint capture; the resulting bounds are the
     // same. Deferred is the structural equivalent of with_priority(100).
+    //
+    // `.occlude()`: the host blocks the mouse, so no caller has to remember —
+    // what a popup covers belongs to the popup. That takes in Popover, the
+    // dropdown menu over it and HoverCard in one place. The surface records
+    // a hit rect ahead of its children, so its own content still hears the
+    // pointer and the panel under it does not.
     return content->AnchorCorner(anchor, kPopupWindowMargin, offsetY)
+        ->StopMouseDown()
         ->Deferred();
 }
 

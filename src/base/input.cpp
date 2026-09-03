@@ -1445,6 +1445,39 @@ void InputToggleFold(InputState* s, App* app, Window* win, int line) {
     (void)app;
 }
 
+bool InputUnfoldAt(InputState* s, App* app, Window* win, RopePoint position) {
+    if (!s || !LayoutModeIsFolding(s->mode)) {
+        return false;
+    }
+    // position_to_offset then offset_to_point: the row of the position once
+    // it has been clipped to the document, which is what a column past the
+    // end of a line or a row past the last line resolve to.
+    int offset = RopePointToOffset(InputValue(s), position);
+    int line = InputOffsetToPoint(s, offset).row;
+    // A fold hides start_line + 1 ..= end_line - 1, so a line is hidden
+    // exactly when some folded range strictly contains it. The start lines
+    // are gathered first: opening a fold takes it out of `folded`, which is
+    // the list being walked.
+    const Vec<FoldRange>& folded = s->folds.folded;
+    int* covering =
+        (int*)Alloc(GetTempArena(), (int)sizeof(int) * (folded.len + 1));
+    int nCovering = 0;
+    for (int i = 0; i < folded.len; i++) {
+        if (line > folded[i].startLine && line < folded[i].endLine) {
+            covering[nCovering++] = folded[i].startLine;
+        }
+    }
+    if (nCovering == 0) {
+        return false;
+    }
+    for (int i = 0; i < nCovering; i++) {
+        FoldMapSetFolded(&s->folds, covering[i], false);
+    }
+    AppInvalidate(win);
+    (void)app;
+    return true;
+}
+
 void InputSetFoldCandidates(InputState* s, const FoldRange* ranges, int n) {
     if (!s || !LayoutModeIsFolding(s->mode)) {
         return;

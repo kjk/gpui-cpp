@@ -4635,7 +4635,15 @@ static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
         return;
     }
     Bounds rects[32] = {};
-    // The washes go under every glyph, so they all go down first.
+    // The washes go under every glyph, so they all go down first. This is
+    // also the editor's decoration-background pass: an editor row hands its
+    // composed spans over here, so a decoration carrying a background paints
+    // under the indent guides, the selection and the text without a pass of
+    // its own. Rust needs `LineLayout::paint_background` and a per-line
+    // `has_background` flag because gpui's `ShapedLine::paint` draws only
+    // glyphs, underlines and strikethroughs; the equivalent early-out here is
+    // the per-span alpha test below, which costs nothing on a line with no
+    // highlight.
     for (int i = 0; i < e->nSpans; i++) {
         const TextSpan& sp = e->spans[i];
         if (sp.bg.a == 0 || sp.hi <= sp.lo) {

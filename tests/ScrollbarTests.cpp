@@ -118,8 +118,7 @@ static void ScrollableElementPreservesTheSourceElementAndMask() {
     utassert(direct->style.overflowY == Overflow::Hidden);
     utassertnear(direct->scrollX, 9);
 
-    El* masked = component::ScrollableMask::New(
-                     &cx, Axis::Horizontal, result)
+    El* masked = component::ScrollableMask::New(&cx, Axis::Horizontal, result)
                      ->Id(StrL("horizontal-mask"))
                      ->IntoEl();
     utassert(masked == result);
@@ -164,11 +163,9 @@ static ScrollRect TestScrollRect(int id, Bounds bounds, float contentW,
     return s;
 }
 
-static void DispatchWheel(Window* win, float dx, float dy,
-                          bool precise = false,
+static void DispatchWheel(Window* win, float dx, float dy, bool precise = false,
                           TouchPhase phase = TouchPhase::Moved) {
-    PlatformInput input =
-        InputScrollWheel(10, 10, dx, dy, precise, {}, phase);
+    PlatformInput input = InputScrollWheel(10, 10, dx, dy, precise, {}, phase);
     WindowDispatchInput(win, &input);
 }
 
@@ -189,12 +186,10 @@ static void ScrollableMasksChainAndTrapLikeTheSource() {
     innerHit.parent = 0;
     VecAppend(win->paint.hits, innerHit);
 
-    ScrollRect outer = TestScrollRect(
-        1, {0, 0, 100, 100}, 100, 500, 2, 0,
-        ListenTo(entity, &ScrollRecorder::Outer));
-    ScrollRect inner = TestScrollRect(
-        2, {0, 0, 100, 60}, 100, 300, 2, 1,
-        ListenTo(entity, &ScrollRecorder::Inner));
+    ScrollRect outer = TestScrollRect(1, {0, 0, 100, 100}, 100, 500, 2, 0,
+                                      ListenTo(entity, &ScrollRecorder::Outer));
+    ScrollRect inner = TestScrollRect(2, {0, 0, 100, 60}, 100, 300, 2, 1,
+                                      ListenTo(entity, &ScrollRecorder::Inner));
     VecAppend(win->paint.scrolls, outer);
     VecAppend(win->paint.scrolls, inner);
 
@@ -216,9 +211,9 @@ static void ScrollableMasksChainAndTrapLikeTheSource() {
     // A horizontal-dominant gesture is trapped by the horizontal mask,
     // including at its edge; vertical-dominant input reaches the parent.
     win->paint.scrolls[0].scrollY = 0;
-    win->paint.scrolls[1] = TestScrollRect(
-        3, {0, 0, 100, 60}, 300, 60, 1, 1,
-        ListenTo(entity, &ScrollRecorder::Inner));
+    win->paint
+        .scrolls[1] = TestScrollRect(3, {0, 0, 100, 60}, 300, 60, 1, 1,
+                                     ListenTo(entity, &ScrollRecorder::Inner));
     state->innerX = 0;
     state->outerY = 0;
     state->outerCalls = 0;
@@ -274,9 +269,9 @@ static void ATrackPressMovesOnceAndOnlyAThumbPressDrags() {
     win->app = &app;
     Entity<ScrollRecorder> entity = EntityNewState<ScrollRecorder>(&app);
     ScrollRecorder* state = entity.Get(&app);
-    ScrollRect scroll = TestScrollRect(
-        51, {0, 0, 100, 100}, 100, 400, 0, -1,
-        ListenTo(entity, &ScrollRecorder::Inner));
+    ScrollRect scroll =
+        TestScrollRect(51, {0, 0, 100, 100}, 100, 400, 0, -1,
+                       ListenTo(entity, &ScrollRecorder::Inner));
     scroll.trackWidth = 20;
     VecAppend(win->paint.scrolls, scroll);
 
@@ -348,8 +343,94 @@ static void TheHighlighterScrollerHasAStableScrollId() {
     ArenaDelete(a);
 }
 
+// scrollable_flex_item_shrinks_below_its_content, and its horizontal twin.
+//
+// A flex item only drops its content-based automatic minimum size when its
+// own overflow is not Visible; otherwise the item refuses to shrink around
+// its content. Rust's Scrollable wraps the caller's element, so the wrapper
+// had to declare the scrolled axis clipped itself; here the caller's element
+// *is* the scroll container — Scrollbar::Apply puts the overflow on it — so
+// the axis is already non-visible and CSS puts its automatic minimum at zero.
+// Without that a scroll region used as a flex item pushes its siblings out of
+// the container instead of scrolling, and every call site has to remember a
+// zero minimum.
+static void AScrollableFlexItemShrinksBelowItsContent() {
+    App app = {};
+    component::Init(&app);
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.a = a;
+
+    // A fixed-height column of header, flexible scroll area, footer. The
+    // content is far taller than the room left for the area, so the area must
+    // shrink into the remaining 60px and scroll.
+    El* header = Div(a)->W(kFill)->H(20)->Shrink0();
+    El* footer = Div(a)->W(kFill)->H(20)->Shrink0();
+    El* area = Div(a)->FlexCol()->Flex1()->W(kFill);
+    for (int i = 0; i < 6; i++) {
+        area->Child(Div(a)->W(kFill)->H(50)->Shrink0());
+    }
+    El* scroller = component::ScrollableElement::OverflowYScrollbar(&cx, area)
+                       ->Id(StrL("flex-item"))
+                       ->IntoEl();
+    El* column =
+        VFlex(a)->W(100)->H(100)->Child(header)->Child(scroller)->Child(footer);
+    LayoutEl(nullptr, column, 0, 0, 100, 100, 14, Rgba{});
+
+    // Header and footer stay inside the 100px column, so the area took the
+    // 60px left over instead of its content height.
+    utassertnear(header->y, 0.f);
+    utassertnear(footer->y, 80.f);
+    utassertnear(scroller->h, 60.f);
+
+    // The same on the other axis.
+    El* leading = Div(a)->W(20)->H(kFill)->Shrink0();
+    El* trailing = Div(a)->W(20)->H(kFill)->Shrink0();
+    El* strip = Div(a)->FlexRow()->Flex1()->H(kFill);
+    for (int i = 0; i < 6; i++) {
+        strip->Child(Div(a)->W(50)->H(20)->Shrink0());
+    }
+    El* across = component::ScrollableElement::OverflowXScrollbar(&cx, strip)
+                     ->Id(StrL("flex-item-across"))
+                     ->IntoEl();
+    El* rowBox =
+        HFlex(a)->W(100)->H(40)->Child(leading)->Child(across)->Child(trailing);
+    LayoutEl(nullptr, rowBox, 0, 0, 100, 40, 14, Rgba{});
+    utassertnear(leading->x, 0.f);
+    utassertnear(trailing->x, 80.f);
+
+    // An explicit minimum is the caller's decision and must survive: the area
+    // cannot shrink past the requested 70px, so the footer is pushed to
+    // 20 + 70 instead of being clamped into the column.
+    El* minHeader = Div(a)->W(kFill)->H(20)->Shrink0();
+    El* minFooter = Div(a)->W(kFill)->H(20)->Shrink0();
+    El* minArea = Div(a)->FlexCol()->Flex1()->W(kFill)->MinH(70);
+    for (int i = 0; i < 6; i++) {
+        minArea->Child(Div(a)->W(kFill)->H(50)->Shrink0());
+    }
+    El* minScroller =
+        component::ScrollableElement::OverflowYScrollbar(&cx, minArea)
+            ->Id(StrL("explicit-min"))
+            ->IntoEl();
+    El* minColumn = VFlex(a)
+                        ->W(100)
+                        ->H(100)
+                        ->Child(minHeader)
+                        ->Child(minScroller)
+                        ->Child(minFooter);
+    LayoutEl(nullptr, minColumn, 0, 0, 100, 100, 14, Rgba{});
+    utassertnear(minHeader->y, 0.f);
+    utassertnear(minFooter->y, 90.f);
+
+    AppGlobalClear(&app);
+    ArenaDelete(a);
+    EntityDropAll(&app);
+}
+
 void TestScrollbar() {
     TestSuite("scrollbar");
+    AScrollableFlexItemShrinksBelowItsContent();
     TheThumbShrinksWithWhatIsVisible();
     TheThumbSitsWhereTheOffsetSaysAndStopsAtTheEnds();
     ATrackPressCentresTheThumbOnIt();
@@ -385,8 +466,8 @@ static void VisibilityUsesDirectionSpecificCurvesAndDurations() {
     ScrollbarVisibilitySet(id, false, ScrollbarEntrance::SlideAndFade, kEnter,
                            kExit, start + kEnter);
     // ease-in must remain visible early in the exit
-    float exiting =
-        ScrollbarVisibilityAt(id, start + kEnter + kExit / 2).opacity;
+    float exiting = ScrollbarVisibilityAt(id, start + kEnter + kExit / 2)
+                        .opacity;
     utassert(exiting > 0.5f);
     utassert(ScrollbarVisibilityAt(id, start + kEnter + kExit).opacity == 0.f);
 }
@@ -471,28 +552,31 @@ static void HoverModeIsTheOneThatSlides() {
     ScrollbarMotion bare;
     utassert(bare.idle == 2 && bare.enter == 0 && bare.exit == 0 &&
              bare.expand == 0);
-    utassert(ScrollbarMotionFor(ScrollbarMode::Hover).thumbHoverEntrance ==
-             ScrollbarEntrance::SlideAndFade);
-    utassert(ScrollbarMotionFor(ScrollbarMode::Scrolling).thumbHoverEntrance ==
-             ScrollbarEntrance::Fade);
-    utassert(ScrollbarMotionFor(ScrollbarMode::Always).thumbHoverEntrance ==
-             ScrollbarEntrance::Fade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Hover)
+                 .thumbHoverEntrance == ScrollbarEntrance::SlideAndFade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Scrolling)
+                 .thumbHoverEntrance == ScrollbarEntrance::Fade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Always)
+                 .thumbHoverEntrance == ScrollbarEntrance::Fade);
     // The entrance every mode shares, and the hold before the exit.
-    utassert(ScrollbarMotionFor(ScrollbarMode::Hover).entrance ==
-             ScrollbarEntrance::Fade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Hover)
+                 .entrance == ScrollbarEntrance::Fade);
     utassert(ScrollbarMotionFor(ScrollbarMode::Hover).idle == 2.f);
 }
 
 static void MotionBuildersAreImmutable() {
     ScrollbarMotion motion;
     ScrollbarMotion changed =
-        motion.WithIdle(3).WithEnter(.2f).WithExit(.4f).WithExpand(.6f)
+        motion.WithIdle(3)
+            .WithEnter(.2f)
+            .WithExit(.4f)
+            .WithExpand(.6f)
             .WithEntrance(ScrollbarEntrance::SlideAndFade)
             .WithThumbHoverEntrance(ScrollbarEntrance::Fade);
     utassert(motion.idle == 2 && motion.enter == 0 && motion.exit == 0 &&
              motion.expand == 0);
-    utassert(changed.idle == 3 && changed.enter == .2f &&
-             changed.exit == .4f && changed.expand == .6f);
+    utassert(changed.idle == 3 && changed.enter == .2f && changed.exit == .4f &&
+             changed.expand == .6f);
     utassert(changed.entrance == ScrollbarEntrance::SlideAndFade);
     utassert(changed.thumbHoverEntrance == ScrollbarEntrance::Fade);
 }
@@ -539,8 +623,7 @@ static void HandlePreservesTheSourceOperations() {
                               TestHandleStart,
                               TestHandleEnd};
     utassert(handle.IsValid());
-    utassert(handle.ViewportBounds().x == 1 &&
-             handle.ViewportBounds().h == 40);
+    utassert(handle.ViewportBounds().x == 1 && handle.ViewportBounds().h == 40);
     utassert(handle.Offset().x == 5 && handle.ContentSize().h == 400);
     handle.SetOffset({17, 19});
     handle.StartDrag();
@@ -595,8 +678,7 @@ static void StyleBuildersAndPrepaintMatchTheSourceGeometry() {
     ArenaDelete(arena);
 
     AxisPrepaintState vertical = ScrollbarPrepaintAxis(
-        Axis::Vertical, Bounds{10, 20, 16, 200}, 300, 200, 800,
-        styledThumb);
+        Axis::Vertical, Bounds{10, 20, 16, 200}, 300, 200, 800, styledThumb);
     // 200 / 800 * 200 = 50, raised to the styled 60-pixel minimum;
     // the source stores the 52-pixel inset-adjusted clickable length.
     utassertnear(vertical.thumbSize, 52.f);
@@ -611,8 +693,7 @@ static void StyleBuildersAndPrepaintMatchTheSourceGeometry() {
              vertical.visibilityPosition == 1.f);
 
     AxisPrepaintState horizontal = ScrollbarPrepaintAxis(
-        Axis::Horizontal, Bounds{20, 30, 200, 16}, 600, 200, 800,
-        styledThumb);
+        Axis::Horizontal, Bounds{20, 30, 200, 16}, 600, 200, 800, styledThumb);
     utassertnear(horizontal.thumbBounds.x, 164.f);
     utassertnear(horizontal.thumbBounds.y, 26.f);
     utassertnear(horizontal.thumbBounds.h, 16.f);

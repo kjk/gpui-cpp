@@ -9,10 +9,18 @@
 
 namespace gpui {
 
+// A row that centers its children on the cross axis.
+//
+// See StyledExt::HFlex for the cross-axis rule, which is not symmetric with
+// VFlex.
 inline El* HFlex(Arena* a) {
     return Div(a)->FlexRow()->ItemsCenter();
 }
 
+// A column whose children stretch across the cross axis.
+//
+// See StyledExt::VFlex for the cross-axis rule, which is not symmetric with
+// HFlex.
 inline El* VFlex(Arena* a) {
     return Div(a)->FlexCol();
 }
@@ -51,7 +59,28 @@ struct RoleOverride {
 // semantics without wrapping or owning an element.
 struct StyledExt {
     static El* RefineStyle(El* element, const Style& style, uint32_t fields);
+    // Lays children out in a row, centered on the cross axis.
+    //
+    // The centering is the desktop default for a row of controls — an icon
+    // beside its label lines up without either side asking for it — but it
+    // is *not* the mirror image of VFlex, which leaves the cross axis
+    // stretching. A column placed in a row therefore does not take the row's
+    // height: it takes its content's height and is centered inside the row.
+    // When its content is taller than the row, it overflows equally above
+    // and below, so the column's header is pushed off the top edge and
+    // clipped.
+    //
+    // Give a full-height column `H(kFill)` (or the row `ItemsStart()` /
+    // `ItemsStretch()`) whenever the child owns a header, a footer, or a
+    // scroll region that has to resolve against the row's height:
+    //
+    //     // A sidebar beside a detail pane, both spanning the full height.
+    //     HFlex(a)->SizeFull()->Child(Div(a)->W(256)->H(kFill));
     static El* HFlex(El* element);
+    // Lays children out in a column, stretching them across the cross axis.
+    //
+    // Unlike HFlex this installs no cross-axis alignment, so a child without
+    // a width fills the column. See HFlex for the asymmetry.
     static El* VFlex(El* element);
     static El* Paddings(El* element, Edges paddings);
     static El* Margins(El* element, Edges margins);

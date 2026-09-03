@@ -77,8 +77,7 @@ static void TriggerCaptureEnablesContentOnTheNextFrame() {
     utassert(firstRoot->first->next == nullptr);
     utassert(win->animFrame);
 
-    Popup* second =
-        Popup::New(&cx, StrL("capture"), Div(a)->W(100)->H(100));
+    Popup* second = Popup::New(&cx, StrL("capture"), Div(a)->W(100)->H(100));
     El* secondRoot = second->Content(Div(a)->W(20)->H(20))->IntoEl();
     utassert(secondRoot->first != nullptr);
     utassert(secondRoot->first->next != nullptr);
@@ -126,8 +125,8 @@ struct TooltipRecorder {
         return Div(cx->a)->W(40)->H(18)->AriaLabel(StrL("custom tip"));
     }
 
-    static El* Render(Ctx* cx, El* view,
-                      const TooltipTransition& transition, void* data) {
+    static El* Render(Ctx* cx, El* view, const TooltipTransition& transition,
+                      void* data) {
         TooltipRecorder* self = (TooltipRecorder*)data;
         self->renders++;
         self->transition = transition;
@@ -230,8 +229,7 @@ struct PopoverRecorder {
         self->lastOpen = ev->open;
     }
 
-    static void OnDismiss(PopoverRecorder* self, Ctx*,
-                          const ClickEvent* ev) {
+    static void OnDismiss(PopoverRecorder* self, Ctx*, const ClickEvent* ev) {
         self->dismisses++;
         self->dismissX = ev->x;
     }
@@ -332,8 +330,7 @@ static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
             ->Trigger(Div(a)->W(50)->H(20))
             ->Content(Div(a)->W(100)->H(100))
             ->IntoEl();
-    utassert(keyboardRoot->style.keyContext ==
-             KeyContextOf(StrL("Popover")));
+    utassert(keyboardRoot->style.keyContext == KeyContextOf(StrL("Popover")));
     ActionSlot* confirm = keyboardRoot->actions;
     while (confirm && confirm->action != action::Confirm()) {
         confirm = confirm->next;
@@ -364,8 +361,58 @@ static void TheSideAnchorsFallBackToTheOrigin() {
     utassertnear(p.y, 50.f);
 }
 
+// the_popup_surface_blocks_the_panel_it_covers.
+//
+// A caller that styles its own surface — a hover card, a dropdown — does not
+// have to remember to block the mouse. The host does it, so the panel a popup
+// covers stops reacting to a pointer that is over the popup. Rust inserts a
+// BlockMouse hitbox at the resolved bounds during prepaint; here the surface
+// says it stops the press, which is what the dispatch chain reads.
+static void ThePopupSurfaceBlocksThePanelItCovers() {
+    App app;
+    Window* win = new Window();
+    Arena* a = ArenaNew();
+    win->app = &app;
+    win->frameArena = a;
+    BaseGlobalStateInit(&app);
+    Ctx cx = {&app, win, a, {}};
+
+    El* trigger = Div(a)->W(100)->H(100);
+    El* content = Div(a)->W(40)->H(40);
+    // The first frame captures the trigger; the second is the one that
+    // carries the content, which is where the occlusion lands.
+    Popup::New(&cx, StrL("occlusion"), trigger)->Content(content)->IntoEl();
+    El* laterContent = Div(a)->W(40)->H(40);
+    Popup::New(&cx, StrL("occlusion"), Div(a)->W(100)->H(100))
+        ->Content(laterContent)
+        ->IntoEl();
+
+    // The surface blocks what is behind it, and it is the surface itself that
+    // does so — the content inside it is an ordinary child.
+    utassert(laterContent->stopMouseDown);
+    utassert(!content->stopMouseDown);
+
+    // A tooltip shares the positioner and must not occlude: one that swallowed
+    // the pointer would un-hover the very trigger keeping it open.
+    Positioner* tip = Positioner::Corner(&cx, Anchor::TopLeft, {0, 0});
+    utassert(!tip->occlude);
+    utassert(!tip->Child(Div(a))->IntoEl()->stopMouseDown);
+    // An interactive surface asks for it explicitly.
+    utassert(Positioner::Corner(&cx, Anchor::TopLeft, {0, 0})
+                 ->Occlude()
+                 ->Child(Div(a))
+                 ->IntoEl()
+                 ->stopMouseDown);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestPopup() {
     TestSuite("popup");
+    ThePopupSurfaceBlocksThePanelItCovers();
     TheTopAnchorsTakeTheTopEdge();
     TheBottomAnchorsMatchUpstreamsSubtractedHeight();
     TheSideAnchorsFallBackToTheOrigin();

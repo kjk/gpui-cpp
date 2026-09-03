@@ -10616,3 +10616,121 @@ a change of its own.
 
 MSVC release tests pass 22,159 checks, and the release story and showcase
 targets build with `/W4 /WX`.
+## Upstream ingest after `6d07863f`: Base fixes, dock and scroll
+
+`2126cedc` adds `EditorState::unfold_at`, the public way to reveal a position
+before acting on it. `InputUnfoldAt` opens exactly the folded ranges that hide
+the given row and only those: a fold keeps its own first and last line
+visible, so a position on either opens nothing, nested folds all open because
+opening only the outermost would leave the position hidden, sibling folds stay
+shut, and the candidates stay so the gutter can fold the ranges again. The
+covering start lines are gathered before any of them is opened, since opening
+one takes it out of the list being walked. Rust takes an lsp `Position`; the
+row and byte column this tree spells a document position as are what the C++
+signature carries, clipped through the same offset round trip. The ported
+`test_unfold_at` pins all four cases plus the no-op on a field that is not a
+folding code editor.
+
+`67b7a22c` blocks the mouse behind an anchored popup. `Positioner` grows the
+opt-in `Occlude()`, off by default because `TooltipPositioner` shares it and a
+tooltip that swallowed the pointer would un-hover the very trigger keeping it
+open, and `Popup` turns it on so no caller has to remember — which covers
+Popover, the dropdown menu over it and HoverCard in one place. Rust inserts a
+`BlockMouse` hitbox at the resolved bounds during prepaint, ahead of the
+children; the equivalent here is `StopMouseDown` on the surface, because a box
+that stops the press records its hit rect before its children record theirs,
+so the popup's own content still hears the pointer and the panel underneath
+does not. `the_popup_surface_blocks_the_panel_it_covers` asserts both halves
+and that a bare positioner still does not occlude.
+
+`df1d07b2` restores the overlay behind an open dialog. Rust's `Dialog` hands
+its backdrop to a wrapper `div()` that exists only to carry
+`on_any_mouse_down`, and that wrapper collapsed to zero height, taking the
+backdrop's `size_full()` and its hitbox with it; the fix gives the wrapper
+`absolute().inset_0()`. The C++ dialog has no such wrapper — the backdrop is a
+direct child of the full-window host, and the themed layer hands it the
+viewport box outright — so the fault cannot occur here and no logic changed.
+`the_backdrop_fills_the_host` pins the property the Rust fix restores: the
+host covers the window, and a backdrop that asks to fill measures the whole
+viewport.
+
+`c5ade488` paints decoration backgrounds in the editor. The C++ element
+already did: an editor row hands its composed spans to the text element, and
+the wash pass under the glyphs fills every span carrying a background, ahead
+of the indent guides, the selection and the text. Rust needs a new
+`LineLayout::paint_background` and a per-line `has_background` flag only
+because gpui's `ShapedLine::paint` draws glyphs, underlines and strikethroughs
+and nothing else; the equivalent skip here is the per-span alpha test, which
+costs nothing on a line with no highlight. No logic changed, and the
+equivalence is now stated beside that loop.
+
+`a3f7bb26` keeps the resize handle's divider line from being crushed to zero.
+Rust's handle combines a fixed main-axis size with padding on the same axis,
+so its content area resolves to zero and the shrinkable 1px line disappears;
+`flex_none()` is the fix. The C++ handle centres its line with `justify`
+rather than with padding, so the crush never happened, but the line now says
+`FlexNone()` outright so that stays true whatever the handle's box becomes.
+
+`5cb09462` resolves a tiles resize by pointer travel and keeps the handles
+hittable. The travel half was already right here: `TilesUpdateResize` has
+always derived the moving edge from the pointer's distance from
+`resizeInitialMouse` applied to `resizeInitialBounds`, never from the
+pointer's position, which is the fault Rust fixes by replacing `last_position`
+with `start_position`. `ResizeDrag` is renamed to match and grows the source's
+accessors, dropping `WithLastPosition`. The skin's two visual halves are
+ported: the tile frame drops its clip, because the resize handles hang past
+the tile's edge and a content mask cut their hit areas down to the sliver
+inside it, and a painted title bar now rounds its own top corners since the
+frame no longer clips it. The extra pixel each non-zoomed tile grows by rides
+on the size here rather than on a minimum, because this skin sizes the frame
+itself instead of having base pin it afterwards.
+`a_resize_tracks_the_pointer_travel_not_its_window_position` drives a resize
+with the pointer far from the tile's canvas bounds; its second assertion is
+the same arithmetic as upstream's against this port's `GRID_SIZE` of eight
+rather than the ten its story uses.
+
+`27b08eca`'s base and UI half moves the dock's structure out of the skin and
+into base, which is the whole point of it. `CLOSED_BOTTOM_STRIP`,
+`dock_extent` and `dock_frame` are now `kClosedBottomStrip`, `DockExtent` and
+`DockFrame`; base asks for a dock's extent itself, draws nothing for one with
+no extent, and wraps whatever the skin's chrome hook returns in the box that
+makes a dock a column beside the centre rather than a block in the flow below
+it. The area frame is a row and the centre frame a flex column with the bottom
+dock stacked under it, both applied around the hooks rather than inside them,
+so a renderer with every hook null now gets a dock area the right shape. A tab
+group is a column that fills its slot and floors its content region at zero,
+which is what stops a virtualized list measuring itself against every row.
+`DockSetDockSize` persists only an effective change and emits one
+`LayoutChanged` for it. The themed skin loses the boxes it used to carry and
+keeps its backgrounds, its padding, the resize strip and the border. Two tests
+come over: `a_dock_is_its_own_width_under_a_renderer_that_draws_no_chrome`
+lays out an area through the bare renderer and checks the dock is its own
+width and the centre what the docks leave, and
+`dock_size_change_emits_one_layout_event` covers the repeat and the clamped
+repeat. The three one-line button/tabs/toggle changes are Rust borrow-checker
+noise in test code with no C++ counterpart.
+
+`39c2c86d`'s base and UI half is the `h_flex` cross-axis rule and the scroll
+region's minimum. `HFlex` and `VFlex` carry the source's new doc comments,
+including the one case where a row of full-height columns has to say so
+itself. `h_flex_centers_and_v_flex_stretches_on_the_cross_axis` is ported to
+tests/SizingTests.cpp with the module added to the audit's `testTargets` as
+`base/styled`: a shorter child of a hundred-pixel row sits at thirty, a taller
+one at minus twenty with its header off the top edge, a height-less one keeps
+its content height, and a width-less child of a column does fill. The
+scrollable's own fix does not apply — Rust wraps the caller's element and so
+had to declare the scrolled axis clipped on the wrapper, while here
+`Scrollbar::Apply` puts the overflow on the caller's element itself, which is
+already a scroll container whose automatic minimum CSS puts at zero — and
+`a_scrollable_flex_item_shrinks_below_its_content` ports all three upstream
+cases (vertical, horizontal, and an explicit minimum surviving) to prove it.
+The accordion's `Arc` to `Rc` change is a Rust thread-safety detail with no
+counterpart in a `Listener`, and `Root`'s new `debug_selector` on the dialog
+layer is a Rust test affordance this tree has no seam for; RootTests already
+covers the layer's behaviour directly.
+
+`ba3433f0` is documentation only, and its `h_flex` clarification is mirrored
+in the same doc comments above.
+
+Verification: MSVC release story, showcase, dock and editor all build with
+`/W4 /WX`, and the release suite passes 22,164 checks.

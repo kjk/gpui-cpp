@@ -49,19 +49,26 @@ enum class TileSide : uint8_t {
 
 using ResizeSide = TileSide;
 
+// In-flight state for a resize drag: which side is moving, where the pointer
+// began the drag, and the tile bounds recorded at the last processed move
+// event.
+//
+// Pointer positions arrive in window coordinates while tile bounds live in
+// canvas coordinates, so the start position is kept for the only measure
+// meaningful across the two: how far the pointer has travelled since the
+// drag began. TilesState keeps the same pair as `resizeInitialMouse` and
+// `resizeInitialBounds`, and TilesUpdateResize resolves every move from them.
 struct ResizeDrag {
     ResizeSide side = ResizeSide::None;
-    Point lastPosition = {};
+    Point startPosition = {};
     Bounds lastBounds = {};
 
-    static ResizeDrag New(ResizeSide side, Point position, Bounds bounds) {
-        return ResizeDrag{side, position, bounds};
+    static ResizeDrag New(ResizeSide side, Point startPosition, Bounds bounds) {
+        return ResizeDrag{side, startPosition, bounds};
     }
-    ResizeDrag WithLastPosition(Point value) const {
-        ResizeDrag copy = *this;
-        copy.lastPosition = value;
-        return copy;
-    }
+    ResizeSide Side() const { return side; }
+    Point StartPosition() const { return startPosition; }
+    Bounds LastBounds() const { return lastBounds; }
     ResizeDrag WithLastBounds(Bounds value) const {
         ResizeDrag copy = *this;
         copy.lastBounds = value;

@@ -140,8 +140,15 @@ El* Tiles::IntoEl() {
         int ix = order[k];
         const TileItem& item = s->items[ix];
         Bounds b = item.bounds;
-        // One pixel more, so two tiles pushed flush together do not leave a
-        // seam where their borders meet.
+        // One extra pixel past the stored bounds, so a snapped neighbor's
+        // border overlaps this tile's instead of stacking beside it into a
+        // double-width line. Rust rides the growth on `min_w`/`min_h` because
+        // base pins `w`/`h` to the stored bounds after the skin's hook; the
+        // skin sizes the frame itself here, so the pixel goes on the size.
+        //
+        // No `overflow_hidden` here: the resize handles hang past the tile's
+        // edge, and a content mask would cut their hit areas down to the
+        // sliver inside it. The panel is clipped by its own body below.
         El* tile =
             Div(a)
                 ->Absolute()
@@ -153,8 +160,6 @@ El* Tiles::IntoEl() {
                 ->Bg(th.tokens.background)
                 ->Border(1, th.border)
                 ->Radius(th.radius)
-                ->ClipX()
-                ->ClipY()
                 // The frame hears the press its drag bar or one of its
                 // resize handles took, on the way back out of the
                 // chain, which is what brings it to the front.
@@ -183,7 +188,12 @@ El* Tiles::IntoEl() {
             bool hasStyle = TilePanelTitleStyle(cx, panel, &titleStyle);
             Rgba titleColor = hasStyle ? titleStyle.foreground : th.foreground;
             if (hasStyle) {
-                bar->Bg(titleStyle.background)->Fg(titleStyle.foreground);
+                // The tile frame does not clip its children, so a painted
+                // title bar rounds its own top corners to stay inside the
+                // frame's (`rounded_t(tile_radius)`).
+                bar->Bg(titleStyle.background)
+                    ->Fg(titleStyle.foreground)
+                    ->Corners(th.tileRadius, th.tileRadius, 0, 0);
             }
             bar->Child(
                 Div(a)

@@ -101,8 +101,52 @@ static void StyleSizedHelpersRefineTheElement() {
     ArenaDelete(a);
 }
 
+// h_flex_centers_and_v_flex_stretches_on_the_cross_axis, from
+// crates/base/src/styled.rs.
+//
+// `h_flex` centers on the cross axis while `v_flex` leaves the default
+// stretch. The asymmetry is deliberate but easy to trip over, so lock it: a
+// column placed in a bare row does not fill the row's height, and one taller
+// than the row is centered, so its top — commonly a header — is pushed off
+// the top edge and clipped.
+static void HFlexCentersAndVFlexStretchesOnTheCrossAxis() {
+    Arena* a = ArenaNew();
+
+    El* child = Div(a)->W(20)->H(40)->Shrink0();
+    El* overflowing = Div(a)->W(20)->H(140)->Shrink0();
+    El* stretch = Div(a)->W(20);
+    El* row =
+        HFlex(a)->SizeFull()->Child(child)->Child(overflowing)->Child(stretch);
+    LayoutEl(nullptr, row, 0, 0, 200, 100, 14, Rgba{});
+
+    // A shorter child of a 100px row sits at (100 - 40) / 2, not at the top,
+    // and a height-less child keeps its content height instead of filling.
+    utassertnear(child->y, 30.f);
+    utassertnear(stretch->h, 0.f);
+    // And a child taller than the row is centered too, so its top — a
+    // column's header, in a real layout — is pushed off the top edge.
+    utassertnear(overflowing->y, -20.f);
+
+    // A width-less child of a column does fill the cross axis.
+    El* colStretch = Div(a)->H(20);
+    El* col = VFlex(a)->SizeFull()->Child(colStretch);
+    LayoutEl(nullptr, col, 0, 0, 200, 100, 14, Rgba{});
+    utassertnear(colStretch->w, 200.f);
+
+    // The row says otherwise the one way upstream documents: a full-height
+    // column asks for the height, or the row stops centering.
+    El* full = Div(a)->W(20)->H(kFill);
+    El* stretched = HFlex(a)->SizeFull()->Child(full);
+    LayoutEl(nullptr, stretched, 0, 0, 200, 100, 14, Rgba{});
+    utassertnear(full->y, 0.f);
+    utassertnear(full->h, 100.f);
+
+    ArenaDelete(a);
+}
+
 void TestSizing() {
     TestSuite("sizing");
+    HFlexCentersAndVFlexStretchesOnTheCrossAxis();
     NamedAndCustomSizesPreserveTheirValues();
     MinMaxAndStepsMatchThePinnedDirection();
     TableAndInputConstantsAreExact();
