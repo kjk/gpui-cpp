@@ -66,6 +66,9 @@ static const StoryInfo kMeta[StoryCount] = {
      "workflow."},
     {"alert-dialog", "AlertDialog",
      "Require a response before the user can continue."},
+    {"attachment", "Attachment",
+     "Composable file and media attachments with lifecycle states and "
+     "actions."},
     {"avatar", "Avatar",
      "Represent a person or organization with an image or fallback."},
     {"badge", "Badge",
@@ -73,6 +76,8 @@ static const StoryInfo kMeta[StoryCount] = {
     {"breadcrumb", "Breadcrumb",
      "A breadcrumb navigation element that shows the current location in a "
      "hierarchy."},
+    {"bubble", "Bubble",
+     "A styleable chat surface for text, rich content, and reactions."},
     {"button", "Button",
      "Displays a button or a component that looks like a button."},
     {"calendar", "Calendar", "A calendar to select a date or date range."},
@@ -119,7 +124,15 @@ static const StoryInfo kMeta[StoryCount] = {
     {"label", "Label",
      "Display concise text with hierarchy, highlighting, and masking."},
     {"list", "List", "A list displays a series of items."},
+    {"marker", "Marker",
+     "A compact row for conversation status, notifications, and separators."},
     {"menu", "Menu", "Popup menu and context menu"},
+    {"message", "Message",
+     "Compose sender identity, metadata, rich content, and message "
+     "actions."},
+    {"message-scroller", "MessageScroller",
+     "A virtualized message list with tail following, unread navigation, "
+     "and anchor preservation."},
     {"native-menu", "NativeMenu",
      "A menu rendered by the operating system. Unlike `PopupMenu`, "
      "it is drawn by the OS and can extend beyond the window "
@@ -152,6 +165,9 @@ static const StoryInfo kMeta[StoryCount] = {
      "A collection of settings groups and items for the "
      "application."},
     {"sheet", "Sheet", "Sheet for open a popup in the edge of the window"},
+    {"shimmer", "Shimmer",
+     "Reusable, theme-aware text loading effects with composable timing "
+     "and appearance."},
     {"sidebar", "Sidebar",
      "A composable, themeable and customizable sidebar component."},
     {"skeleton", "Skeleton",

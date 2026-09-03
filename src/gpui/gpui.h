@@ -981,6 +981,7 @@ enum class IconName : uint8_t {
     EyeOff,
     Eye,
     File,
+    FileText,
     Folder,
     FolderClosed,
     FolderOpen,
@@ -1021,6 +1022,7 @@ enum class IconName : uint8_t {
     Redo2,
     Replace,
     ResizeCorner,
+    RotateCw,
     Search,
     Settings,
     Settings2,
@@ -1246,6 +1248,11 @@ struct Style {
     Display display = Display::Block;
     FlexDir dir = FlexDir::Row;
     FlexAlign align = FlexAlign::Stretch;
+    // align_self, which overrides the line's align_items for this item alone
+    // — `self_start()` / `self_end()`, how a chat bubble sits at one edge of
+    // a column that stretches everything else. Unset is "follow the line".
+    FlexAlign alignSelf = FlexAlign::Stretch;
+    bool hasAlignSelf = false;
     Justify justify = Justify::Start;
     Overflow overflowY = Overflow::Visible;
     Overflow overflowX = Overflow::Visible;
@@ -1263,6 +1270,12 @@ struct Style {
     float minH = kAuto;
     float maxW = 1e9f;
     float maxH = 1e9f;
+    // max_width as a fraction of the parent's content box — `max_w(relative(
+    // f))`, which a chat bubble caps itself to 80% of its row with. Zero is
+    // unset, and `maxW` is the same limit in DIPs. kFill in `maxW` is already
+    // relative(1.), so this is only needed for a fraction that is not the
+    // whole line.
+    float maxWFrac = 0;
     // aspect_ratio, width over height. Only an image sets it, and it sets it
     // from the decoded bitmap: gpui's `Img::request_layout` stamps the ratio
     // on the style so a clamped width carries the height with it. 0 = unset.
@@ -2135,6 +2148,11 @@ struct El {
     El* MinH(float v);
     El* MinW(float v);
     El* MaxW(float v);
+    // max_w(relative(f)).
+    El* MaxWFrac(float f);
+    // aspect_ratio(w / h). An image stamps its own; this is the explicit one
+    // — `aspect_ratio(1.)` on a square media preview.
+    El* Aspect(float ratio);
     El* MaxH(float v);
     El* Gap(float v);
     El* GapX(float v);
@@ -2157,6 +2175,10 @@ struct El {
     El* ItemsStart();
     El* ItemsEnd();
     El* ItemsStretch();
+    // align_self on this item alone.
+    El* SelfStart();
+    El* SelfEnd();
+    El* SelfCenter();
     El* JustifyBetween();
     El* JustifyAround();
     El* JustifyCenter();

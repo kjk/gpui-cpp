@@ -94,7 +94,13 @@ int GpuiMain(int argc, char** argv) {
     TestSearchableList();
     TestSidebar();
     TestWindowBorder();
+    TestAttachment();
     TestAvatar();
+    TestBubble();
+    TestMarker();
+    TestMessage();
+    TestMessageScroller();
+    TestShimmer();
     TestKbd();
     TestNativeMenu();
     TestAppMenu();

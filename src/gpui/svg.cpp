@@ -1666,6 +1666,10 @@ Str IconNamePath(IconName name) {
             return StrL("icons/palette.svg");
         case IconName::File:
             return StrL("icons/file.svg");
+        case IconName::FileText:
+            return StrL("icons/file-text.svg");
+        case IconName::RotateCw:
+            return StrL("icons/rotate-cw.svg");
         case IconName::FolderOpen:
             return StrL("icons/folder-open.svg");
         case IconName::ChevronDown:

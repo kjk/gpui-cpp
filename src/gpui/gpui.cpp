@@ -575,6 +575,14 @@ El* El::MaxW(float v) {
     style.maxW = v;
     return this;
 }
+El* El::MaxWFrac(float f) {
+    style.maxWFrac = f;
+    return this;
+}
+El* El::Aspect(float ratio) {
+    style.aspect = ratio;
+    return this;
+}
 El* El::MaxH(float v) {
     style.maxH = v;
     return this;
@@ -669,6 +677,21 @@ El* El::ItemsEnd() {
 El* El::ItemsStretch() {
     style.display = Display::Flex;
     style.align = FlexAlign::Stretch;
+    return this;
+}
+El* El::SelfStart() {
+    style.alignSelf = FlexAlign::Start;
+    style.hasAlignSelf = true;
+    return this;
+}
+El* El::SelfEnd() {
+    style.alignSelf = FlexAlign::End;
+    style.hasAlignSelf = true;
+    return this;
+}
+El* El::SelfCenter() {
+    style.alignSelf = FlexAlign::Center;
+    style.hasAlignSelf = true;
     return this;
 }
 El* El::JustifyBetween() {
@@ -2996,6 +3019,9 @@ static taffy::Style ToTaffyStyle(const El* e) {
     t.flexDirection = ToTaffyFlexDir(s.dir);
     t.flexWrap = s.flexWrap ? taffy::FlexWrap::Wrap : taffy::FlexWrap::NoWrap;
     t.alignItems = ToTaffyAlignItems(s.align);
+    if (s.hasAlignSelf) {
+        t.alignSelf = ToTaffyAlignItems(s.alignSelf);
+    }
     t.justifyContent = ToTaffyJustify(s.justify);
     t.overflow = {ToTaffyOverflow(s.overflowX), ToTaffyOverflow(s.overflowY)};
 
@@ -3013,7 +3039,10 @@ static taffy::Style ToTaffyStyle(const El* e) {
     // `max_w(relative(1.))` -- a hundred percent of what holds it, which is
     // how node.rs keeps a picture inside its column -- and a length of -2 is
     // a max of nothing at all, which collapses the box.
-    t.maxSize = {s.maxW < 1e9f ? ToDim(s.maxW, 0) : taffy::Dimension::Auto(),
+    t.maxSize = {s.maxWFrac > 0
+                     ? taffy::Dimension::Percent(s.maxWFrac)
+                     : (s.maxW < 1e9f ? ToDim(s.maxW, 0)
+                                      : taffy::Dimension::Auto()),
                  s.maxH < 1e9f ? ToDim(s.maxH, 0) : taffy::Dimension::Auto()};
 
     t.flexGrow = s.flexGrow;

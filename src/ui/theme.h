@@ -384,7 +384,9 @@ struct Theme {
     bool shadow = true;
     bool focusRing = true;
     ScrollbarMode scrollbarMode = ScrollbarMode::Scrolling;
-    Rgba transparent = {};
+    // Theme::transparent, which is `gpui::transparent_black()`. Spelled out
+    // because an Rgba defaults to opaque, so `= {}` would be black.
+    Rgba transparent = Rgba8(0, 0, 0, 0);
     float tileGridSize = 8.f;
     bool tileShadow = true;
     float tileRadius = 0.f;
@@ -405,6 +407,21 @@ struct Theme {
 // existing component reads stay one field access. The alias is the source
 // value type; copying it still produces an independent palette snapshot.
 using ThemeColor = Theme;
+
+// Theme::radius_2xl / radius_3xl / radius_4xl — the surface tiers above the
+// `xl` token. Every one derives from the application-controlled base radius,
+// so squaring the theme squares them too. Rust spells them as methods on
+// Theme; this port keeps the palette a POD, so they are free functions over
+// it the way the other derived values are.
+inline float ThemeRadius2xl(const Theme& t) {
+    return t.radius * 2.5f;
+}
+inline float ThemeRadius3xl(const Theme& t) {
+    return t.radius * 3.f;
+}
+inline float ThemeRadius4xl(const Theme& t) {
+    return t.radius * 3.5f;
+}
 
 // Every token set to the flat colour of the same name — for a palette built
 // in code, and for the tokens a resolved theme file left alone. A token that
