@@ -548,6 +548,13 @@ FpsMonitor::~FpsMonitor() {
     }
     if (resourceTask && ExecCancel(resourceTask)) {
         delete resourceJob;
+    } else if (resourceJob) {
+        // The job is already running or its completion is queued, so it
+        // outlives this monitor and will be drained later — possibly after
+        // AppFree. Detach it: FpsResourceDone answers a null app by deleting
+        // the job and touching nothing else, so the App pointer it carries
+        // can never be followed once the App is gone.
+        resourceJob->app = nullptr;
     }
     resourceWindow = nullptr;
     resourceTimer = 0;
