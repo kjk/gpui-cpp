@@ -1851,47 +1851,23 @@ struct ElStyleStates {
 };
 
 struct El {
+    // Members are ordered by decreasing alignment. El is allocated many
+    // times in the frame arena, so even small holes here multiply quickly.
+    // Keep pointer-sized members first, four-byte members next, and byte-sized
+    // enums last. Boolean state shares the unsigned-int allocation unit near
+    // the end of the four-byte group.
+
     // The frame arena this was built on, so a builder that has to allocate —
     // an action handler's slot — has one without being handed it again.
     Arena* arena = nullptr;
     Style style;
     Str id;
     Str text;
-    IconName icon = IconName::None;
     Str iconPath;
     AccessibilityInfo accessibility = {};
     // ElKind::Image: what the document called the image. gpui/image.h says
     // what that may name.
     Str imgSrc;
-    // Only Chart elements carry this 192-byte payload. All other elements
-    // keep one four-byte arena offset instead.
-    ArenaPtr<ChartSeries> chart = {};
-    float progress = 0; // 0..100
-    int clickId = 0;
-    // GlobalElementId. GPUI identifies an element by the *stack* of
-    // ElementIds from the root down to it — `Window::with_id` pushes and pops
-    // — so a name only has to be unique among its siblings, which is why
-    // upstream can write `div().id(("showcase-tab", ix))` inside every tab
-    // group without a thought for the one next door. There is no stack here:
-    // an element is found by one flat int, so the path is folded into a hash
-    // of it. `IdCollect` walks the built tree once a frame and fills this in;
-    // an element with no name of its own inherits its parent's, exactly as an
-    // element with no `.id()` pushes nothing in Rust.
-    uint32_t pathId = 0;
-    // El::PathId: the click id is the path rather than a number the caller
-    // picked. An explicit Click(v) clears it and wins.
-    bool clickFromPath = false;
-    // El::StopClick — see HitRect::stopClick.
-    bool stopClick = false;
-    // cx.stop_propagation() on the left-button mouse-down bubble. Tab and a
-    // disabled Toggle use this without needing a callback entity of their
-    // own; their press must not activate an enclosing control.
-    bool stopMouseDown = false;
-    // The press belongs to a control with selection behavior of its own.
-    // Base's window-level text selection waits until mouse-down bubbling has
-    // finished and then consults this through GlobalState.
-    bool suppressTextSelection = false;
-    ElKind kind = ElKind::Div;
     Func0 onClick;
     Listener listener;
     // Semantic actions that do not need a pointer hit box. These listeners
@@ -1905,8 +1881,6 @@ struct El {
     // InputState rather than to the view that happened to render them.
     Func0 accessibilityIncrementDirect;
     Func0 accessibilityDecrementDirect;
-    // El::OnClickAction — dispatched from the release, beside onClick.
-    uint32_t clickAction = 0;
     intptr_t clickActionArg = 0;
     // `div().on_hover(..)`. Fires with a HoverEvent when the pointer enters
     // the element and again when it leaves, never in between.
@@ -1936,11 +1910,6 @@ struct El {
     // independently observe the same press, just as GPUI's interactive
     // element handler does.
     Listener onMouseDownOut;
-    // The refinement above, and the fields it names. Zero is no refinement.
-    ArenaPtr<ElStyleStates> styleStates = {};
-    CursorKind cursor = CursorKind::Arrow;
-    DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
-    DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
     // `div().hover(|this| ..)` and `div().drag_over::<T>(|this, ..| ..)`:
     // refinements that hold only while the pointer is over the box, or while
     // a drag of `dragOverKind` is. Resolved where GPUI resolves them — in
@@ -1953,7 +1922,7 @@ struct El {
     // on_drag: what a press on this element picks up. The payload rides along
     // on every DragMoveEvent the drag produces.
     DragPayload drag = {};
-    // div().cursor_col_resize() and friends: `cursor` above is the shape the
+    // div().cursor_col_resize() and friends: `cursor` below is the shape the
     // pointer takes over this element. Rust hangs it off the style; it needs a
     // Click(id) here for the same reason a hover does, since the hit rect is
     // what the move consults.
@@ -1974,17 +1943,6 @@ struct El {
     // report the box layout gave it; a caller that has to answer "what is
     // under the pointer" needs last frame's boxes to do it.
     gpui::Bounds* boundsOut = nullptr;
-    float lineSpanHeight = 0;
-    float lineClampCap = 0;
-    // A descendant Inline reports its laid-out vertical extent to the nearest
-    // line-clamped ancestor. TextView marks one box per Inline, matching
-    // inline.rs; the runtime can then keep a straddling glyph line out whole.
-    bool lineSpan = false;
-    // TextView::max_lines. lineClampCap is already in DIPs (body line height
-    // times the requested count); the full subtree remains laid out under the
-    // capped box so paint can tell whether it overflowed and find a safe mask.
-    bool lineClamp = false;
-    Axis sliderAxis = Axis::Horizontal;
     Listener onLineClamp;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
@@ -2006,6 +1964,56 @@ struct El {
     El* first = nullptr;
     El* last = nullptr;
     El* next = nullptr;
+    // The highlighted runs inside this text, in order. The array is the
+    // caller's — the frame arena, in practice — and outlives the frame the
+    // element was built in.
+    const TextSpan* spans = nullptr;
+    // Washes under this run, painted where the selection quad is and before
+    // the glyphs — which is what Rust's `layout_search_matches` builds paths
+    // for. They are a second array rather than more `spans` because the span
+    // painter partitions the text and so cannot take two runs over the same
+    // bytes, and a search match sits over whatever the highlighter said.
+    // Only `lo`, `hi` and `bg` are read.
+    const TextSpan* washes = nullptr;
+    // Runs that are underlined and nothing else: a diagnostic's squiggle is a
+    // HighlightStyle with only `underline` set, so it marks the text without
+    // taking the colour the language gave it.
+    const TextSpan* underlines = nullptr;
+    gpui::Bounds* rangeOut = nullptr;
+    float* caretOutX = nullptr;
+    float* caretOutY = nullptr;
+    // What a copy of this run says, and whether it continues the run before
+    // it on the same line. The record is owned by whoever built the element —
+    // the frame arena, in practice — and is null on every run that is not
+    // Markdown.
+    const SelSource* selSrc = nullptr;
+    // The taffy node this element was laid out as, this frame. A
+    // `taffy::NodeId` is a u64 and is kept as one here so gpui.h does not
+    // have to name the layout port's types.
+    uint64_t layoutNode = 0;
+    // The shaped run LayoutEl measured, borrowed from the text cache so the
+    // paint pass can draw it without looking it up a second time. Owned by
+    // the cache, which cannot drop it before the frame ends; null when the
+    // element has no text or the run could not be cached.
+    TextLayout* laidLayout = nullptr;
+
+    // Four-byte-aligned state begins here.
+    // Only Chart elements carry this 192-byte payload. All other elements
+    // keep one four-byte arena offset instead.
+    ArenaPtr<ChartSeries> chart = {};
+    float progress = 0; // 0..100
+    int clickId = 0;
+    // GlobalElementId. GPUI identifies an element by the *stack* of
+    // ElementIds from the root down to it. This port folds that path into one
+    // flat hash, filled by IdCollect once per frame.
+    uint32_t pathId = 0;
+    // El::OnClickAction — dispatched from the release, beside onClick.
+    uint32_t clickAction = 0;
+    // Interactive refinements are held in the arena sidecar above.
+    ArenaPtr<ElStyleStates> styleStates = {};
+    float lineSpanHeight = 0;
+    float lineClampCap = 0;
+
     float x = 0, y = 0, w = 0, h = 0;
     // The laid-out box as one value. The fields stay flat because the layout
     // pass writes them a component at a time. The return type is qualified
@@ -2015,11 +2023,7 @@ struct El {
     // overflow_x_scroll: how far the content is slid to the left. Positive
     // means the view has moved right over it, as scrollY is positive-down.
     float scrollX = 0;
-    // The bar this box shows, and whether the caller named it. Unnamed, it
-    // is the theme's — Rust's Scrollbar reads `cx.theme().scrollbar_mode`
-    // unless the caller passed one.
-    ScrollbarMode scrollMode = ScrollbarMode::Always;
-    bool scrollModeSet = false;
+
     // Base ScrollbarTheme projected by crates/ui. Plain gpui scroll boxes
     // leave this unset and use the runtime palette fallback; a Base scrollbar
     // carries its own layer-owned motion and paint styles.
@@ -2046,96 +2050,31 @@ struct El {
     float scrollThumbMinLength = 48;
     float scrollThumbHoverMinLength = 48;
     float scrollThumbActiveMinLength = 48;
-    bool scrollThemeSet = false;
-    // A box that scrolls without showing a bar. In Rust the scrolling
-    // container and the Scrollbar are two elements, so a container with no
-    // Scrollbar beside it simply has none; the box paints its own bar here,
-    // and this is how it says not to — a tab bar scrolls, and shows nothing.
-    bool noScrollbar = false;
-    // The same, one axis at a time. Rust's `.scrollbar(&handle, axis)` adds a
-    // bar layer per axis the ScrollbarAxis names, so a box can scroll both
-    // ways and show a bar down one of them only; the box here paints its own
-    // pair, and this is how it says which of the two to leave off.
-    bool noScrollbarX = false;
-    bool noScrollbarY = false;
-    // ScrollableMask axes. The renderer combines GPUI's transparent sibling
-    // mask with the scroll viewport itself, so these bits say which wheel
-    // deltas the viewport captures before an enclosing scroller can take
-    // them. Horizontal is bit 0, vertical bit 1.
-    uint8_t scrollMaskAxes = 0;
-    // El::ScrollFromPath: the scroll handle's identity is the element's place
-    // in the tree rather than a number the caller hashed. An explicit
-    // ScrollId(v) clears it and wins.
-    bool scrollFromPath = false;
     int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
     int selHi = -1;
-    // The highlighted runs inside this text, in order. The array is the
-    // caller's — the frame arena, in practice — and outlives the frame the
-    // element was built in.
-    const TextSpan* spans = nullptr;
-    // Washes under this run, painted where the selection quad is and before
-    // the glyphs — which is what Rust's `layout_search_matches` builds paths
-    // for. They are a second array rather than more `spans` because the span
-    // painter partitions the text and so cannot take two runs over the same
-    // bytes, and a search match sits over whatever the highlighter said.
-    // Only `lo`, `hi` and `bg` are read.
-    const TextSpan* washes = nullptr;
-    // Runs that are underlined and nothing else: a diagnostic's squiggle is a
-    // HighlightStyle with only `underline` set, so it marks the text without
-    // taking the colour the language gave it.
-    const TextSpan* underlines = nullptr;
     int nSpans = 0;
     int nWashes = 0;
     int nUnderlines = 0;
     // RangeOut: where a run of this text landed, in window coordinates, for
-    // a caller that has to hit-test against it later. `range_to_bounds` in
-    // Rust, which the go-to-definition hitbox is inserted over. One box: a
-    // symbol is on one row, and the first rect is that row's.
+    // a caller that has to hit-test against it later.
     int rangeOutLo = -1;
     int rangeOutHi = -1;
-    gpui::Bounds* rangeOut = nullptr;
-    float* caretOutX = nullptr;
-    float* caretOutY = nullptr;
     Rgba selColor{Rgba8(0x6b, 0xb3, 0xf0, 90)};
     // The input method's provisional run, underlined the way Rust gives the
     // marked range its own UnderlineStyle. Same offsets, same -1 for none.
     int markLo = -1;
     int markHi = -1;
-    bool selectable = false;
-    // ui/text's retained TextViewState. The UI global stack stamps this on
-    // each selectable leaf while it builds the subtree, so selection queries
-    // can be scoped back to one managed view after the frame tree is gone.
+    // ui/text's retained TextViewState, used to scope selection queries.
     EntityId selectionOwner = {};
-    // What a copy of this run says, and whether it continues the run before
-    // it on the same line. The record is owned by whoever built the element —
-    // the frame arena, in practice — and is null on every run that is not
-    // Markdown.
-    const SelSource* selSrc = nullptr;
-    bool selJoin = false;
-    // The caret this run draws, as a UTF-8 offset into it; -1 for none. Rust's
-    // InputElement measures cursor_bounds in prepaint and paints a quad there,
-    // which is what this is — putting the bar between two text runs instead
-    // would shift the glyphs by its own width every time it appeared.
+    // The caret this run draws, as a UTF-8 offset into it; -1 for none.
     int caretOff = -1;
     Rgba caretColor = {};
     float caretW = 2;
-    // A soft-wrap boundary is both the end of one visual row and the start
-    // of the next. True chooses the former; false chooses the latter.
-    bool caretLineEndAffinity = false;
-    // The taffy node this element was laid out as, this frame. A
-    // `taffy::NodeId` is a u64 and is kept as one here so gpui.h does not
-    // have to name the layout port's types.
-    uint64_t layoutNode = 0;
     float laidFont = 0; // resolved font size from last LayoutEl
     float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
-    // The shaped run LayoutEl measured, borrowed from the text cache so the
-    // paint pass can draw it without looking it up a second time. Owned by
-    // the cache, which cannot drop it before the frame ends; null when the
-    // element has no text or the run could not be cached.
-    TextLayout* laidLayout = nullptr;
     // What the measure callback last answered for this text leaf, keyed on
     // the width it was asked about. Taffy asks a leaf for its size several
     // times a pass — the min-content width, the max-content width, then the
@@ -2146,6 +2085,46 @@ struct El {
     // is the whole key and nothing here outlives the text it measured.
     float measKeyW[4] = {};
     Size measSize[4] = {};
+
+    // These one-bit fields occupy one unsigned int allocation unit.
+    // El::PathId: the click id is the path rather than a number the caller
+    // picked. An explicit Click(v) clears it and wins.
+    unsigned int clickFromPath : 1 = false;
+    // The same rule for the scroll handle and an explicit ScrollId(v).
+    unsigned int scrollFromPath : 1 = false;
+    // El::StopClick — see HitRect::stopClick.
+    unsigned int stopClick : 1 = false;
+    // cx.stop_propagation() on the left-button mouse-down bubble.
+    unsigned int stopMouseDown : 1 = false;
+    // The press belongs to a control with selection behavior of its own.
+    unsigned int suppressTextSelection : 1 = false;
+    // A descendant Inline reports its laid-out vertical extent to the nearest
+    // line-clamped ancestor.
+    unsigned int lineSpan : 1 = false;
+    // TextView::max_lines: lineClampCap is already in DIPs.
+    unsigned int lineClamp : 1 = false;
+    // Scrollbar configuration presence and visibility.
+    unsigned int scrollModeSet : 1 = false;
+    unsigned int scrollThemeSet : 1 = false;
+    unsigned int noScrollbar : 1 = false;
+    unsigned int noScrollbarX : 1 = false;
+    unsigned int noScrollbarY : 1 = false;
+    // Text selection/caret state.
+    unsigned int selectable : 1 = false;
+    unsigned int selJoin : 1 = false;
+    unsigned int caretLineEndAffinity : 1 = false;
+
+    // Byte-sized state stays last so none of it creates alignment holes.
+    IconName icon = IconName::None;
+    ElKind kind = ElKind::Div;
+    CursorKind cursor = CursorKind::Arrow;
+    DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
+    DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
+    Axis sliderAxis = Axis::Horizontal;
+    // The bar this box shows. Unnamed, it is the theme's mode.
+    ScrollbarMode scrollMode = ScrollbarMode::Always;
+    // ScrollableMask axes: horizontal is bit 0, vertical bit 1.
+    uint8_t scrollMaskAxes = 0;
     uint8_t measCount = 0;
     uint8_t measNext = 0;
 
@@ -2455,6 +2434,11 @@ struct El {
     El* Tip(Str s);
     El* Id(Str s);
 };
+
+static_assert(sizeof(unsigned int) == 4,
+              "El flags require a four-byte unsigned int");
+static_assert(sizeof(El) <= 1800,
+              "keep El flags packed and members alignment-ordered");
 
 enum class BtnKind : uint8_t {
     Default,
