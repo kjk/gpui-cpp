@@ -15,9 +15,9 @@
    footnotes and bare-URL autolinks all work.
 
    Raw HTML is the other half. Rust parses it with html5ever and folds the
-   DOM into the same BlockNode tree (text/format/html.rs); here
-   base/text_format.cpp is a small tokenizer that folds tags into the same
-   MdNode tree, so an HTML block inside markdown, an inline <b> or <a>, and a
+   DOM into the same BlockNode tree (text/format/html.rs); src/html5ever is
+   that crate's parser surface here and base/text_format.cpp folds its DOM
+   into MdNode. An HTML block inside markdown, an inline <b> or <a>, and a
    whole HTML document all render through the one walk below.
 
    This is the one rich-text renderer in the tree. Rust has exactly one too —
@@ -237,7 +237,8 @@ enum class MdKind : uint8_t {
     Row,
     Cell,
     Rule,
-    // A raw HTML block inside markdown. Its children are what ui/html.cpp
+    // A raw HTML block inside markdown. Its children are what
+    // base/text_format.cpp
     // made of the raw text; Rust reaches the same place through
     // markdown_ext.rs handing the html node to format::html.
     Html,
@@ -250,8 +251,8 @@ enum class MdKind : uint8_t {
     Custom,
 };
 
-// mdast's AlignKind, repeated so ui/html.cpp — which has no mdast of its own
-// — can say the same thing.
+// mdast's AlignKind, repeated so text_format.cpp — which has no mdast of its
+// own — can say the same thing.
 enum MdAlign : uint8_t {
     MdAlignDefault = 0,
     MdAlignLeft = 1,
@@ -285,8 +286,8 @@ struct MdNode {
     bool head = false;
     // Item: the GFM task list checkbox — whether the item carries one at all,
     // and whether it is ticked. BlockNode::ListItem's `Option<bool> checked`,
-    // as the pair mdast keeps it as. ui/html.cpp leaves both unset, which is
-    // what format/html.rs does.
+    // as the pair mdast keeps it as. text_format.cpp leaves both unset, which
+    // is what format/html.rs does.
     bool hasCheck = false;
     bool checked = false;
     MarkdownNode custom = {};

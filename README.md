@@ -134,6 +134,17 @@ GPUI_MARKDOWN=full bun cmd/build.ts -rel story   # default
 The mini feature list and intentional omissions are in
 [`src/markdown-mini/readme.md`](src/markdown-mini/readme.md).
 
+HTML parsing has the same build-time choice. The html5ever port is the
+default; the former reader-mode parser is the smaller drop-in implementation:
+
+```
+GPUI_HTML5EVER=mini bun cmd/build.ts -rel story
+GPUI_HTML5EVER=full bun cmd/build.ts -rel story   # default
+```
+
+See [`src/html5ever/readme.md`](src/html5ever/readme.md) and
+[`src/html5ever-mini/readme.md`](src/html5ever-mini/readme.md).
+
 ## JavaScript shell
 
 `gpui_shell` runs the port of `crates/shell` against the vendored, pinned

@@ -593,6 +593,18 @@ export const markdown = {
 } as const;
 
 /**
+ * The HTML parser `gpui-base` asks for (`html5ever = "0.27"`). We port the
+ * crate's tokenizer and tree-builder surface under src/html5ever; the smaller
+ * interchangeable parser under src/html5ever-mini is port-specific.
+ */
+export const html5ever = {
+  repo: "https://github.com/servo/html5ever",
+  version: "0.27.0",
+  crateSha256: "c13771afe0e6e846f1e67d038d4cb29998a6779f93c809212e4e9c32efd244d4",
+  dir: "src/html5ever",
+} as const;
+
+/**
  * The webview crate `crates/webview` (the `gpui-wry` crate) is built on:
  * `wry = { version = "0.53.3", package = "lb-wry" }`, longbridge's fork. We
  * port it: `src/wry/` is a C++ port of exactly this version, and
@@ -726,6 +738,7 @@ function printVersions(): never {
   console.log("zed gpui     ", zedGpui.sha, zedGpui.date, "(reference only)");
   console.log("crates ported", `taffy ${taffy.version} -> ${taffy.dir}`);
   console.log("             ", `markdown ${markdown.version} -> ${markdown.dir}`);
+  console.log("             ", `html5ever ${html5ever.version} -> ${html5ever.dir}`);
   console.log("             ", `${wry.crate} ${wry.version} -> ${wry.dir}`);
   console.log("             ", `autocorrect ${autocorrect.version} -> ${autocorrect.dir}`);
   console.log("engine       ", `quickjs-ng ${quickjsNg.version} ${quickjsNg.sha} -> ${quickjsNg.dir}`);

@@ -10,7 +10,8 @@ file tree through `Ignorer`, which is why `.cache` is in the tree and
 `.work/` is not.
 
 The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`autocorrect`) alongside
-the gpui-component, taffy, markdown and wry pins, and moves when they do —
+the gpui-component, taffy, markdown, html5ever and wry pins, and moves when
+they do —
 see [`port-upstream.md`](../../port-upstream.md).
 
 Everything is in `namespace autocorrect`, not `gpui`, because it is a port

@@ -64,6 +64,7 @@ void TestVirtualList();
 void TestTask();
 void TestTaffy();
 void TestMarkdown();
+void TestHtml5ever();
 void TestGpuiBlockLayout();
 void TestMinSize();
 void TestDatePicker();

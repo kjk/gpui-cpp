@@ -706,9 +706,8 @@ static void AddImage(MdBuild* b, Str src, Str alt, float w, float h) {
 }
 
 // "&amp;" -> "&". Returns the entity unchanged when it is not one the crate's
-// table knows. ui/html.cpp decodes the entities in an attribute and in HTML
-// text with it; the markdown side needs no such thing, because the parser
-// decodes character references itself.
+// table knows. Kept as the public compatibility helper; both parsers decode
+// character references before their trees reach the GPUI projection.
 Str MdDecodeEntity(Arena* a, Str e) {
     if (e.len < 3 || e.s[0] != '&' || e.s[e.len - 1] != ';') {
         return e;

@@ -5,7 +5,8 @@
 // GPUI_BASE_H_ guard shared with gpui.h, so a pair header and gpui.h can
 // meet in one translation unit): autocorrect — the one not inside gpui.cpp,
 // compiled and linked only into the editor example and the tests — plus
-// taffy, markdown, markdown-mini and wry, which ARE inside gpui.cpp and
+// taffy, markdown, markdown-mini, html5ever, html5ever-mini and wry, which
+// ARE inside gpui.cpp and
 // whose pairs exist for using one library without gpui (each carries the
 // base implementation, so those must never link beside gpui.cpp). All the
 // generated files are the same on every platform.
@@ -51,7 +52,13 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { dirname, join, relative, resolve } from "node:path";
 // The upstream pins live in run.ts (which guards its main, so this import
 // runs no CLI); the dist readme names the extras crate versions from there.
-import { autocorrect as autocorrectPin, markdown as markdownPin, taffy as taffyPin, wry as wryPin } from "./run.ts";
+import {
+  autocorrect as autocorrectPin,
+  html5ever as html5everPin,
+  markdown as markdownPin,
+  taffy as taffyPin,
+  wry as wryPin,
+} from "./run.ts";
 
 const root = resolve(import.meta.dir, "..");
 
@@ -102,9 +109,12 @@ export type BuildDistResult = {
   platformSourceCount: number;
   /** Parser implementation compiled into gpui.cpp. */
   markdown: MarkdownVariant;
+  /** HTML parser implementation compiled into gpui.cpp. */
+  html5ever: Html5everVariant;
 };
 
 export type MarkdownVariant = "full" | "mini";
+export type Html5everVariant = "full" | "mini";
 
 // GPUI_MARKDOWN is a build-time choice: the amalgam contains one parser or
 // the other, never both. Keep the complete CommonMark + GFM port as the
@@ -114,6 +124,17 @@ function markdownVariant(): MarkdownVariant {
   const value = process.env.GPUI_MARKDOWN ?? "full";
   if (value !== "full" && value !== "mini") {
     throw new Error(`GPUI_MARKDOWN must be full or mini, got "${value}"`);
+  }
+  return value;
+}
+
+// Like markdown, html5ever has a faithful default and an API-compatible
+// size build. The environment chooses which source reaches the amalgam; the
+// generated macros let callers and tests describe the resulting binary.
+function html5everVariant(): Html5everVariant {
+  const value = process.env.GPUI_HTML5EVER ?? "full";
+  if (value !== "full" && value !== "mini") {
+    throw new Error(`GPUI_HTML5EVER must be full or mini, got "${value}"`);
   }
   return value;
 }
@@ -558,7 +579,8 @@ function collapseBlankRuns(text: string): string {
   return out;
 }
 
-// src/taffy, src/markdown, src/wry and src/autocorrect are ports of crates
+// src/taffy, src/markdown, src/html5ever, src/wry and src/autocorrect are
+// ports of crates
 // that have never heard of gpui, and they are kept that way on purpose: each
 // is written against
 // base.h and its own headers, so it can be read against the Rust without
@@ -566,7 +588,15 @@ function collapseBlankRuns(text: string): string {
 // anything. The amalgam compiles the whole of src/ as one translation unit,
 // so nothing else would notice the day one of them reached for a gpui type.
 // This does.
-const isolatedDirs = ["src/taffy/", "src/markdown/", "src/markdown-mini/", "src/wry/", "src/autocorrect/"];
+const isolatedDirs = [
+  "src/taffy/",
+  "src/markdown/",
+  "src/markdown-mini/",
+  "src/html5ever/",
+  "src/html5ever-mini/",
+  "src/wry/",
+  "src/autocorrect/",
+];
 
 function checkIsolation(files: string[]): void {
   const bad: string[] = [];
@@ -584,7 +614,8 @@ function checkIsolation(files: string[]): void {
       // the public mdast keeps the API identical and costs far less than a
       // second representation plus an adapter in ui/text.cpp.
       const markdownApi = dir === "src/markdown-mini/" && inc && inc[1].startsWith("markdown/");
-      if (inc && inc[1] !== "base.h" && !inc[1].startsWith(own) && !markdownApi) {
+      const html5everApi = dir === "src/html5ever-mini/" && inc && inc[1].startsWith("html5ever/");
+      if (inc && inc[1] !== "base.h" && !inc[1].startsWith(own) && !markdownApi && !html5everApi) {
         bad.push(`${rel}:${i + 1}: includes "${inc[1]}"`);
       }
     }
@@ -603,6 +634,7 @@ function checkIsolation(files: string[]): void {
 export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const outDir = opts.outDir;
   const markdown = markdownVariant();
+  const html5ever = html5everVariant();
   // QuickJS is already its own upstream-generated amalgam, compiled as C11.
   // Folding it into gpui.h/gpui.cpp would both expose its API as GPUI's and
   // ask a C++ compiler to parse C source. The autocorrect port also stays
@@ -617,15 +649,13 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const headers = allHeaders.filter((rel) => !rel.startsWith("src/autocorrect/"));
   const foundCpps = allFoundCpps.filter((rel) => !rel.startsWith("src/autocorrect/"));
   const allCpps = foundCpps.filter((rel) => {
-    if (markdown === "full") {
-      return !rel.startsWith("src/markdown-mini/");
+    if (markdown === "full" && rel.startsWith("src/markdown-mini/")) return false;
+    if (markdown === "mini" && rel.startsWith("src/markdown/") && rel !== "src/markdown/mdast.cpp") {
+      return false;
     }
-    if (rel.startsWith("src/markdown-mini/")) {
-      return true;
-    }
-    // The mdast representation and its small storage helpers are the shared
-    // API. Everything else under markdown/ is the full parser.
-    return !rel.startsWith("src/markdown/") || rel === "src/markdown/mdast.cpp";
+    if (html5ever === "full" && rel.startsWith("src/html5ever-mini/")) return false;
+    if (html5ever === "mini" && rel.startsWith("src/html5ever/")) return false;
+    return true;
   });
   const cpps = allCpps.filter((f) => filePlatforms(f).length === 0);
   const platCpps = allCpps.filter((f) => filePlatforms(f).length > 0);
@@ -676,6 +706,8 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     "#endif",
     `#define GPUI_MARKDOWN_FULL ${markdown === "full" ? 1 : 0}`,
     `#define GPUI_MARKDOWN_MINI ${markdown === "mini" ? 1 : 0}`,
+    `#define GPUI_HTML5EVER_FULL ${html5ever === "full" ? 1 : 0}`,
+    `#define GPUI_HTML5EVER_MINI ${html5ever === "mini" ? 1 : 0}`,
     "#ifndef GPUI_INCLUDE_PRIVATE_API",
     "#define GPUI_INCLUDE_PRIVATE_API 0",
     "#endif",
@@ -847,11 +879,12 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   //
   // Two consumption models, told apart by `withBaseImpl`. autocorrect is
   // not in gpui.cpp, so its pair holds declarations only and links beside
-  // gpui.cpp, which provides the base implementation. taffy, markdown and
-  // markdown-mini ARE in gpui.cpp — their pairs exist for using one library
-  // without gpui at all, so each inlines the base implementation (base.cpp
-  // and its platform halves behind GPUI_OS_* guards) and must NOT be linked
-  // beside gpui.cpp: the symbols would be there twice.
+  // gpui.cpp, which provides the base implementation. taffy, markdown,
+  // markdown-mini, html5ever, html5ever-mini and wry ARE in gpui.cpp — their
+  // pairs exist for using one library without gpui at all, so each inlines
+  // the base implementation (base.cpp and its platform halves behind
+  // GPUI_OS_* guards) and must NOT be linked beside gpui.cpp: the symbols
+  // would be there twice.
   const baseImplCpps = allFoundCpps.filter((rel) => /^src\/base(_\w+)?\.cpp$/.test(rel));
   const extras: { dir: string; bytes: number; lines: number }[] = [];
   const writeExtrasPair = (spec: {
@@ -991,6 +1024,15 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     withBaseImpl: true,
   });
   writeExtrasPair({
+    dir: "extras/html5ever",
+    headerName: "html5ever.h",
+    guard: "HTML5EVER_AMALGAM_H_",
+    headers: headers.filter((rel) => rel.startsWith("src/html5ever/")),
+    isPublic: (rel) => rel === "src/html5ever/html5ever.h",
+    cpps: foundCpps.filter((rel) => rel.startsWith("src/html5ever/")),
+    withBaseImpl: true,
+  });
+  writeExtrasPair({
     dir: "extras/wry",
     headerName: "wry.h",
     guard: "WRY_AMALGAM_H_",
@@ -1018,6 +1060,15 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     cpps: [...foundCpps.filter((rel) => rel.startsWith("src/markdown-mini/")), "src/markdown/mdast.cpp"],
     withBaseImpl: true,
   });
+  writeExtrasPair({
+    dir: "extras/html5ever-mini",
+    headerName: "html5ever.h",
+    guard: "HTML5EVER_AMALGAM_H_",
+    headers: ["src/html5ever/html5ever.h", ...headers.filter((rel) => rel.startsWith("src/html5ever-mini/"))],
+    isPublic: (rel) => rel === "src/html5ever/html5ever.h",
+    cpps: foundCpps.filter((rel) => rel.startsWith("src/html5ever-mini/")),
+    withBaseImpl: true,
+  });
 
   return {
     outDir,
@@ -1038,6 +1089,7 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     sourceCount: cpps.length,
     platformSourceCount: platCpps.length,
     markdown,
+    html5ever,
   };
 }
 
@@ -1175,6 +1227,7 @@ function writeDistReadme(sha: string): string {
     ["<autocorrect-version>", autocorrectPin.version],
     ["<taffy-version>", taffyPin.version],
     ["<markdown-version>", markdownPin.version],
+    ["<html5ever-version>", html5everPin.version],
     ["<wry-version>", wryPin.version],
   ] as const;
   let text = readFileSync(src, "utf8").replace(shaPlaceholder, sha);
@@ -1279,7 +1332,8 @@ function main(): void {
   console.log(
     `wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ${formatCount(built.sourceBytes)} bytes, ` +
       `${formatCount(built.sourceLines)} lines, ` +
-      `${built.sourceCount} + ${built.platformSourceCount} sources, markdown ${built.markdown})`,
+      `${built.sourceCount} + ${built.platformSourceCount} sources, markdown ${built.markdown}, ` +
+      `html5ever ${built.html5ever})`,
   );
   if (outDir === distRepoDir) {
     copyDistExtras();

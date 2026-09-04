@@ -1,0 +1,452 @@
+#include "html5ever-mini/html5ever.h"
+
+namespace html5ever {
+
+using namespace base;
+
+// This is the old dependency-free parser moved out of base/text_format.cpp.
+// It intentionally recognizes only reader-mode HTML: tags, attributes,
+// comments, a doctype, raw elements and the small entity set below. The full
+// implementation is the default; this file exists for size-sensitive builds.
+static const char kVoidElements[] =
+    "area\0base\0br\0col\0embed\0hr\0img\0input\0link\0meta\0param\0source\0"
+    "track\0wbr\0";
+static const char kRawElements[] = "script\0style\0";
+static const char kEntityNames[] =
+    "AMP\0CounterClockwiseContourIntegral\0GT\0LT\0QUOT\0amp\0apos\0gt\0lt\0"
+    "nbsp\0quot\0";
+static const char kEntityValues[] = "&\0∳\0>\0<\0\"\0&\0'\0>\0<\0 \0\"\0";
+
+static bool Space(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+static bool Alpha(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static bool NameChar(char c) {
+    return Alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+           c == ':';
+}
+
+static bool In(SeqStrings set, Str value) {
+    return SeqStrIndexIS(set, value) >= 0;
+}
+
+static Str Lower(Arena* a, Str value) {
+    Str result = StrDup(a, value);
+    StrLowerAscii(result.s);
+    return result;
+}
+
+static int EncodeUtf8(char* out, uint32_t cp) {
+    if (cp <= 0x7f) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp <= 0x7ff) {
+        out[0] = (char)(0xc0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3f));
+        return 2;
+    }
+    if (cp <= 0xffff) {
+        out[0] = (char)(0xe0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3f));
+        out[2] = (char)(0x80 | (cp & 0x3f));
+        return 3;
+    }
+    out[0] = (char)(0xf0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3f));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3f));
+    out[3] = (char)(0x80 | (cp & 0x3f));
+    return 4;
+}
+
+static void AppendCp(Arena* a, StrBuilder& out, uint32_t cp) {
+    if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
+        cp = 0xfffd;
+    }
+    char bytes[4];
+    int n = EncodeUtf8(bytes, cp);
+    StrBuilderAppend(a, out, Str(bytes, n));
+}
+
+static Str Decode(Arena* a, Str value) {
+    StrBuilder out;
+    StrBuilderReserve(a, out, value.len);
+    for (int i = 0; i < value.len;) {
+        if (value.s[i] != '&') {
+            StrBuilderAppendChar(a, out, value.s[i++]);
+            continue;
+        }
+        int start = i++;
+        if (i < value.len && value.s[i] == '#') {
+            i++;
+            int radix = 10;
+            if (i < value.len && (value.s[i] == 'x' || value.s[i] == 'X')) {
+                radix = 16;
+                i++;
+            }
+            int digits = i;
+            uint32_t cp = 0;
+            while (i < value.len) {
+                char c = value.s[i];
+                int d = c >= '0' && c <= '9'                  ? c - '0'
+                        : radix == 16 && c >= 'a' && c <= 'f' ? c - 'a' + 10
+                        : radix == 16 && c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                                              : -1;
+                if (d < 0) break;
+                cp = cp * (uint32_t)radix + (uint32_t)d;
+                i++;
+            }
+            if (i == digits) {
+                i = start + 1;
+                StrBuilderAppendChar(a, out, '&');
+                continue;
+            }
+            if (i < value.len && value.s[i] == ';') i++;
+            AppendCp(a, out, cp);
+            continue;
+        }
+        int end = i;
+        while (end < value.len && Alpha(value.s[end])) end++;
+        Str decoded = {};
+        int used = 0;
+        for (int n = end - i; n > 0; n--) {
+            int ix = SeqStrIndex(kEntityNames, Str(value.s + i, n));
+            if (ix >= 0) {
+                decoded = SeqStrByIndex(kEntityValues, ix);
+                used = n;
+                break;
+            }
+        }
+        if (!decoded.s) {
+            i = start + 1;
+            StrBuilderAppendChar(a, out, '&');
+            continue;
+        }
+        StrBuilderAppend(a, out, decoded);
+        i += used;
+        if (i < value.len && value.s[i] == ';') i++;
+    }
+    return StrBuilderTakeStr(a, out);
+}
+
+struct Lex {
+    Arena* a = nullptr;
+    Str source = {};
+    int at = 0;
+    int line = 1;
+    TokenSink sink = nullptr;
+    void* user = nullptr;
+    TokenizerOptions options = {};
+};
+
+static void Emit(Lex* l, const Token& token) {
+    if (l->sink) l->sink(l->user, &token);
+}
+
+static void SkipSpace(Lex* l) {
+    while (l->at < l->source.len && Space(l->source.s[l->at])) {
+        if (l->source.s[l->at++] == '\n') l->line++;
+    }
+}
+
+static Str Name(Lex* l) {
+    int start = l->at;
+    while (l->at < l->source.len && NameChar(l->source.s[l->at])) l->at++;
+    return Lower(l->a, Str(l->source.s + start, l->at - start));
+}
+
+static Attribute* Attrs(Lex* l, bool* selfClose) {
+    Attribute* first = nullptr;
+    Attribute* last = nullptr;
+    *selfClose = false;
+    for (;;) {
+        SkipSpace(l);
+        if (l->at >= l->source.len) return first;
+        if (l->source.s[l->at] == '>') {
+            l->at++;
+            return first;
+        }
+        if (l->source.s[l->at] == '/' && l->at + 1 < l->source.len &&
+            l->source.s[l->at + 1] == '>') {
+            l->at += 2;
+            *selfClose = true;
+            return first;
+        }
+        int start = l->at;
+        while (l->at < l->source.len && NameChar(l->source.s[l->at])) l->at++;
+        if (start == l->at) {
+            l->at++;
+            continue;
+        }
+        Str name = Lower(l->a, Str(l->source.s + start, l->at - start));
+        SkipSpace(l);
+        Str value = StrDup(l->a, StrL(""));
+        if (l->at < l->source.len && l->source.s[l->at] == '=') {
+            l->at++;
+            SkipSpace(l);
+            char quote = 0;
+            if (l->at < l->source.len &&
+                (l->source.s[l->at] == '\'' || l->source.s[l->at] == '"')) {
+                quote = l->source.s[l->at++];
+            }
+            start = l->at;
+            while (l->at < l->source.len &&
+                   (quote ? l->source.s[l->at] != quote
+                          : !Space(l->source.s[l->at]) &&
+                                l->source.s[l->at] != '>')) {
+                l->at++;
+            }
+            value = Decode(l->a, Str(l->source.s + start, l->at - start));
+            if (quote && l->at < l->source.len) l->at++;
+        }
+        Attribute* attr = ArenaNew<Attribute>(l->a);
+        attr->name = name;
+        attr->value = value;
+        if (last)
+            last->next = attr;
+        else
+            first = attr;
+        last = attr;
+    }
+}
+
+static int RawEnd(Lex* l, Str name) {
+    for (int i = l->at; i + name.len + 2 <= l->source.len; i++) {
+        if (l->source.s[i] == '<' && l->source.s[i + 1] == '/' &&
+            StrEqI(Str(l->source.s + i + 2, name.len), name)) {
+            return i;
+        }
+    }
+    return l->source.len;
+}
+
+void Tokenize(Arena* a, Str source, TokenSink sink, void* user,
+              TokenizerOptions options) {
+    if (!a || !sink) return;
+    Lex l;
+    l.a = a;
+    l.source = source;
+    l.sink = sink;
+    l.user = user;
+    l.options = options;
+    Str rawName = {};
+    while (l.at < source.len) {
+        if (rawName.s) {
+            int end = RawEnd(&l, rawName);
+            Token token;
+            token.kind = TokenKind::Character;
+            token.data = StrDup(a, Str(source.s + l.at, end - l.at));
+            token.line = l.line;
+            l.at = end;
+            rawName = {};
+            Emit(&l, token);
+            continue;
+        }
+        if (source.s[l.at] != '<') {
+            int start = l.at;
+            while (l.at < source.len && source.s[l.at] != '<') l.at++;
+            Token token;
+            token.kind = TokenKind::Character;
+            token.data = Decode(a, Str(source.s + start, l.at - start));
+            token.line = l.line;
+            Emit(&l, token);
+            continue;
+        }
+        if (l.at + 3 < source.len &&
+            StrEq(Str(source.s + l.at, 4), StrL("<!--"))) {
+            l.at += 4;
+            int start = l.at;
+            while (l.at + 2 < source.len &&
+                   !(source.s[l.at] == '-' && source.s[l.at + 1] == '-' &&
+                     source.s[l.at + 2] == '>')) {
+                l.at++;
+            }
+            Token token;
+            token.kind = TokenKind::Comment;
+            token.data = StrDup(a, Str(source.s + start, l.at - start));
+            if (l.at + 2 < source.len) l.at += 3;
+            Emit(&l, token);
+            continue;
+        }
+        if (l.at + 1 < source.len && source.s[l.at + 1] == '!') {
+            l.at += 2;
+            while (l.at < source.len && source.s[l.at] != '>') l.at++;
+            if (l.at < source.len) l.at++;
+            continue;
+        }
+        Token token;
+        token.line = l.line;
+        if (l.at + 1 < source.len && source.s[l.at + 1] == '/') {
+            l.at += 2;
+            token.kind = TokenKind::EndTag;
+            token.name = Name(&l);
+            while (l.at < source.len && source.s[l.at] != '>') l.at++;
+            if (l.at < source.len) l.at++;
+        } else if (l.at + 1 < source.len && Alpha(source.s[l.at + 1])) {
+            l.at++;
+            token.kind = TokenKind::StartTag;
+            token.name = Name(&l);
+            token.attrs = Attrs(&l, &token.selfClosing);
+            if (!token.selfClosing && In(kRawElements, token.name)) {
+                rawName = token.name;
+            }
+        } else {
+            token.kind = TokenKind::Character;
+            token.data = StrDup(a, Str(source.s + l.at++, 1));
+        }
+        Emit(&l, token);
+    }
+    Token eof;
+    eof.kind = TokenKind::Eof;
+    eof.line = l.line;
+    Emit(&l, eof);
+}
+
+static Node* NewNode(Arena* a, NodeKind kind, Str name = {}) {
+    Node* node = ArenaNew<Node>(a);
+    node->kind = kind;
+    node->name = name;
+    return node;
+}
+
+static void Append(Node* parent, Node* child) {
+    child->parent = parent;
+    if (parent->last)
+        parent->last->next = child;
+    else
+        parent->first = child;
+    parent->last = child;
+}
+
+struct Build {
+    Arena* a = nullptr;
+    Node* doc = nullptr;
+    ArenaVec<Node*> stack{};
+    ParseOptions options = {};
+};
+
+static void OnToken(void* user, const Token* token) {
+    Build* b = (Build*)user;
+    Node* parent = b->stack.len ? b->stack[b->stack.len - 1] : b->doc;
+    if (token->kind == TokenKind::Character) {
+        if (token->data.len <= 0) return;
+        Node* node = NewNode(b->a, NodeKind::Text);
+        node->data = token->data;
+        Append(parent, node);
+    } else if (token->kind == TokenKind::Comment) {
+        Node* node = NewNode(b->a, NodeKind::Comment);
+        node->data = token->data;
+        Append(parent, node);
+    } else if (token->kind == TokenKind::Doctype && !b->options.dropDoctype) {
+        Node* node = NewNode(b->a, NodeKind::Doctype, token->name);
+        Append(parent, node);
+    } else if (token->kind == TokenKind::StartTag) {
+        Node* node = NewNode(b->a, NodeKind::Element, token->name);
+        node->attrs = token->attrs;
+        Append(parent, node);
+        if (!token->selfClosing && !In(kVoidElements, token->name)) {
+            b->stack.Append(b->a, node);
+        }
+    } else if (token->kind == TokenKind::EndTag) {
+        for (int i = b->stack.len - 1; i >= 0; i--) {
+            if (StrEqI(b->stack[i]->name, token->name)) {
+                b->stack.Truncate(i);
+                break;
+            }
+        }
+    }
+}
+
+static Node* Parse(Arena* a, Str source, ParseOptions options) {
+    if (!a) return nullptr;
+    Build build;
+    build.a = a;
+    build.options = options;
+    build.doc = NewNode(a, NodeKind::Document);
+    Tokenize(a, source, OnToken, &build, options.tokenizer);
+    return build.doc;
+}
+
+Node* ParseDocument(Arena* a, Str source, ParseOptions options) {
+    return Parse(a, source, options);
+}
+
+Node* ParseFragment(Arena* a, Str source, Str context, ParseOptions options) {
+    (void)context;
+    return Parse(a, source, options);
+}
+
+const Attribute* Attr(const Node* node, Str name) {
+    for (const Attribute* at = node ? node->attrs : nullptr; at;
+         at = at->next) {
+        if (StrEqI(at->name, name)) return at;
+    }
+    return nullptr;
+}
+
+Str AttrValue(const Node* node, Str name) {
+    const Attribute* attr = Attr(node, name);
+    return attr ? attr->value : Str{};
+}
+
+static void WriteEscaped(Arena* a, StrBuilder& out, Str value, bool attribute) {
+    for (int i = 0; i < value.len; i++) {
+        char c = value.s[i];
+        if (c == '&')
+            StrBuilderAppend(a, out, StrL("&amp;"));
+        else if (c == '<')
+            StrBuilderAppend(a, out, StrL("&lt;"));
+        else if (c == '>' && !attribute)
+            StrBuilderAppend(a, out, StrL("&gt;"));
+        else if (c == '"' && attribute)
+            StrBuilderAppend(a, out, StrL("&quot;"));
+        else
+            StrBuilderAppendChar(a, out, c);
+    }
+}
+
+static void Write(Arena* a, StrBuilder& out, const Node* node, bool include) {
+    bool element = node->kind == NodeKind::Element;
+    if (include && node->kind == NodeKind::Text) {
+        if (node->parent && In(kRawElements, node->parent->name))
+            StrBuilderAppend(a, out, node->data);
+        else
+            WriteEscaped(a, out, node->data, false);
+    } else if (include && node->kind == NodeKind::Comment) {
+        StrBuilderAppend(a, out, StrL("<!--"));
+        StrBuilderAppend(a, out, node->data);
+        StrBuilderAppend(a, out, StrL("-->"));
+    } else if (include && element) {
+        StrBuilderAppendChar(a, out, '<');
+        StrBuilderAppend(a, out, node->name);
+        for (const Attribute* at = node->attrs; at; at = at->next) {
+            StrBuilderAppendChar(a, out, ' ');
+            StrBuilderAppend(a, out, at->name);
+            StrBuilderAppend(a, out, StrL("=\""));
+            WriteEscaped(a, out, at->value, true);
+            StrBuilderAppendChar(a, out, '"');
+        }
+        StrBuilderAppendChar(a, out, '>');
+    }
+    for (const Node* child = node->first; child; child = child->next) {
+        Write(a, out, child, true);
+    }
+    if (include && element && !In(kVoidElements, node->name)) {
+        StrBuilderAppend(a, out, StrL("</"));
+        StrBuilderAppend(a, out, node->name);
+        StrBuilderAppendChar(a, out, '>');
+    }
+}
+
+Str Serialize(Arena* a, const Node* node, SerializeOptions options) {
+    if (!a || !node) return {};
+    StrBuilder out;
+    Write(a, out, node, options.includeNode);
+    return StrBuilderTakeStr(a, out);
+}
+
+} // namespace html5ever

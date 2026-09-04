@@ -13,8 +13,9 @@ gitignored clone at `.work/gpui-component/`, installed at the pinned SHA by
 `bun cmd/build.ts` or `bun cmd/run.ts`.
 
 **Upstream pins** live in the pin block at the top of [`cmd/run.ts`](cmd/run.ts)
-(`gpuiComponent`, `zedGpui`, and the four crates we port: `taffy`, `markdown`,
-`wry`, `autocorrect`). `bun cmd/run.ts -versions` prints and syncs them.
+(`gpuiComponent`, `zedGpui`, and the five crates we port: `taffy`, `markdown`,
+`html5ever`, `wry`, `autocorrect`). `bun cmd/run.ts -versions` prints and
+syncs them.
 Ingesting a later checkin: [`port-upstream.md`](port-upstream.md).
 
 **Fidelity is the bar.** When a widget's look or numbers are in question, read
@@ -48,9 +49,10 @@ deviations), [`port-map.md`](port-map.md) (the Base/UI module ledger and
    with a using-directive, so gpui code writes `Str` unqualified. Examples
    `#include "gpui.h"` and `using namespace gpui;`.
 
-   `src/taffy`, `src/markdown`, `src/wry` and `src/autocorrect` are ports of
-   crates that have never heard of gpui: they are written against `base.h` and
-   nothing else, include no gpui header and name no gpui symbol.
+   `src/taffy`, `src/markdown`, `src/html5ever`, `src/wry` and
+   `src/autocorrect` are ports of crates that have never heard of gpui: they
+   are written against `base.h` and nothing else, include no gpui header and
+   name no gpui symbol.
    `cmd/update-dist.ts` fails the build if that stops being true. Anything one
    of them needs from the tree belongs in `base`, or it does not belong to them.
 3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe`,
@@ -115,10 +117,11 @@ ported for a reason *other* than these belongs in `port-status.md`.
   origins, and neither `Authorization` nor any caller-supplied header follows a
   redirect off its origin.
 - **Anything needing a third-party C++ library** (rule 3): tree-sitter and
-  syntect, an LSP client, resvg, ropey, html5ever. Where Rust reaches for one
+  syntect, an LSP client, resvg, ropey. Where Rust reaches for one
   and the feature is worth having, write the small version this tree needs or
-  port the crate the way `src/taffy`, `src/markdown`, `src/wry` and
-  `src/autocorrect` are ported. `port-upstream.md` lists which is which.
+  port the crate the way `src/taffy`, `src/markdown`, `src/html5ever`,
+  `src/wry` and `src/autocorrect` are ported. `port-upstream.md` lists which
+  is which.
   `src/wry/` is the worked example of the second route: WebView2's COM bindings
   and Microsoft's loader are declared and written out in `wry_win.cpp` rather
   than vendored.
@@ -423,7 +426,7 @@ lists. It is `namespace markdown`, not `gpui`: `CharKind`, `Name`, `Link`,
 `markdown::ToMdast(a, source, ParseOptions::Gfm())` and folds the mdast into
 the `MdNode` tree the renderer walks, which is what
 `crates/base/src/text/format/markdown.rs` does. Raw HTML goes through
-`src/base/text_format.cpp` into the same tree, since there is no html5ever.
+`src/base/text_format.cpp` into the same tree through `src/html5ever`.
 **Do not add a special case to `MdParse` for something CommonMark has a rule
 for.**
 
@@ -438,6 +441,10 @@ those names under `component::`, derives a `TextViewStyle` from the component
 `src/markdown-mini/` is the size-oriented alternative selected by
 `GPUI_MARKDOWN=mini`. It shares `markdown.h` and `mdast.*` but is **not** an
 upstream crate — keep its smaller contract (`src/markdown-mini/readme.md`).
+
+`src/html5ever-mini/` is the corresponding size-oriented HTML parser selected
+by `GPUI_HTML5EVER=mini`. It implements `src/html5ever/html5ever.h`; keep its
+smaller contract (`src/html5ever-mini/readme.md`).
 
 ## Code style
 
@@ -592,7 +599,8 @@ in either order. All of it is the same on every platform.
 - **`extras/autocorrect/` links beside `gpui.cpp`** (taking base from it), and
   `cmd/build.ts` compiles it only into the targets that use it (the editor
   example, the tests). `extras/taffy/`, `extras/markdown/`,
-  `extras/markdown-mini/` and `extras/wry/` are *inside* `gpui.cpp`; their
+  `extras/markdown-mini/`, `extras/html5ever/`, `extras/html5ever-mini/` and
+  `extras/wry/` are *inside* `gpui.cpp`; their
   pairs exist for using one library without gpui, each carries the base
   implementation, and **must never link beside `gpui.cpp`**.
 - Implementation-private headers (markdown's tokenizer, taffy's compute
@@ -690,6 +698,8 @@ src/fps/               the crates/fps performance HUD
 src/taffy/             the taffy crate, ported (readme.md)
 src/markdown/          the markdown crate, ported (readme.md)
 src/markdown-mini/     the smaller alternative, ours (readme.md)
+src/html5ever/         the html5ever crate, ported (readme.md)
+src/html5ever-mini/    the smaller alternative, ours (readme.md)
 src/wry/               the wry webview crate, ported (readme.md)
 src/autocorrect/       the autocorrect CJK linter crate, ported (readme.md)
 src/webview/           crates/webview: the view that gives a wry webview a box

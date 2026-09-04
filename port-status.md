@@ -22,8 +22,11 @@ and wasm. The work left is depth, not breadth.
   what position alone settles. Nothing that needs a tree (rename, semantic
   scope) can be asked of it. Folding is brace-pair scanning, which is what
   upstream's own showcase highlighter does.
-- **HTML is handwritten.** `src/ui/html.cpp` in html5ever's place, folding
-  into the same `MdNode` tree. A deliberately smaller tag vocabulary.
+- **HTML parsing is complete-input, not browser-hosted.** `src/html5ever`
+  builds its arena DOM from one UTF-8 `Str`; it has no incremental tendril
+  feed or script-execution pause, and its named-reference table is the reader
+  set rather than all generated spellings. `src/html5ever/readme.md` names the
+  boundary; numeric references and the tree rules TextView consumes are on.
 - **Process CPU %** is a Win32/procfs times delta, not `sysinfo`. First sample
   is 0; values are in the same ballpark, not bit-identical.
 - **The scene graph is half of GPUI's.** `src/gpui/scene.h` collects and culls;
@@ -54,6 +57,7 @@ and wasm. The work left is depth, not breadth.
 ## Not ported, on purpose
 
 Per-crate exclusion lists live with the crate: `src/taffy/readme.md`,
-`src/markdown/readme.md`, `src/markdown-mini/readme.md`, `src/wry/readme.md`,
-`src/autocorrect/readme.md`. `port-upstream.md` lists the dependencies we
+`src/markdown/readme.md`, `src/markdown-mini/readme.md`,
+`src/html5ever/readme.md`, `src/html5ever-mini/readme.md`, `src/wry/readme.md`
+and `src/autocorrect/readme.md`. `port-upstream.md` lists the dependencies we
 replace rather than port.

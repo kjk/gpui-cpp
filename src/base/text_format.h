@@ -4,10 +4,9 @@
    crates/base/src/text/format/html.rs
 
    Rust hands the source to html5ever, walks the RcDom and folds it into the
-   BlockNode tree node.rs renders. There is no html5ever here and no room for
-   one (hard rule 3), so this is a tokenizer and a stack of open elements that
-   fold the same tags into base/text.h's MdNode — the tree src/markdown already
-   builds. One renderer walks both, which is exactly how Rust arranges it.
+   BlockNode tree node.rs renders. This does the same through the arena DOM in
+   src/html5ever, folding its elements into base/text.h's MdNode — the tree
+   src/markdown already builds. One renderer walks both.
 
    The subset is Rust's: the block elements it lists, the inline marks it
    understands (b/strong, i/em, code, u, s/del, mark, a), tables with their
@@ -19,10 +18,8 @@
 namespace gpui {
 
 // format/html5minify Minifier. The Rust type writes to io::Write after an
-// html5ever DOM pass; this dependency-free projection writes to an Arena and
-// preserves its configurable whitespace/comment/doctype policy. HtmlParse's
-// tokenizer already performs the same cleanup while folding the tree, so
-// parsing does not serialize and tokenize the document a second time.
+// html5ever DOM pass. This projection writes to an Arena and preserves its
+// configurable whitespace/comment/doctype policy.
 struct Minifier {
     bool omitDoctype = false;
     bool collapseWhitespace = true;

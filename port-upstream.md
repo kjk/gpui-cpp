@@ -1,8 +1,8 @@
 # Ingesting a later upstream checkin
 
 **Which checkin we port is the pin block at the top of [`cmd/run.ts`](cmd/run.ts)**
-— `gpuiComponent.sha`, `zedGpui.sha`, and `taffy` / `markdown` / `wry` /
-`autocorrect` versions. `bun cmd/run.ts -versions` prints them and resets
+— `gpuiComponent.sha`, `zedGpui.sha`, and `taffy` / `markdown` / `html5ever` /
+`wry` / `autocorrect` versions. `bun cmd/run.ts -versions` prints them and resets
 `.work/gpui-component` to that SHA. Always diff from the pinned SHA, never from
 `HEAD`.
 
@@ -41,14 +41,15 @@ Then `bun cmd/audit-port.ts` (see `port-map.md`) — its content hashes fail on
 any added, removed or renamed public declaration, re-export or test, which is
 how a pin bump turns into an explicit decision list rather than a silent gap.
 
-## The four ported crates
+## The five ported crates
 
-`src/taffy/`, `src/markdown/`, `src/wry/` and `src/autocorrect/` are full
-ports, not references, at the version gpui-component resolves. **They move when
-the gpui-component pin moves.** After bumping `gpuiComponent.sha`, check each:
+`src/taffy/`, `src/markdown/`, `src/html5ever/`, `src/wry/` and
+`src/autocorrect/` are ports, not references, at the version gpui-component
+resolves. **They move when the gpui-component pin moves.** After bumping
+`gpuiComponent.sha`, check each:
 
 ```
-grep -A3 'name = "taffy"' .work/gpui-component/Cargo.lock   # also: markdown, lb-wry, autocorrect
+grep -A3 'name = "taffy"' .work/gpui-component/Cargo.lock   # also: markdown, html5ever, lb-wry, autocorrect
 ```
 
 If a version changed, set it in `cmd/run.ts` and diff the crate. Each crate's
@@ -62,6 +63,7 @@ mechanically.
 | --- | --- | --- |
 | taffy | `DioxusLabs/taffy` | git tags: `git -C .work/taffy diff vOLD vNEW -- src` |
 | markdown | `wooorm/markdown-rs` | git tags: `git -C .work/markdown-rs diff OLD NEW -- src` |
+| html5ever | `servo/html5ever` | crate tarball; compare `src/`, generated tokenizer data and crate features |
 | wry | `lb-wry` (longbridge fork) | crate tarball from `static.crates.io` — published from a fork, so no useful tag |
 | autocorrect | `huacnlee/autocorrect` | crate tarball; git tags carry the whole workspace. Diff `src/` **and** `grammar/` |
 
@@ -75,6 +77,7 @@ Two crate-specific notes a bump never touches: the WebView2 declaration block
 in `wry_win.cpp` moves when the *SDK* does, not when wry does; and
 `src/markdown-mini/` is ours, not upstream — do not mechanically ingest new
 markdown-rs constructs into it (`src/markdown-mini/readme.md`).
+The same applies to `src/html5ever-mini/`.
 
 ## Zed GPUI — reference only
 
@@ -87,8 +90,8 @@ font-kit are not ported.
 
 ## Dependencies we replace rather than port
 
-`sysinfo`, `battery`, `smol`, `reqwest`, ropey, tree-sitter, syntect,
-html5ever, resvg — OS APIs or our own code instead. taffy's `arrayvec`, `grid`,
+`sysinfo`, `battery`, `smol`, `reqwest`, ropey, tree-sitter, syntect and resvg
+— OS APIs or our own code instead. taffy's `arrayvec`, `grid`,
 `slotmap`, `cssparser` — `Vec`, a flat occupancy matrix, our own generational
 slots, no CSS parser. markdown's `unicode-id` belongs to MDX, not ported.
 wry's `webview2-com` / `-sys` are written out in `wry_win.cpp`, `http` and

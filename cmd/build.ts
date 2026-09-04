@@ -456,13 +456,17 @@ function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[]
     // and editor.cpp switches its include on GPUI_AMALGAM).
     if (name !== "hello_world" && name !== "hello_world_no_amalgam" && name !== "editor") return null;
     const markdown = process.env.GPUI_MARKDOWN ?? "full";
+    const html5ever = process.env.GPUI_HTML5EVER ?? "full";
     const example = name === "hello_world_no_amalgam" ? "examples/hello_world_no_amalgam.cpp" : `examples/${name}.cpp`;
     return [
       example,
       ...allCppDir("src").filter((f) => {
         if (!sourcePlatform(f, plat)) return false;
-        if (markdown === "full") return !f.startsWith("src/markdown-mini/");
-        return !f.startsWith("src/markdown/") || f === "src/markdown/mdast.cpp";
+        if (markdown === "full" && f.startsWith("src/markdown-mini/")) return false;
+        if (markdown !== "full" && f.startsWith("src/markdown/") && f !== "src/markdown/mdast.cpp") return false;
+        if (html5ever === "full" && f.startsWith("src/html5ever-mini/")) return false;
+        if (html5ever !== "full" && f.startsWith("src/html5ever/")) return false;
+        return true;
       }),
       "src/quickjs/quickjs.c",
     ];
@@ -1361,6 +1365,8 @@ const extrasPairs = [
   ["extras/taffy", "taffy"],
   ["extras/markdown", "markdown"],
   ["extras/markdown-mini", "markdown"],
+  ["extras/html5ever", "html5ever"],
+  ["extras/html5ever-mini", "html5ever"],
   ["extras/wry", "wry"],
 ] as const;
 
@@ -1373,6 +1379,7 @@ export async function ensureAmalgam(fail: (msg: string) => never): Promise<void>
     console.log(
       `amalgam ${a.headerPath} + ${a.sourcePath} ` +
         `(${a.headerCount} headers, ${a.sourceCount} + ${a.platformSourceCount} sources, markdown ${a.markdown}, ` +
+        `html5ever ${a.html5ever}, ` +
         `${amalgamSize(a.headerBytes + a.sourceBytes, a.headerLines + a.sourceLines)}); ` +
         `${a.quickjsHeaderPath} + ${a.quickjsSourcePath} ` +
         `(${amalgamSize(a.quickjsHeaderBytes + a.quickjsSourceBytes, a.quickjsHeaderLines + a.quickjsSourceLines)}); ` +

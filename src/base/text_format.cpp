@@ -1,32 +1,13 @@
 #include "base/text_format.h"
 
+#include "html5ever/html5ever.h"
+
 namespace gpui {
 
-// ─── lexer ────────────────────────────────────────────────────────────────
-//
-// html5ever runs a whole HTML5 tokenizer; this is the part of it a document
-// written for a reader — Rust's own bar, "simple HTML like Safari Reader
-// Mode" — actually uses: text, start tags with attributes, end tags, and the
-// two things to throw away, comments and the doctype.
+using namespace base;
 
-enum class HtmlTok : uint8_t {
-    End,
-    Text,
-    Start,
-    Close
-};
-
-static bool HtmlIsSpace(char c) {
+static bool HtmlSpace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
-}
-
-static bool HtmlIsAlpha(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-}
-
-static bool HtmlIsNameChar(char c) {
-    return HtmlIsAlpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
-           c == ':';
 }
 
 Minifier& Minifier::OmitDoctype(bool value) {
@@ -52,7 +33,7 @@ Str Minifier::WriteCollapseWhitespace(Arena* a, Str source) {
     bool whitespace = precedingWhitespace;
     for (int i = 0; i < source.len; i++) {
         char c = source.s[i];
-        if (HtmlIsSpace(c)) {
+        if (HtmlSpace(c)) {
             if (!whitespace) out[n++] = ' ';
             whitespace = true;
         } else {
@@ -65,6 +46,8 @@ Str Minifier::WriteCollapseWhitespace(Arena* a, Str source) {
     return Str(out, n);
 }
 
+// crates/base/src/text/format/html5minify. Minification stays a source pass:
+// serializing a DOM would insert html/head/body and normalize malformed input.
 Str Minifier::Minify(Arena* a, Str source) {
     if (!a || source.len <= 0) return {};
     char* out = (char*)Alloc(a, source.len + 1);
@@ -74,7 +57,7 @@ Str Minifier::Minify(Arena* a, Str source) {
     bool whitespace = precedingWhitespace;
     Str raw = {};
     while (at < source.len) {
-        if (base::StrStartsWithI(Str(source.s + at, source.len - at), "<!--")) {
+        if (StrStartsWithI(Str(source.s + at, source.len - at), "<!--")) {
             int end = at + 4;
             while (end + 2 < source.len &&
                    !(source.s[end] == '-' && source.s[end + 1] == '-' &&
@@ -91,8 +74,7 @@ Str Minifier::Minify(Arena* a, Str source) {
             continue;
         }
         if (omitDoctype &&
-            base::StrStartsWithI(Str(source.s + at, source.len - at),
-                                 "<!doctype")) {
+            StrStartsWithI(Str(source.s + at, source.len - at), "<!doctype")) {
             while (at < source.len && source.s[at] != '>') at++;
             if (at < source.len) at++;
             continue;
@@ -116,15 +98,16 @@ Str Minifier::Minify(Arena* a, Str source) {
             bool close = nameAt < source.len && source.s[nameAt] == '/';
             if (close) nameAt++;
             int nameEnd = nameAt;
-            while (nameEnd < source.len && HtmlIsNameChar(source.s[nameEnd])) {
+            while (nameEnd < source.len &&
+                   ((source.s[nameEnd] >= 'a' && source.s[nameEnd] <= 'z') ||
+                    (source.s[nameEnd] >= 'A' && source.s[nameEnd] <= 'Z'))) {
                 nameEnd++;
             }
             Str name(source.s + nameAt, nameEnd - nameAt);
-            if (!close &&
-                (base::StrEqI(name, "pre") || base::StrEqI(name, "textarea") ||
-                 base::StrEqI(name, "script") || base::StrEqI(name, "style"))) {
+            if (!close && (StrEqI(name, "pre") || StrEqI(name, "textarea") ||
+                           StrEqI(name, "script") || StrEqI(name, "style"))) {
                 raw = name;
-            } else if (close && raw.s && base::StrEqI(name, raw)) {
+            } else if (close && raw.s && StrEqI(name, raw)) {
                 raw = {};
             }
             memcpy(out + n, source.s + at, (size_t)(end - at));
@@ -134,7 +117,7 @@ Str Minifier::Minify(Arena* a, Str source) {
             continue;
         }
         char c = source.s[at++];
-        if (collapseWhitespace && !raw.s && HtmlIsSpace(c)) {
+        if (collapseWhitespace && !raw.s && HtmlSpace(c)) {
             if (!whitespace) out[n++] = ' ';
             whitespace = true;
         } else {
@@ -153,815 +136,415 @@ Str HtmlMinify(Arena* a, Str source) {
     return minifier.Minify(a, source);
 }
 
-struct HtmlLex {
-    Str src = {};
+static const html5ever::Node* FirstElement(const html5ever::Node* node) {
+    for (const html5ever::Node* at = node ? node->first : nullptr; at;
+         at = at->next) {
+        if (at->kind == html5ever::NodeKind::Element) return at;
+        if (const html5ever::Node* child = FirstElement(at)) return child;
+    }
+    return nullptr;
+}
+
+Str HtmlAttrValue(Arena* a, Str attrs, const char* name) {
+    if (!a || !attrs.s || !name) return {};
+    StrBuilder source;
+    StrBuilderAppend(a, source, StrL("<x "));
+    StrBuilderAppend(a, source, attrs);
+    StrBuilderAppendChar(a, source, '>');
+    Str html = StrBuilderTakeStr(a, source);
+    html5ever::Node* doc = html5ever::ParseFragment(a, html);
+    return html5ever::AttrValue(FirstElement(doc), Str((char*)name));
+}
+
+static uint8_t InlineMark(Str name) {
+    static const char names[] =
+        "b\0strong\0i\0em\0cite\0var\0code\0kbd\0samp\0tt\0u\0ins\0s\0del\0"
+        "strike\0mark\0";
+    static const uint8_t marks[] = {
+        MdBold, MdBold, MdItalic, MdItalic,    MdItalic,    MdItalic,
+        MdCode, MdCode, MdCode,   MdCode,      MdUnderline, MdUnderline,
+        MdDel,  MdDel,  MdDel,    MdHighlight,
+    };
+    int ix = SeqStrIndexIS(names, name);
+    return ix < 0 ? 0 : marks[ix];
+}
+
+static float LengthValue(Str value) {
+    value = StrTrimAscii(value);
+    float result = 0;
+    bool any = false;
     int at = 0;
-    HtmlTok tok = HtmlTok::End;
-    // Text: the raw source slice, entities and all.
-    Str text = {};
-    // Start / Close: the tag name as a source slice. Comparisons fold ASCII
-    // case, so no fixed lowercase scratch buffer limits its length.
-    Str name = {};
-    // Start: everything between the name and the '>'.
-    Str attrs = {};
-    bool selfClose = false;
-};
-
-static void HtmlLexName(HtmlLex* l) {
-    int start = l->at;
-    while (l->at < l->src.len && HtmlIsNameChar(l->src.s[l->at])) {
-        l->at++;
+    while (at < value.len && value.s[at] >= '0' && value.s[at] <= '9') {
+        result = result * 10 + (float)(value.s[at++] - '0');
+        any = true;
     }
-    l->name = Str(l->src.s + start, l->at - start);
-}
-
-// From the name to the '>', with quoted values passed over so that a '>'
-// inside one does not end the tag.
-static void HtmlLexAttrs(HtmlLex* l) {
-    int start = l->at;
-    char quote = 0;
-    while (l->at < l->src.len) {
-        char c = l->src.s[l->at];
-        if (quote) {
-            if (c == quote) {
-                quote = 0;
-            }
-        } else if (c == '"' || c == '\'') {
-            quote = c;
-        } else if (c == '>') {
-            break;
-        }
-        l->at++;
-    }
-    int end = l->at;
-    if (l->at < l->src.len) {
-        l->at++; // the '>'
-    }
-    while (end > start && HtmlIsSpace(l->src.s[end - 1])) {
-        end--;
-    }
-    l->selfClose = end > start && l->src.s[end - 1] == '/';
-    if (l->selfClose) {
-        end--;
-    }
-    l->attrs = Str(l->src.s + start, end - start);
-}
-
-static bool HtmlAtStartTag(const HtmlLex* l, int at) {
-    if (at + 1 >= l->src.len || l->src.s[at] != '<') {
-        return false;
-    }
-    char c = l->src.s[at + 1];
-    return HtmlIsAlpha(c) || c == '/' || c == '!';
-}
-
-static void HtmlLexNext(HtmlLex* l) {
-    l->selfClose = false;
-    l->attrs = {};
-    l->text = {};
-    // A run of comments is skipped in place rather than by recursing, so a
-    // document that is mostly comments costs no stack.
-    while (l->at < l->src.len && HtmlAtStartTag(l, l->at) &&
-           l->src.s[l->at + 1] == '!') {
-        // A comment runs to "-->", a doctype to the first '>'.
-        bool comment = l->at + 3 < l->src.len && l->src.s[l->at + 2] == '-' &&
-                       l->src.s[l->at + 3] == '-';
-        l->at += comment ? 4 : 2;
-        while (l->at < l->src.len) {
-            if (comment) {
-                if (l->at + 2 < l->src.len && l->src.s[l->at] == '-' &&
-                    l->src.s[l->at + 1] == '-' && l->src.s[l->at + 2] == '>') {
-                    l->at += 3;
-                    break;
-                }
-            } else if (l->src.s[l->at] == '>') {
-                l->at++;
-                break;
-            }
-            l->at++;
+    if (at < value.len && value.s[at] == '.') {
+        at++;
+        float scale = 0.1f;
+        while (at < value.len && value.s[at] >= '0' && value.s[at] <= '9') {
+            result += (float)(value.s[at++] - '0') * scale;
+            scale *= 0.1f;
+            any = true;
         }
     }
-    if (l->at >= l->src.len) {
-        l->tok = HtmlTok::End;
-        return;
-    }
-    if (HtmlAtStartTag(l, l->at)) {
-        char c = l->src.s[l->at + 1];
-        if (c == '/') {
-            l->at += 2;
-            HtmlLexName(l);
-            while (l->at < l->src.len && l->src.s[l->at] != '>') {
-                l->at++;
-            }
-            if (l->at < l->src.len) {
-                l->at++;
-            }
-            l->tok = HtmlTok::Close;
-            return;
-        }
-        l->at++;
-        HtmlLexName(l);
-        HtmlLexAttrs(l);
-        l->tok = HtmlTok::Start;
-        return;
-    }
-    int start = l->at;
-    l->at++;
-    while (l->at < l->src.len && !HtmlAtStartTag(l, l->at)) {
-        l->at++;
-    }
-    l->text = Str(l->src.s + start, l->at - start);
-    l->tok = HtmlTok::Text;
+    if (!any || (at < value.len && value.s[at] == '%')) return 0;
+    return result;
 }
 
-// <script> and <style> hold text that is not markup — `a < b` in a script is
-// not a tag — so their content is skipped by looking for the close tag
-// rather than by tokenizing it.
-static void HtmlLexSkipRaw(HtmlLex* l, Str name) {
-    while (l->at < l->src.len) {
-        if (l->src.s[l->at] == '<' && l->at + 1 < l->src.len &&
-            l->src.s[l->at + 1] == '/') {
-            int save = l->at;
-            l->at += 2;
-            HtmlLexName(l);
-            if (base::StrEqI(l->name, name)) {
-                while (l->at < l->src.len && l->src.s[l->at] != '>') {
-                    l->at++;
-                }
-                if (l->at < l->src.len) {
-                    l->at++;
-                }
-                return;
-            }
-            l->at = save + 1;
-            continue;
-        }
-        l->at++;
-    }
-}
-
-// ─── attributes and text ──────────────────────────────────────────────────
-
-// The raw slice of one attribute's value, or an empty Str. A valueless
-// attribute (`<td nowrap>`) reads as empty, which is what a caller asking
-// for its value wants.
-static Str HtmlAttrRaw(Str attrs, const char* name) {
+static Str StyleValue(Str style, const char* name) {
     int nameLen = (int)strlen(name);
-    int at = 0;
-    while (at < attrs.len) {
-        while (at < attrs.len &&
-               (HtmlIsSpace(attrs.s[at]) || attrs.s[at] == '/')) {
-            at++;
-        }
-        int ns = at;
-        while (at < attrs.len && HtmlIsNameChar(attrs.s[at])) {
-            at++;
-        }
-        int nl = at - ns;
-        if (nl == 0) {
-            at++; // nothing consumed: step over the odd byte
-            continue;
-        }
-        bool match = nl == nameLen && base::StrEqI(Str(attrs.s + ns, nl), name);
-        while (at < attrs.len && HtmlIsSpace(attrs.s[at])) {
-            at++;
-        }
-        if (at >= attrs.len || attrs.s[at] != '=') {
-            if (match) {
-                return Str(attrs.s + ns, 0);
-            }
-            continue;
-        }
-        at++; // '='
-        while (at < attrs.len && HtmlIsSpace(attrs.s[at])) {
-            at++;
-        }
-        int vs = at;
-        int vl = 0;
-        if (at < attrs.len && (attrs.s[at] == '"' || attrs.s[at] == '\'')) {
-            char q = attrs.s[at++];
-            vs = at;
-            while (at < attrs.len && attrs.s[at] != q) {
-                at++;
-            }
-            vl = at - vs;
-            if (at < attrs.len) {
-                at++;
-            }
-        } else {
-            while (at < attrs.len && !HtmlIsSpace(attrs.s[at]) &&
-                   attrs.s[at] != '>') {
-                at++;
-            }
-            vl = at - vs;
-        }
-        if (match) {
-            return Str(attrs.s + vs, vl);
-        }
+    for (int i = 0; i + nameLen <= style.len; i++) {
+        if (!StrEqI(Str(style.s + i, nameLen), Str(name, nameLen))) continue;
+        int at = i + nameLen;
+        while (at < style.len && HtmlSpace(style.s[at])) at++;
+        if (at >= style.len || style.s[at++] != ':') continue;
+        while (at < style.len && HtmlSpace(style.s[at])) at++;
+        int end = at;
+        while (end < style.len && style.s[end] != ';') end++;
+        return StrTrimAscii(Str(style.s + at, end - at));
     }
     return {};
 }
 
-// Entity-decoded text. `raw` is <pre>: newlines and runs of spaces stand,
-// where everywhere else HTML collapses them to one space. Decoding never
-// grows the text — the shortest entity is four bytes and the longest
-// codepoint four — so one buffer the size of the input is always enough.
-static Str HtmlDecodeText(Arena* a, Str s, bool raw) {
-    if (s.len <= 0) {
-        return {};
+static float ElementLength(const html5ever::Node* node, const char* name) {
+    Str value = html5ever::AttrValue(node, Str((char*)name));
+    if (!value.s) {
+        value = StyleValue(html5ever::AttrValue(node, StrL("style")), name);
     }
-    char* out = (char*)Alloc(a, s.len + 1);
-    if (!out) {
-        return {};
-    }
-    int n = 0;
-    for (int i = 0; i < s.len;) {
-        char c = s.s[i];
-        if (!raw && HtmlIsSpace(c)) {
-            if (n > 0 && out[n - 1] == ' ') {
-                i++;
-                continue;
-            }
-            out[n++] = ' ';
-            i++;
-            continue;
-        }
-        if (c == '&') {
-            int j = i + 1;
-            while (j < s.len && s.s[j] != ';' && !HtmlIsSpace(s.s[j])) {
-                j++;
-            }
-            if (j < s.len && s.s[j] == ';') {
-                Str dec = MdDecodeEntity(a, Str(s.s + i, j - i + 1));
-                if (dec.s != s.s + i) {
-                    memcpy(out + n, dec.s, (size_t)dec.len);
-                    n += dec.len;
-                    i = j + 1;
-                    continue;
-                }
-            }
-        }
-        out[n++] = c;
-        i++;
-    }
-    out[n] = 0;
-    return Str(out, n);
-}
-
-Str HtmlAttrValue(Arena* a, Str attrs, const char* name) {
-    Str raw = HtmlAttrRaw(attrs, name);
-    if (raw.len <= 0) {
-        return raw.s ? Str(raw.s, 0) : Str{};
-    }
-    return HtmlDecodeText(a, raw, true);
-}
-
-// ─── the tag vocabulary ───────────────────────────────────────────────────
-
-// html.rs BLOCK_ELEMENTS, plus the ones it names in its own match arms.
-// MdKind::Group is BlockNode::Root: a container that contributes its
-// children and no box of its own.
-static bool HtmlBlockKind(Str n, MdKind* kind, uint8_t* level) {
-    *level = 0;
-    if (base::StrEqI(n, "p") || base::StrEqI(n, "dt") ||
-        base::StrEqI(n, "dd") || base::StrEqI(n, "summary") ||
-        base::StrEqI(n, "figcaption")) {
-        *kind = MdKind::Paragraph;
-    } else if (n.len == 2 && base::StrStartsWithI(n, "h") && n.s[1] >= '1' &&
-               n.s[1] <= '6') {
-        *kind = MdKind::Heading;
-        *level = (uint8_t)(n.s[1] - '0');
-    } else if (base::StrEqI(n, "blockquote")) {
-        *kind = MdKind::Quote;
-    } else if (base::StrEqI(n, "ul") || base::StrEqI(n, "ol")) {
-        *kind = MdKind::List;
-    } else if (base::StrEqI(n, "li")) {
-        *kind = MdKind::Item;
-    } else if (base::StrEqI(n, "pre")) {
-        *kind = MdKind::Code;
-    } else if (base::StrEqI(n, "table")) {
-        *kind = MdKind::Table;
-    } else if (base::StrEqI(n, "tr")) {
-        *kind = MdKind::Row;
-    } else if (base::StrEqI(n, "td") || base::StrEqI(n, "th")) {
-        *kind = MdKind::Cell;
-    } else if (base::StrEqI(n, "div") || base::StrEqI(n, "section") ||
-               base::StrEqI(n, "article") || base::StrEqI(n, "main") ||
-               base::StrEqI(n, "header") || base::StrEqI(n, "footer") ||
-               base::StrEqI(n, "aside") || base::StrEqI(n, "nav") ||
-               base::StrEqI(n, "figure") || base::StrEqI(n, "details") ||
-               base::StrEqI(n, "form") || base::StrEqI(n, "fieldset") ||
-               base::StrEqI(n, "address") || base::StrEqI(n, "dl") ||
-               base::StrEqI(n, "body") || base::StrEqI(n, "html") ||
-               base::StrEqI(n, "center")) {
-        *kind = MdKind::Group;
-    } else {
-        return false;
-    }
-    return true;
-}
-
-// The inline marks, which are html.rs's parse_paragraph arms.
-static uint8_t HtmlInlineMark(Str n) {
-    if (base::StrEqI(n, "b") || base::StrEqI(n, "strong")) {
-        return MdBold;
-    }
-    if (base::StrEqI(n, "i") || base::StrEqI(n, "em") ||
-        base::StrEqI(n, "cite") || base::StrEqI(n, "var")) {
-        return MdItalic;
-    }
-    if (base::StrEqI(n, "code") || base::StrEqI(n, "kbd") ||
-        base::StrEqI(n, "samp") || base::StrEqI(n, "tt")) {
-        return MdCode;
-    }
-    if (base::StrEqI(n, "u") || base::StrEqI(n, "ins")) {
-        return MdUnderline;
-    }
-    if (base::StrEqI(n, "s") || base::StrEqI(n, "del") ||
-        base::StrEqI(n, "strike")) {
-        return MdDel;
-    }
-    if (base::StrEqI(n, "mark")) {
-        return MdHighlight;
-    }
-    return 0;
-}
-
-static uint8_t HtmlAlignValue(Str v) {
-    if (v.len >= 6 && StrEq(Str(v.s, 6), StrL("center"))) {
-        return MdAlignCenter;
-    }
-    if (v.len >= 5 && StrEq(Str(v.s, 5), StrL("right"))) {
-        return MdAlignRight;
-    }
-    if (v.len >= 4 && StrEq(Str(v.s, 4), StrL("left"))) {
-        return MdAlignLeft;
-    }
-    return MdAlignDefault;
-}
-
-// A cell's alignment, from `align="center"` or from `text-align` in the
-// style attribute — the two places it is written. html.rs reads width and
-// height out of the same pair.
-static uint8_t HtmlAlign(Arena* a, Str attrs) {
-    Str v = HtmlAttrRaw(attrs, "align");
-    if (v.len > 0) {
-        return HtmlAlignValue(v);
-    }
-    Str style = HtmlAttrValue(a, attrs, "style");
-    for (int i = 0; i + 10 <= style.len; i++) {
-        if (!StrEq(Str(style.s + i, 10), StrL("text-align"))) {
-            continue;
-        }
-        int at = i + 10;
-        while (at < style.len &&
-               (HtmlIsSpace(style.s[at]) || style.s[at] == ':')) {
-            at++;
-        }
-        return HtmlAlignValue(Str(style.s + at, style.len - at));
-    }
-    return MdAlignDefault;
-}
-
-// html.rs attr_width_height: the number in a width / height attribute or in
-// the style beside it. A percentage is relative to something this layout
-// cannot ask about here, so it reads as "no size given" and the image takes
-// its own, which is what an unsized one does anyway.
-static float HtmlLength(Arena* a, Str attrs, const char* name) {
-    Str v = HtmlAttrValue(a, attrs, name);
-    if (v.len <= 0) {
-        Str style = HtmlAttrValue(a, attrs, "style");
-        int nameLen = (int)strlen(name);
-        for (int i = 0; i + nameLen <= style.len; i++) {
-            if (!StrEq(Str(style.s + i, nameLen), Str(name, nameLen))) {
-                continue;
-            }
-            int at = i + nameLen;
-            while (at < style.len &&
-                   (HtmlIsSpace(style.s[at]) || style.s[at] == ':')) {
-                at++;
-            }
-            v = Str(style.s + at, style.len - at);
-            break;
-        }
-    }
-    float n = 0;
-    int i = 0;
-    bool any = false;
-    while (i < v.len && v.s[i] >= '0' && v.s[i] <= '9') {
-        n = n * 10 + (float)(v.s[i] - '0');
-        any = true;
-        i++;
-    }
-    if (i < v.len && v.s[i] == '.') {
-        i++;
-        float scale = 0.1f;
-        while (i < v.len && v.s[i] >= '0' && v.s[i] <= '9') {
-            n += (float)(v.s[i] - '0') * scale;
-            scale *= 0.1f;
-            any = true;
-            i++;
-        }
-    }
-    if (!any || (i < v.len && v.s[i] == '%')) {
-        return 0;
-    }
-    return n;
+    return LengthValue(value);
 }
 
 HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag) {
-    HtmlInlineTag t;
-    HtmlLex l;
-    l.src = tag;
-    HtmlLexNext(&l);
-    if (l.tok != HtmlTok::Start && l.tok != HtmlTok::Close) {
-        return t;
+    HtmlInlineTag result;
+    Str trimmed = StrTrimAscii(tag);
+    if (trimmed.len < 3 || trimmed.s[0] != '<') return result;
+    int at = 1;
+    if (trimmed.s[at] == '/') {
+        result.close = true;
+        at++;
     }
-    t.close = l.tok == HtmlTok::Close;
-    if (base::StrEqI(l.name, "br")) {
-        t.known = !t.close;
-        t.isBreak = t.known;
-        return t;
+    int start = at;
+    while (at < trimmed.len &&
+           ((trimmed.s[at] >= 'a' && trimmed.s[at] <= 'z') ||
+            (trimmed.s[at] >= 'A' && trimmed.s[at] <= 'Z') ||
+            (trimmed.s[at] >= '0' && trimmed.s[at] <= '9'))) {
+        at++;
     }
-    if (base::StrEqI(l.name, "img")) {
-        t.known = !t.close;
-        t.isImage = t.known;
-        if (t.known) {
-            t.alt = HtmlAttrValue(a, l.attrs, "alt");
-            t.src = HtmlAttrValue(a, l.attrs, "src");
-            t.width = HtmlLength(a, l.attrs, "width");
-            t.height = HtmlLength(a, l.attrs, "height");
-        }
-        return t;
+    Str name(trimmed.s + start, at - start);
+    if (StrEqI(name, "br")) {
+        result.known = !result.close;
+        result.isBreak = result.known;
+        return result;
     }
-    if (base::StrEqI(l.name, "a")) {
-        t.known = true;
-        t.mark = MdLink;
-        if (!t.close) {
-            t.href = HtmlAttrValue(a, l.attrs, "href");
-        }
-        return t;
+    if (StrEqI(name, "a")) {
+        result.known = true;
+        result.mark = MdLink;
+    } else if (StrEqI(name, "img")) {
+        result.known = !result.close;
+        result.isImage = result.known;
+    } else {
+        result.mark = InlineMark(name);
+        result.known = result.mark != 0;
     }
-    t.mark = HtmlInlineMark(l.name);
-    t.known = t.mark != 0;
-    return t;
+    if (result.close || !result.known) return result;
+    html5ever::Node* doc = html5ever::ParseFragment(a, tag);
+    const html5ever::Node* element = FirstElement(doc);
+    if (!element) return result;
+    if (result.isImage) {
+        result.alt = html5ever::AttrValue(element, StrL("alt"));
+        result.src = html5ever::AttrValue(element, StrL("src"));
+        result.width = ElementLength(element, "width");
+        result.height = ElementLength(element, "height");
+    } else if (result.mark == MdLink) {
+        result.href = html5ever::AttrValue(element, StrL("href"));
+    }
+    return result;
 }
 
-// ─── the tree builder ─────────────────────────────────────────────────────
-
-// One open element. A block pushed a node; an inline one only added marks.
-// Closing restores whichever it was, which is also what makes an unclosed
-// tag harmless: the close of an ancestor pops everything above it.
-struct HtmlOpen {
-    MdNode* node = nullptr;
-    Str name = {};
-    uint8_t mark = 0;
-    bool hadHref = false;
-    Str prevHref = {};
-    bool head = false;
-    bool prevHead = false;
-    bool raw = false;
-    bool prevRaw = false;
+static const char kBlockNames[] =
+    "p\0dt\0dd\0summary\0figcaption\0blockquote\0ul\0ol\0li\0pre\0table\0"
+    "tr\0td\0th\0div\0section\0article\0main\0header\0footer\0aside\0nav\0"
+    "figure\0details\0form\0fieldset\0address\0dl\0body\0html\0center\0";
+static const MdKind kBlockKinds[] = {
+    MdKind::Paragraph, MdKind::Paragraph, MdKind::Paragraph, MdKind::Paragraph,
+    MdKind::Paragraph, MdKind::Quote,     MdKind::List,      MdKind::List,
+    MdKind::Item,      MdKind::Code,      MdKind::Table,     MdKind::Row,
+    MdKind::Cell,      MdKind::Cell,      MdKind::Group,     MdKind::Group,
+    MdKind::Group,     MdKind::Group,     MdKind::Group,     MdKind::Group,
+    MdKind::Group,     MdKind::Group,     MdKind::Group,     MdKind::Group,
+    MdKind::Group,     MdKind::Group,     MdKind::Group,     MdKind::Group,
+    MdKind::Group,     MdKind::Group,     MdKind::Group,
 };
 
-struct HtmlBuild {
+static bool BlockKind(const html5ever::Node* node, MdKind* kind,
+                      uint8_t* level) {
+    *level = 0;
+    Str name = node->name;
+    if (name.len == 2 && name.s[0] == 'h' && name.s[1] >= '1' &&
+        name.s[1] <= '6') {
+        *kind = MdKind::Heading;
+        *level = (uint8_t)(name.s[1] - '0');
+        return true;
+    }
+    int ix = SeqStrIndexIS(kBlockNames, name);
+    if (ix < 0) return false;
+    *kind = kBlockKinds[ix];
+    return true;
+}
+
+struct Project {
     Arena* a = nullptr;
-    // The block that receives children.
     MdNode* cur = nullptr;
-    // The paragraph opened for text that arrived with no block around it —
-    // html.rs's `paragraph` accumulator, consumed the same way.
     MdNode* para = nullptr;
     uint8_t marks = 0;
     Str href = {};
-    bool inHead = false;
     bool raw = false;
-    // html5ever's open-element stack is a Vec. Arena-backed segments keep the
-    // same shape here without imposing a port-only nesting depth.
-    ArenaVec<HtmlOpen> stack{};
+    bool tableHead = false;
 };
 
-static MdNode* HtmlNewNode(HtmlBuild* b, MdKind k) {
-    MdNode* n = ArenaNew<MdNode>(b->a);
-    n->kind = k;
-    n->parent = b->cur;
-    if (b->cur->last) {
-        b->cur->last->next = n;
-    } else {
-        b->cur->first = n;
-    }
-    b->cur->last = n;
-    return n;
+static MdNode* NewMd(Project* p, MdKind kind) {
+    MdNode* node = ArenaNew<MdNode>(p->a);
+    node->kind = kind;
+    node->parent = p->cur;
+    if (p->cur->last)
+        p->cur->last->next = node;
+    else
+        p->cur->first = node;
+    p->cur->last = node;
+    return node;
 }
 
-static void HtmlPush(HtmlBuild* b, MdNode* n, Str name) {
-    if (!b->stack.Append(b->a, HtmlOpen{})) {
+static MdNode* TextTarget(Project* p) {
+    MdKind kind = p->cur->kind;
+    if (kind == MdKind::Paragraph || kind == MdKind::Heading ||
+        kind == MdKind::Cell || kind == MdKind::Code || kind == MdKind::Item) {
+        return p->cur;
+    }
+    if (!p->para) p->para = NewMd(p, MdKind::Paragraph);
+    return p->para;
+}
+
+static bool TargetEmpty(Project* p) {
+    MdKind kind = p->cur->kind;
+    if (kind == MdKind::Paragraph || kind == MdKind::Heading ||
+        kind == MdKind::Cell || kind == MdKind::Code || kind == MdKind::Item) {
+        return p->cur->runFirst == nullptr;
+    }
+    return !p->para || !p->para->runFirst;
+}
+
+static void AddRun(Project* p, Str text) {
+    if (text.len <= 0) return;
+    MdNode* target = TextTarget(p);
+    MdRun* run = ArenaNew<MdRun>(p->a);
+    run->text = text;
+    run->marks = p->marks;
+    run->href = p->href;
+    if (target->runLast)
+        target->runLast->next = run;
+    else
+        target->runFirst = run;
+    target->runLast = run;
+}
+
+static void AddText(Project* p, Str text) {
+    if (text.len <= 0) return;
+    if (p->raw) {
+        if (!p->cur->runFirst && text.s[0] == '\n') {
+            text = Str(text.s + 1, text.len - 1);
+        }
+        AddRun(p, text);
         return;
     }
-    HtmlOpen& o = b->stack[b->stack.len - 1];
-    o.node = n;
-    o.name = name;
-    if (n) {
-        b->cur = n;
-        b->para = nullptr;
-    }
-}
-
-// The node text goes into. A block that holds runs takes it directly;
-// anything else opens a paragraph, which is html.rs wrapping loose text in a
-// BlockNode::Paragraph before the next block element starts.
-static MdNode* HtmlTextTarget(HtmlBuild* b) {
-    MdKind k = b->cur->kind;
-    if (k == MdKind::Paragraph || k == MdKind::Heading || k == MdKind::Cell ||
-        k == MdKind::Code || k == MdKind::Item) {
-        return b->cur;
-    }
-    if (!b->para) {
-        b->para = HtmlNewNode(b, MdKind::Paragraph);
-    }
-    return b->para;
-}
-
-static void HtmlAddRun(HtmlBuild* b, Str text) {
-    if (text.len <= 0) {
-        return;
-    }
-    MdNode* n = HtmlTextTarget(b);
-    // A run that only differs by where it came from is the same run: merging
-    // keeps the common paragraph down to one, which is the shape the renderer
-    // hands whole to the text engine instead of splitting into words.
-    MdRun* last = n->runLast;
-    if (last && last->marks == b->marks && last->href.s == b->href.s &&
-        last->text.s + last->text.len == text.s) {
-        last->text.len += text.len;
-        return;
-    }
-    MdRun* r = ArenaNew<MdRun>(b->a);
-    r->text = text;
-    r->marks = b->marks;
-    r->href = b->href;
-    if (n->runLast) {
-        n->runLast->next = r;
-    } else {
-        n->runFirst = r;
-    }
-    n->runLast = r;
-}
-
-// Whether the run list text would land in is still empty, without opening a
-// paragraph to find out.
-static bool HtmlTargetEmpty(HtmlBuild* b) {
-    MdKind k = b->cur->kind;
-    if (k == MdKind::Paragraph || k == MdKind::Heading || k == MdKind::Cell ||
-        k == MdKind::Code || k == MdKind::Item) {
-        return b->cur->runFirst == nullptr;
-    }
-    return !b->para || b->para->runFirst == nullptr;
-}
-
-// html.rs push_image: an ImageNode in the paragraph, carrying whatever marks
-// are in force — an <img> inside an <a> is a link, the way image.link is
-// there.
-static void HtmlAddImage(HtmlBuild* b, Str src, Str alt, float w, float h) {
-    if (src.len <= 0) {
-        // html.rs warns and drops an image with no src; so does this.
-        return;
-    }
-    MdNode* n = HtmlTextTarget(b);
-    MdRun* r = ArenaNew<MdRun>(b->a);
-    r->imgSrc = src;
-    r->text = alt;
-    r->imgW = w;
-    r->imgH = h;
-    r->marks = b->marks;
-    r->href = b->href;
-    if (n->runLast) {
-        n->runLast->next = r;
-    } else {
-        n->runFirst = r;
-    }
-    n->runLast = r;
-}
-
-static void HtmlText(HtmlBuild* b, Str raw) {
-    Str s = HtmlDecodeText(b->a, raw, b->raw);
-    if (s.len <= 0) {
-        return;
-    }
-    if (!b->raw) {
-        // Whitespace between two block elements is layout, not content, and
-        // a paragraph never opens with the space that followed its tag.
-        bool empty = HtmlTargetEmpty(b);
-        if (s.len == 1 && s.s[0] == ' ') {
-            if (empty) {
-                return;
-            }
-        } else if (s.s[0] == ' ' && empty) {
-            s = Str(s.s + 1, s.len - 1);
-        }
-    } else if (!b->cur->runFirst && s.s[0] == '\n') {
-        // <pre> swallows the newline that follows its tag.
-        s = Str(s.s + 1, s.len - 1);
-    }
-    HtmlAddRun(b, s);
-}
-
-static void HtmlClose(HtmlBuild* b, Str name) {
-    int found = -1;
-    for (int i = b->stack.len - 1; i >= 0; i--) {
-        if (base::StrEqI(b->stack[i].name, name)) {
-            found = i;
-            break;
-        }
-    }
-    if (found < 0) {
-        return;
-    }
-    for (int i = b->stack.len - 1; i >= found; i--) {
-        HtmlOpen& o = b->stack[i];
-        if (o.node) {
-            b->cur = o.node->parent ? o.node->parent : b->cur;
-            b->para = nullptr;
-        }
-        if (o.mark) {
-            b->marks = (uint8_t)(b->marks & ~o.mark);
-        }
-        if (o.hadHref) {
-            b->href = o.prevHref;
-        }
-        if (o.head) {
-            b->inHead = o.prevHead;
-        }
-        if (o.raw) {
-            b->raw = o.prevRaw;
-        }
-    }
-    b->stack.Truncate(found);
-}
-
-// <ol start="3">. A value that is not a number leaves the list at 1, the way
-// an absent one does.
-static int HtmlListStart(Str v) {
-    if (v.len <= 0) {
-        return 1;
-    }
+    char* out = (char*)Alloc(p->a, text.len + 1);
     int n = 0;
-    for (int i = 0; i < v.len; i++) {
-        if (v.s[i] < '0' || v.s[i] > '9') {
-            return 1;
+    bool space = false;
+    for (int i = 0; i < text.len; i++) {
+        if (HtmlSpace(text.s[i])) {
+            if (!space) out[n++] = ' ';
+            space = true;
+        } else {
+            out[n++] = text.s[i];
+            space = false;
         }
-        n = n * 10 + (v.s[i] - '0');
     }
-    return n;
+    bool empty = TargetEmpty(p);
+    int start = empty && n > 0 && out[0] == ' ' ? 1 : 0;
+    if (n - start == 1 && out[start] == ' ' && empty) return;
+    out[n] = 0;
+    AddRun(p, Str(out + start, n - start));
 }
 
-static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
-    Str name = StrDup(b->a, l->name);
+static void AddImage(Project* p, const html5ever::Node* node) {
+    Str src = html5ever::AttrValue(node, StrL("src"));
+    if (src.len <= 0) return;
+    MdNode* target = TextTarget(p);
+    MdRun* run = ArenaNew<MdRun>(p->a);
+    run->imgSrc = src;
+    run->text = html5ever::AttrValue(node, StrL("alt"));
+    run->imgW = ElementLength(node, "width");
+    run->imgH = ElementLength(node, "height");
+    run->marks = p->marks;
+    run->href = p->href;
+    if (target->runLast)
+        target->runLast->next = run;
+    else
+        target->runFirst = run;
+    target->runLast = run;
+}
+
+static uint8_t AlignValue(Str value) {
+    value = StrTrimAscii(value);
+    if (StrStartsWithI(value, "center")) return MdAlignCenter;
+    if (StrStartsWithI(value, "right")) return MdAlignRight;
+    if (StrStartsWithI(value, "left")) return MdAlignLeft;
+    return MdAlignDefault;
+}
+
+static uint8_t CellAlign(const html5ever::Node* node) {
+    Str value = html5ever::AttrValue(node, StrL("align"));
+    if (!value.s) {
+        value =
+            StyleValue(html5ever::AttrValue(node, StrL("style")), "text-align");
+    }
+    return AlignValue(value);
+}
+
+static int ListStart(const html5ever::Node* node) {
+    Str value = html5ever::AttrValue(node, StrL("start"));
+    if (!value.s || value.len <= 0) return 1;
+    int result = 0;
+    for (int i = 0; i < value.len; i++) {
+        if (value.s[i] < '0' || value.s[i] > '9') return 1;
+        result = result * 10 + value.s[i] - '0';
+    }
+    return result;
+}
+
+static void ProjectNode(Project* p, const html5ever::Node* source);
+
+static void ProjectChildren(Project* p, const html5ever::Node* source) {
+    for (const html5ever::Node* child = source->first; child;
+         child = child->next) {
+        ProjectNode(p, child);
+    }
+}
+
+static void ProjectElement(Project* p, const html5ever::Node* source) {
+    Str name = source->name;
+    if (StrEqI(name, "head") || StrEqI(name, "title") ||
+        StrEqI(name, "script") || StrEqI(name, "style")) {
+        return;
+    }
+    if (source->implicit && (StrEqI(name, "html") || StrEqI(name, "body") ||
+                             StrEqI(name, "head") || StrEqI(name, "tbody"))) {
+        ProjectChildren(p, source);
+        return;
+    }
+    if (StrEqI(name, "br")) {
+        AddRun(p, StrL("\n"));
+        return;
+    }
+    if (StrEqI(name, "hr")) {
+        p->para = nullptr;
+        NewMd(p, MdKind::Rule);
+        return;
+    }
+    if (StrEqI(name, "img")) {
+        AddImage(p, source);
+        return;
+    }
+    if (StrEqI(name, "thead") || StrEqI(name, "tbody") ||
+        StrEqI(name, "tfoot")) {
+        bool oldHead = p->tableHead;
+        p->tableHead = StrEqI(name, "thead");
+        ProjectChildren(p, source);
+        p->tableHead = oldHead;
+        return;
+    }
     MdKind kind = MdKind::Group;
     uint8_t level = 0;
-
-    if (base::StrEqI(l->name, "br")) {
-        HtmlAddRun(b, StrL("\n"));
-        return;
-    }
-    if (base::StrEqI(l->name, "hr")) {
-        b->para = nullptr;
-        HtmlNewNode(b, MdKind::Rule);
-        return;
-    }
-    if (base::StrEqI(l->name, "img")) {
-        HtmlAddImage(b, HtmlAttrValue(b->a, l->attrs, "src"),
-                     HtmlAttrValue(b->a, l->attrs, "alt"),
-                     HtmlLength(b->a, l->attrs, "width"),
-                     HtmlLength(b->a, l->attrs, "height"));
-        return;
-    }
-    if (base::StrEqI(l->name, "thead") || base::StrEqI(l->name, "tbody") ||
-        base::StrEqI(l->name, "tfoot")) {
-        // Not a node of its own: it only says which rows are header rows,
-        // exactly as MD_BLOCK_THEAD does on the markdown side.
-        bool head = base::StrEqI(l->name, "thead");
-        HtmlPush(b, nullptr, name);
-        if (b->stack.len > 0) {
-            HtmlOpen& o = b->stack[b->stack.len - 1];
-            o.head = true;
-            o.prevHead = b->inHead;
-        }
-        b->inHead = head;
-        return;
-    }
-
-    if (HtmlBlockKind(l->name, &kind, &level)) {
-        // <p>text<div>..</div> is not nesting: an open paragraph gives way to
-        // the block that follows it.
-        if (b->cur->kind == MdKind::Paragraph) {
-            for (int i = b->stack.len - 1; i >= 0; i--) {
-                if (b->stack[i].node == b->cur) {
-                    HtmlClose(b, b->stack[i].name);
-                    break;
-                }
-            }
-        }
-        MdNode* n = HtmlNewNode(b, kind);
-        n->level = level;
+    if (BlockKind(source, &kind, &level)) {
+        p->para = nullptr;
+        MdNode* parent = p->cur;
+        MdNode* node = NewMd(p, kind);
+        node->level = level;
         if (kind == MdKind::List) {
-            n->ordered = base::StrEqI(l->name, "ol");
-            n->start = HtmlListStart(HtmlAttrValue(b->a, l->attrs, "start"));
+            node->ordered = StrEqI(name, "ol");
+            node->start = ListStart(source);
         } else if (kind == MdKind::Row) {
-            n->head = b->inHead;
+            node->head =
+                p->tableHead ||
+                (source->parent && StrEqI(source->parent->name, "thead"));
         } else if (kind == MdKind::Cell) {
-            n->align = HtmlAlign(b->a, l->attrs);
-            if (base::StrEqI(l->name, "th") && n->parent) {
-                n->parent->head = true;
+            node->align = CellAlign(source);
+            if (StrEqI(name, "th") && node->parent) node->parent->head = true;
+        }
+        bool oldRaw = p->raw;
+        p->raw = kind == MdKind::Code;
+        p->cur = node;
+        if (kind == MdKind::Code && source->first &&
+            source->first->kind == html5ever::NodeKind::Element &&
+            StrEqI(source->first->name, "code")) {
+            Str cls = html5ever::AttrValue(source->first, StrL("class"));
+            if (StrStartsWith(cls, "language-")) {
+                node->lang = Str(cls.s + 9, cls.len - 9);
             }
         }
-        HtmlPush(b, n, name);
-        if (kind == MdKind::Code && b->stack.len > 0) {
-            HtmlOpen& o = b->stack[b->stack.len - 1];
-            o.raw = true;
-            o.prevRaw = b->raw;
-            b->raw = true;
-        }
-        if (l->selfClose) {
-            HtmlClose(b, name);
-        }
+        ProjectChildren(p, source);
+        p->cur = parent;
+        p->para = nullptr;
+        p->raw = oldRaw;
         return;
     }
+    uint8_t oldMarks = p->marks;
+    Str oldHref = p->href;
+    uint8_t mark = InlineMark(name);
+    if (StrEqI(name, "a")) {
+        p->marks = (uint8_t)(p->marks | MdLink);
+        p->href = html5ever::AttrValue(source, StrL("href"));
+    } else {
+        p->marks = (uint8_t)(p->marks | mark);
+    }
+    ProjectChildren(p, source);
+    p->marks = oldMarks;
+    p->href = oldHref;
+}
 
-    // <code class="language-cpp"> inside a <pre> names the fence's language
-    // rather than marking a span, which is the shape every markdown-rendered
-    // code block on the web has.
-    if (b->cur->kind == MdKind::Code && base::StrEqI(l->name, "code")) {
-        Str cls = HtmlAttrValue(b->a, l->attrs, "class");
-        if (cls.len > 9 && StrEq(Str(cls.s, 9), StrL("language-"))) {
-            b->cur->lang = Str(cls.s + 9, cls.len - 9);
-        }
-        HtmlPush(b, nullptr, name);
-        return;
-    }
-
-    uint8_t mark = HtmlInlineMark(l->name);
-    bool link = base::StrEqI(l->name, "a");
-    HtmlPush(b, nullptr, name);
-    if (b->stack.len <= 0) {
-        return;
-    }
-    HtmlOpen& o = b->stack[b->stack.len - 1];
-    if (link) {
-        o.mark = MdLink;
-        o.hadHref = true;
-        o.prevHref = b->href;
-        b->href = HtmlAttrValue(b->a, l->attrs, "href");
-        b->marks = (uint8_t)(b->marks | MdLink);
-    } else if (mark) {
-        o.mark = mark;
-        b->marks = (uint8_t)(b->marks | mark);
-    }
-    if (l->selfClose) {
-        HtmlClose(b, name);
+static void ProjectNode(Project* p, const html5ever::Node* source) {
+    if (!source) return;
+    if (source->kind == html5ever::NodeKind::Text) {
+        AddText(p, source->data);
+    } else if (source->kind == html5ever::NodeKind::Element) {
+        ProjectElement(p, source);
+    } else if (source->kind == html5ever::NodeKind::Document) {
+        ProjectChildren(p, source);
     }
 }
 
 void HtmlParseInto(Arena* a, MdNode* parent, Str source) {
-    if (!parent || !source.s || source.len <= 0) {
-        return;
-    }
-    HtmlBuild b;
-    b.a = a;
-    b.cur = parent;
-
-    HtmlLex l;
-    l.src = source;
-    for (;;) {
-        HtmlLexNext(&l);
-        if (l.tok == HtmlTok::End) {
-            break;
-        }
-        if (l.tok == HtmlTok::Text) {
-            HtmlText(&b, l.text);
-            continue;
-        }
-        if (l.tok == HtmlTok::Close) {
-            HtmlClose(&b, l.name);
-            continue;
-        }
-        // <head> and <title> are metadata; <style> and <script> are the two
-        // html.rs drops by name. All four take their content with them.
-        if (base::StrEqI(l.name, "head") || base::StrEqI(l.name, "title") ||
-            base::StrEqI(l.name, "script") || base::StrEqI(l.name, "style")) {
-            Str name = StrDup(a, l.name);
-            if (!l.selfClose) {
-                HtmlLexSkipRaw(&l, name);
-            }
-            continue;
-        }
-        HtmlStart(&b, &l);
-    }
+    if (!a || !parent || !source.s || source.len <= 0) return;
+    html5ever::ParseOptions options;
+    options.dropDoctype = true;
+    html5ever::Node* dom =
+        html5ever::ParseFragment(a, source, StrL("body"), options);
+    Project project;
+    project.a = a;
+    project.cur = parent;
+    ProjectNode(&project, dom);
 }
 
 MdNode* HtmlParse(Arena* a, Str source) {
     MdNode* doc = ArenaNew<MdNode>(a);
     doc->kind = MdKind::Doc;
-    HtmlParseInto(a, doc, source);
+    if (!source.s || source.len <= 0) return doc;
+    html5ever::ParseOptions options;
+    options.dropDoctype = true;
+    html5ever::Node* dom = html5ever::ParseDocument(a, source, options);
+    Project project;
+    project.a = a;
+    project.cur = doc;
+    ProjectNode(&project, dom);
     return doc;
 }
 
