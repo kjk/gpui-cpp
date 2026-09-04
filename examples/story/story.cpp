@@ -666,8 +666,16 @@ static void ClearSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
 // The pane that was scrolled reports where it should now be — by the wheel
 // over it, or by a press or a drag on its bar. The view owns the offsets, so
 // it is the one that stores them.
+static int SidebarScrollId() {
+    return HashClickId(StrL("story-sidebar-scroll"));
+}
+
+static int PageScrollId() {
+    return HashClickId(StrL("story-page-scroll"));
+}
+
 static void OnPaneScroll(StoryApp* app, Ctx* cx, const ScrollEvent* ev) {
-    if (ev->id == 2) {
+    if (ev->id == SidebarScrollId()) {
         app->sideScrollY = ev->offsetY;
     } else {
         app->scrollY = ev->offsetY;
@@ -797,7 +805,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->sideScrollY)
-                       ->ScrollId(HashClickId(StrL("story-sidebar-scroll")))
+                       ->ScrollId(SidebarScrollId())
                        ->OnScroll(Listen(cx, &OnPaneScroll))
                        ->W(kFill);
     if (!app->collapsed) {
@@ -1737,7 +1745,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->scrollY)
-                       ->ScrollId(HashClickId(StrL("story-page-scroll")))
+                       ->ScrollId(PageScrollId())
                        ->OnScroll(Listen(cx, &OnPaneScroll))
                        ->W(kFill);
     scroller->Child(
