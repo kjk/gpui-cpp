@@ -2517,12 +2517,22 @@ bool BlinkVisible(App* app, EntityId handle) {
     return b->paused || b->visible;
 }
 
+static bool WindowAnimationDue(Window* win, double now) {
+    if (!win || !(win->anim || win->opts.anim || win->animFrame)) {
+        return false;
+    }
+    if (win->lastDrawTime <= 0) {
+        return true;
+    }
+    double interval = win->active ? 0.016 : kInactiveFrameInterval;
+    return now >= win->lastDrawTime + interval;
+}
+
 void WindowTimerTick(Window* win) {
     if (!win) {
         return;
     }
     double now = TimeNow();
-    bool repaint = false;
 
     // A snapshot of the count, so a timer armed by a handler runs next pass
     // rather than inside this one.
@@ -2557,7 +2567,11 @@ void WindowTimerTick(Window* win) {
     }
     win->timers.len = keep;
 
-    if (win->anim || win->animFrame || repaint) {
+    // PlatSetTimer may wake before the requested deadline (on Windows this is
+    // deliberate, to avoid missing a display interval). A resource timer can
+    // also be sooner than the next animation frame. Neither is permission to
+    // draw early; the remaining deadline is re-armed below.
+    if (WindowAnimationDue(win, now)) {
         AppInvalidate(win);
     }
     PlatSetTimer(win, WindowTimerMs(win));

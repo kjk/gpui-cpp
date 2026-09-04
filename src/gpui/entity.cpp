@@ -178,12 +178,25 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
     return s.render(s.ptr, &cx);
 }
 
+static void InvalidateForNotify(Window* win) {
+    if (win && !win->active && win->animFrame) {
+        // GPUI's inactive-frame throttle applies when a next-frame callback
+        // is pending. Keep the notification for that already-scheduled frame
+        // instead of turning an async update into a second frame between
+        // animation deadlines. Direct input still uses AppInvalidate, so an
+        // inactive window under the pointer continues to scroll immediately.
+        win->invalidations++;
+        return;
+    }
+    AppInvalidate(win);
+}
+
 void NotifyApp(App* app) {
     if (!app) {
         return;
     }
     for (int i = 0; i < app->windows.len; i++) {
-        AppInvalidate(app->windows[i]);
+        InvalidateForNotify(app->windows[i]);
     }
 }
 
@@ -226,7 +239,7 @@ void NotifyEntity(App* app, EntityId id, Window* from) {
             Window* w = app->windows[i];
             for (int j = 0; j < w->rendered.len; j++) {
                 if (w->rendered[j] == id) {
-                    AppInvalidate(w);
+                    InvalidateForNotify(w);
                     any = true;
                     break;
                 }
@@ -240,7 +253,7 @@ void NotifyEntity(App* app, EntityId id, Window* from) {
     // whose first frame has not been built yet. Both still have to reach the
     // screen, so this is where the old shotgun stays.
     if (from) {
-        AppInvalidate(from);
+        InvalidateForNotify(from);
         return;
     }
     NotifyApp(app);

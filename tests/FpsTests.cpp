@@ -140,6 +140,23 @@ static void SimultaneousFramesDoNotDivideByZero() {
     utassertnear(FrameSamplerFps(&s), 0.f);
 }
 
+static void AnEarlyTimerWakeDoesNotProduceAnAnimationFrame() {
+    App app;
+    Window win;
+    win.app = &app;
+    win.active = false;
+    win.animFrame = true;
+    // TimeNow starts its process-relative clock on first use, so put the last
+    // draw safely beyond that zero while still representing an early wake.
+    win.lastDrawTime = TimeNow() + 1.0;
+
+    // Platform timers may wake early, and another timer may be due before the
+    // inactive animation deadline. The tick must re-arm the remaining wait,
+    // not turn that unrelated wake into an extra frame.
+    WindowTimerTick(&win);
+    utassert(win.invalidations == 0);
+}
+
 static void ThePercentileIsTheFrameAtTheNearestRank() {
     // Twenty frames, so the 95th percentile is rank 0.95 * 19 = 18.05, which
     // rounds to the second slowest.
@@ -444,6 +461,7 @@ void TestFrameSampler() {
     FpsMatchesTheCommonRefreshRates();
     FpsNeedsTwoFramesToHaveARateAtAll();
     SimultaneousFramesDoNotDivideByZero();
+    AnEarlyTimerWakeDoesNotProduceAnAnimationFrame();
     ThePercentileIsTheFrameAtTheNearestRank();
     ThePercentileSeparatesAStutterTheMeanAbsorbs();
     OneSlowFrameInTwentyDoesNotMoveThePercentile();
