@@ -1847,20 +1847,19 @@ struct AccessibilityInfo {
 // representation instead of paying for a pointer plus length beside it.
 struct ElStyleStates {
     Style refine = {};
-    uint32_t refineSet = 0;
     Style hover = {};
-    uint32_t hoverSet = 0;
     Style active = {};
-    uint32_t activeSet = 0;
     Style focus = {};
-    uint32_t focusSet = 0;
     Style dragOver = {};
+    uint32_t refineSet = 0;
+    uint32_t hoverSet = 0;
+    uint32_t activeSet = 0;
+    uint32_t focusSet = 0;
     uint32_t dragOverSet = 0;
     ArenaStr dragOverKind = kArenaStrNone;
 };
 
 struct El {
-    ElKind kind = ElKind::Div;
     // The frame arena this was built on, so a builder that has to allocate —
     // an action handler's slot — has one without being handed it again.
     Arena* arena = nullptr;
@@ -1901,6 +1900,7 @@ struct El {
     // Base's window-level text selection waits until mouse-down bubbling has
     // finished and then consults this through GlobalState.
     bool suppressTextSelection = false;
+    ElKind kind = ElKind::Div;
     Func0 onClick;
     Listener listener;
     // Semantic actions that do not need a pointer hit box. These listeners
@@ -1934,8 +1934,6 @@ struct El {
     // listener above; unlike the click, it carries the full MouseDownEvent.
     Listener onMouseDown;
     Listener onMouseUp;
-    DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
-    DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
     // on_drag_move. GPUI carries a drag entity so the move can name what is
     // being dragged; here the element that took the press keeps the moves
     // until the button comes back up, which is the same thing without the
@@ -1949,6 +1947,9 @@ struct El {
     Listener onMouseDownOut;
     // The refinement above, and the fields it names. Zero is no refinement.
     ArenaPtr<ElStyleStates> styleStates = {};
+    CursorKind cursor = CursorKind::Arrow;
+    DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
+    DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
     // `div().hover(|this| ..)` and `div().drag_over::<T>(|this, ..| ..)`:
     // refinements that hold only while the pointer is over the box, or while
     // a drag of `dragOverKind` is. Resolved where GPUI resolves them — in
@@ -1961,11 +1962,10 @@ struct El {
     // on_drag: what a press on this element picks up. The payload rides along
     // on every DragMoveEvent the drag produces.
     DragPayload drag = {};
-    // div().cursor_col_resize() and friends: the shape the pointer takes over
-    // this element. Rust hangs it off the style; it needs a Click(id) here for
-    // the same reason a hover does, since the hit rect is what the move
-    // consults.
-    CursorKind cursor = CursorKind::Arrow;
+    // div().cursor_col_resize() and friends: `cursor` above is the shape the
+    // pointer takes over this element. Rust hangs it off the style; it needs a
+    // Click(id) here for the same reason a hover does, since the hit rect is
+    // what the move consults.
     // on_mouse_up_out: a release that landed anywhere but on this element.
     // Rust hears it wherever the pointer is, whether or not the press started
     // here, and so does this.
@@ -1983,23 +1983,23 @@ struct El {
     // report the box layout gave it; a caller that has to answer "what is
     // under the pointer" needs last frame's boxes to do it.
     gpui::Bounds* boundsOut = nullptr;
+    float lineSpanHeight = 0;
+    float lineClampCap = 0;
     // A descendant Inline reports its laid-out vertical extent to the nearest
     // line-clamped ancestor. TextView marks one box per Inline, matching
     // inline.rs; the runtime can then keep a straddling glyph line out whole.
     bool lineSpan = false;
-    float lineSpanHeight = 0;
     // TextView::max_lines. lineClampCap is already in DIPs (body line height
     // times the requested count); the full subtree remains laid out under the
     // capped box so paint can tell whether it overflowed and find a safe mask.
     bool lineClamp = false;
-    float lineClampCap = 0;
+    Axis sliderAxis = Axis::Horizontal;
     Listener onLineClamp;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
     // their own closures; there are no closures on an element here, so the
     // element names the state and the window does what those closures do.
     SliderState* slider = nullptr;
-    Axis sliderAxis = Axis::Horizontal;
     // BindInput: this element is a text field's editor box, so a press in it
     // places the caret and a drag extends the selection. The same trick as
     // BindSlider — Rust's InputElement captures the state entity in the
@@ -2072,11 +2072,11 @@ struct El {
     // deltas the viewport captures before an enclosing scroller can take
     // them. Horizontal is bit 0, vertical bit 1.
     uint8_t scrollMaskAxes = 0;
-    int scrollId = 0;
     // El::ScrollFromPath: the scroll handle's identity is the element's place
     // in the tree rather than a number the caller hashed. An explicit
     // ScrollId(v) clears it and wins.
     bool scrollFromPath = false;
+    int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
@@ -2085,7 +2085,6 @@ struct El {
     // caller's — the frame arena, in practice — and outlives the frame the
     // element was built in.
     const TextSpan* spans = nullptr;
-    int nSpans = 0;
     // Washes under this run, painted where the selection quad is and before
     // the glyphs — which is what Rust's `layout_search_matches` builds paths
     // for. They are a second array rather than more `spans` because the span
@@ -2093,11 +2092,12 @@ struct El {
     // bytes, and a search match sits over whatever the highlighter said.
     // Only `lo`, `hi` and `bg` are read.
     const TextSpan* washes = nullptr;
-    int nWashes = 0;
     // Runs that are underlined and nothing else: a diagnostic's squiggle is a
     // HighlightStyle with only `underline` set, so it marks the text without
     // taking the colour the language gave it.
     const TextSpan* underlines = nullptr;
+    int nSpans = 0;
+    int nWashes = 0;
     int nUnderlines = 0;
     // RangeOut: where a run of this text landed, in window coordinates, for
     // a caller that has to hit-test against it later. `range_to_bounds` in
