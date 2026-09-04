@@ -339,6 +339,7 @@ enum class StateName : uint16_t {
     TitleEscape,
     TitleInside,
     TitleNok,
+    Count,
 };
 
 // state.rs State, minus `Error`. `Next` feeds the next byte to the named
