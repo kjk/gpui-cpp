@@ -254,7 +254,7 @@ void Notify(Ctx* cx) {
 }
 
 void ListenerCall(App* app, Window* win, const Listener& l, const void* ev) {
-    if (!l.fn) {
+    if (!l.IsValid()) {
         return;
     }
     void* self = EntityGet(app, l.view);
@@ -267,10 +267,10 @@ void ListenerCall(App* app, Window* win, const Listener& l, const void* ev) {
     cx.win = win;
     cx.a = win ? win->frameArena : nullptr;
     cx.self = l.view;
-    if (l.hasArg) {
-        ((ListenerArgFn)l.fn)(self, &cx, ev, l.arg);
+    if (l.HasArg()) {
+        ((ListenerArgFn)l.Fn())(self, &cx, ev, l.arg);
     } else {
-        ((ListenerFn)l.fn)(self, &cx, ev);
+        ((ListenerFn)l.Fn())(self, &cx, ev);
     }
 }
 

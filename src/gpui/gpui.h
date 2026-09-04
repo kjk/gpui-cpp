@@ -739,18 +739,34 @@ using ListenerArgFn = void (*)(void* self, Ctx* cx, const void* ev,
                                intptr_t arg);
 
 struct Listener {
-    void* fn = nullptr;
+    // User-space code addresses and wasm table indexes leave the top two bits
+    // free. Keeping the argument-shape flags there preserves unaligned MSVC
+    // incremental-link thunks without shifting the callback on either path.
+    static constexpr int kPointerBits = sizeof(uintptr_t) * 8;
+    static constexpr uintptr_t kHasArg = uintptr_t(1) << (kPointerBits - 1);
+    static constexpr uintptr_t kArgBound = uintptr_t(1) << (kPointerBits - 2);
+    static constexpr uintptr_t kFlags = kHasArg | kArgBound;
+
+    uintptr_t fn = 0;
     EntityId view = {};
     intptr_t arg = 0;
-    // The handler takes an argument at all.
-    bool hasArg = false;
-    // The caller already said what it is. Rust hands a closure both what it
-    // captured and what the widget produced; there is one slot here, so a
-    // value the caller bound wins and ListenerFill leaves it alone.
-    bool argBound = false;
 
-    bool IsValid() const { return fn != nullptr; }
+    template <typename F>
+    void SetFn(F value) {
+        fn = (uintptr_t)value | (fn & kFlags);
+    }
+
+    uintptr_t Fn() const { return fn & ~kFlags; }
+
+    bool HasArg() const { return (fn & kHasArg) != 0; }
+    bool ArgBound() const { return (fn & kArgBound) != 0; }
+    void SetHasArg() { fn |= kHasArg; }
+    void SetArgBound() { fn |= kHasArg | kArgBound; }
+    bool IsValid() const { return Fn() != 0; }
 };
+
+static_assert(sizeof(Listener) <= 24,
+              "keep Listener flags packed into the function word");
 
 // One armed timer. GPUI has no timer list: it spawns a task per timer and the
 // Task handle cancels on drop. Here the window keeps them, and dispatch drops
@@ -1869,6 +1885,9 @@ struct El {
     // what that may name.
     Str imgSrc;
     Func0 onClick;
+
+    // Keep every entity Listener together. El is copied and walked as
+    // frame-arena data, and this makes its dispatch footprint contiguous.
     Listener listener;
     // Semantic actions that do not need a pointer hit box. These listeners
     // receive a keyboard-shaped ClickEvent, just like a button activated by
@@ -1876,12 +1895,6 @@ struct El {
     Listener accessibilityDefault;
     Listener accessibilityIncrement;
     Listener accessibilityDecrement;
-    // The same semantic operations for a frame-local, non-entity callback.
-    // Composed controls use this when the behavior belongs to their retained
-    // InputState rather than to the view that happened to render them.
-    Func0 accessibilityIncrementDirect;
-    Func0 accessibilityDecrementDirect;
-    intptr_t clickActionArg = 0;
     // `div().on_hover(..)`. Fires with a HoverEvent when the pointer enters
     // the element and again when it leaves, never in between.
     Listener onHover;
@@ -1893,7 +1906,6 @@ struct El {
     // `InteractiveElement::on_scroll_wheel`; `El::OnScroll` above is the
     // scrolled box's own offset, which is a different question.
     Listener onScrollWheel;
-    ActionSlot* actions = nullptr;
     // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
     // what `div().on_mouse_down(..)` is. A press runs this before the click
     // listener above; unlike the click, it carries the full MouseDownEvent.
@@ -1910,6 +1922,21 @@ struct El {
     // independently observe the same press, just as GPUI's interactive
     // element handler does.
     Listener onMouseDownOut;
+    // on_mouse_up_out: a release that landed anywhere but on this element.
+    // Rust hears it wherever the pointer is, whether or not the press started
+    // here, and so does this.
+    Listener onMouseUpOut;
+    // on_drop::<T>(..): called when a drag of dropKind lands on this element.
+    Listener onDrop;
+    Listener onLineClamp;
+
+    // The same semantic operations for a frame-local, non-entity callback.
+    // Composed controls use this when the behavior belongs to their retained
+    // InputState rather than to the view that happened to render them.
+    Func0 accessibilityIncrementDirect;
+    Func0 accessibilityDecrementDirect;
+    intptr_t clickActionArg = 0;
+    ActionSlot* actions = nullptr;
     // `div().hover(|this| ..)` and `div().drag_over::<T>(|this, ..| ..)`:
     // refinements that hold only while the pointer is over the box, or while
     // a drag of `dragOverKind` is. Resolved where GPUI resolves them — in
@@ -1926,10 +1953,6 @@ struct El {
     // pointer takes over this element. Rust hangs it off the style; it needs a
     // Click(id) here for the same reason a hover does, since the hit rect is
     // what the move consults.
-    // on_mouse_up_out: a release that landed anywhere but on this element.
-    // Rust hears it wherever the pointer is, whether or not the press started
-    // here, and so does this.
-    Listener onMouseUpOut;
     // on_drop::<T>(..) and drag_over::<T>(..): the kind of drag this element
     // takes, and what to do when one lets go over it. `WindowDragOverId` says
     // which element the drag is over right now, which is what a caller styles
@@ -1937,13 +1960,11 @@ struct El {
     // element; an element here is rebuilt every frame and reads the answer
     // back instead.
     Str dropKind = {};
-    Listener onDrop;
     // Where this element ended up, written at paint. GPUI's DockArea keeps
     // its own `bounds` the same way, through an element whose only job is to
     // report the box layout gave it; a caller that has to answer "what is
     // under the pointer" needs last frame's boxes to do it.
     gpui::Bounds* boundsOut = nullptr;
-    Listener onLineClamp;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
     // their own closures; there are no closures on an element here, so the
@@ -5246,7 +5267,7 @@ Entity<T> EntityNewState(App* app) {
 template <typename T, typename E>
 Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = cx->self;
     return l;
 }
@@ -5256,11 +5277,10 @@ template <typename T, typename E>
 Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t),
                 intptr_t arg) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = cx->self;
     l.arg = arg;
-    l.hasArg = true;
-    l.argBound = true;
+    l.SetArgBound();
     return l;
 }
 
@@ -5269,9 +5289,9 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t),
 template <typename T, typename E>
 Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t)) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = cx->self;
-    l.hasArg = true;
+    l.SetHasArg();
     return l;
 }
 
@@ -5280,8 +5300,7 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t)) {
 inline Listener ListenerArg(Listener l, intptr_t arg) {
     if (l.IsValid()) {
         l.arg = arg;
-        l.hasArg = true;
-        l.argBound = true;
+        l.SetArgBound();
     }
     return l;
 }
@@ -5291,9 +5310,9 @@ inline Listener ListenerArg(Listener l, intptr_t arg) {
 // passes that beside whatever the closure captured, so a caller that already
 // bound its own — which of ten toggles this is — keeps it.
 inline Listener ListenerFill(Listener l, intptr_t v) {
-    if (l.IsValid() && !l.argBound) {
+    if (l.IsValid() && !l.ArgBound()) {
         l.arg = v;
-        l.hasArg = true;
+        l.SetHasArg();
     }
     return l;
 }
@@ -5302,7 +5321,7 @@ inline Listener ListenerFill(Listener l, intptr_t v) {
 template <typename T, typename E>
 Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = e.id;
     return l;
 }
@@ -5313,9 +5332,9 @@ Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*)) {
 template <typename T, typename E>
 Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t)) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = e.id;
-    l.hasArg = true;
+    l.SetHasArg();
     return l;
 }
 
@@ -5323,11 +5342,10 @@ template <typename T, typename E>
 Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t),
                   intptr_t arg) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = e.id;
     l.arg = arg;
-    l.hasArg = true;
-    l.argBound = true;
+    l.SetArgBound();
     return l;
 }
 
@@ -5403,7 +5421,7 @@ template <typename T, typename S, typename E>
 requires EmitsEvent<T, E> Subscription
 Subscribe(Ctx* cx, Entity<T> emitter, void (*fn)(S*, Ctx*, const E*)) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = cx->self;
     return EntitySubscribeRaw(cx->app, emitter.id, EntityEventType<E>(), l);
 }
@@ -5433,7 +5451,7 @@ requires EmitsEvent<T, E> Subscription SubscribeTo(App* app, Entity<T> emitter,
                                                    void (*fn)(S*, Ctx*,
                                                               const E*)) {
     Listener l;
-    l.fn = (void*)fn;
+    l.SetFn(fn);
     l.view = subscriber.id;
     return EntitySubscribeRaw(app, emitter.id, EntityEventType<E>(), l);
 }

@@ -2439,7 +2439,7 @@ void BlinkCursor::OnResume(BlinkCursor* self, Ctx* cx, const TickEvent*) {
     self->paused = false;
     self->visible = true;
     Listener flip;
-    flip.fn = (void*)&BlinkCursor::OnFlip;
+    flip.SetFn(&BlinkCursor::OnFlip);
     flip.view = cx->self;
     self->timer = WindowSetInterval(cx->win, kBlinkIntervalMs, flip);
     Notify(cx);
@@ -2447,9 +2447,10 @@ void BlinkCursor::OnResume(BlinkCursor* self, Ctx* cx, const TickEvent*) {
 
 // The Listener a timer calls back through, bound to the cursor's own entity —
 // which is what makes the timer die with it.
-static Listener BlinkListener(EntityId handle, void* fn) {
+template <typename T, typename E>
+static Listener BlinkListener(EntityId handle, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
-    l.fn = fn;
+    l.SetFn(fn);
     l.view = handle;
     return l;
 }
@@ -2471,9 +2472,8 @@ void BlinkStart(App* app, Window* win, EntityId* handle) {
     // Rust starts hidden and flips on the first tick; lit immediately is what
     // makes a click feel like it landed.
     b->visible = true;
-    b->timer =
-        WindowSetInterval(win, kBlinkIntervalMs,
-                          BlinkListener(*handle, (void*)&BlinkCursor::OnFlip));
+    b->timer = WindowSetInterval(win, kBlinkIntervalMs,
+                                 BlinkListener(*handle, &BlinkCursor::OnFlip));
     AppInvalidate(win);
 }
 
@@ -2503,9 +2503,8 @@ void BlinkPause(App* app, Window* win, EntityId* handle) {
     WindowCancelTimer(win, b->timer);
     b->paused = true;
     b->visible = true;
-    b->timer =
-        WindowSetTimeout(win, kBlinkPauseMs,
-                         BlinkListener(*handle, (void*)&BlinkCursor::OnResume));
+    b->timer = WindowSetTimeout(win, kBlinkPauseMs,
+                                BlinkListener(*handle, &BlinkCursor::OnResume));
     AppInvalidate(win);
 }
 

@@ -98,8 +98,7 @@ namespace {
 struct MouseDownRecorder {
     int calls = 0;
 
-    static void OnDown(MouseDownRecorder* self, Ctx*,
-                       const MouseDownEvent*) {
+    static void OnDown(MouseDownRecorder* self, Ctx*, const MouseDownEvent*) {
         self->calls++;
     }
 };
@@ -163,14 +162,13 @@ static void SwitchActivationProducesTheControlledNextValue() {
     Ctx cx = {};
     cx.a = a;
     Listener change = {};
-    change.fn = (void*)1;
+    change.SetFn(&SwitchActivationProducesTheControlledNextValue);
     El* off = Switch::New(&cx, StrL("off"), false, false, change);
     El* on = Switch::New(&cx, StrL("on"), true, false, change);
-    El* disabled = Switch::New(&cx, StrL("disabled"), false, true,
-                               change);
-    utassert(off->listener.IsValid() && off->listener.hasArg &&
+    El* disabled = Switch::New(&cx, StrL("disabled"), false, true, change);
+    utassert(off->listener.IsValid() && off->listener.HasArg() &&
              off->listener.arg == 1);
-    utassert(on->listener.IsValid() && on->listener.hasArg &&
+    utassert(on->listener.IsValid() && on->listener.HasArg() &&
              on->listener.arg == 0);
     utassert(!disabled->listener.IsValid() && disabled->stopMouseDown);
     ArenaDelete(a);

@@ -81,9 +81,10 @@ uint64_t TooltipOverlay::NextEpoch() {
     return ++epoch;
 }
 
-static Listener TooltipTimerListener(Ctx* cx, void* fn) {
+template <typename T, typename E>
+static Listener TooltipTimerListener(Ctx* cx, void (*fn)(T*, Ctx*, const E*)) {
     Listener out;
-    out.fn = fn;
+    out.SetFn(fn);
     out.view = cx->self;
     return out;
 }
@@ -128,9 +129,9 @@ void TooltipOverlay::RequestShow(const TooltipRequest& request, Window* window,
     hasPreviousBounds = false;
     isSwitching = false;
     NextEpoch();
-    showTask = WindowSetTimeout(
-        window, kTooltipShowDelayMs,
-        TooltipTimerListener(cx, (void*)&TooltipOverlay::OnShow));
+    showTask =
+        WindowSetTimeout(window, kTooltipShowDelayMs,
+                         TooltipTimerListener(cx, &TooltipOverlay::OnShow));
 }
 
 void TooltipOverlay::RequestHide(Window* window, Ctx* cx) {
@@ -144,9 +145,9 @@ void TooltipOverlay::RequestHide(Window* window, Ctx* cx) {
     }
     NextEpoch();
     hadRecentTooltip = true;
-    hideTask = WindowSetTimeout(
-        window, kTooltipGracePeriodMs,
-        TooltipTimerListener(cx, (void*)&TooltipOverlay::OnHide));
+    hideTask =
+        WindowSetTimeout(window, kTooltipGracePeriodMs,
+                         TooltipTimerListener(cx, &TooltipOverlay::OnHide));
 }
 
 void TooltipOverlay::Hide(Ctx* cx) {

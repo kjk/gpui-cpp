@@ -63,7 +63,7 @@ static void TheWholeCardClickNeedsBothAnIdAndAHandler() {
     utassert(!Attachment::New(&cx)->onClick.IsValid());
 
     Listener handler;
-    handler.fn = (void*)&TheWholeCardClickNeedsBothAnIdAndAHandler;
+    handler.SetFn(&TheWholeCardClickNeedsBothAnIdAndAHandler);
     Attachment* clickable =
         Attachment::New(&cx)->Id(StrL("report-attachment"))->OnClick(handler);
     utassert(clickable->hasId &&
@@ -272,7 +272,7 @@ static void TheClickLayerSitsBelowTheActions() {
     cx.a = a;
 
     Listener handler;
-    handler.fn = (void*)&TheClickLayerSitsBelowTheActions;
+    handler.SetFn(&TheClickLayerSitsBelowTheActions);
     El* card = Attachment::New(&cx)
                    ->Id(StrL("attachment"))
                    ->OnClick(handler)
