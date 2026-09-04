@@ -10,7 +10,7 @@
 // so this is too — the README goes through component::TextView, the one
 // markdown renderer in the tree, and the story shell owns the scrolling and
 // the 16px padding. assets/story/README.md is a verbatim copy of
-// gpui-component's README.md at the SHA in cmd/versions.ts; refresh it when
+// gpui-kit's README.md at the SHA in cmd/versions.ts; refresh it when
 // that SHA moves.
 struct WelcomeStory {
     static El* Render(WelcomeStory* self, Ctx* cx);

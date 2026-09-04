@@ -1,7 +1,7 @@
 /* src/lib.rs — the public API of the `autocorrect` crate.
 
    `src/autocorrect/` is a C++ port of autocorrect 2.14.2, the CJK
-   copywriting linter/formatter the gpui-component editor example lints every
+   copywriting linter/formatter the gpui-kit editor example lints every
    open document with (`autocorrect = "2.14.2"` in `crates/story/Cargo.toml`).
    It adds spaces between CJK (Han / Hangul / Katakana / Hiragana / Bopomofo)
    and halfwidth text, corrects fullwidth/halfwidth punctuation near CJK, and

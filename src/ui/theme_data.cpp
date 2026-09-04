@@ -92,7 +92,7 @@ const uint32_t kShadcnWhite = 0xffffff;
 const char* const kDefaultThemeJson =
     "{\n"
     "  \"$schema\": "
-    "\"https://github.com/longbridge/gpui-component/raw/refs/heads/main/"
+    "\"https://github.com/longbridge/gpui-kit/raw/refs/heads/main/"
     ".theme-schema.json\",\n"
     "  \"name\": \"Default\",\n"
     "  \"author\": \"shadcn\",\n"

@@ -163,7 +163,7 @@ void DatePickerStateSelectPreset(DatePickerState* state,
                                  bool emit = true);
 
 // chrono's formatting seam, kept dependency-free. It covers the numeric,
-// name and weekday directives used by gpui-component and copies unknown
+// name and weekday directives used by gpui-kit and copies unknown
 // directives literally instead of silently changing the requested pattern.
 Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date);
 Str DatePickerFormatValue(Arena* a, Str pattern, Date date);

@@ -37,7 +37,7 @@ struct ColorTokens {
     // application that never installs a palette used to render as. The
     // default is the light palette instead — `impl Default for ColorTokens`.
     ColorTokens();
-    // The two palettes, aligned with gpui-component's Default Light and
+    // The two palettes, aligned with gpui-kit's Default Light and
     // Default Dark themes.
     static ColorTokens Light();
     static ColorTokens Dark();

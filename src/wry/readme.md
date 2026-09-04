@@ -1,13 +1,13 @@
 # src/wry — the wry webview crate, ported to C++
 
 This is a port of [wry](https://github.com/tauri-apps/wry) **0.53.3** — the
-`lb-wry` fork gpui-component's `crates/webview` (the `gpui-wry` crate) depends
+`lb-wry` fork gpui-kit's `crates/webview` (the `gpui-wry` crate) depends
 on, and therefore the crate that defines what a webview in a gpui window
 means. `src/webview/` is the gpui-side half — the port of `crates/webview`
 itself — and it is the only thing in the tree that calls in here.
 
 The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`wry`) next to
-the gpui-component, Zed GPUI, taffy and markdown pins, and moves the same way
+the gpui-kit, Zed GPUI, taffy and markdown pins, and moves the same way
 — see [`port-upstream.md`](../../port-upstream.md).
 
 ## Where the Rust went

@@ -1,13 +1,13 @@
 # src/taffy — the taffy layout crate, ported to C++
 
 This is a port of [taffy](https://github.com/DioxusLabs/taffy) **0.13.0**, the
-layout crate Zed's GPUI uses and therefore the one gpui-component's layout is
+layout crate Zed's GPUI uses and therefore the one gpui-kit's layout is
 defined by. Everything in `src/gpui` that has a box lays it out through here.
 
-The pinned version is the one `gpui-component`'s `Cargo.lock` resolves for
+The pinned version is the one `gpui-kit`'s `Cargo.lock` resolves for
 `gpui`. The pin lives in
 [`cmd/run.ts`](../../cmd/run.ts) (`taffy`) alongside the
-gpui-component and Zed GPUI pins, and moves when they do — see
+gpui-kit and Zed GPUI pins, and moves when they do — see
 [`port-upstream.md`](../../port-upstream.md).
 
 ## Where the Rust went
@@ -27,7 +27,7 @@ gpui-component and Zed GPUI pins, and moves when they do — see
 | `src/compute/grid/**`               | `compute_grid.cpp`      |
 
 Everything is in `namespace taffy` — not `gpui` — because it is a port of a
-crate of its own rather than part of gpui-component. `gpui::Style` and
+crate of its own rather than part of gpui-kit. `gpui::Style` and
 `taffy::Style` both exist and mean different things; so do `Overflow`,
 `Position` and `Display`.
 

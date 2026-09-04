@@ -6,7 +6,7 @@
 `.work/gpui-component` to that SHA. Always diff from the pinned SHA, never from
 `HEAD`.
 
-## gpui-component
+## gpui-kit
 
 Trees we translate, and the naming rule: a file under `src/base/` or `src/ui/`
 is named after the Rust module it ports, so the map is mechanical both ways. A
@@ -44,8 +44,8 @@ how a pin bump turns into an explicit decision list rather than a silent gap.
 ## The five ported crates
 
 `src/taffy/`, `src/markdown/`, `src/html5ever/`, `src/wry/` and
-`src/autocorrect/` are ports, not references, at the version gpui-component
-resolves. **They move when the gpui-component pin moves.** After bumping
+`src/autocorrect/` are ports, not references, at the version gpui-kit
+resolves. **They move when the gpui-kit pin moves.** After bumping
 `gpuiComponent.sha`, check each:
 
 ```
@@ -99,4 +99,4 @@ wry's `webview2-com` / `-sys` are written out in `wry_win.cpp`, `http` and
 `autocorrect-derive` is a dispatch table in `code.cpp`; pest, regex and
 `ignore` are hand-written scanners and `ignorer.cpp`.
 
-`src/base.h` / `src/base.cpp` are SumatraPDF, not gpui-component.
+`src/base.h` / `src/base.cpp` are SumatraPDF, not gpui-kit.

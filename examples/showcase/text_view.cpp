@@ -3,7 +3,7 @@
  * Base rich text with no themed layer above it: the page derives a
  * TextViewStyle from the example palette and hands it to the view, which is
  * the whole point of the move — a gpui-base application renders Markdown
- * without depending on gpui-component. */
+ * without depending on gpui-kit. */
 
 #include "Showcase.h"
 #include "palette.h"
@@ -18,7 +18,7 @@ static const char* kFallbackMarkdown =
     "# Hello, **World**!\n"
     "\n"
     "This is the first paragraph, with **bold**, _italic_ and ~~struck~~ "
-    "text, `code`, and a [link](https://github.com/longbridge/gpui-component) "
+    "text, `code`, and a [link](https://github.com/longbridge/gpui-kit) "
     "in it.\n"
     "\n"
     "## Lists\n"

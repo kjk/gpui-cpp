@@ -1,5 +1,5 @@
 /* Side placement for anchored popups — crates/base/src/positioner.rs, as
- * gpui-component 81305ef4 started using it for dropdowns.
+ * gpui-kit 81305ef4 started using it for dropdowns.
  *
  * `Positioner::side` takes the requested side when the popup fits there, the
  * opposite side when it does not, and the roomier of the two when neither

@@ -49,7 +49,7 @@ El* DescriptionListStory::Render(DescriptionListStory* self, Ctx* cx) {
             ->Vertical(self->vertical)
             ->Bordered(self->bordered)
             ->WithSize(self->toolbar.size)
-            ->ItemEl(StrL("Name"), Md(cx, StrL("GPUI Component")))
+            ->ItemEl(StrL("Name"), Md(cx, StrL("GPUI Kit")))
             ->ItemEl(
                 StrL("Description"),
                 Md(cx, StrL("UI components for building fantastic desktop "
@@ -58,7 +58,7 @@ El* DescriptionListStory::Render(DescriptionListStory* self, Ctx* cx) {
                             "**Button**, **Input**, **Table**, **List**, "
                             "**Select**, **DatePicker** ...\n\n"
                             "You can easily create your native desktop "
-                            "application by using GPUI Component.")),
+                            "application by using GPUI Kit.")),
                 3)
             ->ItemEl(StrL("Version"), Md(cx, StrL("0.1.0")))
             ->ItemEl(StrL("License"), Md(cx, StrL("Apache-2.0")))
@@ -66,7 +66,7 @@ El* DescriptionListStory::Render(DescriptionListStory* self, Ctx* cx) {
             ->Separator()
             ->ItemEl(StrL("Repository"),
                      Md(cx, StrL("https://github.com/longbridge/"
-                                 "gpui-component")),
+                                 "gpui-kit")),
                      2)
             ->ItemEl(StrL("Category"), Md(cx, StrL("UI, Desktop, Framework")))
             ->ItemEl(StrL("This is a long label for Platform"),

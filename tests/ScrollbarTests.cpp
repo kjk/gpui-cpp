@@ -6,7 +6,7 @@
  * grab point. Offsets here run positive-down, the way El::ScrollY takes them;
  * Rust's run negative because it offsets the content rather than the view.
  *
- * The second half is the visibility animation that arrived with gpui-component
+ * The second half is the visibility animation that arrived with gpui-kit
  * 2a1335d5: the animation lives beside the element tree here rather than in a
  * keyed state, so a test drives it by scroll id and steps the clock itself. */
 

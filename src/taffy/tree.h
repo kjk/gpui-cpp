@@ -7,7 +7,7 @@
  *     same u64 and converts to and from one the way Rust's does.
  *   - `LayoutOutput::content_size` and `Layout::content_size` are
  *     unconditional; the `content_size` feature is on in the build
- *     gpui-component pins.
+ *     gpui-kit pins.
  */
 
 #ifndef GPUI_TAFFY_TREE_H_

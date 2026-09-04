@@ -1,7 +1,7 @@
 /* wry/src/lib.rs — the public API of the `wry` crate.
  *
  * `src/wry/` is a C++ port of lb-wry 0.53.3, the webview crate
- * gpui-component's `crates/webview` (`gpui-wry`) drives. See
+ * gpui-kit's `crates/webview` (`gpui-wry`) drives. See
  * src/wry/readme.md for the file-for-file map and for what is deliberately
  * not ported, and cmd/versions.ts (`wry`) for the pinned version.
  *

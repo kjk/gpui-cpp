@@ -28,7 +28,7 @@ static const char* kMarkdown =
     "An image from the asset roots, inline with the text:\n"
     "![a gradient](gradient.png) — and one fetched over the network,\n"
     "which shows its alt text until it lands and the picture after:\n"
-    "![a docs.rs badge](https://docs.rs/gpui-component/badge.svg). A host\n"
+    "![a docs.rs badge](https://docs.rs/gpui-kit/badge.svg). A host\n"
     "that does not resolve keeps its alt text: ![nowhere](https://x/y.png).\n"
     "\n"
     "<div>\n"

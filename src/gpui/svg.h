@@ -49,7 +49,7 @@ bool SvgToDrawOps(Str xml, DrawOpsBuilder* out);
 // no such asset. The bytes belong to the cache — copy them to keep them.
 const uint8_t* SvgDrawOpsFor(Str assetPath, int* lenOut);
 
-// IconName -> "icons/<kebab>.svg" (same mapping as gpui-component's
+// IconName -> "icons/<kebab>.svg" (same mapping as gpui-kit's
 // icon_named!).
 Str IconNamePath(IconName name);
 } // namespace gpui

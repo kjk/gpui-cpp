@@ -789,7 +789,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
     brand->Child(logo);
     if (!app->collapsed) {
         El* names = Div(a)->FlexCol();
-        names->Child(StoryTxt(cx, StrL("GPUI Component"), 14, th.sidebarFg)
+        names->Child(StoryTxt(cx, StrL("GPUI Kit"), 14, th.sidebarFg)
                          ->Semibold());
         names->Child(StoryTxt(cx, StrL("Component showcase"), 12, th.mutedFg));
         brand->Child(names);
@@ -1044,11 +1044,11 @@ static uint32_t ApAction(ApKind kind) {
 static void OnUnhandledClick(StoryApp* app, Ctx* cx, const ClickEvent* ev);
 static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev);
 
-// create_new_window("GPUI Component", ..): the name the window is opened
+// create_new_window("GPUI Kit", ..): the name the window is opened
 // under, and so the name the title bar shows when the menus are not in it —
 // Rust hands the same string to `create_new_window` and to `AppTitleBar`.
 static Str StoryWindowTitle() {
-    return StrL("GPUI Component C++");
+    return StrL("GPUI Kit C++");
 }
 
 static void StoryInitKeys();
@@ -1104,19 +1104,19 @@ struct AboutDialog {
         El* body = Div(a)->FlexCol()->Gap(8)->W(kFill);
         body->Child(
             StoryTxt(cx,
-                     StrL("A C++ port of longbridge/gpui-component: the "
+                     StrL("A C++ port of longbridge/gpui-kit: the "
                           "same components, the same theme, no Rust and "
                           "no STL."),
                      14, th.mutedFg)
                 ->W(kFill)
                 ->Wrap());
-        body->Child(StoryTxt(cx, StrL("github.com/longbridge/gpui-component"),
+        body->Child(StoryTxt(cx, StrL("github.com/longbridge/gpui-kit"),
                              14, th.mutedFg)
                         ->W(kFill));
         Listener close = Listen(cx, &AboutDialog::OnClose);
         return component::Dialog::New(cx)
             ->Open(true)
-            ->Title(StrL("GPUI Component"))
+            ->Title(StrL("GPUI Kit"))
             ->Description(StrL("Component showcase  v0.5.1"))
             ->Body(body)
             ->W(420)
@@ -1168,7 +1168,7 @@ static El* AppearanceMenu(StoryApp* app, Ctx* cx) {
 }
 
 static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
-    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+    OpenUrl(StrL("https://github.com/longbridge/gpui-kit"));
 }
 
 // ─── app_menus.rs ─────────────────────────────────────────────────────────
@@ -1220,7 +1220,7 @@ static void OnCloseWindowAction(StoryApp*, Ctx* cx, const ActionEvent*) {
 }
 
 static void OnDocumentationAction(StoryApp*, Ctx*, const ActionEvent*) {
-    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+    OpenUrl(StrL("https://github.com/longbridge/gpui-kit"));
 }
 
 // SwitchThemeMode(ThemeMode::Light | ::Dark), checked against the mode in
@@ -1418,7 +1418,7 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
     }
 
     MenuRow* appRows = StoryRows(cx, 9);
-    appRows[0].label = StrL("About GPUI Component");
+    appRows[0].label = StrL("About GPUI Kit");
     appRows[0].action = ActAbout();
     appRows[1].separator = true;
     appRows[2].label = StrL("Open...");
@@ -1440,7 +1440,7 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
     appRows[7].separator = true;
     appRows[8].label = StrL("Quit");
     appRows[8].action = ActQuit();
-    out[0].name = StrL("GPUI Component");
+    out[0].name = StrL("GPUI Kit");
     out[0].items = appRows;
     out[0].n = 9;
 
@@ -1495,7 +1495,7 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
     MenuRow* helpRows = StoryRows(cx, 2);
     helpRows[0].label = StrL("Documentation");
     helpRows[0].action = ActDocumentation();
-    helpRows[1].label = StrL("About GPUI Component");
+    helpRows[1].label = StrL("About GPUI Kit");
     helpRows[1].action = ActAbout();
     out[3].name = StrL("Help");
     out[3].items = helpRows;
@@ -1701,7 +1701,7 @@ static El* Footer(StoryApp* app, Ctx* cx) {
                             ->Ghost()
                             ->WithSize(UiSize::XSmall)
                             ->Icon(IconName::Github)
-                            ->Tooltip(StrL("GPUI Component GitHub repository"))
+                            ->Tooltip(StrL("GPUI Kit GitHub repository"))
                             ->OnClick(Listen(cx, &OnGithub))
                             ->IntoEl()
                             ->Cursor(CursorKind::Pointer)));
@@ -1832,8 +1832,8 @@ int GpuiMain(int argc, char** argv) {
     // cx.set_app_identity(..): what the platform calls the application when it
     // shows one of its notifications. Windows names the notification area icon
     // with it; the other backends do not have one to name yet.
-    SysNotifySetAppIdentity(StrL("com.longbridge.gpui-component.story"),
-                            StrL("GPUI Component"));
+    SysNotifySetAppIdentity(StrL("com.longbridge.gpui-kit.story"),
+                            StrL("GPUI Kit"));
     ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(Str{});

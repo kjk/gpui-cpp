@@ -179,7 +179,7 @@ El* BubbleStory::Render(BubbleStory* self, Ctx* cx) {
                         component::Link::New(cx,
                                              StrL("bubble-documentation-link"))
                             ->Href(StrL(
-                                "https://longbridge.github.io/gpui-component/"))
+                                "https://gpui-kit.com/"))
                             ->Text(StrL("Open the component documentation"))
                             ->IntoEl())))
             ->IntoEl());

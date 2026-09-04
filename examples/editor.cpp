@@ -1114,15 +1114,15 @@ static void OnGoToLineAction(EditorApp* self, Ctx* cx, const ActionEvent*) {
 }
 
 static void OnDocumentationAction(EditorApp*, Ctx*, const ActionEvent*) {
-    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+    OpenUrl(StrL("https://github.com/longbridge/gpui-kit"));
 }
 
 static void OnOpenWebsiteAction(EditorApp*, Ctx*, const ActionEvent*) {
-    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+    OpenUrl(StrL("https://github.com/longbridge/gpui-kit"));
 }
 
 static void OnGithubClick(EditorApp*, Ctx*, const ClickEvent*) {
-    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+    OpenUrl(StrL("https://github.com/longbridge/gpui-kit"));
 }
 
 static void OnSwitchThemeModeAction(EditorApp*, Ctx* cx,

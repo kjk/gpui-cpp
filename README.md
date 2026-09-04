@@ -1,13 +1,13 @@
 # gpui for C++
 
-A **C++** port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed). Runs on **Windows**, **Linux**, **macOS** and **in the browser** (wasm).
+A **C++** port of [longbridge/gpui-kit](https://github.com/longbridge/gpui-kit), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed). Runs on **Windows**, **Linux**, **macOS** and **in the browser** (wasm).
 
 Original project:
 
-- Repository: https://github.com/longbridge/gpui-component
-- Docs: https://longbridge.github.io/gpui-component
+- Repository: https://github.com/longbridge/gpui-kit
+- Docs: https://gpui-kit.com
 
-This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux, Cocoa + Core Graphics + Core Text on macOS, and a `<canvas>` 2D context in the browser. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates, and it does not use Blade or Zed’s renderer. Layout is the exception: `src/taffy/` is a C++ port of the taffy crate GPUI itself lays out with, at the version gpui-component pins.
+This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux, Cocoa + Core Graphics + Core Text on macOS, and a `<canvas>` 2D context in the browser. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates, and it does not use Blade or Zed’s renderer. Layout is the exception: `src/taffy/` is a C++ port of the taffy crate GPUI itself lays out with, at the version gpui-kit pins.
 
 The API follows GPUI's shape: an `App` owns the entity store and the windows, a `Window` renders a view, and a view is a struct with state plus `static El* Render(T* self, Ctx* cx)`:
 

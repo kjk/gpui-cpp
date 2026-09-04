@@ -1,6 +1,6 @@
 #ifndef GPUI_SRC_UI_SIZING_H_
 #define GPUI_SRC_UI_SIZING_H_
-/* Shared types for the themed gpui-component façade
+/* Shared types for the themed gpui-kit façade
    crates/ui/src/sizing.rs */
 
 #include "gpui/gpui.h"

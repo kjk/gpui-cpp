@@ -1,14 +1,14 @@
 # src/markdown — the `markdown` crate, ported to C++
 
 This is a port of [markdown-rs](https://github.com/wooorm/markdown-rs)
-**1.0.0**, the CommonMark + GFM parser `gpui-component` parses every
+**1.0.0**, the CommonMark + GFM parser `gpui-kit` parses every
 `TextView` with (`markdown = { version = "1.0.0", features = ["serde"] }` in
 `crates/ui/Cargo.toml`). `component::TextView` calls it and folds the mdast it
 returns into its `MdNode` tree, which is what
 `crates/ui/src/text/format/markdown.rs` does with `ast_to_node`.
 
 The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`markdown`)
-alongside the gpui-component, Zed GPUI and taffy pins, and moves when they do
+alongside the gpui-kit, Zed GPUI and taffy pins, and moves when they do
 — see [`port-upstream.md`](../../port-upstream.md).
 
 This remains the default parser. `-markdown=mini` selects the independent,
@@ -80,7 +80,7 @@ Not ported, and not planned:
 - **MDX** — `mdx_esm`, `mdx_expression_flow`, `mdx_expression_text`,
   `mdx_jsx_flow`, `mdx_jsx_text` and the partials, tree nodes, `Location` and
   `mdx_collect` that serve them. `TextView` never turns it on: the
-  `enable_mdx` half of `markdown_ext.rs` is a gpui-component extension for
+  `enable_mdx` half of `markdown_ext.rs` is a gpui-kit extension for
   callers that bring their own plugins, and nothing in the story, the showcase
   or the examples does.
   Two consequences worth knowing, both kept faithful:

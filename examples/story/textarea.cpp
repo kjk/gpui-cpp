@@ -1,14 +1,14 @@
 #include "Story.h"
 
 static const char* kTextareaText =
-    "Hello 世界，this is GPUI component.\n"
+    "Hello 世界，this is GPUI Kit.\n"
     "\n"
-    "The GPUI Component is a collection of UI components for GPUI framework, "
+    "The GPUI Kit is a collection of UI components for GPUI framework, "
     "including.\n"
     "\n"
     "Button, Input, Checkbox, Radio, Dropdown, Tab, and more...\n"
     "\n"
-    "Here is an application that is built by using GPUI Component.\n"
+    "Here is an application that is built by using GPUI Kit.\n"
     "\n"
     "> This application is still under development, not published yet.\n"
     "\n"
@@ -70,7 +70,7 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
         InputSetValue(&self->notes, Str(kTextareaText));
         InputSetValue(&self->noWrap, Str(kNoWrapText));
         InputSetValue(&self->autoGrow, Str(kAutoGrowText));
-        InputSetValue(&self->both, StrL("Hello 世界，this is GPUI component."));
+        InputSetValue(&self->both, StrL("Hello 世界，this is GPUI Kit."));
         // auto_grow(1, 5).
         self->autoGrow.mode.kind = LayoutModeKind::AutoGrow;
         self->autoGrow.mode.minRows = 1;

@@ -38,9 +38,9 @@ struct SettingsStory {
     static El* Render(SettingsStory* self, Ctx* cx);
 };
 
-// cx.open_url("https://longbridge.github.io/gpui-component/").
+// cx.open_url("https://gpui-kit.com/").
 static void OpenDocs(SettingsStory*, Ctx*, const ClickEvent*) {
-    OpenUrl(StrL("https://longbridge.github.io/gpui-component/"));
+    OpenUrl(StrL("https://gpui-kit.com/"));
 }
 
 El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {

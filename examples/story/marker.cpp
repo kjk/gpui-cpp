@@ -234,7 +234,7 @@ El* MarkerStory::Render(MarkerStory*, Ctx* cx) {
             ->Icon(MarkerIconOf(cx, IconName::Info))
             ->Content(component::MarkerContent::New(cx)->Child(
                 component::Link::New(cx, StrL("marker-documentation-link"))
-                    ->Href(StrL("https://longbridge.github.io/gpui-component/"))
+                    ->Href(StrL("https://gpui-kit.com/"))
                     ->Text(StrL("Open the component documentation"))
                     ->IntoEl()))
             ->IntoEl());

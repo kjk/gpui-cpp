@@ -2049,7 +2049,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
         // on_click bubbles. GPUI registers it in the Bubble phase against the
         // element's hitbox, so every enclosing element that asked for one
         // hears the click, innermost first, until one stops it — and none of
-        // gpui-component's own do: a `Button`'s handler stops nothing, and a
+        // gpui-kit's own do: a `Button`'s handler stops nothing, and a
         // table's sort icon sits inside the column head whose click selects
         // the column, so pressing it sorts *and* selects. The port delivered
         // the click to the one rect the hit test named, which is why a box

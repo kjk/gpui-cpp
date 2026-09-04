@@ -1,6 +1,6 @@
-# gpui — C++ port of gpui-component
+# gpui — C++ port of gpui-kit
 
-A C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component)
+A C++ port of [longbridge/gpui-kit](https://github.com/longbridge/gpui-kit)
 targeting **Windows, Linux, macOS and the browser** (wasm/emscripten). The goal
 is to port as much of the Rust as this tree can hold: every module of
 `crates/base` and `crates/ui`, the story gallery, the showcase, the shell and
@@ -81,7 +81,7 @@ deviations), [`port-map.md`](port-map.md) (the Base/UI module ledger and
 
 ## Non-goals
 
-Standing exclusions. Everything else in gpui-component is in scope, and a
+Standing exclusions. Everything else in gpui-kit is in scope, and a
 module being large or unglamorous is not a reason to skip it. A thing not
 ported for a reason *other* than these belongs in `port-status.md`.
 
@@ -377,7 +377,7 @@ editing the innermost context.
 
 `src/taffy/` is a C++ port of [taffy](https://github.com/DioxusLabs/taffy) at
 the version `Cargo.lock` resolves for `gpui` — the crate Zed's GPUI lays out
-with, so it defines what gpui-component's layout *means*. Flexbox, CSS Grid,
+with, so it defines what gpui-kit's layout *means*. Flexbox, CSS Grid,
 block layout and floats, plus ports of the crate's unit tests
 (`tests/TaffyTests.cpp`). It is `namespace taffy`, not `gpui`: `Style`,
 `Overflow`, `Position` and `Display` exist in both and mean different things.

@@ -74,7 +74,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
         self->bio.kind = InputKind::Textarea;
         InputSetValue(&self->bio,
                       StrL("Hello \xe4\xb8\x96\xe7\x95\x8c\xef\xbc\x8cthis "
-                           "is GPUI component."));
+                           "is GPUI Kit."));
         InputSetPlaceholder(&self->email, StrL("Enter text here..."));
     }
     if (self->name.focused) {

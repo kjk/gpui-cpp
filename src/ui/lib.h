@@ -1,6 +1,6 @@
 #ifndef GPUI_UI_LIB_H_
 #define GPUI_UI_LIB_H_
-/* Themed gpui-component façade — crates/ui/src */
+/* Themed gpui-kit façade — crates/ui/src */
 
 #include "ui/accordion.h"
 #include "ui/alert.h"

@@ -2822,7 +2822,7 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 //     re-parented onto the root taffy node as absolutely positioned children,
 //     so their insets resolve against the window rather than their El parent.
 //   - `anchorBelow` / `anchorAbove` / `anchorCenterX` and the `relative(f)`
-//     halves of `left` / `right`: positioning rules gpui-component has and CSS
+//     halves of `left` / `right`: positioning rules gpui-kit has and CSS
 //     does not. They move an already-laid-out subtree afterwards, which is
 //     what the old engine did too.
 //   - `scrollX` / `scrollY`: taffy lays a scroll container's content out at
@@ -3918,7 +3918,7 @@ AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
     return out;
 }
 
-// The positioning rules gpui-component has and CSS does not: an overlay
+// The positioning rules gpui-kit has and CSS does not: an overlay
 // anchored under or over its trigger, one centred on it, and the
 // `relative(f)` half of a left/right inset. Each moves a subtree that taffy
 // has already sized and placed.

@@ -1,5 +1,5 @@
 /* Not a port — `fmt()` is this tree's printf, inherited from SumatraPDF's
-   StrFormat rather than from gpui-component.
+   StrFormat rather than from gpui-kit.
 
    The doc block above `Fmt` in base.cpp is what these check: the directives
    it takes, that flags and width and precision reach snprintf unchanged,

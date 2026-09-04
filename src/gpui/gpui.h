@@ -213,7 +213,7 @@ Rgba RgbaMixOklab(Rgba a, Rgba b, float factor);
 // `Pixels`, `ScaledPixels`, `DevicePixels`, `Rems`, `Length` — so the compiler
 // refuses to add device pixels to logical ones. Everything above Paint.h here
 // is DIPs and always has been, which leaves that generic with one instantiation
-// (`Point<Pixels>` is 170 of the 185 `Point<T>` in gpui-component), so these
+// (`Point<Pixels>` is 170 of the 185 `Point<T>` in gpui-kit), so these
 // are plain float structs and the arithmetic is written out once. The units
 // that are not DIPs get their own named struct instead of a parameter:
 // `WinSize` carries both the DIP and the device-pixel size of a window, and the
@@ -1104,7 +1104,7 @@ enum class IconName : uint8_t {
     WindowMinimize,
     WindowRestore,
 
-    // Compatibility with the earlier port. Pinned gpui-component calls this
+    // Compatibility with the earlier port. Pinned gpui-kit calls this
     // asset `Close`; keeping X avoids forcing applications to migrate in one
     // release while both names remain backed by their exact SVGs.
     X,
@@ -1486,7 +1486,7 @@ struct Style {
     uint8_t positionerAlign = 1;
     bool tabStop = true;
     // Whether a press on this element moves focus to it. GPUI's `track_focus`
-    // does not: every widget in gpui-component that takes focus from a click
+    // does not: every widget in gpui-kit that takes focus from a click
     // calls `focus_handle.focus(window, cx)` itself — the input, the otp
     // field, the tree, the list, the select and the colour picker do, and the
     // button, the checkbox, the radio, the switch and the link do not. A
@@ -5730,7 +5730,7 @@ void ClipboardSetText(Window* win, Str text);
 Str ClipboardGetText(Arena* a, Window* win);
 
 // macOS NSTextContent autofill metadata. The other platforms intentionally
-// accept and ignore it, matching gpui-component's cfg-gated implementation.
+// accept and ignore it, matching gpui-kit's cfg-gated implementation.
 // An empty value clears the metadata.
 void WindowSetTextContentType(Window* win, Str value);
 

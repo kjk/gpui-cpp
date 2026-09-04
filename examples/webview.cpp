@@ -2,7 +2,7 @@
 
 using namespace gpui;
 
-// examples/webview — the gpui-component example of the same name: an address
+// examples/webview — the gpui-kit example of the same name: an address
 // bar over a webview, Enter loads what is in it.
 //
 // The webview is an OS control sitting over the window (WebView2 on Windows,
@@ -72,7 +72,7 @@ int GpuiMain(int argc, char** argv) {
     Entity<Example> view = EntityNew<Example>(app);
     Example* self = view.Get(app);
     InputSetValue(&self->address,
-                  StrL("https://longbridge.github.io/gpui-component"));
+                  StrL("https://gpui-kit.com"));
 
     if (!wry::WebViewAvailable()) {
         // Rust has no equivalent — `build_as_child` panics. Saying it out

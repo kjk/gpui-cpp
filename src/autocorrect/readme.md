@@ -1,7 +1,7 @@
 # src/autocorrect — the `autocorrect` crate, ported to C++
 
 This is a port of [autocorrect](https://github.com/huacnlee/autocorrect)
-**2.14.2**, the CJK copywriting linter/formatter the gpui-component editor
+**2.14.2**, the CJK copywriting linter/formatter the gpui-kit editor
 example lints every open document with (`autocorrect = "2.14.2"` in
 `crates/story/Cargo.toml`). `examples/editor.cpp` calls `LintFor` on the
 document and maps each `LineResult` to a diagnostic and a quickfix, exactly
@@ -10,7 +10,7 @@ file tree through `Ignorer`, which is why `.cache` is in the tree and
 `.work/` is not.
 
 The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`autocorrect`) alongside
-the gpui-component, taffy, markdown, html5ever and wry pins, and moves when
+the gpui-kit, taffy, markdown, html5ever and wry pins, and moves when
 they do —
 see [`port-upstream.md`](../../port-upstream.md).
 

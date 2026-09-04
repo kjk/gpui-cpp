@@ -1474,7 +1474,7 @@ HRESULT WinAccessibilityNode::get_CanSelectMultiple(BOOL* out) {
         return UIA_E_INVALIDOPERATION;
     }
     // The portable semantic record has no multi-select policy. Every current
-    // gpui-component selection container is single-select.
+    // gpui-kit selection container is single-select.
     *out = FALSE;
     return S_OK;
 }

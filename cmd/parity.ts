@@ -273,7 +273,7 @@ function markdown(results: CaseResult[], args: Args): string {
     "# Rust/C++ parity suite",
     "",
     `Generated ${new Date().toISOString()} with \`bun cmd/parity.ts${args.nobuild ? " -nobuild" : ""}\`.`,
-    `Rust specification: gpui-component ${gpuiComponent.sha.slice(0, 12)} (${gpuiComponent.date}).`,
+    `Rust specification: gpui-kit ${gpuiComponent.sha.slice(0, 12)} (${gpuiComponent.date}).`,
     `The top ${skipRows} window rows are ignored; a channel-sum above ${bigPixelTolerance} counts as a big pixel difference.`,
     "",
     "| case | shot | result | any / budget | big / budget | Rust changed | C++ changed |",

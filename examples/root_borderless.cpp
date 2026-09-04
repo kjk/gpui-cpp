@@ -33,7 +33,7 @@ El* Example::Render(Example*, Ctx* cx) {
                     ->Fg(th.foreground))
         ->Child(TextEl(frame, StrL("This window requests client-side "
                                    "decorations, while Root disables "
-                                   "GPUI Component's window border wrapper."))
+                                   "GPUI Kit's window border wrapper."))
                     ->Font(14)
                     ->Fg(th.mutedFg)
                     ->MaxW(560)

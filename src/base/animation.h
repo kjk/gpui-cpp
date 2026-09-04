@@ -14,7 +14,7 @@ namespace gpui {
 // This is CSS's `cubic-bezier`: `x(s) = t` is solved for the curve parameter
 // first — Newton, then bisection where the slope is no use — and `y(s)` is the
 // answer. Reading `t` as the parameter and taking `y` off it directly, which
-// is what this did before gpui-component 5b3e18d1, makes every curve run
+// is what this did before gpui-kit 5b3e18d1, makes every curve run
 // slower than the same control points do in a browser.
 float CubicBezier(float x1, float y1, float x2, float y2, float t);
 

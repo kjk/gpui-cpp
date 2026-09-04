@@ -1,4 +1,4 @@
-/* C++ port of crates/story — GPUI Component gallery. */
+/* C++ port of crates/story — GPUI Kit gallery. */
 
 #include "gpui.h"
 

@@ -19,7 +19,7 @@
 // .work/ is cloned only for -compare, and emscripten is only looked for with
 // -wasm.
 //
-// The upstream pins are here too — which gpui-component checkin this port
+// The upstream pins are here too — which gpui-kit checkin this port
 // matches, and which crates it ports — because -compare is the only thing
 // that fetches anything from them, and this script has to carry them into
 // gpui-cpp-dist, where it and build.ts are the whole of cmd/. `-versions`
@@ -229,7 +229,7 @@ function parseArgs(argv: string[]): RunArgs {
   if (compare && !rustTwin(target)) {
     die(
       `-compare has nothing to compare ${target} against: it is a port-only ` +
-        "example, with no counterpart in gpui-component at the pinned SHA.\n\n" +
+        "example, with no counterpart in gpui-kit at the pinned SHA.\n\n" +
         "Drop -compare to launch just this one.",
     );
   }
@@ -527,7 +527,7 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string, a
 
 // Exact upstream checkins this C++ port is matching. Source of truth —
 // AGENTS.md / port-*.md point here. Bump the SHAs (then re-run
-// `bun run.ts -versions`) when ingesting a newer gpui-component. Do not
+// `bun run.ts -versions`) when ingesting a newer gpui-kit. Do not
 // read HEAD of a random clone.
 //
 // These live in run.ts rather than in a module of their own because -compare
@@ -537,7 +537,7 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string, a
 
 /** Spec we port: crates/base, crates/ui, crates/story, crates/webview, crates/shell, crates/component-shell, examples. */
 export const gpuiComponent = {
-  repo: "https://github.com/longbridge/gpui-component",
+  repo: "https://github.com/longbridge/gpui-kit",
   sha: "0c746dff2a70f19e3c348961326b502a0008417a",
   date: "2026-09-02",
   subject: "base: Add NavStack, a navigation stack built on History (#2922)",
@@ -553,7 +553,7 @@ export const gpuiComponent = {
 } as const;
 
 /**
- * Zed GPUI snapshot from that gpui-component Cargo.lock.
+ * Zed GPUI snapshot from that gpui-kit Cargo.lock.
  * Reference for runtime behavior only — not a crate we port.
  */
 export const zedGpui = {
@@ -570,7 +570,7 @@ export const zedGpui = {
 } as const;
 
 /**
- * The layout crate that gpui-component's pinned Cargo.lock resolves for
+ * The layout crate that gpui-kit's pinned Cargo.lock resolves for
  * `gpui`. We port it: `src/taffy/` is a C++ port of exactly this version, and
  * `src/gpui` lays out through it. See
  * `src/taffy/readme.md`.
@@ -583,7 +583,7 @@ export const taffy = {
 } as const;
 
 /**
- * The CommonMark + GFM parser gpui-component's `crates/ui/Cargo.toml` asks
+ * The CommonMark + GFM parser gpui-kit's `crates/ui/Cargo.toml` asks
  * for (`markdown = { version = "1.0.0", features = ["serde"] }`). We port it:
  * `src/markdown/` is a C++ port of exactly this version, and
  * `component::TextView` parses through it. See `src/markdown/readme.md`.
@@ -675,7 +675,7 @@ function checkoutPin(dir: string, sha: string): void {
   }
   const have = gitOut(["cat-file", "-t", sha], dir);
   if (!have.ok) {
-    console.log(`Fetching gpui-component ${sha.slice(0, 12)}`);
+    console.log(`Fetching gpui-kit ${sha.slice(0, 12)}`);
     if (gitRun(["fetch", "--depth", "1", "origin", sha], dir) !== 0) {
       if (gitRun(["fetch", "origin", sha], dir) !== 0) {
         throw new Error(`git fetch ${sha} failed in ${dir}`);
@@ -735,7 +735,7 @@ export function ensureRustTree(repoRoot: string): string {
 
 /** `-versions`: what the port is matching, and the spec tree at that SHA. */
 function printVersions(): never {
-  console.log("gpui-component", gpuiComponent.sha, gpuiComponent.date);
+  console.log("gpui-kit      ", gpuiComponent.sha, gpuiComponent.date);
   console.log("  ", gpuiComponent.subject);
   console.log("  crates", gpuiComponent.crates);
   console.log("zed gpui     ", zedGpui.sha, zedGpui.date, "(reference only)");
@@ -823,7 +823,7 @@ const rustStoryExamples: Record<string, string> = {
   tiles: "tiles",
 };
 
-/** null when the port wrote this example and gpui-component has no such thing. */
+/** null when the port wrote this example and gpui-kit has no such thing. */
 function rustTwin(target: string): RustTwin | null {
   if (target === "showcase") {
     return { pkg: "gpui-base", example: "components" };

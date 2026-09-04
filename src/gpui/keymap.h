@@ -1,7 +1,7 @@
 #ifndef GPUI_GPUI_KEYMAP_H_
 #define GPUI_GPUI_KEYMAP_H_
 /* Actions and the keymap — crates/gpui's `actions!`, `KeyBinding`,
-   `key_context` and `on_action`, which gpui-component builds every component's
+   `key_context` and `on_action`, which gpui-kit builds every component's
    keyboard on.
 
    Rust dispatches a *type*: an action is a unit struct, a binding names it,

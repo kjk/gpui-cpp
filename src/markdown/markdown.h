@@ -1,7 +1,7 @@
 /* src/lib.rs + src/configuration.rs — the public API of the `markdown` crate.
 
    `src/markdown/` is a C++ port of markdown-rs 1.0.0, the CommonMark + GFM
-   parser gpui-component parses every TextView with. See
+   parser gpui-kit parses every TextView with. See
    src/markdown/readme.md for what is ported and what is not, and
    cmd/versions.ts (`markdown`) for the pinned version.
 

@@ -1,5 +1,5 @@
 /* Ported from crates/gpui's keymap: Keystroke::parse, KeyBinding, key
- * contexts, and the dispatch that reads them — which gpui-component builds
+ * contexts, and the dispatch that reads them — which gpui-kit builds
  * every component's keyboard on.
  *
  * An action is a name here rather than a type, so what is worth pinning is

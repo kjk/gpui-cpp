@@ -671,7 +671,7 @@ static void TestSourceIgnoresPlainRuns() {
 
 #if GPUI_MARKDOWN_FULL
 
-// `Table::to_markdown`, which gpui-component b1e78a51 fixed on its way to the
+// `Table::to_markdown`, which gpui-kit b1e78a51 fixed on its way to the
 // table_actions hook: it used to join cells straight out of the paragraph
 // writer -- which trails a blank line -- and emit no outer pipes, so a
 // single-column table did not round-trip as GFM.

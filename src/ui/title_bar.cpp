@@ -35,7 +35,7 @@ static El* WindowControls(Ctx* cx) {
     Window* win = cx->win;
     // Under server-side decorations the window manager already draws a title
     // bar with its own min/max/close, and a second set on top of it is most
-    // visible as two close buttons. gpui-component gates this on
+    // visible as two close buttons. gpui-kit gates this on
     // `Decorations::Client`; the same question here is whether the frame ever
     // came off — on X11 a manager may keep it whatever the window asked for.
     if (!WindowClientDecorated(win)) {

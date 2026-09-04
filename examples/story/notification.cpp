@@ -201,7 +201,7 @@ struct NotificationMarkdownView {
                    cx,
                    StrL("This is a custom notification.\n\n- List item 1\n- "
                         "List item 2\n- [Click here](https://github.com/"
-                        "longbridge/gpui-component)"))
+                        "longbridge/gpui-kit)"))
             ->Font(14)
             ->IntoEl();
     }
