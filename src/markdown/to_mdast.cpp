@@ -607,10 +607,9 @@ static void OnExitListItem(CompileContext* c) {
             Node* text = firstInParagraph;
             Str value = Get(c, text, NodeStrKind::Value);
             int32_t start = 0;
-            if (value.len > 0 && (value.s[0] == '\t' || value.s[0] == ' ')) {
+            if (StrStartsWithAny(value, "\t ")) {
                 start += 1;
-            } else if (value.len > 0 &&
-                       (value.s[0] == '\r' || value.s[0] == '\n')) {
+            } else if (StrStartsWithAny(value, "\r\n")) {
                 start += 1;
                 if (value.len > 1 && value.s[0] == '\r' && value.s[1] == '\n') {
                     start += 1;

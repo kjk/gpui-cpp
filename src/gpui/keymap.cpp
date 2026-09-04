@@ -132,8 +132,7 @@ static int VkForName(Str name, bool* shift) {
     }
     // Windows names F1..F24; macOS and XKB continue the same vocabulary to
     // F35. The latter live in the reserved portable range above the VKs.
-    if ((name.s[0] == 'f' || name.s[0] == 'F') && name.len >= 2 &&
-        name.len <= 3) {
+    if (StrStartsWithAny(name, "fF") && name.len >= 2 && name.len <= 3) {
         int n = 0;
         for (int i = 1; i < name.len; i++) {
             if (name.s[i] < '0' || name.s[i] > '9') {

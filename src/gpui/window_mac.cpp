@@ -1488,8 +1488,8 @@ static NSString* KeyEquivalent(Str key) {
         }
     }
     // f1..f12, which AppKit also names with a code point of its own.
-    if ((key.s[0] == 'f' || key.s[0] == 'F') && key.len >= 2 &&
-        key.s[1] >= '0' && key.s[1] <= '9') {
+    if (StrStartsWithAny(key, "fF") && key.len >= 2 && key.s[1] >= '0' &&
+        key.s[1] <= '9') {
         int n = key.s[1] - '0';
         if (key.len == 3 && key.s[2] >= '0' && key.s[2] <= '9') {
             n = n * 10 + (key.s[2] - '0');

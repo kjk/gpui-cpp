@@ -1687,6 +1687,7 @@ inline bool StrEqI(Str s1, Str s2) {
 bool StrEqI(Str s1, const char* s2);
 bool StrStartsWith(Str s, Str prefix);
 bool StrStartsWith(Str s, const char* prefix);
+bool StrStartsWithAny(Str s, const char* chars);
 inline bool StrStartsWithI(Str s, Str prefix) {
     if (prefix.len > s.len) {
         return false;

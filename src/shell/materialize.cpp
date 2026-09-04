@@ -442,8 +442,7 @@ struct MaterialLength {
 };
 
 static Str TrimSpace(Str value) {
-    while (value.len > 0 && (value.s[0] == ' ' || value.s[0] == '\t' ||
-                             value.s[0] == '\r' || value.s[0] == '\n')) {
+    while (StrStartsWithAny(value, " \t\r\n")) {
         value.s++;
         value.len--;
     }

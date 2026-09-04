@@ -181,6 +181,24 @@ static void Dup2TreatsNullAsEmptyInsideTheSameBlock() {
     StrFree2(a);
 }
 
+static void StartsWithAnyChecksFirstCharInSet() {
+    Str s = StrL("+123");
+    utassert(StrStartsWithAny(s, "+-"));
+    utassert(StrStartsWithAny(s, "+"));
+    utassert(!StrStartsWithAny(s, "-"));
+    utassert(!StrStartsWithAny(s, "123"));
+
+    Str minus = StrL("-456");
+    utassert(StrStartsWithAny(minus, "+-"));
+    utassert(!StrStartsWithAny(minus, "+"));
+    utassert(StrStartsWithAny(minus, "-"));
+
+    utassert(!StrStartsWithAny(Str{}, "+-"));
+    utassert(!StrStartsWithAny(StrL(""), "+-"));
+    utassert(!StrStartsWithAny(s, ""));
+    utassert(!StrStartsWithAny(s, nullptr));
+}
+
 void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
@@ -188,6 +206,7 @@ void TestStr() {
     ComparisonUsesBytesThenLength();
     SequentialStringLookupsAvoidLengthPrepass();
     CaseInsensitivePrefixUsesBothOverloads();
+    StartsWithAnyChecksFirstCharInSet();
     ReplaceAllReplacesNonOverlappingMatches();
     ReplaceAllHandlesEmptyAndMissingMatches();
     PrefixSuffixAndFindHelpersHandleBoundaries();

@@ -123,7 +123,7 @@ static bool ValidId(Str id) {
 }
 
 static bool ValidEntry(Str entry) {
-    if (!entry || entry.s[0] == '/' || entry.s[0] == '\\' ||
+    if (!entry || StrStartsWithAny(entry, "/\\") ||
         StrFind(entry, StrL(":")) >= 0)
         return false;
     int start = 0;
@@ -323,7 +323,7 @@ static bool ParseGitDependencyString(Arena* arena, Str source, Str* git,
 }
 
 static bool ValidBareModuleName(Str name) {
-    if (!name || name.s[0] == '.' || name.s[0] == '/') return false;
+    if (!name || StrStartsWithAny(name, "./")) return false;
     if (StrContains(name, StrL("\\")) || StrContains(name, StrL(":")))
         return false;
     int start = 0;
@@ -800,8 +800,7 @@ void PluginManifestSchema(StrBuilder* out) {
 }
 
 static bool AbsolutePath(Str path) {
-    if (!path) return false;
-    if (path.s[0] == '/' || path.s[0] == '\\') return true;
+    if (StrStartsWithAny(path, "/\\")) return true;
     return path.len >= 3 && path.s[1] == ':' &&
            (path.s[2] == '/' || path.s[2] == '\\');
 }

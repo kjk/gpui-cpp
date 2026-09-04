@@ -598,7 +598,7 @@ static bool MiniAtx(Str line, int32_t* level, Str* content) {
 
 static bool MiniSetext(Str line, int32_t* level) {
     Str value = MiniTrim(line);
-    if (value.len <= 0 || (value.s[0] != '=' && value.s[0] != '-')) {
+    if (!StrStartsWithAny(value, "=-")) {
         return false;
     }
     char marker = value.s[0];
@@ -619,8 +619,7 @@ static bool MiniSetext(Str line, int32_t* level) {
 
 static bool MiniThematic(Str line) {
     Str value = MiniTrim(line);
-    if (value.len < 3 ||
-        (value.s[0] != '*' && value.s[0] != '-' && value.s[0] != '_')) {
+    if (value.len < 3 || !StrStartsWithAny(value, "*-_")) {
         return false;
     }
     char marker = value.s[0];

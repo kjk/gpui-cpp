@@ -36,8 +36,8 @@ bool AppAssets::Resolve(Str path, Str* relative, Str* error) const {
         StrFree(*error);
         *error = {};
     }
-    if (!path || path.len >= kMaxPath || path.s[0] == '/' ||
-        path.s[0] == '\\' || (path.len >= 2 && path.s[1] == ':')) {
+    if (!path || path.len >= kMaxPath || StrStartsWithAny(path, "/\\") ||
+        (path.len >= 2 && path.s[1] == ':')) {
         if (error)
             *error = StrDup(
                 fmt("asset `%s` is outside the application directory", path));

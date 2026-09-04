@@ -31,8 +31,9 @@ int StrToIntUnchecked(Str s) {
         i++;
     }
     bool negative = false;
-    if (i < s.len && (s.s[i] == '+' || s.s[i] == '-')) {
-        negative = s.s[i] == '-';
+    Str rest = Str(s.s + i, s.len - i);
+    if (StrStartsWithAny(rest, "+-")) {
+        negative = rest.s[0] == '-';
         i++;
     }
     uint64_t value = 0;
@@ -1161,6 +1162,18 @@ bool StrStartsWith(Str s, Str prefix) {
 
 bool StrStartsWith(Str s, const char* prefix) {
     return StrStartsWith(s, Str(prefix));
+}
+
+bool StrStartsWithAny(Str s, const char* chars) {
+    if (!s || !chars) {
+        return false;
+    }
+    for (; *chars; chars++) {
+        if (s.s[0] == *chars) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool StrStartsWithI(Str s, const char* prefix) {
