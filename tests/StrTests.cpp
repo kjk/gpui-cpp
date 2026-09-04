@@ -31,6 +31,23 @@ static void ComparisonUsesBytesThenLength() {
     utassert(base::StrCmp(Str{}, Str{}) == 0);
 }
 
+static void SequentialStringLookupsAvoidLengthPrepass() {
+    static const char values[] = "Alpha\0beta\0longer value\0";
+    utassert(base::SeqStrIndex(values, StrL("Alpha")) == 0);
+    utassert(base::SeqStrIndex(values, StrL("beta")) == 1);
+    utassert(base::SeqStrIndex(values, StrL("BETA")) == -1);
+    utassert(base::SeqStrIndexIS(values, StrL("BETA")) == 1);
+    utassert(base::SeqStrIndex(values, StrL("longer value")) == 2);
+    utassert(base::SeqStrIndexIS(values, StrL("missing")) == -1);
+    utassert(base::SeqStrContainsI(values, StrL("alpha")));
+    utassert(base::SeqStrContainsI(values, StrL("BETA")));
+    utassert(base::SeqStrContainsI(values, StrL("longer value")));
+    utassert(!base::SeqStrContainsI(values, StrL("longer")));
+    utassert(!base::SeqStrContainsI(values, StrL("missing")));
+    utassert(!base::SeqStrContainsI(values, Str{}));
+    utassert(!base::SeqStrContainsI(nullptr, StrL("alpha")));
+}
+
 static void CaseInsensitivePrefixUsesBothOverloads() {
     Str text = StrL("Alpha");
     utassert(base::StrStartsWithI(text, "aL"));
@@ -169,6 +186,7 @@ void TestStr() {
     CaseInsensitiveEqualityRejectsLengthFirst();
     CaseInsensitiveEqualityKeepsEmptySliceSemantics();
     ComparisonUsesBytesThenLength();
+    SequentialStringLookupsAvoidLengthPrepass();
     CaseInsensitivePrefixUsesBothOverloads();
     ReplaceAllReplacesNonOverlappingMatches();
     ReplaceAllHandlesEmptyAndMissingMatches();

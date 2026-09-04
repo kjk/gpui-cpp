@@ -30,10 +30,6 @@ static bool NameChar(char c) {
            c == ':';
 }
 
-static bool In(SeqStrings set, Str value) {
-    return SeqStrIndexIS(set, value) >= 0;
-}
-
 static ArenaStr Lower(Arena* a, Str value) {
     ArenaStr result = ArenaStrDup(a, value);
     StrLowerAscii(ArenaStrGet(a, result).s);
@@ -300,7 +296,8 @@ void Tokenize(Arena* a, Str source, TokenSink sink, void* user,
             token.kind = TokenKind::StartTag;
             token.name = Name(&l);
             token.attrs = ArenaPtrOf(a, Attrs(&l, &token.selfClosing));
-            if (!token.selfClosing && In(kRawElements, TokenName(a, &token))) {
+            if (!token.selfClosing &&
+                SeqStrContainsI(kRawElements, TokenName(a, &token))) {
                 rawName = TokenName(a, &token);
             }
         } else {
@@ -361,7 +358,7 @@ static void OnToken(void* user, const Token* token) {
         node->name = token->name;
         node->attrs = token->attrs;
         Append(b->a, parent, node);
-        if (!token->selfClosing && !In(kVoidElements, name)) {
+        if (!token->selfClosing && !SeqStrContainsI(kVoidElements, name)) {
             b->stack.Append(b->a, node);
         }
     } else if (token->kind == TokenKind::EndTag) {
@@ -425,7 +422,7 @@ static void Write(Arena* a, StrBuilder& out, const Node* node, bool include) {
     bool element = node->kind == NodeKind::Element;
     if (include && node->kind == NodeKind::Text) {
         const Node* parent = NodeParent(a, node);
-        if (parent && In(kRawElements, NodeName(a, parent)))
+        if (parent && SeqStrContainsI(kRawElements, NodeName(a, parent)))
             StrBuilderAppend(a, out, NodeData(a, node));
         else
             WriteEscaped(a, out, NodeData(a, node), false);
@@ -450,7 +447,8 @@ static void Write(Arena* a, StrBuilder& out, const Node* node, bool include) {
          child = NodeNext(a, child)) {
         Write(a, out, child, true);
     }
-    if (include && element && !In(kVoidElements, NodeName(a, node))) {
+    if (include && element &&
+        !SeqStrContainsI(kVoidElements, NodeName(a, node))) {
         StrBuilderAppend(a, out, StrL("</"));
         StrBuilderAppend(a, out, NodeName(a, node));
         StrBuilderAppendChar(a, out, '>');

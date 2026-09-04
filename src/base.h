@@ -1735,6 +1735,8 @@ bool SeqStrAdvance(SeqStrings strs, int& off, int* idxInOut = nullptr);
 // Which string in the run this is, or -1. `IS` ignores case.
 int SeqStrIndex(SeqStrings strs, Str toFind);
 int SeqStrIndexIS(SeqStrings strs, Str toFind);
+// Whether the run contains this string, ignoring case.
+bool SeqStrContainsI(SeqStrings strs, Str toFind);
 // The nth string, or {} past the end of the run.
 Str SeqStrByIndex(SeqStrings strs, int idx);
 // How many strings the run holds. Not one of Sumatra's — it is here because

@@ -1326,22 +1326,27 @@ bool SeqStrAdvance(SeqStrings strs, int& off, int* idxInOut) {
     return true;
 }
 
-// The two lookups differ only in how they compare, so they share the walk.
+// Compare before advancing so a lookup does not strlen every candidate first.
+// The two lookups differ only in case folding, so they share the walk.
 static int SeqStrIndexCmp(SeqStrings strs, Str toFind, bool ignoreCase) {
-    if (!strs || !toFind) {
-        return -1;
-    }
-    int off = 0;
+    if (!strs || !toFind) return -1;
+    const char* candidate = strs;
     int idx = 0;
-    while (strs[off]) {
-        Str at = SeqStrAt(strs, off);
-        bool same = ignoreCase ? StrEqI(at, toFind) : StrEq(at, toFind);
-        if (same) {
-            return idx;
+    while (*candidate) {
+        int i = 0;
+        while (i < toFind.len && candidate[i]) {
+            char a = candidate[i];
+            char b = toFind.s[i];
+            if (ignoreCase) {
+                if (a >= 'A' && a <= 'Z') a = (char)(a + ('a' - 'A'));
+                if (b >= 'A' && b <= 'Z') b = (char)(b + ('a' - 'A'));
+            }
+            if (a != b) break;
+            i++;
         }
-        if (!SeqStrAdvance(strs, off)) {
-            break;
-        }
+        if (i == toFind.len && !candidate[i]) return idx;
+        while (*candidate) candidate++;
+        candidate++;
         idx++;
     }
     return -1;
@@ -1353,6 +1358,10 @@ int SeqStrIndex(SeqStrings strs, Str toFind) {
 
 int SeqStrIndexIS(SeqStrings strs, Str toFind) {
     return SeqStrIndexCmp(strs, toFind, true);
+}
+
+bool SeqStrContainsI(SeqStrings strs, Str toFind) {
+    return SeqStrIndexCmp(strs, toFind, true) >= 0;
 }
 
 Str SeqStrByIndex(SeqStrings strs, int idx) {

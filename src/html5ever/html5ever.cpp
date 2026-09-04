@@ -4,22 +4,22 @@ namespace html5ever {
 
 using namespace base;
 
-// html5ever's generated atom sets become sequential strings here. They are
-// read only at structural boundaries, where a linear walk is smaller than a
-// pointer table and insignificant beside allocating the node.
-static const char kVoidElements[] =
-    "area\0base\0basefont\0bgsound\0br\0col\0embed\0frame\0hr\0img\0input\0"
-    "keygen\0link\0meta\0param\0source\0track\0wbr\0";
+// html5ever's generated atom sets become compact NUL-separated strings here.
+// The hot sets are split by first byte below so their linear walks stay short.
+static const char kVoidB[] = "base\0basefont\0bgsound\0br\0";
+static const char kVoidI[] = "img\0input\0";
 static const char kRawElements[] =
     "iframe\0noembed\0noframes\0script\0style\0xmp\0";
 static const char kRcdataElements[] = "textarea\0title\0";
-static const char kFormattingElements[] =
-    "a\0b\0big\0code\0em\0font\0i\0nobr\0s\0small\0strike\0strong\0tt\0u\0";
-static const char kBlockElements[] =
-    "address\0article\0aside\0blockquote\0center\0details\0dialog\0dir\0div\0"
-    "dl\0fieldset\0figcaption\0figure\0footer\0form\0h1\0h2\0h3\0h4\0h5\0"
-    "h6\0header\0hgroup\0hr\0main\0menu\0nav\0ol\0p\0pre\0search\0section\0"
-    "summary\0table\0ul\0";
+static const char kFormattingB[] = "b\0big\0";
+static const char kFormattingS[] = "s\0small\0strike\0strong\0";
+static const char kBlockA[] = "address\0article\0aside\0";
+static const char kBlockD[] = "details\0dialog\0dir\0div\0dl\0";
+static const char kBlockF[] = "fieldset\0figcaption\0figure\0footer\0form\0";
+static const char kBlockH[] = "h1\0h2\0h3\0h4\0h5\0h6\0header\0hgroup\0hr\0";
+static const char kBlockM[] = "main\0menu\0";
+static const char kBlockP[] = "p\0pre\0";
+static const char kBlockS[] = "search\0section\0summary\0";
 static const char kHeadElements[] =
     "base\0basefont\0bgsound\0link\0meta\0noframes\0script\0style\0template\0"
     "title\0";
@@ -42,8 +42,70 @@ static bool IsNameChar(char c) {
     return IsAlpha(c) || IsDigit(c) || c == '-' || c == '_' || c == ':';
 }
 
-static bool In(SeqStrings set, Str value) {
-    return SeqStrIndexIS(set, value) >= 0;
+// Tag names have already been folded to lowercase by ScanName. Branching on
+// their first byte keeps the common membership tests to one or two compares.
+static bool IsVoid(Str name) {
+    if (!name.s || name.len == 0) return false;
+    switch (name.s[0]) {
+        case 'a':
+            return StrEq(name, StrL("area"));
+        case 'b':
+            return SeqStrContainsI(kVoidB, name);
+        case 'c':
+            return StrEq(name, StrL("col"));
+        case 'e':
+            return StrEq(name, StrL("embed"));
+        case 'f':
+            return StrEq(name, StrL("frame"));
+        case 'h':
+            return StrEq(name, StrL("hr"));
+        case 'i':
+            return SeqStrContainsI(kVoidI, name);
+        case 'k':
+            return StrEq(name, StrL("keygen"));
+        case 'l':
+            return StrEq(name, StrL("link"));
+        case 'm':
+            return StrEq(name, StrL("meta"));
+        case 'p':
+            return StrEq(name, StrL("param"));
+        case 's':
+            return StrEq(name, StrL("source"));
+        case 't':
+            return StrEq(name, StrL("track"));
+        case 'w':
+            return StrEq(name, StrL("wbr"));
+        default:
+            return false;
+    }
+}
+
+static bool IsFormatting(Str name) {
+    if (!name.s || name.len == 0) return false;
+    switch (name.s[0]) {
+        case 'a':
+            return StrEq(name, StrL("a"));
+        case 'b':
+            return SeqStrContainsI(kFormattingB, name);
+        case 'c':
+            return StrEq(name, StrL("code"));
+        case 'e':
+            return StrEq(name, StrL("em"));
+        case 'f':
+            return StrEq(name, StrL("font"));
+        case 'i':
+            return StrEq(name, StrL("i"));
+        case 'n':
+            return StrEq(name, StrL("nobr"));
+        case 's':
+            return SeqStrContainsI(kFormattingS, name);
+        case 't':
+            return StrEq(name, StrL("tt"));
+        case 'u':
+            return StrEq(name, StrL("u"));
+        default:
+            return false;
+    }
 }
 
 static ArenaStr LowerCopy(Arena* a, Str value) {
@@ -416,12 +478,13 @@ static void TokenizeRun(Scanner* s) {
             Token token;
             token.kind = TokenKind::Doctype;
             token.line = tokenLine;
-            if (StrStartsWithI(body, "doctype")) {
+            if (StrStartsWithI(body, StrL("doctype"))) {
                 body = StrTrimAscii(Str(body.s + 7, body.len - 7));
                 int n = 0;
                 while (n < body.len && !IsSpace(body.s[n])) n++;
                 token.name = LowerCopy(s->a, Str(body.s, n));
-                token.forceQuirks = !StrEqI(TokenName(s->a, &token), "html");
+                token.forceQuirks =
+                    !StrEqI(TokenName(s->a, &token), StrL("html"));
             } else {
                 token.kind = TokenKind::Comment;
                 token.data = ArenaStrDup(s->a, body);
@@ -451,9 +514,10 @@ static void TokenizeRun(Scanner* s) {
             Emit(s, token);
             Str name = TokenName(s->a, &token);
             if (!token.selfClosing &&
-                (In(kRawElements, name) || In(kRcdataElements, name))) {
+                (SeqStrContainsI(kRawElements, name) ||
+                 SeqStrContainsI(kRcdataElements, name))) {
                 s->rawName = name;
-                s->rcdata = In(kRcdataElements, name);
+                s->rcdata = SeqStrContainsI(kRcdataElements, name);
             }
             continue;
         }
@@ -550,13 +614,13 @@ static Node* Current(Builder* b) {
 
 static int OpenIndex(Builder* b, Str name) {
     for (int i = b->open.len - 1; i >= 0; i--) {
-        if (StrEqI(NodeName(b->a, b->open[i]), name)) return i;
+        if (StrEq(NodeName(b->a, b->open[i]), name)) return i;
     }
     return -1;
 }
 
-static bool HasOpen(Builder* b, const char* name) {
-    return OpenIndex(b, Str((char*)name)) >= 0;
+static bool HasOpen(Builder* b, Str name) {
+    return OpenIndex(b, name) >= 0;
 }
 
 static Node* Element(Builder* b, Str name, const Attribute* attrs,
@@ -577,10 +641,9 @@ static Node* ElementFromToken(Builder* b, const Token* token,
     return node;
 }
 
-static Node* EnsureWrapper(Builder* b, Node** slot, const char* name,
-                           Node* parent) {
+static Node* EnsureWrapper(Builder* b, Node** slot, Str name, Node* parent) {
     if (*slot) return *slot;
-    *slot = Element(b, Str((char*)name), nullptr);
+    *slot = Element(b, name, nullptr);
     (*slot)->implicit = true;
     Append(b->a, parent, *slot);
     return *slot;
@@ -588,9 +651,10 @@ static Node* EnsureWrapper(Builder* b, Node** slot, const char* name,
 
 static Node* Body(Builder* b) {
     if (b->fragment) return b->doc;
-    EnsureWrapper(b, &b->html, "html", b->doc);
-    EnsureWrapper(b, &b->head, "head", b->html);
-    return EnsureWrapper(b, &b->body, "body", b->html);
+    if (b->body) return b->body;
+    EnsureWrapper(b, &b->html, StrL("html"), b->doc);
+    EnsureWrapper(b, &b->head, StrL("head"), b->html);
+    return EnsureWrapper(b, &b->body, StrL("body"), b->html);
 }
 
 static bool AllSpace(Str value) {
@@ -602,30 +666,38 @@ static bool AllSpace(Str value) {
 
 static Node* TableInScope(Builder* b) {
     for (int i = b->open.len - 1; i >= 0; i--) {
-        if (StrEqI(NodeName(b->a, b->open[i]), "table")) return b->open[i];
+        if (StrEq(NodeName(b->a, b->open[i]), StrL("table"))) {
+            return b->open[i];
+        }
     }
     return nullptr;
 }
 
 static bool TableAllows(Str parent, Str child) {
-    if (StrEqI(parent, "table")) {
-        return In(kTableParts, child) || StrEqI(child, "style") ||
-               StrEqI(child, "script") || StrEqI(child, "template");
+    if (StrEq(parent, StrL("table"))) {
+        return SeqStrContainsI(kTableParts, child) ||
+               StrEq(child, StrL("style")) || StrEq(child, StrL("script")) ||
+               StrEq(child, StrL("template"));
     }
-    if (StrEqI(parent, "tbody") || StrEqI(parent, "thead") ||
-        StrEqI(parent, "tfoot")) {
-        return StrEqI(child, "tr");
+    if (StrEq(parent, StrL("tbody")) || StrEq(parent, StrL("thead")) ||
+        StrEq(parent, StrL("tfoot"))) {
+        return StrEq(child, StrL("tr"));
     }
-    if (StrEqI(parent, "tr")) {
-        return StrEqI(child, "td") || StrEqI(child, "th");
+    if (StrEq(parent, StrL("tr"))) {
+        return StrEq(child, StrL("td")) || StrEq(child, StrL("th"));
     }
     return true;
 }
 
-static Node* InsertionParent(Builder* b, Str child, bool textIsSpace = false) {
+static Node* InsertionParent(Builder* b, Str child, bool textIsSpace,
+                             Node** tableOut, bool* fosterOut) {
     Node* current = Current(b);
     Node* table = TableInScope(b);
-    if (table && !TableAllows(NodeName(b->a, current), child) && !textIsSpace) {
+    if (tableOut) *tableOut = table;
+    bool foster =
+        table && !textIsSpace && !TableAllows(NodeName(b->a, current), child);
+    if (fosterOut) *fosterOut = foster;
+    if (foster) {
         Node* tableParent = NodeParent(b->a, table);
         return tableParent ? tableParent : current;
     }
@@ -635,9 +707,10 @@ static Node* InsertionParent(Builder* b, Str child, bool textIsSpace = false) {
 static void AppendText(Builder* b, ArenaStr stored) {
     Str data = ArenaStrGet(b->a, stored);
     if (data.len <= 0) return;
-    Node* parent = InsertionParent(b, {}, AllSpace(data));
-    Node* table = TableInScope(b);
-    if (table && parent == NodeParent(b->a, table) && !AllSpace(data)) {
+    Node* table = nullptr;
+    bool foster = false;
+    Node* parent = InsertionParent(b, {}, AllSpace(data), &table, &foster);
+    if (foster) {
         Node* text = NewNode(b->a, NodeKind::Text);
         text->data = stored;
         InsertBefore(b->a, table, text);
@@ -654,31 +727,65 @@ static void AppendText(Builder* b, ArenaStr stored) {
 }
 
 static bool ClosesP(Str name) {
-    return In(kBlockElements, name) || StrEqI(name, "listing");
+    if (!name.s || name.len == 0) return false;
+    char first = name.s[0];
+    if (first >= 'A' && first <= 'Z') first = (char)(first + ('a' - 'A'));
+    switch (first) {
+        case 'a':
+            return SeqStrContainsI(kBlockA, name);
+        case 'b':
+            return StrEq(name, StrL("blockquote"));
+        case 'c':
+            return StrEq(name, StrL("center"));
+        case 'd':
+            return SeqStrContainsI(kBlockD, name);
+        case 'f':
+            return SeqStrContainsI(kBlockF, name);
+        case 'h':
+            return SeqStrContainsI(kBlockH, name);
+        case 'l':
+            return StrEq(name, StrL("listing"));
+        case 'm':
+            return SeqStrContainsI(kBlockM, name);
+        case 'n':
+            return StrEq(name, StrL("nav"));
+        case 'o':
+            return StrEq(name, StrL("ol"));
+        case 'p':
+            return SeqStrContainsI(kBlockP, name);
+        case 's':
+            return SeqStrContainsI(kBlockS, name);
+        case 't':
+            return StrEq(name, StrL("table"));
+        case 'u':
+            return StrEq(name, StrL("ul"));
+        default:
+            return false;
+    }
 }
 
-static void CloseNamed(Builder* b, const char* name) {
-    int at = OpenIndex(b, Str((char*)name));
+static void CloseNamed(Builder* b, Str name) {
+    int at = OpenIndex(b, name);
     if (at >= 0) b->open.Truncate(at);
 }
 
 static void CloseImplied(Builder* b, Str name) {
-    if (ClosesP(name) && HasOpen(b, "p")) CloseNamed(b, "p");
-    if (StrEqI(name, "li")) {
+    if (ClosesP(name)) CloseNamed(b, StrL("p"));
+    if (StrEq(name, StrL("li"))) {
         int at = OpenIndex(b, StrL("li"));
         if (at >= 0) b->open.Truncate(at);
     }
-    if (StrEqI(name, "dt") || StrEqI(name, "dd")) {
+    if (StrEq(name, StrL("dt")) || StrEq(name, StrL("dd"))) {
         int dt = OpenIndex(b, StrL("dt"));
         int dd = OpenIndex(b, StrL("dd"));
         int at = dt > dd ? dt : dd;
         if (at >= 0) b->open.Truncate(at);
     }
-    if (StrEqI(name, "tr")) {
+    if (StrEq(name, StrL("tr"))) {
         int at = OpenIndex(b, StrL("tr"));
         if (at >= 0) b->open.Truncate(at);
     }
-    if (StrEqI(name, "td") || StrEqI(name, "th")) {
+    if (StrEq(name, StrL("td")) || StrEq(name, StrL("th"))) {
         int td = OpenIndex(b, StrL("td"));
         int th = OpenIndex(b, StrL("th"));
         int at = td > th ? td : th;
@@ -716,16 +823,16 @@ static void MergeAttrs(Arena* a, Node* node, const Attribute* attrs) {
 static Node* PushElement(Builder* b, const Token* token,
                          Namespace ns = Namespace::Html) {
     Str name = TokenName(b->a, token);
-    Node* parent = InsertionParent(b, name);
+    Node* table = nullptr;
+    bool foster = false;
+    Node* parent = InsertionParent(b, name, false, &table, &foster);
     Node* node = ElementFromToken(b, token, ns);
-    Node* table = TableInScope(b);
-    if (table && parent == NodeParent(b->a, table) &&
-        !TableAllows(NodeName(b->a, Current(b)), name)) {
+    if (foster) {
         InsertBefore(b->a, table, node);
     } else {
         Append(b->a, parent, node);
     }
-    if (!token->selfClosing && !In(kVoidElements, name)) {
+    if (!token->selfClosing && !IsVoid(name)) {
         b->open.Append(b->a, node);
     }
     return node;
@@ -733,36 +840,36 @@ static Node* PushElement(Builder* b, const Token* token,
 
 static void StartTag(Builder* b, const Token* token) {
     Str name = TokenName(b->a, token);
-    if (!b->fragment && StrEqI(name, "html")) {
-        Node* html = EnsureWrapper(b, &b->html, "html", b->doc);
+    if (!b->fragment && StrEq(name, StrL("html"))) {
+        Node* html = EnsureWrapper(b, &b->html, StrL("html"), b->doc);
         html->implicit = false;
         MergeAttrs(b->a, html, TokenAttrs(b->a, token));
         if (b->open.len == 0) b->open.Append(b->a, html);
         return;
     }
-    if (!b->fragment && StrEqI(name, "head")) {
-        EnsureWrapper(b, &b->html, "html", b->doc);
-        Node* head = EnsureWrapper(b, &b->head, "head", b->html);
+    if (!b->fragment && StrEq(name, StrL("head"))) {
+        EnsureWrapper(b, &b->html, StrL("html"), b->doc);
+        Node* head = EnsureWrapper(b, &b->head, StrL("head"), b->html);
         head->implicit = false;
         MergeAttrs(b->a, head, TokenAttrs(b->a, token));
-        if (!HasOpen(b, "head")) b->open.Append(b->a, head);
+        if (!HasOpen(b, StrL("head"))) b->open.Append(b->a, head);
         return;
     }
-    if (!b->fragment && StrEqI(name, "body")) {
+    if (!b->fragment && StrEq(name, StrL("body"))) {
         Body(b)->implicit = false;
         MergeAttrs(b->a, b->body, TokenAttrs(b->a, token));
         while (b->open.len && b->open[b->open.len - 1] != b->html)
             b->open.Pop();
-        if (!HasOpen(b, "html")) b->open.Append(b->a, b->html);
+        if (!HasOpen(b, StrL("html"))) b->open.Append(b->a, b->html);
         b->open.Append(b->a, b->body);
         return;
     }
-    if (!b->fragment && In(kHeadElements, name) && !b->body) {
-        EnsureWrapper(b, &b->html, "html", b->doc);
-        Node* head = EnsureWrapper(b, &b->head, "head", b->html);
+    if (!b->fragment && !b->body && SeqStrContainsI(kHeadElements, name)) {
+        EnsureWrapper(b, &b->html, StrL("html"), b->doc);
+        Node* head = EnsureWrapper(b, &b->head, StrL("head"), b->html);
         Node* node = ElementFromToken(b, token);
         Append(b->a, head, node);
-        if (!token->selfClosing && !In(kVoidElements, name)) {
+        if (!token->selfClosing && !IsVoid(name)) {
             b->open.Append(b->a, node);
         }
         return;
@@ -776,13 +883,14 @@ static void StartTag(Builder* b, const Token* token) {
     }
 
     CloseImplied(b, name);
-    if (StrEqI(name, "tr") && StrEqI(NodeName(b->a, Current(b)), "table")) {
+    if (StrEq(name, StrL("tr")) &&
+        StrEq(NodeName(b->a, Current(b)), StrL("table"))) {
         Node* tbody = Element(b, StrL("tbody"), nullptr);
         tbody->implicit = true;
         Append(b->a, Current(b), tbody);
         b->open.Append(b->a, tbody);
-    } else if ((StrEqI(name, "td") || StrEqI(name, "th")) &&
-               StrEqI(NodeName(b->a, Current(b)), "table")) {
+    } else if ((StrEq(name, StrL("td")) || StrEq(name, StrL("th"))) &&
+               StrEq(NodeName(b->a, Current(b)), StrL("table"))) {
         Node* tbody = Element(b, StrL("tbody"), nullptr);
         tbody->implicit = true;
         Append(b->a, Current(b), tbody);
@@ -791,19 +899,19 @@ static void StartTag(Builder* b, const Token* token) {
         tr->implicit = true;
         Append(b->a, Current(b), tr);
         b->open.Append(b->a, tr);
-    } else if ((StrEqI(name, "td") || StrEqI(name, "th")) &&
-               (StrEqI(NodeName(b->a, Current(b)), "tbody") ||
-                StrEqI(NodeName(b->a, Current(b)), "thead") ||
-                StrEqI(NodeName(b->a, Current(b)), "tfoot"))) {
+    } else if ((StrEq(name, StrL("td")) || StrEq(name, StrL("th"))) &&
+               (StrEq(NodeName(b->a, Current(b)), StrL("tbody")) ||
+                StrEq(NodeName(b->a, Current(b)), StrL("thead")) ||
+                StrEq(NodeName(b->a, Current(b)), StrL("tfoot")))) {
         Node* tr = Element(b, StrL("tr"), nullptr);
         tr->implicit = true;
         Append(b->a, Current(b), tr);
         b->open.Append(b->a, tr);
     }
     Namespace ns = Current(b)->ns;
-    if (StrEqI(name, "svg"))
+    if (StrEq(name, StrL("svg")))
         ns = Namespace::Svg;
-    else if (StrEqI(name, "math"))
+    else if (StrEq(name, StrL("math")))
         ns = Namespace::MathMl;
     PushElement(b, token, ns);
 }
@@ -813,7 +921,7 @@ static void EndFormatting(Builder* b, Str name) {
     if (at < 0) return;
     ArenaVec<Node*> reopen;
     for (int i = at + 1; i < b->open.len; i++) {
-        if (In(kFormattingElements, NodeName(b->a, b->open[i]))) {
+        if (IsFormatting(NodeName(b->a, b->open[i]))) {
             reopen.Append(b->a, b->open[i]);
         }
     }
@@ -831,16 +939,16 @@ static void EndFormatting(Builder* b, Str name) {
 
 static void EndTag(Builder* b, const Token* token) {
     Str name = TokenName(b->a, token);
-    if (StrEqI(name, "head")) {
-        CloseNamed(b, "head");
+    if (StrEq(name, StrL("head"))) {
+        CloseNamed(b, StrL("head"));
         return;
     }
-    if (StrEqI(name, "body") || StrEqI(name, "html")) {
+    if (StrEq(name, StrL("body")) || StrEq(name, StrL("html"))) {
         while (b->open.len && b->open[b->open.len - 1] != b->html)
             b->open.Pop();
         return;
     }
-    if (In(kFormattingElements, name)) {
+    if (IsFormatting(name)) {
         EndFormatting(b, name);
         return;
     }
@@ -893,14 +1001,14 @@ static Node* Parse(Arena* a, Str source, Str context, ParseOptions options,
     if (fragment) {
         builder.doc->name =
             context.s ? LowerCopy(a, context) : ArenaStrDup(a, StrL("body"));
-        builder.doc->ns = StrEqI(context, "svg")    ? Namespace::Svg
-                          : StrEqI(context, "math") ? Namespace::MathMl
-                                                    : Namespace::Html;
+        builder.doc->ns = StrEqI(context, StrL("svg"))    ? Namespace::Svg
+                          : StrEqI(context, StrL("math")) ? Namespace::MathMl
+                                                          : Namespace::Html;
     }
     TokenizerOptions tokenizer = options.tokenizer;
     tokenizer.exactErrors = tokenizer.exactErrors || options.exactErrors;
-    if (fragment &&
-        (In(kRawElements, context) || In(kRcdataElements, context))) {
+    if (fragment && (SeqStrContainsI(kRawElements, context) ||
+                     SeqStrContainsI(kRcdataElements, context))) {
         Scanner scanner;
         scanner.a = a;
         scanner.source = source;
@@ -908,7 +1016,7 @@ static Node* Parse(Arena* a, Str source, Str context, ParseOptions options,
         scanner.user = &builder;
         scanner.options = tokenizer;
         scanner.rawName = context;
-        scanner.rcdata = In(kRcdataElements, context);
+        scanner.rcdata = SeqStrContainsI(kRcdataElements, context);
         TokenizeRun(&scanner);
     } else {
         Tokenize(a, source, BuildToken, &builder, tokenizer);
@@ -961,7 +1069,7 @@ static void WriteNode(Arena* a, StrBuilder& out, const Node* node,
     if (include) {
         if (node->kind == NodeKind::Text) {
             const Node* parent = NodeParent(a, node);
-            if (parent && In(kRawElements, NodeName(a, parent)))
+            if (parent && SeqStrContainsI(kRawElements, NodeName(a, parent)))
                 StrBuilderAppend(a, out, NodeData(a, node));
             else
                 WriteEscaped(a, out, NodeData(a, node), false);
@@ -994,7 +1102,7 @@ static void WriteNode(Arena* a, StrBuilder& out, const Node* node,
             WriteNode(a, out, child, true);
         }
     }
-    if (include && element && !In(kVoidElements, NodeName(a, node))) {
+    if (include && element && !IsVoid(NodeName(a, node))) {
         StrBuilderAppend(a, out, StrL("</"));
         StrBuilderAppend(a, out, NodeName(a, node));
         StrBuilderAppendChar(a, out, '>');
