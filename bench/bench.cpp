@@ -129,9 +129,11 @@ static const char* kUsage =
 int GpuiMain(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         Str argument = Str(argv[i]);
-        if (StrEq(argument, "-small") || StrEq(argument, "--small")) {
+        if (StrEq(argument, StrL("-small")) ||
+            StrEq(argument, StrL("--small"))) {
             gBenchSmall = true;
-        } else if (StrEq(argument, "-large") || StrEq(argument, "--large")) {
+        } else if (StrEq(argument, StrL("-large")) ||
+                   StrEq(argument, StrL("--large"))) {
             gBenchLarge = true;
         } else if (StrStartsWith(argument, "-n=")) {
             gBenchSamples =
@@ -139,7 +141,8 @@ int GpuiMain(int argc, char** argv) {
             if (gBenchSamples < 1) {
                 gBenchSamples = 1;
             }
-        } else if (StrEq(argument, "-h") || StrEq(argument, "--help")) {
+        } else if (StrEq(argument, StrL("-h")) ||
+                   StrEq(argument, StrL("--help"))) {
             printf("%s", kUsage);
             return 0;
         } else if (argument.s[0] == '-') {

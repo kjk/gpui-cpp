@@ -111,16 +111,16 @@ static void TheBuilderCarriesEveryOption() {
 
     utassert(!scroller->scrollbar);
     utassert(!scroller->jumpButton);
-    utassert(base::StrEq(scroller->jumpButtonLabel, "Latest"));
+    utassert(base::StrEq(scroller->jumpButtonLabel, StrL("Latest")));
     utassertnear(scroller->jumpButtonTransitionMs, 300.f);
     utassert(scroller->hasBottomFade);
     utassert(RgbaEq(scroller->bottomFade, Rgb(255, 255, 255)));
     // The defaults the source starts from.
-    MessageScroller* plain = MessageScroller::New(
-        &cx, StrL("plain"), state, nullptr, nullptr);
+    MessageScroller* plain =
+        MessageScroller::New(&cx, StrL("plain"), state, nullptr, nullptr);
     utassert(plain->scrollbar);
     utassert(plain->jumpButton);
-    utassert(base::StrEq(plain->jumpButtonLabel, "Jump to latest"));
+    utassert(base::StrEq(plain->jumpButtonLabel, StrL("Jump to latest")));
     utassertnear(plain->jumpButtonTransitionMs,
                  kMessageScrollerJumpTransitionMs);
     utassert(!plain->hasBottomFade);

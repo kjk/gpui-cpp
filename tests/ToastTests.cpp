@@ -203,11 +203,10 @@ static void StackBuilderUsesStableMeasurementsAndSourceMotion() {
               {(uint32_t)HashClickId(StrL("second")), {0, 0, 300, 80}});
 
     MotionSetReduced(true);
-    El* collapsed =
-        ToastStack::New(&cx, StrL("stack"), &state)
-            ->Item(StrL("first"), Div(a)->H(40))
-            ->Item(StrL("second"), Div(a)->H(80))
-            ->IntoEl();
+    El* collapsed = ToastStack::New(&cx, StrL("stack"), &state)
+                        ->Item(StrL("first"), Div(a)->H(40))
+                        ->Item(StrL("second"), Div(a)->H(80))
+                        ->IntoEl();
     utassertnear(collapsed->style.height, 94.f);
     utassert(collapsed->first && collapsed->first->next);
     utassertnear(collapsed->first->style.absTop, 14.f);
@@ -218,12 +217,11 @@ static void StackBuilderUsesStableMeasurementsAndSourceMotion() {
     state.bounds = {0, 0, 300, 94};
     win->mouseX = 10;
     win->mouseY = 10;
-    El* expanded =
-        ToastStack::New(&cx, StrL("stack"), &state)
-            ->Item(StrL("first"), Div(a)->H(40))
-            ->Item(StrL("second"), Div(a)->H(80))
-            ->Placement(Anchor::TopRight)
-            ->IntoEl();
+    El* expanded = ToastStack::New(&cx, StrL("stack"), &state)
+                       ->Item(StrL("first"), Div(a)->H(40))
+                       ->Item(StrL("second"), Div(a)->H(80))
+                       ->Placement(Anchor::TopRight)
+                       ->IntoEl();
     utassert(state.IsExpanded());
     utassertnear(expanded->style.height, 134.f);
     utassertnear(expanded->first->style.absTop, 94.f);
@@ -246,7 +244,7 @@ static void ToastRootOwnsTheExposedTransitionStatus() {
     utassert(toast->Status() == ToastTransitionStatus::Ending);
     El* root = toast->IntoEl();
     utassert(root->accessibility.role == AccessibilityRole::Alert);
-    utassert(root->first && base::StrEq(root->first->text, "done"));
+    utassert(root->first && base::StrEq(root->first->text, StrL("done")));
     ArenaDelete(a);
 }
 

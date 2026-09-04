@@ -59,10 +59,10 @@ static void CaseInsensitivePrefixUsesBothOverloads() {
 
 static void ReplaceAllReplacesNonOverlappingMatches() {
     utassert(base::StrEq(
-        base::StrReplaceAll(StrL("aaaa"), StrL("aa"), StrL("b")), "bb"));
+        base::StrReplaceAll(StrL("aaaa"), StrL("aa"), StrL("b")), StrL("bb")));
     utassert(base::StrEq(
         base::StrReplaceAll(StrL("one two one"), StrL("one"), StrL("three")),
-        "three two three"));
+        StrL("three two three")));
 }
 
 static void ReplaceAllHandlesEmptyAndMissingMatches() {
@@ -71,8 +71,8 @@ static void ReplaceAllHandlesEmptyAndMissingMatches() {
     utassert(unchanged.s == value.s && unchanged.len == value.len);
     unchanged = base::StrReplaceAll(value, StrL("z"), StrL("x"));
     utassert(unchanged.s == value.s && unchanged.len == value.len);
-    utassert(
-        base::StrEq(base::StrReplaceAll(value, StrL("l"), StrL("")), "heo"));
+    utassert(base::StrEq(base::StrReplaceAll(value, StrL("l"), StrL("")),
+                         StrL("heo")));
 }
 
 static void PrefixSuffixAndFindHelpersHandleBoundaries() {
@@ -96,9 +96,9 @@ static void PrefixSuffixAndFindHelpersHandleBoundaries() {
 static void TrimAsciiReturnsASlice() {
     char text[] = "\f \tHello world\r\n";
     Str trimmed = base::StrTrimAscii(Str(text, (int)sizeof(text) - 1));
-    utassert(base::StrEq(trimmed, "Hello world"));
+    utassert(base::StrEq(trimmed, StrL("Hello world")));
     utassert(trimmed.s == text + 3);
-    utassert(base::StrEq(base::StrTrimAscii(StrL(" \t\r\n")), ""));
+    utassert(base::StrEq(base::StrTrimAscii(StrL(" \t\r\n")), StrL("")));
 }
 
 static void BuilderBorrowsThenGrowsLikeAVec() {
@@ -111,7 +111,7 @@ static void BuilderBorrowsThenGrowsLikeAVec() {
 
     // Taking borrowed storage copies the result and keeps the scratch bound.
     Str four = b.TakeStr();
-    utassert(base::StrEq(four, "four"));
+    utassert(base::StrEq(four, StrL("four")));
     utassert(four.s != scratch.s && b.els == scratch.s && b.len == 0);
     StrFree(four);
 
@@ -121,7 +121,7 @@ static void BuilderBorrowsThenGrowsLikeAVec() {
     utassert(b.els != scratch.s && b.cap > 0);
     utassert(scratch.s[0] == 0);
     Str five = b.TakeStr();
-    utassert(base::StrEq(five, "abcde"));
+    utassert(base::StrEq(five, StrL("abcde")));
     utassert(b.els == nullptr && b.cap == 0 && b.len == 0);
     StrFree(five);
 }
@@ -137,7 +137,7 @@ static void BuilderArenaStorageStaysWithTheArena() {
     char* storage = b.els;
 
     Str result = StrBuilderTakeStr(a, b);
-    utassert(base::StrEq(result, "a string longer than reserve"));
+    utassert(base::StrEq(result, StrL("a string longer than reserve")));
     utassert(result.s != storage);
     utassert(b.els == storage && b.cap < 0 && b.len == 0);
     // Destroying b must not try to free either arena allocation.
@@ -149,7 +149,7 @@ static void BuilderRemovalKeepsTheTerminator() {
     utassert(b.Append(StrL("abcd")));
     utassert(b.LastChar() == 'd');
     utassert(b.RemoveAt(1, 2) == 'b');
-    utassert(base::StrEq(Str(b.els, b.len), "ad"));
+    utassert(base::StrEq(Str(b.els, b.len), StrL("ad")));
     utassert(b.els[b.len] == 0);
     utassert(b.RemoveLast() == 'd');
     utassert(b.LastChar() == 'a' && b.els[b.len] == 0);
@@ -160,8 +160,8 @@ static void BuilderRemovalKeepsTheTerminator() {
 static void Dup2PutsBothStringsInOneBlock() {
     Str a, b;
     StrDup2(StrL("id"), StrL("label"), a, b);
-    utassert(base::StrEq(a, "id"));
-    utassert(base::StrEq(b, "label"));
+    utassert(base::StrEq(a, StrL("id")));
+    utassert(base::StrEq(b, StrL("label")));
     utassert(a.s && b.s == a.s + a.len + 1);
     utassert(a.s[a.len] == 0 && b.s[b.len] == 0);
     StrFree2(a);
@@ -171,12 +171,12 @@ static void Dup2TreatsNullAsEmptyInsideTheSameBlock() {
     Str a, b;
     StrDup2(Str{}, StrL("x"), a, b);
     utassert(a.len == 0 && a.s);
-    utassert(base::StrEq(b, "x"));
+    utassert(base::StrEq(b, StrL("x")));
     utassert(b.s == a.s + 1);
     StrFree2(a);
 
     StrDup2(StrL("y"), Str{}, a, b);
-    utassert(base::StrEq(a, "y"));
+    utassert(base::StrEq(a, StrL("y")));
     utassert(b.len == 0 && b.s == a.s + a.len + 1);
     StrFree2(a);
 }

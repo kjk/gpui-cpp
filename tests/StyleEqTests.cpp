@@ -99,15 +99,14 @@ static void EveryFieldIsCompared() {
     }
     {
         TStyle s = base;
-        s.alignSelf = taffy::OptAlignSelf(
-            taffy::AlignSelf{taffy::AlignItemsKeyword::Start,
-                             taffy::AlignmentSafety::Safe});
+        s.alignSelf = taffy::OptAlignSelf(taffy::AlignSelf{
+            taffy::AlignItemsKeyword::Start, taffy::AlignmentSafety::Safe});
         utassert(!(s == base));
     }
     {
         TStyle s = base;
-        s.justifyContent = taffy::OptJustifyContent(taffy::JustifyContent{
-            taffy::AlignContentKeyword::SpaceBetween});
+        s.justifyContent = taffy::OptJustifyContent(
+            taffy::JustifyContent{taffy::AlignContentKeyword::SpaceBetween});
         utassert(!(s == base));
     }
     {
@@ -204,11 +203,11 @@ static void TwoNonesAreEqual() {
 
 static void RoleOverridesResolveLikeTheSourceEnum() {
     AccessibilityRole role = AccessibilityRole::None;
-    utassert(RoleOverride::Implicit().Resolve(AccessibilityRole::Button,
-                                               &role));
+    utassert(RoleOverride::Implicit()
+                 .Resolve(AccessibilityRole::Button, &role));
     utassert(role == AccessibilityRole::Button);
-    utassert(!RoleOverride::Presentational().Resolve(
-        AccessibilityRole::Button, &role));
+    utassert(!RoleOverride::Presentational()
+                  .Resolve(AccessibilityRole::Button, &role));
     utassert(RoleOverride::Explicit(AccessibilityRole::Link)
                  .Resolve(AccessibilityRole::Button, &role));
     utassert(role == AccessibilityRole::Link);
@@ -255,8 +254,8 @@ static void StyledExtensionsProjectOntoElements() {
     int count = 0;
     const char* const* methods = StyledExtReflectionMethods(&count);
     utassert(methods && count == 21);
-    utassert(base::StrEq(Str(methods[0]), "refine_style"));
-    utassert(base::StrEq(Str(methods[count - 1]), "corner_radii"));
+    utassert(base::StrEq(Str(methods[0]), StrL("refine_style")));
+    utassert(base::StrEq(Str(methods[count - 1]), StrL("corner_radii")));
     ArenaDelete(a);
 }
 

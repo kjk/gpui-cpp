@@ -8,8 +8,7 @@
 
 #include "Test.h"
 
-static void AssignWebViewHandle(WebViewHandle* to,
-                                const WebViewHandle* from) {
+static void AssignWebViewHandle(WebViewHandle* to, const WebViewHandle* from) {
     *to = *from;
 }
 
@@ -77,15 +76,18 @@ void TestWryUri() {
     utassert(!wry::IsWorkAroundUri(uri, scheme, StrL("asset")));
 
     // The prefix the filter is built from.
-    utassert(base::StrEq(wry::WorkAroundUriPrefix(scheme, StrL("wry")), "http://wry."));
-    utassert(base::StrEq(wry::WorkAroundUriPrefix(StrL("https"), StrL("asset")), "https://asset."));
+    utassert(base::StrEq(wry::WorkAroundUriPrefix(scheme, StrL("wry")),
+                         StrL("http://wry.")));
+    utassert(base::StrEq(wry::WorkAroundUriPrefix(StrL("https"), StrL("asset")),
+                         StrL("https://asset.")));
 
     // What the initial navigation does to a `wry://` url, and what the
     // request handler undoes before the handler sees it.
     Str original = StrL("wry://localhost/path/to/page");
     Str applied = wry::ApplyUriWorkAround(original, scheme, StrL("wry"));
-    utassert(base::StrEq(applied, "http://wry.localhost/path/to/page"));
-    utassert(base::StrEq(wry::RevertUriWorkAround(applied, scheme, StrL("wry")), original.s));
+    utassert(base::StrEq(applied, StrL("http://wry.localhost/path/to/page")));
+    utassert(base::StrEq(wry::RevertUriWorkAround(applied, scheme, StrL("wry")),
+                         original.s));
 
     // Rust uses `str::replace`, not `strip_prefix`: nested URLs are rewritten
     // too, and revert makes the complete string round-trip.
@@ -93,14 +95,16 @@ void TestWryUri() {
     Str nestedApplied = wry::ApplyUriWorkAround(nested, scheme, StrL("wry"));
     utassert(base::StrEq(
         nestedApplied,
-        "http://wry.host/?next=http://wry.other#back=http://wry.host/"));
-    utassert(base::StrEq(wry::RevertUriWorkAround(nestedApplied, scheme, StrL("wry")),
-                         nested));
+        StrL("http://wry.host/?next=http://wry.other#back=http://wry.host/")));
+    utassert(base::StrEq(
+        wry::RevertUriWorkAround(nestedApplied, scheme, StrL("wry")), nested));
 
     // A URI in another protocol is left where it is, both ways round.
     Str other = StrL("https://example.com/x");
-    utassert(base::StrEq(wry::ApplyUriWorkAround(other, scheme, StrL("wry")), other.s));
-    utassert(base::StrEq(wry::RevertUriWorkAround(other, scheme, StrL("wry")), other.s));
+    utassert(base::StrEq(wry::ApplyUriWorkAround(other, scheme, StrL("wry")),
+                         other.s));
+    utassert(base::StrEq(wry::RevertUriWorkAround(other, scheme, StrL("wry")),
+                         other.s));
 
     // The https variant is a different prefix, so an http-tunnelled URI is
     // not one of its.

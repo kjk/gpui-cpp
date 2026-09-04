@@ -174,8 +174,8 @@ static void SettingsAndBuilderMatchThePublicSourceShape() {
         .Icon(IconName::Bell)
         .Refine(refine, StyleFieldWidth);
     utassert(n.hasType && n.type == NotificationType::Success);
-    utassert(base::StrEq(n.title, "Done"));
-    utassert(base::StrEq(n.message, "saved"));
+    utassert(base::StrEq(n.title, StrL("Done")));
+    utassert(base::StrEq(n.message, StrL("saved")));
     utassert(n.hasPlacement && n.placement == Anchor::BottomLeft);
     utassert(n.hasDelivery && n.delivery == NotificationDelivery::System);
     utassert(!n.autohide);
@@ -202,7 +202,7 @@ static void PushOwnsItsTextAndHonorsBuilderAutohide() {
     int id = NotificationPush(&s, nullptr, n);
     text[0] = 'X';
     utassert(id > 0 && s.items.len == 1);
-    utassert(base::StrEq(s.items[0].message, "borrowed"));
+    utassert(base::StrEq(s.items[0].message, StrL("borrowed")));
     utassert(s.items[0].ownsText);
     utassert(!s.stack.entries[0].hasTimeout);
 }

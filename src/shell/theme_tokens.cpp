@@ -86,39 +86,39 @@ uint32_t ThemeTokensRevision() {
 }
 
 static bool ColorOf(const ColorTokens& colors, Str name, Rgba* out) {
-    if (StrEq(name, "background"))
+    if (StrEq(name, StrL("background")))
         *out = colors.background;
-    else if (StrEq(name, "foreground"))
+    else if (StrEq(name, StrL("foreground")))
         *out = colors.foreground;
-    else if (StrEq(name, "surface"))
+    else if (StrEq(name, StrL("surface")))
         *out = colors.surface;
-    else if (StrEq(name, "surface_foreground"))
+    else if (StrEq(name, StrL("surface_foreground")))
         *out = colors.surfaceForeground;
-    else if (StrEq(name, "primary"))
+    else if (StrEq(name, StrL("primary")))
         *out = colors.primary;
-    else if (StrEq(name, "primary_foreground"))
+    else if (StrEq(name, StrL("primary_foreground")))
         *out = colors.primaryForeground;
-    else if (StrEq(name, "secondary"))
+    else if (StrEq(name, StrL("secondary")))
         *out = colors.secondary;
-    else if (StrEq(name, "secondary_foreground"))
+    else if (StrEq(name, StrL("secondary_foreground")))
         *out = colors.secondaryForeground;
-    else if (StrEq(name, "muted"))
+    else if (StrEq(name, StrL("muted")))
         *out = colors.muted;
-    else if (StrEq(name, "muted_foreground"))
+    else if (StrEq(name, StrL("muted_foreground")))
         *out = colors.mutedForeground;
-    else if (StrEq(name, "accent"))
+    else if (StrEq(name, StrL("accent")))
         *out = colors.accent;
-    else if (StrEq(name, "accent_foreground"))
+    else if (StrEq(name, StrL("accent_foreground")))
         *out = colors.accentForeground;
-    else if (StrEq(name, "destructive"))
+    else if (StrEq(name, StrL("destructive")))
         *out = colors.destructive;
-    else if (StrEq(name, "destructive_foreground"))
+    else if (StrEq(name, StrL("destructive_foreground")))
         *out = colors.destructiveForeground;
-    else if (StrEq(name, "border"))
+    else if (StrEq(name, StrL("border")))
         *out = colors.border;
-    else if (StrEq(name, "input"))
+    else if (StrEq(name, StrL("input")))
         *out = colors.input;
-    else if (StrEq(name, "ring"))
+    else if (StrEq(name, StrL("ring")))
         *out = colors.ring;
     else
         return false;
@@ -143,19 +143,19 @@ bool ThemeTokenSpacing(Str name, float* out) {
     if (!out || !gThemeCache.valid) {
         return false;
     }
-    if (StrEq(name, "xxs"))
+    if (StrEq(name, StrL("xxs")))
         *out = gThemeCache.spacing.xxs;
-    else if (StrEq(name, "xs"))
+    else if (StrEq(name, StrL("xs")))
         *out = gThemeCache.spacing.xs;
-    else if (StrEq(name, "sm"))
+    else if (StrEq(name, StrL("sm")))
         *out = gThemeCache.spacing.sm;
-    else if (StrEq(name, "md"))
+    else if (StrEq(name, StrL("md")))
         *out = gThemeCache.spacing.md;
-    else if (StrEq(name, "lg"))
+    else if (StrEq(name, StrL("lg")))
         *out = gThemeCache.spacing.lg;
-    else if (StrEq(name, "xl"))
+    else if (StrEq(name, StrL("xl")))
         *out = gThemeCache.spacing.xl;
-    else if (StrEq(name, "xxl"))
+    else if (StrEq(name, StrL("xxl")))
         *out = gThemeCache.spacing.xxl;
     else
         return false;
@@ -167,17 +167,17 @@ bool ThemeTokenRadius(Str name, float* out) {
     if (!out || !gThemeCache.valid) {
         return false;
     }
-    if (StrEq(name, "none"))
+    if (StrEq(name, StrL("none")))
         *out = gThemeCache.radius.none;
-    else if (StrEq(name, "sm"))
+    else if (StrEq(name, StrL("sm")))
         *out = gThemeCache.radius.sm;
-    else if (StrEq(name, "md"))
+    else if (StrEq(name, StrL("md")))
         *out = gThemeCache.radius.md;
-    else if (StrEq(name, "lg"))
+    else if (StrEq(name, StrL("lg")))
         *out = gThemeCache.radius.lg;
-    else if (StrEq(name, "xl"))
+    else if (StrEq(name, StrL("xl")))
         *out = gThemeCache.radius.xl;
-    else if (StrEq(name, "full"))
+    else if (StrEq(name, StrL("full")))
         *out = gThemeCache.radius.full;
     else
         return false;

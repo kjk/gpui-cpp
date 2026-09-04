@@ -30,11 +30,11 @@ struct TableStory {
 static El* StatusTag(Ctx* cx, Str status) {
     component::Tag* tag =
         component::Tag::New(cx, status)->Outline()->WithSize(UiSize::XSmall);
-    if (StrEq(status, "Paid")) {
+    if (StrEq(status, StrL("Paid"))) {
         tag->Success();
-    } else if (StrEq(status, "Pending")) {
+    } else if (StrEq(status, StrL("Pending"))) {
         tag->Warning();
-    } else if (StrEq(status, "Unpaid")) {
+    } else if (StrEq(status, StrL("Unpaid"))) {
         tag->Danger();
     }
     return tag->IntoEl();

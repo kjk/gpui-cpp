@@ -355,8 +355,9 @@ static void ADisplayKeepingUpIsNeverGradedAsFallingBehind() {
 }
 
 static void FormatsMemoryByMagnitude() {
-    utassert(StrEq(FpsFormatBytesTemp(184ull * 1024 * 1024), "184 MB"));
-    utassert(StrEq(FpsFormatBytesTemp(3ull * 1024 * 1024 * 1024), "3.00 GB"));
+    utassert(StrEq(FpsFormatBytesTemp(184ull * 1024 * 1024), StrL("184 MB")));
+    utassert(
+        StrEq(FpsFormatBytesTemp(3ull * 1024 * 1024 * 1024), StrL("3.00 GB")));
 }
 
 // The reading is on the single core scale, so it passes 100 and keeps going —
@@ -364,13 +365,13 @@ static void FormatsMemoryByMagnitude() {
 static void FormatsCpuOnTheSingleCoreScale() {
     // A process spread over a core and a half, which under a scale where 100
     // is the whole machine would have read 5.8% on a 24 core desktop.
-    utassert(StrEq(FpsFormatCpuTemp(140.f), "140%"));
+    utassert(StrEq(FpsFormatCpuTemp(140.f), StrL("140%")));
     // Saturating every core of a big machine still has somewhere to go.
-    utassert(StrEq(FpsFormatCpuTemp(2400.f), "2400%"));
+    utassert(StrEq(FpsFormatCpuTemp(2400.f), StrL("2400%")));
     // Small readings keep the tenth that distinguishes them.
-    utassert(StrEq(FpsFormatCpuTemp(0.4f), "0.4%"));
-    utassert(StrEq(FpsFormatCpuTemp(9.9f), "9.9%"));
-    utassert(StrEq(FpsFormatCpuTemp(12.4f), "12%"));
+    utassert(StrEq(FpsFormatCpuTemp(0.4f), StrL("0.4%")));
+    utassert(StrEq(FpsFormatCpuTemp(9.9f), StrL("9.9%")));
+    utassert(StrEq(FpsFormatCpuTemp(12.4f), StrL("12%")));
 }
 
 // ─── memory (crates/fps/src/memory.rs) ────────────────────────────────────

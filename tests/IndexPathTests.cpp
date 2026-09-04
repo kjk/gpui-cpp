@@ -27,10 +27,11 @@ static void ThePathNamesItsElement() {
     Arena* a = ArenaNew();
     IndexPath p = IndexPathNew(2).Section(1).Column(3);
     Str id = IndexPathIdStr(a, p);
-    utassert(base::StrEq(id, "index-path(1,2,3)"));
+    utassert(base::StrEq(id, StrL("index-path(1,2,3)")));
     // The hashed form is what El::Click takes, and two different paths do not
     // land on the same id.
-    utassert(IndexPathClickId(p) == (uint32_t)HashClickId(StrL("index-path(1,2,3)")));
+    utassert(IndexPathClickId(p) ==
+             (uint32_t)HashClickId(StrL("index-path(1,2,3)")));
     utassert(IndexPathClickId(p) != IndexPathClickId(IndexPathNew(3)));
     ArenaDelete(a);
 }

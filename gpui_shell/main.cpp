@@ -58,11 +58,11 @@ static bool Parse(int argc, char** argv, Invocation* out, Str* error) {
     *error = {};
     for (int i = 1; i < argc; i++) {
         Str argument = Str(argv[i]);
-        if (StrEq(argument, "--help") || StrEq(argument, "-h")) {
+        if (StrEq(argument, StrL("--help")) || StrEq(argument, StrL("-h"))) {
             out->kind = CommandKind::Help;
             return true;
         }
-        if (StrEq(argument, "--version") || StrEq(argument, "-V")) {
+        if (StrEq(argument, StrL("--version")) || StrEq(argument, StrL("-V"))) {
             out->kind = CommandKind::Version;
             return true;
         }
@@ -70,18 +70,19 @@ static bool Parse(int argc, char** argv, Invocation* out, Str* error) {
     bool command = false;
     for (int i = 1; i < argc; i++) {
         Str argument = Str(argv[i]);
-        if (!command && !out->directory && StrEq(argument, "check")) {
+        if (!command && !out->directory && StrEq(argument, StrL("check"))) {
             out->kind = CommandKind::Check;
             command = true;
-        } else if (!command && !out->directory && StrEq(argument, "types")) {
+        } else if (!command && !out->directory &&
+                   StrEq(argument, StrL("types"))) {
             out->kind = CommandKind::Types;
             command = true;
-        } else if (StrEq(argument, "--watch")) {
+        } else if (StrEq(argument, StrL("--watch"))) {
             out->watch = true;
-        } else if (StrEq(argument, "--dev")) {
+        } else if (StrEq(argument, StrL("--dev"))) {
             out->development = true;
             out->watch = true;
-        } else if (StrEq(argument, "--print-spec")) {
+        } else if (StrEq(argument, StrL("--print-spec"))) {
             out->printSpec = true;
         } else if (argument.s[0] == '-') {
             *error = StrDup(fmt("unknown flag `%s`", argument));

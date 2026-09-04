@@ -1184,12 +1184,13 @@ static TempStr ReadModuleFileTemp(Str path, ShellError* error) {
 }
 
 static bool IsBuiltin(Str name) {
-    return StrEq(name, "gpui") || StrEq(name, "gpui-base") ||
-           StrEq(name, "gpui-shell") || StrEq(name, "gpui-fps") ||
-           StrEq(name, "buffer") || StrEq(name, "console") ||
-           StrEq(name, "crypto") || StrEq(name, "fs/promises") ||
-           StrEq(name, "os") || StrEq(name, "path") || StrEq(name, "process") ||
-           StrEq(name, "url") || StrEq(name, "zlib");
+    return StrEq(name, StrL("gpui")) || StrEq(name, StrL("gpui-base")) ||
+           StrEq(name, StrL("gpui-shell")) || StrEq(name, StrL("gpui-fps")) ||
+           StrEq(name, StrL("buffer")) || StrEq(name, StrL("console")) ||
+           StrEq(name, StrL("crypto")) || StrEq(name, StrL("fs/promises")) ||
+           StrEq(name, StrL("os")) || StrEq(name, StrL("path")) ||
+           StrEq(name, StrL("process")) || StrEq(name, StrL("url")) ||
+           StrEq(name, StrL("zlib"));
 }
 
 static const char* const kGpuiExports[] = {
@@ -1236,58 +1237,58 @@ static const char* const kZlibExports[] = {
 static void ModuleExports(Str name, const char* const** values, int* count) {
     *values = nullptr;
     *count = 0;
-    if (StrEq(name, "gpui")) {
+    if (StrEq(name, StrL("gpui"))) {
         *values = kGpuiExports;
         *count = (int)(sizeof(kGpuiExports) / sizeof(kGpuiExports[0]));
-    } else if (StrEq(name, "gpui-base")) {
+    } else if (StrEq(name, StrL("gpui-base"))) {
         *values = kBaseExports;
         *count = (int)(sizeof(kBaseExports) / sizeof(kBaseExports[0]));
-    } else if (StrEq(name, "gpui-fps")) {
+    } else if (StrEq(name, StrL("gpui-fps"))) {
         *values = kFpsExports;
         *count = (int)(sizeof(kFpsExports) / sizeof(kFpsExports[0]));
-    } else if (StrEq(name, "buffer")) {
+    } else if (StrEq(name, StrL("buffer"))) {
         *values = kBufferExports;
         *count = (int)(sizeof(kBufferExports) / sizeof(kBufferExports[0]));
-    } else if (StrEq(name, "console")) {
+    } else if (StrEq(name, StrL("console"))) {
         *values = kConsoleExports;
         *count = (int)(sizeof(kConsoleExports) / sizeof(kConsoleExports[0]));
-    } else if (StrEq(name, "crypto")) {
+    } else if (StrEq(name, StrL("crypto"))) {
         *values = kCryptoExports;
         *count = (int)(sizeof(kCryptoExports) / sizeof(kCryptoExports[0]));
-    } else if (StrEq(name, "fs/promises")) {
+    } else if (StrEq(name, StrL("fs/promises"))) {
         *values = kFsExports;
         *count = (int)(sizeof(kFsExports) / sizeof(kFsExports[0]));
-    } else if (StrEq(name, "os")) {
+    } else if (StrEq(name, StrL("os"))) {
         *values = kOsExports;
         *count = (int)(sizeof(kOsExports) / sizeof(kOsExports[0]));
-    } else if (StrEq(name, "path")) {
+    } else if (StrEq(name, StrL("path"))) {
         *values = kPathExports;
         *count = (int)(sizeof(kPathExports) / sizeof(kPathExports[0]));
-    } else if (StrEq(name, "process")) {
+    } else if (StrEq(name, StrL("process"))) {
         *values = kProcessExports;
         *count = (int)(sizeof(kProcessExports) / sizeof(kProcessExports[0]));
-    } else if (StrEq(name, "url")) {
+    } else if (StrEq(name, StrL("url"))) {
         *values = kUrlExports;
         *count = (int)(sizeof(kUrlExports) / sizeof(kUrlExports[0]));
-    } else if (StrEq(name, "zlib")) {
+    } else if (StrEq(name, StrL("zlib"))) {
         *values = kZlibExports;
         *count = (int)(sizeof(kZlibExports) / sizeof(kZlibExports[0]));
     }
 }
 
 static const char* BuiltinObject(Str name) {
-    if (StrEq(name, "gpui") || StrEq(name, "gpui-base") ||
-        StrEq(name, "gpui-shell") || StrEq(name, "gpui-fps"))
+    if (StrEq(name, StrL("gpui")) || StrEq(name, StrL("gpui-base")) ||
+        StrEq(name, StrL("gpui-shell")) || StrEq(name, StrL("gpui-fps")))
         return "__gpui";
-    if (StrEq(name, "buffer")) return "__shell_buffer";
-    if (StrEq(name, "console")) return "console";
-    if (StrEq(name, "crypto")) return "__shell_crypto";
-    if (StrEq(name, "fs/promises")) return "__shell_fs";
-    if (StrEq(name, "os")) return "__shell_os";
-    if (StrEq(name, "path")) return "__shell_path";
-    if (StrEq(name, "process")) return "process";
-    if (StrEq(name, "url")) return "__shell_url";
-    if (StrEq(name, "zlib")) return "__shell_zlib";
+    if (StrEq(name, StrL("buffer"))) return "__shell_buffer";
+    if (StrEq(name, StrL("console"))) return "console";
+    if (StrEq(name, StrL("crypto"))) return "__shell_crypto";
+    if (StrEq(name, StrL("fs/promises"))) return "__shell_fs";
+    if (StrEq(name, StrL("os"))) return "__shell_os";
+    if (StrEq(name, StrL("path"))) return "__shell_path";
+    if (StrEq(name, StrL("process"))) return "process";
+    if (StrEq(name, StrL("url"))) return "__shell_url";
+    if (StrEq(name, StrL("zlib"))) return "__shell_zlib";
     return "__gpui";
 }
 
@@ -1302,7 +1303,7 @@ static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
     JSValue api = JS_GetPropertyStr(ctx, global, BuiltinObject(moduleName));
     int result = 0;
     for (int i = 0; i < count; i++) {
-        JSValue value = StrEq(Str(exports[i]), "default")
+        JSValue value = StrEq(Str(exports[i]), StrL("default"))
                             ? JS_DupValue(ctx, api)
                             : JS_GetPropertyStr(ctx, api, exports[i]);
         if (JS_IsException(value) ||
@@ -1809,11 +1810,11 @@ static JSValue NativePath(JSContext* ctx, JSValueConst, int argc,
     component.background.opacity = (float)opacity;
     component.background.colorSpace = colorSpace;
     bool valid = true;
-    if (StrEq(kind, "solid")) {
+    if (StrEq(kind, StrL("solid"))) {
         component.background.kind = shell::BackgroundKind::Solid;
         valid = count64 >= 1;
         if (valid) component.background.color = values[0];
-    } else if (StrEq(kind, "linear-gradient")) {
+    } else if (StrEq(kind, StrL("linear-gradient"))) {
         component.background.kind = shell::BackgroundKind::LinearGradient;
         valid =
             count64 >= 5 &&
@@ -1824,13 +1825,13 @@ static JSValue NativePath(JSContext* ctx, JSValueConst, int argc,
             component.background.fromColor = values[1];
             component.background.toColor = values[3];
         }
-    } else if (StrEq(kind, "pattern-slash")) {
+    } else if (StrEq(kind, StrL("pattern-slash"))) {
         component.background.kind = shell::BackgroundKind::PatternSlash;
         valid = count64 >= 3 &&
                 ParseFiniteText(values[1], &component.background.width) &&
                 ParseFiniteText(values[2], &component.background.interval);
         if (valid) component.background.color = values[0];
-    } else if (StrEq(kind, "checkerboard")) {
+    } else if (StrEq(kind, StrL("checkerboard"))) {
         component.background.kind = shell::BackgroundKind::Checkerboard;
         valid = count64 >= 2 &&
                 ParseFiniteText(values[1], &component.background.size);
@@ -1976,14 +1977,14 @@ static bool IsDockCommand(Str name) {
 // MouseButton maps onto — so the op stays the name-and-id pair every other
 // callback uses.
 static const char* MouseButtonCallbackName(Str method, Str button) {
-    bool down = StrEq(method, "on_mouse_down");
-    if (StrEq(button, "left")) {
+    bool down = StrEq(method, StrL("on_mouse_down"));
+    if (StrEq(button, StrL("left"))) {
         return down ? "on_mouse_down_left" : "on_mouse_up_left";
     }
-    if (StrEq(button, "right")) {
+    if (StrEq(button, StrL("right"))) {
         return down ? "on_mouse_down_right" : "on_mouse_up_right";
     }
-    if (StrEq(button, "middle")) {
+    if (StrEq(button, StrL("middle"))) {
         return down ? "on_mouse_down_middle" : "on_mouse_up_middle";
     }
     return nullptr;
@@ -2460,9 +2461,9 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
     // into the ordinary shapes before the table below sees them: an action is
     // an ActionCallback carrying the name, a button press is a Callback under
     // one of six fixed names.
-    bool actionCallback = StrEq(name, "on_action");
+    bool actionCallback = StrEq(name, StrL("on_action"));
     bool buttonCallback =
-        StrEq(name, "on_mouse_down") || StrEq(name, "on_mouse_up");
+        StrEq(name, StrL("on_mouse_down")) || StrEq(name, StrL("on_mouse_up"));
     if (actionCallback || buttonCallback) {
         if (shell::ScopeCurrentPhase() == ScopePhase::Layout) {
             JSValue thrown = JS_ThrowTypeError(
@@ -2669,7 +2670,7 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
                 return thrown;
             }
         }
-        if (StrEq(name, "role")) {
+        if (StrEq(name, StrL("role"))) {
             if (argCount != 1 || op.args[0]
                                          .kind != shell::BridgedKind::String) {
                 ArenaDelete(arena);
@@ -2677,7 +2678,7 @@ static JSValue NativeApply(JSContext* ctx, JSValueConst, int argc,
                     ctx, "role(name) expects one snake_case role string");
             }
             Str roleName = op.args[0].string;
-            if (StrEq(roleName, "generic_container")) {
+            if (StrEq(roleName, StrL("generic_container"))) {
                 ArenaDelete(arena);
                 return JS_ThrowRangeError(
                     ctx,
@@ -3188,13 +3189,13 @@ static bool SheetPlacementFromJs(JSContext* ctx, JSValueConst value,
     Str name;
     bool ok = JsString(ctx, value, arena, &name);
     if (ok) {
-        if (StrEq(name, "left"))
+        if (StrEq(name, StrL("left")))
             *out = component::SheetPlacement::Left;
-        else if (StrEq(name, "right"))
+        else if (StrEq(name, StrL("right")))
             *out = component::SheetPlacement::Right;
-        else if (StrEq(name, "top"))
+        else if (StrEq(name, StrL("top")))
             *out = component::SheetPlacement::Top;
-        else if (StrEq(name, "bottom"))
+        else if (StrEq(name, StrL("bottom")))
             *out = component::SheetPlacement::Bottom;
         else {
             JS_ThrowTypeError(ctx,
@@ -3726,12 +3727,12 @@ static JSValue NativeSliderStateNew(JSContext* ctx, JSValueConst, int argc,
               JS_ToFloat64(ctx, &step, argv[2]) == 0 &&
               JsString(ctx, argv[3], arena, &scale) &&
               ReadSliderValue(ctx, argv[4], &value);
-    SliderScale nativeScale = StrEq(scale, "logarithmic")
+    SliderScale nativeScale = StrEq(scale, StrL("logarithmic"))
                                   ? SliderScale::Logarithmic
                                   : SliderScale::Linear;
     ok = ok && isfinite(min) && isfinite(max) && isfinite(step) && max > min &&
          step > 0 && (nativeScale == SliderScale::Linear || min > 0) &&
-         (StrEq(scale, "linear") || StrEq(scale, "logarithmic"));
+         (StrEq(scale, StrL("linear")) || StrEq(scale, StrL("logarithmic")));
     if (!ok && !JS_HasException(ctx)) {
         JS_ThrowTypeError(ctx,
                           "SliderState.new needs a finite min below max, a "
@@ -3935,22 +3936,22 @@ static bool RetainedEventOf(shell::RetainedKind kind, Str name,
     *replace = false;
     if (kind == shell::RetainedKind::Input ||
         kind == shell::RetainedKind::Textarea) {
-        if (StrEq(name, "change"))
+        if (StrEq(name, StrL("change")))
             *event = shell::RetainedEvent::InputChange;
-        else if (StrEq(name, "submit"))
+        else if (StrEq(name, StrL("submit")))
             *event = shell::RetainedEvent::InputSubmit;
-        else if (StrEq(name, "focus"))
+        else if (StrEq(name, StrL("focus")))
             *event = shell::RetainedEvent::InputFocus;
-        else if (StrEq(name, "blur"))
+        else if (StrEq(name, StrL("blur")))
             *event = shell::RetainedEvent::InputBlur;
         else
             return false;
         return true;
     }
     if (kind == shell::RetainedKind::Slider) {
-        if (StrEq(name, "change"))
+        if (StrEq(name, StrL("change")))
             *event = shell::RetainedEvent::SliderChange;
-        else if (StrEq(name, "release"))
+        else if (StrEq(name, StrL("release")))
             *event = shell::RetainedEvent::SliderRelease;
         else
             return false;
@@ -3958,13 +3959,13 @@ static bool RetainedEventOf(shell::RetainedKind kind, Str name,
     }
     if (kind == shell::RetainedKind::Otp) {
         *replace = true;
-        if (StrEq(name, "change"))
+        if (StrEq(name, StrL("change")))
             *event = shell::RetainedEvent::OtpChange;
-        else if (StrEq(name, "complete"))
+        else if (StrEq(name, StrL("complete")))
             *event = shell::RetainedEvent::OtpComplete;
-        else if (StrEq(name, "focus"))
+        else if (StrEq(name, StrL("focus")))
             *event = shell::RetainedEvent::OtpFocus;
-        else if (StrEq(name, "blur"))
+        else if (StrEq(name, StrL("blur")))
             *event = shell::RetainedEvent::OtpBlur;
         else
             return false;
@@ -4148,9 +4149,11 @@ static JSValue NativeVirtualScrollOp(JSContext* ctx, JSValueConst, int argc,
     Str strategy;
     bool ok = OptionalJsString(ctx, argc > 2 ? argv[2] : JS_UNDEFINED, arena,
                                &strategy);
-    ScrollStrategy native = StrEq(strategy, "center") ? ScrollStrategy::Center
-                                                      : ScrollStrategy::Top;
-    if (strategy && !StrEq(strategy, "top") && !StrEq(strategy, "center")) {
+    ScrollStrategy native = StrEq(strategy, StrL("center"))
+                                ? ScrollStrategy::Center
+                                : ScrollStrategy::Top;
+    if (strategy && !StrEq(strategy, StrL("top")) &&
+        !StrEq(strategy, StrL("center"))) {
         ok = false;
         JS_ThrowTypeError(ctx, "scroll strategy must be top or center");
     }
@@ -4346,39 +4349,39 @@ static bool ThemeRequiredProperty(JSContext* ctx, JSValueConst object,
 }
 
 static bool SetThemeColor(ColorTokens* colors, Str name, Rgba value) {
-    if (StrEq(name, "background"))
+    if (StrEq(name, StrL("background")))
         colors->background = value;
-    else if (StrEq(name, "foreground"))
+    else if (StrEq(name, StrL("foreground")))
         colors->foreground = value;
-    else if (StrEq(name, "surface"))
+    else if (StrEq(name, StrL("surface")))
         colors->surface = value;
-    else if (StrEq(name, "surface_foreground"))
+    else if (StrEq(name, StrL("surface_foreground")))
         colors->surfaceForeground = value;
-    else if (StrEq(name, "primary"))
+    else if (StrEq(name, StrL("primary")))
         colors->primary = value;
-    else if (StrEq(name, "primary_foreground"))
+    else if (StrEq(name, StrL("primary_foreground")))
         colors->primaryForeground = value;
-    else if (StrEq(name, "secondary"))
+    else if (StrEq(name, StrL("secondary")))
         colors->secondary = value;
-    else if (StrEq(name, "secondary_foreground"))
+    else if (StrEq(name, StrL("secondary_foreground")))
         colors->secondaryForeground = value;
-    else if (StrEq(name, "muted"))
+    else if (StrEq(name, StrL("muted")))
         colors->muted = value;
-    else if (StrEq(name, "muted_foreground"))
+    else if (StrEq(name, StrL("muted_foreground")))
         colors->mutedForeground = value;
-    else if (StrEq(name, "accent"))
+    else if (StrEq(name, StrL("accent")))
         colors->accent = value;
-    else if (StrEq(name, "accent_foreground"))
+    else if (StrEq(name, StrL("accent_foreground")))
         colors->accentForeground = value;
-    else if (StrEq(name, "destructive"))
+    else if (StrEq(name, StrL("destructive")))
         colors->destructive = value;
-    else if (StrEq(name, "destructive_foreground"))
+    else if (StrEq(name, StrL("destructive_foreground")))
         colors->destructiveForeground = value;
-    else if (StrEq(name, "border"))
+    else if (StrEq(name, StrL("border")))
         colors->border = value;
-    else if (StrEq(name, "input"))
+    else if (StrEq(name, StrL("input")))
         colors->input = value;
-    else if (StrEq(name, "ring"))
+    else if (StrEq(name, StrL("ring")))
         colors->ring = value;
     else
         return false;
@@ -4386,19 +4389,19 @@ static bool SetThemeColor(ColorTokens* colors, Str name, Rgba value) {
 }
 
 static bool SetThemeSpacing(SpacingTokens* spacing, Str name, float value) {
-    if (StrEq(name, "xxs"))
+    if (StrEq(name, StrL("xxs")))
         spacing->xxs = value;
-    else if (StrEq(name, "xs"))
+    else if (StrEq(name, StrL("xs")))
         spacing->xs = value;
-    else if (StrEq(name, "sm"))
+    else if (StrEq(name, StrL("sm")))
         spacing->sm = value;
-    else if (StrEq(name, "md"))
+    else if (StrEq(name, StrL("md")))
         spacing->md = value;
-    else if (StrEq(name, "lg"))
+    else if (StrEq(name, StrL("lg")))
         spacing->lg = value;
-    else if (StrEq(name, "xl"))
+    else if (StrEq(name, StrL("xl")))
         spacing->xl = value;
-    else if (StrEq(name, "xxl"))
+    else if (StrEq(name, StrL("xxl")))
         spacing->xxl = value;
     else
         return false;
@@ -4406,17 +4409,17 @@ static bool SetThemeSpacing(SpacingTokens* spacing, Str name, float value) {
 }
 
 static bool SetThemeRadius(RadiusTokens* radius, Str name, float value) {
-    if (StrEq(name, "none"))
+    if (StrEq(name, StrL("none")))
         radius->none = value;
-    else if (StrEq(name, "sm"))
+    else if (StrEq(name, StrL("sm")))
         radius->sm = value;
-    else if (StrEq(name, "md"))
+    else if (StrEq(name, StrL("md")))
         radius->md = value;
-    else if (StrEq(name, "lg"))
+    else if (StrEq(name, StrL("lg")))
         radius->lg = value;
-    else if (StrEq(name, "xl"))
+    else if (StrEq(name, StrL("xl")))
         radius->xl = value;
-    else if (StrEq(name, "full"))
+    else if (StrEq(name, StrL("full")))
         radius->full = value;
     else
         return false;
@@ -8317,7 +8320,7 @@ static JSValue NativeCalendarOn(JSContext* ctx, JSValueConst, int argc,
     Arena* arena = ArenaNew();
     Str name;
     bool named = JsString(ctx, argv[1], arena, &name);
-    bool isChange = named && StrEq(name, "change");
+    bool isChange = named && StrEq(name, StrL("change"));
     ArenaDelete(arena);
     if (!named) return JS_EXCEPTION;
     if (!isChange) {
@@ -8581,9 +8584,9 @@ static Str ShellRegisterPanelClass(ShellRuntimeImpl* impl, JSContext* ctx,
 // are written, and a failure is catchable at the line that caused it.
 
 static DockPlacement DockPlacementOf(Str name) {
-    if (StrEq(name, "left")) return DockPlacement::Left;
-    if (StrEq(name, "right")) return DockPlacement::Right;
-    if (StrEq(name, "bottom")) return DockPlacement::Bottom;
+    if (StrEq(name, StrL("left"))) return DockPlacement::Left;
+    if (StrEq(name, StrL("right"))) return DockPlacement::Right;
+    if (StrEq(name, StrL("bottom"))) return DockPlacement::Bottom;
     return DockPlacement::Center;
 }
 
@@ -9039,7 +9042,7 @@ static JSValue NativeDockOn(JSContext* ctx, JSValueConst, int argc,
     Arena* arena = ArenaNew();
     Str name;
     bool named = JsString(ctx, argv[1], arena, &name);
-    bool isLayout = named && StrEq(name, "layout_changed");
+    bool isLayout = named && StrEq(name, StrL("layout_changed"));
     ArenaDelete(arena);
     if (!named) return JS_EXCEPTION;
     if (!isLayout) {

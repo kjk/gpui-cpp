@@ -375,8 +375,8 @@ static Str NormalizePath(Arena* arena, Str path, bool* escaped) {
         int end = at;
         while (end < path.len && !IsSeparator(path.s[end])) end++;
         Str part(path.s + at, end - at);
-        if (part.len == 0 || StrEq(part, ".")) {
-        } else if (StrEq(part, "..")) {
+        if (part.len == 0 || StrEq(part, StrL("."))) {
+        } else if (StrEq(part, StrL(".."))) {
             if (parts.len == 0) {
                 if (escaped) *escaped = true;
             } else {

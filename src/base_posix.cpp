@@ -118,7 +118,7 @@ int PlatListDir(const char* dir, DirEntry* out, int max) {
     struct dirent* ent = nullptr;
     while (n < max && (ent = readdir(d)) != nullptr) {
         Str name = Str(ent->d_name);
-        if (StrEq(name, ".") || StrEq(name, "..")) {
+        if (StrEq(name, StrL(".")) || StrEq(name, StrL(".."))) {
             continue;
         }
         DirEntry& e = out[n];

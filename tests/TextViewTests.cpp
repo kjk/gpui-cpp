@@ -143,7 +143,7 @@ static void TestMarkdownInlineHtml(Arena* a) {
     utassert(MarksOf(p, "Plain") == 0);
     utassert(MarksOf(p, "bold") == MdBold);
     utassert(MarksOf(p, "link") == MdLink);
-    utassert(base::StrEq(HrefOf(p, "link"), "http://x/"));
+    utassert(base::StrEq(HrefOf(p, "link"), StrL("http://x/")));
     // The mark ends with the tag: what follows is unmarked again.
     utassert(MarksOf(p, "and") == 0);
 }
@@ -197,7 +197,7 @@ static void TestHtmlInlineMarks(Arena* a) {
     utassert(MarksOf(p, "s") == MdDel);
     utassert(MarksOf(p, "m") == MdHighlight);
     utassert(MarksOf(p, "go") == MdLink);
-    utassert(base::StrEq(HrefOf(p, "go"), "/go"));
+    utassert(base::StrEq(HrefOf(p, "go"), StrL("/go")));
 }
 
 // Nested marks: html.rs merges the child's marks with the parent's, so the
@@ -267,7 +267,7 @@ static void TestHtmlPre(Arena* a) {
                           "</code></pre>"));
     MdNode* code = Child(doc, 0);
     utassert(code->kind == MdKind::Code);
-    utassert(base::StrEq(code->lang, "cpp"));
+    utassert(base::StrEq(code->lang, StrL("cpp")));
     utassert(TextIs(a, code, "int a;\n  int b;\n"));
 }
 
@@ -336,8 +336,8 @@ static void TestMarkdownImage(Arena* a) {
     MdNode* p = Child(doc, 0);
     MdRun* img = ImageRunOf(p);
     utassert(img != nullptr);
-    utassert(base::StrEq(img->imgSrc, "cat.png"));
-    utassert(base::StrEq(img->text, "a cat"));
+    utassert(base::StrEq(img->imgSrc, StrL("cat.png")));
+    utassert(base::StrEq(img->text, StrL("a cat")));
     // The words around it are still their own runs, in order.
     utassert(TextIs(a, p, "see a cat here"));
     // An image inside a link is a link, the way ImageNode::link is.
@@ -345,7 +345,7 @@ static void TestMarkdownImage(Arena* a) {
     MdRun* r = ImageRunOf(Child(linked, 0));
     utassert(r != nullptr);
     utassert((r->marks & MdLink) != 0);
-    utassert(base::StrEq(r->href, "https://x/"));
+    utassert(base::StrEq(r->href, StrL("https://x/")));
 }
 
 // html.rs attr_width_height: the size the tag gives, in pixels. A percentage
@@ -356,8 +356,8 @@ static void TestHtmlImage(Arena* a) {
                           "height=\"40\"> b</p>"));
     MdRun* img = ImageRunOf(Child(doc, 0));
     utassert(img != nullptr);
-    utassert(base::StrEq(img->imgSrc, "x.png"));
-    utassert(base::StrEq(img->text, "alt"));
+    utassert(base::StrEq(img->imgSrc, StrL("x.png")));
+    utassert(base::StrEq(img->text, StrL("alt")));
     utassert(img->imgW == 60 && img->imgH == 40);
 
     // The README showcase uses this shape: a remote bitmap with a width and
@@ -369,7 +369,8 @@ static void TestHtmlImage(Arena* a) {
     MdRun* widthRun = ImageRunOf(Child(widthOnly, 0));
     utassert(widthRun != nullptr);
     utassert(widthRun->imgW == 1763 && widthRun->imgH == 0);
-    utassert(base::StrEq(widthRun->imgSrc, "https://example.com/showcase.png"));
+    utassert(base::StrEq(widthRun->imgSrc,
+                         StrL("https://example.com/showcase.png")));
 
     MdNode* pct =
         HtmlParse(a, StrL("<img src=\"y.png\" style=\"width: 50%\">"));
@@ -467,11 +468,11 @@ static void TestSourceMarks() {
     d.Run("two ", &bold, true);
     d.Run("three", &plain, true);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "**one two **three"));
+                         StrL("**one two **three")));
     // The same runs in Plain are the text as rendered, on one line: a
     // paragraph is one InlineState.text in Rust however it is copied.
-    utassert(
-        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "one two three"));
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
+                         StrL("one two three")));
 }
 
 // reconstruct_markdown: a partial selection inside a marked run still wraps
@@ -481,7 +482,7 @@ static void TestSourcePartialMark() {
     SelSource bold = {StrL("**"), StrL("**"), &para};
     SrcDoc d;
     d.Run("bold", &bold, false);
-    utassert(base::StrEq(SrcRangeCopyTemp(&d, 1, 3), "**ol**"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 1, 3), StrL("**ol**")));
 }
 
 // reconstruct_markdown_emits_unmarked_text_verbatim, and a link's tail.
@@ -496,7 +497,7 @@ static void TestSourceCodeAndLink() {
     d.Run(" c ", &plain, true);
     d.Run("home", &link, true);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "a `b` c [home](https://x.dev)"));
+                         StrL("a `b` c [home](https://x.dev)")));
 }
 
 // A selected heading round-trips with its marker, and the paragraph under it
@@ -510,9 +511,9 @@ static void TestSourceHeading() {
     d.Run("Title", &h, false);
     d.Run("body", &p, false);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "## Title\nbody"));
-    utassert(
-        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "Title\nbody"));
+                         StrL("## Title\nbody")));
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
+                         StrL("Title\nbody")));
 }
 
 // Every line of a blockquote carries its prefix, including the ones inside a
@@ -526,7 +527,7 @@ static void TestSourceBlockquote() {
     d.Run("first", &a, false);
     d.Run("second\nthird", &b, false);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "> first\n> second\n> third"));
+                         StrL("> first\n> second\n> third")));
 }
 
 // code_block.selected_source: the code comes back fenced, with the block's
@@ -538,7 +539,7 @@ static void TestSourceCodeBlock() {
     d.Run("let x", &tok, false);
     d.Run(" = 1;", &tok, true);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "```rust\nlet x = 1;\n```"));
+                         StrL("```rust\nlet x = 1;\n```")));
 }
 
 // table_selected_source: the row is piped and the alignment row follows the
@@ -558,9 +559,9 @@ static void TestSourceTable() {
     d.Run("Nut", &s2, false);
     d.Run("3", &s3, false);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "| Name | Qty |\n| :-- | :-: |\n| Nut | 3 |"));
+                         StrL("| Name | Qty |\n| :-- | :-: |\n| Nut | 3 |")));
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
-                         "Name Qty\nNut 3"));
+                         StrL("Name Qty\nNut 3")));
 }
 
 // A list item's marker is the markdown one, not the bullet glyph it draws
@@ -574,7 +575,7 @@ static void TestSourceList() {
     d.Run("first", &a, false);
     d.Run("under", &b, false);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "- first\n  - under"));
+                         StrL("- first\n  - under")));
 }
 
 // A task list item: list_selected_source puts the checkbox after the marker
@@ -589,11 +590,11 @@ static void TestSourceTaskList() {
     d.Run("shipped", &a, false);
     d.Run("pending", &b, false);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "- [x] shipped\n- [ ] pending"));
+                         StrL("- [x] shipped\n- [ ] pending")));
     // The rendered text is the item's words: the checkbox is drawn, not
     // written.
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
-                         "shipped\npending"));
+                         StrL("shipped\npending")));
 }
 
 // node.rs selected_source: an inline image is emitted when the selection runs
@@ -609,15 +610,17 @@ static void TestSourceImage() {
     d.Image(&img, true);
     d.Run(" now", &plain, true);
     utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
-                         "see ![alt](a.png) now"));
-    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "see  now"));
+                         StrL("see ![alt](a.png) now")));
+    utassert(
+        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), StrL("see  now")));
     // Stopping at the end of the run before it still reaches it: the run
     // after has nothing selected in it, which is the trailing case.
-    utassert(base::StrEq(SrcRangeCopyTemp(&d, 0, 4), "see ![alt](a.png)"));
+    utassert(
+        base::StrEq(SrcRangeCopyTemp(&d, 0, 4), StrL("see ![alt](a.png)")));
     // Stopping short of that end does not.
-    utassert(base::StrEq(SrcRangeCopyTemp(&d, 0, 2), "se"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 0, 2), StrL("se")));
     // Nor does a selection that starts after the picture.
-    utassert(base::StrEq(SrcRangeCopyTemp(&d, 6, 10), " now"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 6, 10), StrL(" now")));
 }
 
 // The two ends of the same rule: a paragraph that begins or ends with an
@@ -630,12 +633,14 @@ static void TestSourceImageAtTheEnds() {
     SrcDoc lead;
     lead.Image(&img, false);
     lead.Run(" now", &plain, true);
-    utassert(base::StrEq(SrcRangeCopyTemp(&lead, 1, 5), "![alt](a.png) now"));
+    utassert(
+        base::StrEq(SrcRangeCopyTemp(&lead, 1, 5), StrL("![alt](a.png) now")));
     // Trailing: selecting the words before it does too.
     SrcDoc tail;
     tail.Run("see ", &plain, false);
     tail.Image(&img, true);
-    utassert(base::StrEq(SrcRangeCopyTemp(&tail, 0, 4), "see ![alt](a.png)"));
+    utassert(
+        base::StrEq(SrcRangeCopyTemp(&tail, 0, 4), StrL("see ![alt](a.png)")));
     // A picture with no words either side is the whole paragraph, and Rust
     // emits nothing for such a paragraph: it is the document walk that takes
     // it when what encloses it is selected. Here that is the selection having
@@ -646,9 +651,9 @@ static void TestSourceImageAtTheEnds() {
     lone.Image(&img, false);
     lone.Run("after", &below, false);
     utassert(base::StrEq(SrcCopyTemp(&lone, SelectionFormat::Source),
-                         "![alt](a.png)\nafter"));
+                         StrL("![alt](a.png)\nafter")));
     // The paragraph below it on its own leaves it behind.
-    utassert(base::StrEq(SrcRangeCopyTemp(&lone, 1, 6), "after"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&lone, 1, 6), StrL("after")));
 }
 
 // A run that names no source — everything outside a TextView — copies as its
@@ -658,10 +663,10 @@ static void TestSourceIgnoresPlainRuns() {
     SrcDoc d;
     d.Run("hello", nullptr, false);
     d.Run("world", nullptr, false);
-    utassert(
-        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source), "hello\nworld"));
-    utassert(
-        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "hello\nworld"));
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
+                         StrL("hello\nworld")));
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
+                         StrL("hello\nworld")));
 }
 
 #if GPUI_MARKDOWN_FULL
@@ -675,13 +680,13 @@ static void TestTableToMarkdown(Arena* a) {
     MdNode* table = Child(doc, 0);
     utassert(table && table->kind == MdKind::Table);
     utassert(base::StrEq(MdTableToMarkdown(a, table),
-                         "| a | b |\n| --- | ---: |\n| 1 | 2 |\n"));
+                         StrL("| a | b |\n| --- | ---: |\n| 1 | 2 |\n")));
 
     // One column, which is the shape that was not valid GFM before.
     MdNode* one = Child(MdParse(a, StrL("| only |\n| --- |\n| x |\n")), 0);
     utassert(one && one->kind == MdKind::Table);
     Str md1 = MdTableToMarkdown(a, one);
-    utassert(base::StrEq(md1, "| only |\n| --- |\n| x |\n"));
+    utassert(base::StrEq(md1, StrL("| only |\n| --- |\n| x |\n")));
     // And it parses back to the table it came from.
     MdNode* again = Child(MdParse(a, md1), 0);
     utassert(again && again->kind == MdKind::Table);
@@ -691,9 +696,9 @@ static void TestTableToMarkdown(Arena* a) {
     MdNode* aligned = Child(
         MdParse(a, StrL("| l | c | r |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n")),
         0);
-    utassert(
-        base::StrEq(MdTableToMarkdown(a, aligned),
-                    "| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n"));
+    utassert(base::StrEq(
+        MdTableToMarkdown(a, aligned),
+        StrL("| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n")));
 }
 
 #endif // GPUI_MARKDOWN_FULL
@@ -832,19 +837,19 @@ static void TestSourceShapedTextValues(Arena* a) {
     mark.Merge(more);
     utassert(mark.bold && mark.italic && mark.code && mark.underline);
     utassert(mark.strikethrough && mark.hasHighlight && mark.hasLink);
-    utassert(base::StrEq(mark.link.url, "https://example.com"));
+    utassert(base::StrEq(mark.link.url, StrL("https://example.com")));
 
     ImageNode image;
     image.alt = StrL("fallback");
-    utassert(base::StrEq(image.Title(a), "fallback"));
+    utassert(base::StrEq(image.Title(a), StrL("fallback")));
     image.title = StrL("title");
-    utassert(base::StrEq(image.Title(a), "title"));
+    utassert(base::StrEq(image.Title(a), StrL("title")));
 
     MarkdownNode node = MarkdownNode::New(StrL("demo"), &image);
     node.Text(StrL("plain")).Markdown(StrL("**plain**"));
-    utassert(base::StrEq(node.ToMarkdown(), "**plain**"));
+    utassert(base::StrEq(node.ToMarkdown(), StrL("**plain**")));
     node.markdown = {};
-    utassert(base::StrEq(node.ToMarkdown(), "plain"));
+    utassert(base::StrEq(node.ToMarkdown(), StrL("plain")));
 
     TextViewStyle base = TextViewStyle::Default();
     TextViewStyle same = TextViewStyle::Default();
@@ -884,21 +889,22 @@ static void TestSourceShapedTextValues(Arena* a) {
 static void TestHtmlMinifier(Arena* a) {
     Minifier minifier;
     utassert(base::StrEq(
-        minifier.WriteCollapseWhitespace(a, StrL(" x   \n  \t y  ")), " x y "));
+        minifier.WriteCollapseWhitespace(a, StrL(" x   \n  \t y  ")),
+        StrL(" x y ")));
     minifier.precedingWhitespace = true;
-    utassert(
-        base::StrEq(minifier.WriteCollapseWhitespace(a, StrL("   x")), "x"));
+    utassert(base::StrEq(minifier.WriteCollapseWhitespace(a, StrL("   x")),
+                         StrL("x")));
 
     minifier = {};
     minifier.OmitDoctype();
     Str minified =
         minifier.Minify(a, StrL("<!doctype html><p> a   b </p><!-- gone -->"
                                 "<pre> x   y </pre>"));
-    utassert(base::StrEq(minified, "<p> a b </p><pre> x   y </pre>"));
+    utassert(base::StrEq(minified, StrL("<p> a b </p><pre> x   y </pre>")));
     minifier = {};
     minifier.PreserveComments();
     utassert(base::StrEq(minifier.Minify(a, StrL("<p>x</p><!-- keep -->")),
-                         "<p>x</p><!-- keep -->"));
+                         StrL("<p>x</p><!-- keep -->")));
 }
 
 static int gParseTimePluginCalls = 0;
@@ -1101,7 +1107,8 @@ static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
     Entity<TextViewState> state =
         TextViewState::Markdown(&app, StrL("```cpp\nclaimed\n```"));
     TextViewState* managed = state.Get(&app);
-    utassert(managed && base::StrEq(managed->Source(), "```cpp\nclaimed\n```"));
+    utassert(managed &&
+             base::StrEq(managed->Source(), StrL("```cpp\nclaimed\n```")));
     uint64_t revision = managed->revision;
     managed->PushStr(StrL("\n"), &app);
     utassert(managed->revision == revision + 1);
@@ -1150,7 +1157,7 @@ static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
     utassert(managed->HasSelection(&window));
     TempStr selected = AllocStrTemp(63);
     int n = managed->SelectedText(&window, selected.s, selected.len + 1);
-    utassert(base::StrEq(Str(selected.s, n), "alpha\nomega"));
+    utassert(base::StrEq(Str(selected.s, n), StrL("alpha\nomega")));
     managed->ClearSelection(&window, &app);
     utassert(!managed->HasSelection(&window));
 

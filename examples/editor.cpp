@@ -56,7 +56,7 @@ static bool SkipEntry(const autocorrect::Ignorer* ig, Str relPath, Str name) {
     if (name.len == 0) {
         return true;
     }
-    if (StrEq(name, ".git")) {
+    if (StrEq(name, StrL(".git"))) {
         return true;
     }
     return autocorrect::IgnorerIsIgnored(ig, relPath);

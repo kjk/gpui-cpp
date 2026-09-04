@@ -44,12 +44,12 @@ static void TheBuilderCarriesTimingSpreadAndDirection() {
                             ->Spread(0.5f)
                             ->Reverse(false)
                             ->Once(false);
-    utassert(base::StrEq(text->text, "Thinking"));
+    utassert(base::StrEq(text->text, StrL("Thinking")));
     utassertnear(text->shimmerStyle.durationMs, 4000.f);
     utassert(text->shimmerStyle.spread == ShimmerSpread::Relative(0.5f));
     utassert(!text->shimmerStyle.reverse);
     utassert(!text->shimmerStyle.once);
-    utassert(base::StrEq(text->id, "thinking"));
+    utassert(base::StrEq(text->id, StrL("thinking")));
 
     // The clamps: a fraction into 0.05..=1.0, an absolute length to at least
     // one pixel, and a non-finite value leaves the spread alone.
@@ -95,10 +95,10 @@ static void TheBandMovesSmoothlyAcrossTheText() {
                                &inner));
     utassert(inner.x > outer.x);
     utassert(inner.w < outer.w);
-    utassert(!ShimmerBandBounds(bounds, 0.5f, spread, kShimmerLayerCount,
-                                &out));
-    utassert(!ShimmerBandBounds(Bounds{bounds.x, bounds.y, 0, 18}, 0.5f,
-                                spread, 0, &out));
+    utassert(
+        !ShimmerBandBounds(bounds, 0.5f, spread, kShimmerLayerCount, &out));
+    utassert(!ShimmerBandBounds(Bounds{bounds.x, bounds.y, 0, 18}, 0.5f, spread,
+                                0, &out));
 
     Bounds narrow = {};
     Bounds wide = {};
@@ -135,22 +135,25 @@ static void TheHighlightStaysBrightInBothThemes() {
     // from holds Rust's own thousandth; the byte itself is a truncation, the
     // rule the whole palette is written to, and twelve of them compound to
     // about a point and a half below the peak.
-    utassert(fabsf(1.f - powf(1.f - ShimmerLayerOpacity(false),
-                              (float)kShimmerLayerCount) -
+    utassert(fabsf(1.f -
+                   powf(1.f - ShimmerLayerOpacity(false),
+                        (float)kShimmerLayerCount) -
                    0.75f) < 0.001f);
-    utassert(fabsf(1.f - powf(1.f - ShimmerLayerOpacity(true),
-                              (float)kShimmerLayerCount) -
-                   0.6f) < 0.001f);
-    utassert(fabsf(1.f - powf(1.f - (float)light.a / 255.f,
-                              (float)kShimmerLayerCount) -
-                   0.75f) < 0.02f);
-    utassert(fabsf(1.f - powf(1.f - (float)dark.a / 255.f,
-                              (float)kShimmerLayerCount) -
-                   0.6f) < 0.02f);
+    utassert(
+        fabsf(1.f -
+              powf(1.f - ShimmerLayerOpacity(true), (float)kShimmerLayerCount) -
+              0.6f) < 0.001f);
+    utassert(
+        fabsf(1.f -
+              powf(1.f - (float)light.a / 255.f, (float)kShimmerLayerCount) -
+              0.75f) < 0.02f);
+    utassert(
+        fabsf(1.f -
+              powf(1.f - (float)dark.a / 255.f, (float)kShimmerLayerCount) -
+              0.6f) < 0.02f);
 
     Rgba custom = ShimmerHighlightColor(black, white, black, false, &muted);
-    utassert(custom.r == muted.r && custom.g == muted.g &&
-             custom.b == muted.b);
+    utassert(custom.r == muted.r && custom.g == muted.g && custom.b == muted.b);
 
     ShimmerAnimation animation = ShimmerLoadingAnimation(3000, false);
     utassertnear(animation.durationMs, 3000.f);

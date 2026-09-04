@@ -8,22 +8,21 @@ static void FieldBuilderAndStandaloneFieldKeepSourceState() {
     Arena* arena = ArenaNew();
     El* control = Div(arena);
     El* label = TextEl(arena, StrL("Custom"));
-    gpui::component::Field fld =
-        field(control)
-            .Label(label)
-            .Description(StrL("Help"))
-            .Required()
-            .Visible(false)
-            .LabelIndent(false)
-            .Align(FieldAlign::End)
-            .ColSpan(2)
-            .ColStart(1)
-            .ColEnd(3);
+    gpui::component::Field fld = field(control)
+                                     .Label(label)
+                                     .Description(StrL("Help"))
+                                     .Required()
+                                     .Visible(false)
+                                     .LabelIndent(false)
+                                     .Align(FieldAlign::End)
+                                     .ColSpan(2)
+                                     .ColStart(1)
+                                     .ColEnd(3);
     utassert(fld.control == control);
     utassert(fld.label.kind == FieldBuilderKind::Element);
     utassert(fld.label.element == label);
     utassert(fld.description.kind == FieldBuilderKind::String);
-    utassert(base::StrEq(fld.description.string, "Help"));
+    utassert(base::StrEq(fld.description.string, StrL("Help")));
     utassert(fld.required && !fld.visible && !fld.labelIndent);
     utassert(fld.align == FieldAlign::End);
     utassert(fld.colSpan == 2 && fld.colStart == 1 && fld.colEnd == 3);

@@ -87,11 +87,11 @@ static void OnlyTheRowsThatCanBeChosenAreNumbered() {
 static void AnUnlabelledRowIsASeparator() {
     uint32_t open = Act("test::Open");
     MenuRow rows[3] = {};
-    rows[0].action = open;  // no label: a separator, and not numbered
+    rows[0].action = open; // no label: a separator, and not numbered
     rows[1].label = StrL("Open");
     rows[1].action = open;
     rows[2].label = StrL("Empty Submenu");
-    rows[2].submenuN = 0;  // nothing under it, so it is a row of its own
+    rows[2].submenuN = 0; // nothing under it, so it is a row of its own
 
     MenuDef menus[1] = {};
     menus[0].name = StrL("File");
@@ -173,7 +173,7 @@ static void AMenuRowFindsAChordBoundInsideAContext() {
     utassert(!KeymapBindingForAction(copy, nullptr, 0, &c));
     utassert(KeymapAnyBindingForAction(copy, &c));
     utassert(c.vk == 'C' && c.ctrl && !c.shift);
-    utassert(base::StrEq(KeyName(c.vk), "c"));
+    utassert(base::StrEq(KeyName(c.vk), StrL("c")));
 
     // The last binding for an action wins here too.
     KeyBinding later[] = {

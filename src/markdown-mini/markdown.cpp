@@ -1061,17 +1061,18 @@ Node* ToMdast(Arena* a, Str source, const ParseOptions& options) {
 
 Str DecodeNamed(Arena* a, Str name) {
     const char* value = nullptr;
-    if (base::StrEq(name, "amp") || base::StrEq(name, "AMP")) {
+    if (base::StrEq(name, StrL("amp")) || base::StrEq(name, StrL("AMP"))) {
         value = "&";
-    } else if (base::StrEq(name, "lt") || base::StrEq(name, "LT")) {
+    } else if (base::StrEq(name, StrL("lt")) || base::StrEq(name, StrL("LT"))) {
         value = "<";
-    } else if (base::StrEq(name, "gt") || base::StrEq(name, "GT")) {
+    } else if (base::StrEq(name, StrL("gt")) || base::StrEq(name, StrL("GT"))) {
         value = ">";
-    } else if (base::StrEq(name, "quot") || base::StrEq(name, "QUOT")) {
+    } else if (base::StrEq(name, StrL("quot")) ||
+               base::StrEq(name, StrL("QUOT"))) {
         value = "\"";
-    } else if (base::StrEq(name, "apos")) {
+    } else if (base::StrEq(name, StrL("apos"))) {
         value = "'";
-    } else if (base::StrEq(name, "nbsp")) {
+    } else if (base::StrEq(name, StrL("nbsp"))) {
         value = "\xc2\xa0";
     }
     return value ? MiniOwn(a, Str((char*)value)) : Str{};

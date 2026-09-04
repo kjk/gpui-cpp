@@ -71,9 +71,9 @@ static void ANamedKeyKeepsItsName() {
     k.key = StrL("backspace");
     utassert(base::StrEq(KbdFmtTemp(k), kExpected[ExpectedBackspace]));
     k.key = StrL("pagedown");
-    utassert(base::StrEq(KbdFmtTemp(k), "Page Down"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("Page Down")));
     k.key = StrL("pageup");
-    utassert(base::StrEq(KbdFmtTemp(k), "Page Up"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("Page Up")));
     k.key = StrL("left");
     utassert(base::StrEq(KbdFmtTemp(k), kExpected[ExpectedLeft]));
     k.key = StrL("enter");
@@ -84,20 +84,20 @@ static void AnythingElseIsCapitalised() {
     Keystroke k;
     // One character is upper-cased...
     k.key = StrL("c");
-    utassert(base::StrEq(KbdFmtTemp(k), "C"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("C")));
     // ...and a symbol is left as it is.
     k.key = StrL("/");
-    utassert(base::StrEq(KbdFmtTemp(k), "/"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("/")));
     k.key = StrL("-");
-    utassert(base::StrEq(KbdFmtTemp(k), "-"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("-")));
     // A longer name keeps its spelling with the first letter raised, which is
     // how the keys with no table entry of their own read.
     k.key = StrL("home");
-    utassert(base::StrEq(KbdFmtTemp(k), "Home"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("Home")));
     k.key = StrL("f12");
-    utassert(base::StrEq(KbdFmtTemp(k), "F12"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("F12")));
     k.key = StrL("space");
-    utassert(base::StrEq(KbdFmtTemp(k), "Space"));
+    utassert(base::StrEq(KbdFmtTemp(k), StrL("Space")));
 }
 
 static void ABufferTooSmallStillEndsTheString() {
@@ -122,7 +122,7 @@ static void AShortcutComesFromTheBinding() {
     // finds nothing — which is the same rule the matcher applies.
     utassert(!KeystrokeForAction(input::Copy(), nullptr, &k));
     utassert(KeystrokeForAction(input::Copy(), "Input", &k));
-    utassert(base::StrEq(k.key, "c"));
+    utassert(base::StrEq(k.key, StrL("c")));
 #if GPUI_OS_MAC
     utassert(k.platform && !k.ctrl);
 #else
@@ -133,9 +133,9 @@ static void AShortcutComesFromTheBinding() {
     TempStr buf = KbdFmtTemp(k, 32);
     utassert(buf);
 #if GPUI_OS_MAC
-    utassert(base::StrEq(buf, "\u2318C"));
+    utassert(base::StrEq(buf, StrL("\u2318C")));
 #else
-    utassert(base::StrEq(buf, "Ctrl+C"));
+    utassert(base::StrEq(buf, StrL("Ctrl+C")));
 #endif
 
     // An action nothing binds has no shortcut to show, which is a row with

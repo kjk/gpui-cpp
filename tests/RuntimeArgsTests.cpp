@@ -30,9 +30,9 @@ void TestRuntimeArgs() {
     int argc = GpuiTakeRuntimeArgs(8, argv);
     const WinPaintOptions& options = WinPaintOptionsGet();
     utassert(argc == 3);
-    utassert(base::StrEq(Str(argv[0]), "tests"));
-    utassert(base::StrEq(Str(argv[1]), "first"));
-    utassert(base::StrEq(Str(argv[2]), "second"));
+    utassert(base::StrEq(Str(argv[0]), StrL("tests")));
+    utassert(base::StrEq(Str(argv[1]), StrL("first")));
+    utassert(base::StrEq(Str(argv[2]), StrL("second")));
     utassert(argv[3] == nullptr);
     utassert(options.backend == expected);
     utassert(options.msaa == WinPaintMsaa::X8);
@@ -42,9 +42,9 @@ void TestRuntimeArgs() {
     char* argv[] = {app, first, reuse, second, nullptr};
     int argc = GpuiTakeRuntimeArgs(4, argv);
     utassert(argc == 3);
-    utassert(base::StrEq(Str(argv[0]), "tests"));
-    utassert(base::StrEq(Str(argv[1]), "first"));
-    utassert(base::StrEq(Str(argv[2]), "second"));
+    utassert(base::StrEq(Str(argv[0]), StrL("tests")));
+    utassert(base::StrEq(Str(argv[1]), StrL("first")));
+    utassert(base::StrEq(Str(argv[2]), StrL("second")));
     utassert(argv[3] == nullptr);
 #endif
     utassert(!LayoutReuseOn());

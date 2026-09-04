@@ -16,7 +16,7 @@ static void WhatGoesInComesOut() {
     ArenaStr s = ArenaStrDup(a, StrL("hello"));
     utassert(ArenaStrIsSet(s));
     utassert(ArenaStrLen(a, s) == 5);
-    utassert(base::StrEq(ArenaStrGet(a, s), "hello"));
+    utassert(base::StrEq(ArenaStrGet(a, s), StrL("hello")));
 
     // NUL-terminated the way StrDup's is, so a caller that needs a C string
     // has one without copying again.
@@ -27,8 +27,8 @@ static void WhatGoesInComesOut() {
     ArenaStr one = ArenaStrDup(a, StrL("one"));
     ArenaStr two = ArenaStrDup(a, StrL("two"));
     ArenaStr three = ArenaStrDup(a, StrL(""));
-    utassert(base::StrEq(ArenaStrGet(a, one), "one"));
-    utassert(base::StrEq(ArenaStrGet(a, two), "two"));
+    utassert(base::StrEq(ArenaStrGet(a, one), StrL("one")));
+    utassert(base::StrEq(ArenaStrGet(a, two), StrL("two")));
     // Empty is nothing stored at all, which is what a Str with a null s means.
     utassert(!ArenaStrIsSet(three));
     utassert(ArenaStrGet(a, three).s == nullptr);
@@ -52,8 +52,8 @@ static void ItSurvivesTheArenaChainingOn() {
     ArenaStr last = ArenaStrDup(a, StrL("last"));
     // The early one is still readable, and so is the late one — which is the
     // whole point of the position space over a per-block offset.
-    utassert(base::StrEq(ArenaStrGet(a, first), "first"));
-    utassert(base::StrEq(ArenaStrGet(a, last), "last"));
+    utassert(base::StrEq(ArenaStrGet(a, first), StrL("first")));
+    utassert(base::StrEq(ArenaStrGet(a, last), StrL("last")));
     ArenaDelete(a);
 }
 
@@ -137,12 +137,12 @@ static void AppendingToTheNewestCostsOnlyTheBytes() {
     uint64_t after = ArenaUsed(a);
 
     s = ArenaStrAppend(a, s, StrL(" two"));
-    utassert(base::StrEq(ArenaStrGet(a, s), "one two"));
+    utassert(base::StrEq(ArenaStrGet(a, s), StrL("one two")));
     // Four characters more, and nothing else: no second copy of "one".
     utassert(ArenaUsed(a) == after + 4);
 
     s = ArenaStrAppend(a, s, StrL(" three"));
-    utassert(base::StrEq(ArenaStrGet(a, s), "one two three"));
+    utassert(base::StrEq(ArenaStrGet(a, s), StrL("one two three")));
     utassert(ArenaUsed(a) == after + 4 + 6);
     utassert(ArenaStrLen(a, s) == 13);
 
@@ -160,7 +160,7 @@ static void AppendingToTheNewestCostsOnlyTheBytes() {
 
     // Appending to nothing is just storing it.
     ArenaStr fresh = ArenaStrAppend(a, kArenaStrNone, StrL("first"));
-    utassert(base::StrEq(ArenaStrGet(a, fresh), "first"));
+    utassert(base::StrEq(ArenaStrGet(a, fresh), StrL("first")));
     ArenaDelete(a);
 }
 
@@ -173,15 +173,15 @@ static void AppendingToAnOlderStringCopies() {
 
     // `first` is no longer at the end, so this cannot grow in place.
     first = ArenaStrAppend(a, first, StrL("cc"));
-    utassert(base::StrEq(ArenaStrGet(a, first), "aacc"));
+    utassert(base::StrEq(ArenaStrGet(a, first), StrL("aacc")));
     // The one behind it is untouched, which is the thing a wrong in-place
     // append would break.
-    utassert(base::StrEq(ArenaStrGet(a, second), "bb"));
+    utassert(base::StrEq(ArenaStrGet(a, second), StrL("bb")));
 
     // And the copy is itself the newest now, so the next append is in place.
     uint64_t after = ArenaUsed(a);
     first = ArenaStrAppend(a, first, StrL("dd"));
-    utassert(base::StrEq(ArenaStrGet(a, first), "aaccdd"));
+    utassert(base::StrEq(ArenaStrGet(a, first), StrL("aaccdd")));
     utassert(ArenaUsed(a) == after + 2);
     ArenaDelete(a);
 }

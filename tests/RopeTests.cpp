@@ -20,18 +20,18 @@ static const char* kMixed = "a 中文🎉 test\nRope";
 
 static void SliceLine() {
     Str r = Str(kLines);
-    utassert(base::StrEq(RopeSliceLine(r, 0), "Hello"));
+    utassert(base::StrEq(RopeSliceLine(r, 0), StrL("Hello")));
     // Lines split on LF alone, so the CR stays at the end of the line.
-    utassert(base::StrEq(RopeSliceLine(r, 1), "World\r"));
-    utassert(base::StrEq(RopeSliceLine(r, 2), "This is a test 中文"));
-    utassert(base::StrEq(RopeSliceLine(r, 3), "Rope"));
+    utassert(base::StrEq(RopeSliceLine(r, 1), StrL("World\r")));
+    utassert(base::StrEq(RopeSliceLine(r, 2), StrL("This is a test 中文")));
+    utassert(base::StrEq(RopeSliceLine(r, 3), StrL("Rope")));
     // over bounds
-    utassert(base::StrEq(RopeSliceLine(r, 6), ""));
+    utassert(base::StrEq(RopeSliceLine(r, 6), StrL("")));
 
     // only have \r end
     Str cr = StrL("Hello\r");
-    utassert(base::StrEq(RopeSliceLine(cr, 0), "Hello\r"));
-    utassert(base::StrEq(RopeSliceLine(cr, 1), ""));
+    utassert(base::StrEq(RopeSliceLine(cr, 0), StrL("Hello\r")));
+    utassert(base::StrEq(RopeSliceLine(cr, 1), StrL("")));
 }
 
 static void LinesLen() {
@@ -153,10 +153,10 @@ static void SourceRopeFacadesIterateAndDescribeEdits() {
     RopeExt rope = RopeExt::Of(Str(kLines));
     utassert(rope.LinesLen() == 4);
     utassert(base::StrEq(rope.SliceLines(1, 3),
-                   "World\r\nThis is a test 中文"));
+                         StrL("World\r\nThis is a test 中文")));
     Selection word;
     utassert(rope.WordRange(7, &word));
-    utassert(base::StrEq(rope.WordAt(7), "World"));
+    utassert(base::StrEq(rope.WordAt(7), StrL("World")));
 
     RopeLines lines = rope.IterLines();
     Str line;
@@ -166,8 +166,8 @@ static void SourceRopeFacadesIterateAndDescribeEdits() {
     }
     utassert(count == 4 && lines.Len() == 0);
 
-    InputEdit edit = InputEdit::New(StrL("one\ntwo"), {4, 7},
-                                    StrL("three\nfour"));
+    InputEdit edit =
+        InputEdit::New(StrL("one\ntwo"), {4, 7}, StrL("three\nfour"));
     utassert(edit.startByte == 4 && edit.oldEndByte == 7);
     utassert(edit.newEndByte == 14);
     utassert(edit.startPosition.row == 1 && edit.startPosition.column == 0);
@@ -179,14 +179,14 @@ static void TabSizeCountsAndBuildsIndent() {
     Arena* arena = ArenaNew();
     TabSize soft;
     soft.tabSize = 4;
-    utassert(base::StrEq(soft.ToString(arena), "    "));
+    utassert(base::StrEq(soft.ToString(arena), StrL("    ")));
     utassert(soft.IndentCount(StrL("  \tabc")) == 6);
     utassert(soft.IndentCount(StrL("abc")) == 0);
 
     TabSize hard;
     hard.tabSize = 8;
     hard.hardTabs = true;
-    utassert(base::StrEq(hard.ToString(arena), "\t"));
+    utassert(base::StrEq(hard.ToString(arena), StrL("\t")));
     utassert(hard.IndentCount(StrL(" \t abc")) == 10);
     ArenaDelete(arena);
 }

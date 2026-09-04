@@ -78,7 +78,7 @@ static void TheTreeSkipsVisualBoxesButKeepsSemanticParents() {
     if (dialogNode && buttonNode) {
         utassert(dialogNode->parent == -1);
         utassert(buttonNode->parent == 0);
-        utassert(base::StrEq(buttonNode->info.label, "Save changes"));
+        utassert(base::StrEq(buttonNode->info.label, StrL("Save changes")));
         utassert(buttonNode->actions & AccessibilityActionDefault);
         utassert(buttonNode->actions & AccessibilityActionFocus);
         utassert(WindowAccessibilityNode(f.win, buttonNode->id) == buttonNode);
@@ -103,7 +103,7 @@ static void StyledButtonsCanReplaceTheirVisibleAccessibleName() {
     const AccessibilityNode* node =
         RoleNode(f.win->accessibility, AccessibilityRole::Button);
     utassert(node &&
-             base::StrEq(node->info.label, "Save the current document"));
+             base::StrEq(node->info.label, StrL("Save the current document")));
     FreeAccessibilityFrame(&f);
 }
 
@@ -123,43 +123,45 @@ static void AnExplicitAccessibilityLabelReplacesTheVisibleOne() {
             ->Label(StrL("Remember me"))
             ->AccessibilityLabel(StrL("Remember this account"));
     // ...and must not change what is drawn.
-    utassert(base::StrEq(namedBox->label, "Remember me"));
+    utassert(base::StrEq(namedBox->label, StrL("Remember me")));
     AccessibilityCollect(namedBox->IntoEl(), &f.win->accessibility);
     const AccessibilityNode* box =
         RoleNode(f.win->accessibility, AccessibilityRole::CheckBox);
-    utassert(box && base::StrEq(box->info.label, "Remember this account"));
+    utassert(box &&
+             base::StrEq(box->info.label, StrL("Remember this account")));
 
     component::Radio* namedRadio =
         component::Radio::New(&f.cx, StrL("auto"))
             ->Label(StrL("Automatic"))
             ->AccessibilityLabel(StrL("Choose automatic mode"));
-    utassert(base::StrEq(namedRadio->label, "Automatic"));
+    utassert(base::StrEq(namedRadio->label, StrL("Automatic")));
     AccessibilityCollect(namedRadio->IntoEl(), &f.win->accessibility);
     const AccessibilityNode* radio =
         RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
-    utassert(radio && base::StrEq(radio->info.label, "Choose automatic mode"));
+    utassert(radio &&
+             base::StrEq(radio->info.label, StrL("Choose automatic mode")));
 
     component::Switch* namedSwitch =
         component::Switch::New(&f.cx, StrL("wifi"))
             ->Label(StrL("Wi-Fi"))
             ->AccessibilityLabel(StrL("Toggle Wi-Fi"));
-    utassert(base::StrEq(namedSwitch->label, "Wi-Fi"));
+    utassert(base::StrEq(namedSwitch->label, StrL("Wi-Fi")));
     AccessibilityCollect(namedSwitch->IntoEl(), &f.win->accessibility);
     const AccessibilityNode* sw =
         RoleNode(f.win->accessibility, AccessibilityRole::Switch);
-    utassert(sw && base::StrEq(sw->info.label, "Toggle Wi-Fi"));
+    utassert(sw && base::StrEq(sw->info.label, StrL("Toggle Wi-Fi")));
 
     component::ColorPicker* namedPicker =
         component::ColorPicker::New(&f.cx, StrL("picker"))
             ->Label(StrL("Color"))
             ->AccessibilityLabel(StrL("Text color"));
-    utassert(base::StrEq(namedPicker->label, "Color"));
+    utassert(base::StrEq(namedPicker->label, StrL("Color")));
     El* pickerEl = namedPicker->IntoEl();
     IdsCollect(pickerEl);
     AccessibilityCollect(pickerEl, &f.win->accessibility);
     const AccessibilityNode* picker =
         RoleNode(f.win->accessibility, AccessibilityRole::Button);
-    utassert(picker && base::StrEq(picker->info.label, "Text color"));
+    utassert(picker && base::StrEq(picker->info.label, StrL("Text color")));
 
     FreeAccessibilityFrame(&f);
 }
@@ -181,7 +183,8 @@ static void ExplicitOnlyNamesReachTheAnnouncedControl() {
     AccessibilityCollect(bar, &f.win->accessibility);
     const AccessibilityNode* barNode =
         RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator);
-    utassert(barNode && base::StrEq(barNode->info.label, "Upload progress"));
+    utassert(barNode &&
+             base::StrEq(barNode->info.label, StrL("Upload progress")));
 
     utassert(!component::ProgressCircle::New(&f.cx)->accessibilityLabel.s);
     El* circle = component::ProgressCircle::New(&f.cx)
@@ -195,7 +198,7 @@ static void ExplicitOnlyNamesReachTheAnnouncedControl() {
     const AccessibilityNode* circleNode =
         RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator);
     utassert(circleNode &&
-             base::StrEq(circleNode->info.label, "Upload progress"));
+             base::StrEq(circleNode->info.label, StrL("Upload progress")));
 
     utassert(!component::Table::New(&f.cx, StrL("t"))->accessibilityLabel.s);
     El* table = component::Table::New(&f.cx, StrL("invoices"))
@@ -205,7 +208,7 @@ static void ExplicitOnlyNamesReachTheAnnouncedControl() {
     const AccessibilityNode* tableNode =
         RoleNode(f.win->accessibility, AccessibilityRole::Table);
     utassert(tableNode &&
-             base::StrEq(tableNode->info.label, "Recent invoices"));
+             base::StrEq(tableNode->info.label, StrL("Recent invoices")));
 
     FreeAccessibilityFrame(&f);
 }
@@ -239,10 +242,10 @@ static void ExplicitAriaFieldsSurviveCollection() {
     utassert(f.win->accessibility.len == 1);
     if (f.win->accessibility.len == 1) {
         const AccessibilityInfo& a = f.win->accessibility[0].info;
-        utassert(base::StrEq(a.authorId, "heading.main"));
-        utassert(base::StrEq(a.label, "Explicit"));
-        utassert(base::StrEq(a.value, "value"));
-        utassert(base::StrEq(a.placeholder, "placeholder"));
+        utassert(base::StrEq(a.authorId, StrL("heading.main")));
+        utassert(base::StrEq(a.label, StrL("Explicit")));
+        utassert(base::StrEq(a.value, StrL("value")));
+        utassert(base::StrEq(a.placeholder, StrL("placeholder")));
         utassert(a.toggled == AccessibilityToggled::Mixed);
         utassert(a.hasSelected && a.selected);
         utassert(a.hasExpanded && !a.expanded);
@@ -341,7 +344,7 @@ static void ConditionalAndCompositeRolesMatchUpstream() {
     const AccessibilityNode* picker =
         RoleNode(f.win->accessibility, AccessibilityRole::Button, 2);
     utassert(picker && picker->info.hasExpanded && picker->info.expanded &&
-             base::StrEq(picker->info.label, "Color") &&
+             base::StrEq(picker->info.label, StrL("Color")) &&
              (picker->actions & AccessibilityActionFocus));
     const AccessibilityNode* swatch =
         RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
@@ -369,9 +372,9 @@ static void InputContentTypesAndSecretsProjectSafely() {
     AccessibilityCollect(email, &f.win->accessibility);
     const AccessibilityNode* node =
         RoleNode(f.win->accessibility, AccessibilityRole::EmailInput);
-    utassert(node && base::StrEq(node->info.authorId, "account.email") &&
-             base::StrEq(node->info.label, "Email address") &&
-             base::StrEq(node->info.value, "ada@example.test") &&
+    utassert(node && base::StrEq(node->info.authorId, StrL("account.email")) &&
+             base::StrEq(node->info.label, StrL("Email address")) &&
+             base::StrEq(node->info.value, StrL("ada@example.test")) &&
              (node->actions & AccessibilityActionSetValue));
 
     InputState passwordState;
@@ -421,19 +424,20 @@ static void BaseControlsProjectTheirControlledState() {
     const AccessibilityNode* tab =
         RoleNode(f.win->accessibility, AccessibilityRole::Tab);
     utassert(check && check->info.toggled == AccessibilityToggled::Mixed);
-    utassert(check && base::StrEq(check->info.label, "Remember choice"));
+    utassert(check && base::StrEq(check->info.label, StrL("Remember choice")));
     utassert(radio && radio->info.hasSelected && radio->info.selected);
     utassert(sw && sw->info.toggled == AccessibilityToggled::True);
-    utassert(sw && base::StrEq(sw->info.label, "Airplane mode"));
+    utassert(sw && base::StrEq(sw->info.label, StrL("Airplane mode")));
     utassert(sw && sw->focusId == -88);
     utassert(toggle && toggle->info.toggled == AccessibilityToggled::True);
     utassert(done && done->info.hasNumericValue &&
              TestNear(done->info.numericValue, 100));
-    utassert(done && base::StrEq(done->info.label, "Downloading release"));
+    utassert(done &&
+             base::StrEq(done->info.label, StrL("Downloading release")));
     utassert(busy && !busy->info.hasNumericValue);
     utassert(tab && tab->info.hasSelected && tab->info.selected);
     if (tab) {
-        utassert(base::StrEq(tab->info.label, "Account"));
+        utassert(base::StrEq(tab->info.label, StrL("Account")));
         utassert(tab->info.positionInSet == 2 && tab->info.sizeOfSet == 5);
     }
     FreeAccessibilityFrame(&f);
@@ -463,12 +467,13 @@ static void TablesKeepCountsAndOneBasedIndices() {
         RoleNode(f.win->accessibility, AccessibilityRole::Cell);
     utassert(tableNode && tableNode->info.rowCount == 12 &&
              tableNode->info.columnCount == 4);
-    utassert(tableNode && base::StrEq(tableNode->info.label, "Open positions"));
+    utassert(tableNode &&
+             base::StrEq(tableNode->info.label, StrL("Open positions")));
     utassert(bodyNode && bodyNode->parent == 0);
     utassert(rowNode && rowNode->parent == 1 && rowNode->info.rowIndex == 3);
     utassert(cellNode && cellNode->parent == 2 &&
              cellNode->info.columnIndex == 2);
-    utassert(cellNode && base::StrEq(cellNode->info.label, "Ada"));
+    utassert(cellNode && base::StrEq(cellNode->info.label, StrL("Ada")));
 #if GPUI_OS_WINDOWS
     if (tableNode && cellNode) {
         utassert(AccessibilityWinSmokeTest(f.win, tableNode->id));
@@ -521,14 +526,14 @@ static void EditableTextOffersSetValueAndReadOnlyTextDoesNot() {
     const AccessibilityNode* node =
         RoleNode(f.win->accessibility, AccessibilityRole::TextInput);
     utassert(node && (node->actions & AccessibilityActionSetValue));
-    utassert(node && base::StrEq(node->info.value, "old"));
+    utassert(node && base::StrEq(node->info.value, StrL("old")));
     if (node) {
 #if GPUI_OS_WINDOWS
         utassert(AccessibilityWinSmokeTest(f.win, node->id));
 #endif
         utassert(WindowAccessibilityPerform(
             f.win, node->id, AccessibilityAction::SetValue, StrL("new value")));
-        utassert(base::StrEq(InputValue(&editable), "new value"));
+        utassert(base::StrEq(InputValue(&editable), StrL("new value")));
     }
 
     InputState readOnly;

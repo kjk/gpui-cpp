@@ -156,12 +156,12 @@ static void FilesystemGrantsReturnRootRelativeAuthority() {
     utassert(capabilities
                  .ResolvePath(absolute, CapabilityAccess::Read, &path, &error));
     utassert(StrEq(path.root, root));
-    utassert(StrEq(path.relative, "dir/file.txt"));
+    utassert(StrEq(path.relative, StrL("dir/file.txt")));
     path.Free();
     utassert(capabilities.ResolvePath(StrL("inside/../file.txt"),
                                       CapabilityAccess::Write, &path, &error));
     utassert(StrEq(path.root, root));
-    utassert(StrEq(path.relative, "file.txt"));
+    utassert(StrEq(path.relative, StrL("file.txt")));
     path.Free();
     utassert(!capabilities.ResolvePath(StrL("../escape.txt"),
                                        CapabilityAccess::Read, &path, &error));
@@ -246,7 +246,7 @@ static void SpecElementsAreSingleUseValues() {
     utassert(arena.Attach(parent, child));
     utassert(!arena.Attach(other, child, &error));
     utassert(error.kind == SpecErrorKind::AlreadyParented);
-    utassert(StrEq(error.component, "text"));
+    utassert(StrEq(error.component, StrL("text")));
     SpecOp style = {};
     style.kind = SpecOpKind::NullaryStyle;
     style.name = StrL("flex");
@@ -317,12 +317,11 @@ static void SpecsAndSnapshotsDumpWithoutEnteringTheVm() {
     utassert(lease.refs == 1 && lease.retired == 0);
     Arena* output = ArenaNew();
     Str tree = snapshot->DebugTree(output);
-    utassert(StrEq(tree,
-                   "v_flex .flex\n"
-                   "  text \"Save\"\n"
-                   "  Collapsible\n"
-                   "    @content\n"
-                   "      text \"body\"\n"));
+    utassert(StrEq(tree, StrL("v_flex .flex\n"
+                              "  text \"Save\"\n"
+                              "  Collapsible\n"
+                              "    @content\n"
+                              "      text \"body\"\n")));
     ArenaDelete(output);
     delete snapshot;
     utassert(lease.refs == 0 && lease.retired == 1);
@@ -553,11 +552,10 @@ static void RuntimeLoadsRendersAndRetiresCallbacks() {
     if (snapshot) {
         Arena* arena = ArenaNew();
         Str tree = snapshot->DebugTree(arena);
-        utassert(StrEq(tree,
-                       "v_flex :id(\"root\") .p(12) .items_center\n"
-                       "  text \"hello\"\n"
-                       "  Button \"save\" :on_click(fn)\n"
-                       "    text \"Save\"\n"));
+        utassert(StrEq(tree, StrL("v_flex :id(\"root\") .p(12) .items_center\n"
+                                  "  text \"hello\"\n"
+                                  "  Button \"save\" :on_click(fn)\n"
+                                  "    text \"Save\"\n")));
         ArenaDelete(arena);
         utassert(runtime->LiveCallbacks() == 1);
         shell::CallbackId callback = FirstCallback(snapshot);
@@ -934,7 +932,7 @@ static void ShellTypeDeclarationsMatchRuntimeAndRefreshImportDirectories() {
         written == 1);
     utassert(FsRun(FsOperation::Read, Str(rootName), StrL("jsconfig.json"), {},
                    false, &result, &fsError));
-    utassert(StrEq(result.bytes, "{}"));
+    utassert(StrEq(result.bytes, StrL("{}")));
     result.Free();
     utassert(ShellFixtureFs(FsOperation::RemoveFile, Str(rootName),
                             StrL("gpui.d.ts")));
@@ -991,7 +989,7 @@ static void RuntimeLoadsOnlyModulesInsideTheApplicationRoot() {
     Str tree = object ? runtime->RenderToSpec(arena, object, &window, &app, {},
                                               nullptr, &error)
                       : Str{};
-    utassert(StrEq(tree, "div\n  text \"from dependency\"\n"));
+    utassert(StrEq(tree, StrL("div\n  text \"from dependency\"\n")));
 
     ViewType* escaped =
         runtime ? runtime->LoadApp(StrL("."), Str(badName), &error) : nullptr;
@@ -1060,7 +1058,7 @@ static void PublishedSnapshotsMaterializeToNativeElements() {
         utassert(abs((int)root->style.bg.color.g - 0x34) <= 1);
         utassert(abs((int)root->style.bg.color.b - 0x56) <= 1);
         utassert(root->first && root->first->kind == ElKind::Text);
-        utassert(StrEq(root->first->text, "native"));
+        utassert(StrEq(root->first->text, StrL("native")));
         utassert(root->first->next != nullptr);
         utassert(root->first->next->accessibility.disabled);
     }
@@ -1332,7 +1330,7 @@ static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
     utassert(root != nullptr && !error.IsSet());
     utassert(runtime && runtime->LiveEntities() == 3);
     InputState* input = root && root->first ? root->first->input : nullptr;
-    utassert(input != nullptr && StrEq(InputValue(input), "first"));
+    utassert(input != nullptr && StrEq(InputValue(input), StrL("first")));
     utassert(input && input->onChange.IsValid());
     if (input) {
         InputEvent changed = {InputEventKind::Change};
@@ -1342,7 +1340,7 @@ static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
                  ->Eval(StrL("if (globalThis.retainedEvents !== 1) throw new "
                              "Error('retained event was not dispatched')"),
                         StrL("retained-event-check.js"), &error));
-    utassert(input && StrEq(InputValue(input), "second"));
+    utassert(input && StrEq(InputValue(input), StrL("second")));
     utassert(runtime->Eval(StrL("globalThis.retainedInput.release()"),
                            StrL("retained-release.js"), &error));
     utassert(runtime->LiveEntities() == 2);
@@ -1834,8 +1832,8 @@ static void ShellProcessRunIsBoundedAndPromiseBased() {
     utassert(ProcessRunBounded(StrL("cmd.exe"), args, 3, &cancellation, &output,
                                &processError));
     utassert(!processError && output.code == 7);
-    utassert(StrEq(StrTrimAscii(output.out), "out") &&
-             StrEq(StrTrimAscii(output.err), "err"));
+    utassert(StrEq(StrTrimAscii(output.out), StrL("out")) &&
+             StrEq(StrTrimAscii(output.err), StrL("err")));
     output.Free();
     StrFree(processError);
 
@@ -1920,11 +1918,11 @@ static void ShellFilesystemUsesGrantedHandleRelativePaths() {
     utassert(FsRun(FsOperation::Read, Str(rootName),
                    StrL("nested/child/note.txt"), {}, false, &result,
                    &fsError));
-    utassert(StrEq(result.bytes, "hello"));
+    utassert(StrEq(result.bytes, StrL("hello")));
     utassert(FsRun(FsOperation::ReadDirectory, Str(rootName),
                    StrL("nested/child"), {}, false, &result, &fsError));
     utassert(result.entries.len == 1 &&
-             StrEq(result.entries[0].name, "note.txt") &&
+             StrEq(result.entries[0].name, StrL("note.txt")) &&
              !result.entries[0].isDirectory);
     utassert(FsRun(FsOperation::Exists, Str(rootName),
                    StrL("nested/child/note.txt"), {}, false, &result,
@@ -2036,7 +2034,7 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
         utassert(assets.Install());
         Vec<uint8_t> bytes;
         utassert(AssetsLoad(StrL("icons/check.svg"), &bytes));
-        utassert(StrEq(Str((char*)bytes.els, bytes.len), "<svg/>"));
+        utassert(StrEq(Str((char*)bytes.els, bytes.len), StrL("<svg/>")));
         VecReset(bytes);
         Str relative;
         utassert(!assets.Resolve(StrL("../secret.svg"), &relative, &error));
@@ -2044,7 +2042,7 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
         error = {};
         Vec<Str> names;
         utassert(assets.List(StrL("icons"), &names, &error));
-        utassert(names.len == 1 && StrEq(names[0], "check.svg"));
+        utassert(names.len == 1 && StrEq(names[0], StrL("check.svg")));
         for (int i = 0; i < names.len; i++) StrFree(names[i]);
         VecReset(names);
     }
@@ -2082,7 +2080,7 @@ static void ShellCryptoAndCompressionMatchStandardRuntime() {
         utassert(
             ZlibInflate(compressed, gzip != 0, &inflated, &compressionError));
         utassert(!compressionError &&
-                 StrEq(inflated, "stored compression round trip"));
+                 StrEq(inflated, StrL("stored compression round trip")));
         compressed.s[compressed.len - 1] ^= 1;
         utassert(
             !ZlibInflate(compressed, gzip != 0, &inflated, &compressionError));
@@ -2199,36 +2197,39 @@ static bool ShellFetchFixture(const HttpReq& req, HttpRsp* out) {
     StrFree(gShellFetchHeaders);
     gShellFetchHeaders = headers.TakeStr();
 
-    if (gShellFetchMode == 1 && StrEq(url, "https://api.example.test/start")) {
+    if (gShellFetchMode == 1 &&
+        StrEq(url, StrL("https://api.example.test/start"))) {
         out->status = 302;
         out->redirectUrl = StrDup(StrL("https://cdn.example.test/result"));
         return true;
     }
-    if (gShellFetchMode == 2 && StrEq(url, "https://api.example.test/start")) {
+    if (gShellFetchMode == 2 &&
+        StrEq(url, StrL("https://api.example.test/start"))) {
         out->status = 302;
         out->redirectUrl = StrDup(StrL("http://api.example.test/result"));
         return true;
     }
-    if (gShellFetchMode == 3 && StrEq(url, "https://api.example.test/start")) {
+    if (gShellFetchMode == 3 &&
+        StrEq(url, StrL("https://api.example.test/start"))) {
         // A 303 turns any method but HEAD into a bodyless GET, which is what
         // makes this redirect same-origin-safe to follow.
         out->status = 303;
         out->redirectUrl = StrDup(StrL("https://api.example.test/result"));
         return true;
     }
-    if (StrEq(url, "https://api.example.test/result")) {
+    if (StrEq(url, StrL("https://api.example.test/result"))) {
         out->status = 200;
         const char* body = "after";
         memcpy(VecAppendBlanks(out->body, 5), body, 5);
         return true;
     }
-    if (StrEq(url, "https://cdn.example.test/result")) {
+    if (StrEq(url, StrL("https://cdn.example.test/result"))) {
         out->status = 201;
         const char* body = "redirected";
         memcpy(VecAppendBlanks(out->body, 10), body, 10);
         return true;
     }
-    if (StrEq(url, "https://api.example.test/data")) {
+    if (StrEq(url, StrL("https://api.example.test/data"))) {
         out->status = 200;
         const char* body = "{\"answer\":42}";
         memcpy(VecAppendBlanks(out->body, 13), body, 13);
@@ -2439,8 +2440,8 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     FetchResult result;
     utassert(FetchSend(request, both, &result));
     utassert(!result.error && result.status == 201 &&
-             StrEq(result.url, "https://cdn.example.test/result") &&
-             StrEq(result.body, "redirected"));
+             StrEq(result.url, StrL("https://cdn.example.test/result")) &&
+             StrEq(result.body, StrL("redirected")));
     utassert(gShellFetchCalls == 2);
     result.Free();
 
@@ -2453,11 +2454,12 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
                             MkFunc1(ShellFetchAsyncDone, &asynchronous)));
     utassert(!asynchronous.called);
     utassert(ExecWaitIdle(5000));
-    utassert(
-        asynchronous.called && asynchronous.ok &&
-        asynchronous.result.status == 201 &&
-        StrEq(asynchronous.result.url, "https://cdn.example.test/result") &&
-        StrEq(asynchronous.result.body, "redirected") && gShellFetchCalls == 2);
+    utassert(asynchronous.called && asynchronous.ok &&
+             asynchronous.result.status == 201 &&
+             StrEq(asynchronous.result.url,
+                   StrL("https://cdn.example.test/result")) &&
+             StrEq(asynchronous.result.body, StrL("redirected")) &&
+             gShellFetchCalls == 2);
     asynchronous.Free();
 
     Capabilities initialOnly;
@@ -2489,8 +2491,8 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     VecAppend(posted.headers, type);
     utassert(FetchSend(posted, initialOnly, &result));
     utassert(!result.error && result.status == 200 &&
-             StrEq(gShellFetchMethod, "POST") &&
-             StrEq(gShellFetchBody, "grant_type=client_credentials") &&
+             StrEq(gShellFetchMethod, StrL("POST")) &&
+             StrEq(gShellFetchBody, StrL("grant_type=client_credentials")) &&
              StrContains(gShellFetchHeaders, StrL("Content-Type:application/"
                                                   "x-www-form-urlencoded;")));
     result.Free();
@@ -2503,9 +2505,9 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
     posted.url = StrDup(StrL("https://api.example.test/start"));
     utassert(FetchSend(posted, initialOnly, &result));
     utassert(!result.error && result.status == 200 &&
-             StrEq(result.body, "after") && gShellFetchCalls == 2 &&
-             StrEq(gShellFetchMethod, "GET") && gShellFetchBody.len == 0 &&
-             gShellFetchHeaders.len == 0);
+             StrEq(result.body, StrL("after")) && gShellFetchCalls == 2 &&
+             StrEq(gShellFetchMethod, StrL("GET")) &&
+             gShellFetchBody.len == 0 && gShellFetchHeaders.len == 0);
     result.Free();
     posted.Free();
     request.Free();
@@ -2585,7 +2587,7 @@ static void ShellFetchChecksEveryGetTargetBeforeContact() {
                  "data|true|{\"answer\":42}|42') throw new Error(fetchResult)"),
             StrL("fetch-result.js"), &error));
     // The lowercase `post` reached the policy and the wire upper-cased.
-    utassert(StrEq(gShellFetchMethod, "GET"));
+    utassert(StrEq(gShellFetchMethod, StrL("GET")));
     utassert(gShellFetchCalls == 2);
     EntityDrop(&app, view.id);
     app.windows.len = 0;
@@ -2679,7 +2681,7 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     utassert(gDockRuntime && gDockViewType && !error.IsSet());
 
     Str name = ShellPanelName(StrL("mail"), StrL("inbox"));
-    utassert(StrEq(name, "shell:mail/inbox"));
+    utassert(StrEq(name, StrL("shell:mail/inbox")));
     utassert(name.s == ShellPanelName(StrL("mail"), StrL("inbox")).s);
     utassert(!StrEq(name, ShellPanelName(StrL("chat"), StrL("inbox"))));
 
@@ -2701,7 +2703,7 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     DockDump(state, &saved);
     const PanelStateNode* leaf = FindPanelState(saved, name);
     utassert(leaf && leaf->infoIsJson &&
-             StrEq(leaf->info, "{\"filter\":\"unread\",\"sort\":2}"));
+             StrEq(leaf->info, StrL("{\"filter\":\"unread\",\"sort\":2}")));
 
     StrBuilder written;
     DockAreaStateWrite(&saved, &written);
@@ -2717,7 +2719,7 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     StrFree(gDockRestored);
     utassert(DockLoad(restored, &parsed, persisted, nullptr, &app, &window,
                       restoredArea));
-    utassert(StrEq(gDockRestored, "{\"filter\":\"unread\",\"sort\":2}"));
+    utassert(StrEq(gDockRestored, StrL("{\"filter\":\"unread\",\"sort\":2}")));
     utassert(restored->panels.len == 1 && restored->panels[0].closable &&
              restored->panels[0].canZoom && restored->panels[0].visible);
 
@@ -2730,8 +2732,9 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     DockAreaState failedSaved;
     DockDump(failed, &failedSaved);
     const PanelStateNode* failedLeaf = FindPanelState(failedSaved, name);
-    utassert(failedLeaf && failedLeaf->infoIsJson &&
-             StrEq(failedLeaf->info, "{\"filter\":\"unread\",\"sort\":2}"));
+    utassert(
+        failedLeaf && failedLeaf->infoIsJson &&
+        StrEq(failedLeaf->info, StrL("{\"filter\":\"unread\",\"sort\":2}")));
     gDockBuildFails = false;
 
     Arena* frame = ArenaNew();
@@ -2753,8 +2756,8 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     ShellDockData(&dock, &dockData);
     Str dockJson = dockData.TakeStr();
     utassert(StrEq(dockJson,
-                   "{\"placement\":\"left\",\"size\":240,\"open\":true,"
-                   "\"collapsible\":true}"));
+                   StrL("{\"placement\":\"left\",\"size\":240,\"open\":true,"
+                        "\"collapsible\":true}")));
 
     StrFree(dockJson);
     ArenaDelete(frame);
@@ -2806,11 +2809,11 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
     ShellError error = {};
     PluginManifest manifest;
     utassert(PluginManifestParse(valid, &manifest, &error));
-    utassert(!error.IsSet() && StrEq(manifest.id, "com.example.inbox") &&
-             StrEq(manifest.name, "Inbox") &&
-             StrEq(manifest.version, "1.2.0") &&
+    utassert(!error.IsSet() && StrEq(manifest.id, StrL("com.example.inbox")) &&
+             StrEq(manifest.name, StrL("Inbox")) &&
+             StrEq(manifest.version, StrL("1.2.0")) &&
              StrEq(manifest.shellVersion, kShellVersion) &&
-             StrEq(manifest.entry, "main.js"));
+             StrEq(manifest.entry, StrL("main.js")));
     Capabilities granted = manifest
                                .Grant(StrL("plugin-root"), StrL("data-root"));
     utassert(granted.HasReadAccess() && granted.HasWriteAccess() &&

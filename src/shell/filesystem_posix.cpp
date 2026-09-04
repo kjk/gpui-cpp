@@ -59,7 +59,7 @@ static int OpenRoot(Str root, bool create, Str* error) {
 }
 
 static bool ValidComponent(Str value) {
-    return value && !StrEq(value, ".") && !StrEq(value, "..") &&
+    return value && !StrEq(value, StrL(".")) && !StrEq(value, StrL("..")) &&
            StrFind(value, "\\") < 0;
 }
 
@@ -72,7 +72,7 @@ static bool OpenParent(int root, Str relative, int* parent, TempStr* leaf,
                        Str rootName, Str* error) {
     *parent = -1;
     *leaf = {};
-    if (StrEq(relative, ".")) {
+    if (StrEq(relative, StrL("."))) {
         int copy = dup(root);
         if (copy < 0)
             SyscallError(error, "open", rootName, relative);
@@ -123,7 +123,7 @@ static bool OpenParent(int root, Str relative, int* parent, TempStr* leaf,
 }
 
 static int OpenDirectory(int root, Str relative, Str rootName, Str* error) {
-    if (StrEq(relative, ".")) return dup(root);
+    if (StrEq(relative, StrL("."))) return dup(root);
     int parent = -1;
     TempStr leaf;
     if (!OpenParent(root, relative, &parent, &leaf, rootName, error)) return -1;
@@ -251,7 +251,7 @@ static bool ReadDirectory(int root, Str rootName, Str relative,
             break;
         }
         Str name = Str(entry->d_name);
-        if (StrEq(name, ".") || StrEq(name, "..")) continue;
+        if (StrEq(name, StrL(".")) || StrEq(name, StrL(".."))) continue;
         int nameLen = name.len;
         nameBytes += nameLen;
         if (result->entries.len >= kFsMaxDirectoryEntries ||
@@ -285,7 +285,7 @@ static bool ReadDirectory(int root, Str rootName, Str relative,
 
 static bool MakeDirectoryRecursive(int root, Str rootName, Str relative,
                                    Str* error) {
-    if (StrEq(relative, ".")) return true;
+    if (StrEq(relative, StrL("."))) return true;
     char* path = StrDup(relative).s;
     if (!path) return false;
     int current = dup(root);

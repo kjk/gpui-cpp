@@ -59,14 +59,14 @@ static void PrefixAndSecondaryRangesMatchRust() {
 
     HighlightsMatch prefix = HighlightsMatch::Prefix(StrL("hello"));
     utassert(prefix.IsPrefix());
-    utassert(base::StrEq(prefix.AsStr(), "hello"));
+    utassert(base::StrEq(prefix.AsStr(), StrL("hello")));
     utassert(!HighlightsMatch::Full(StrL("hello")).IsPrefix());
 
     Label* label = Label::New(&cx, StrL("Hello"))
                        ->Secondary(StrL("World"))
                        ->Highlights(prefix);
     Str full = label->FullText();
-    utassert(base::StrEq(full, "Hello World"));
+    utassert(base::StrEq(full, StrL("Hello World")));
     int n = label->HighlightRanges(full.len, ranges, 8);
     utassert(n == 3);
     utassert(ranges[0].start == 0 && ranges[0].end == 5);
@@ -101,7 +101,7 @@ static void RenderUsesOneStyledRunAndRealBullets() {
     El* styled = root->first;
     utassert(styled != nullptr);
     utassert(styled && styled->next == nullptr);
-    utassert(styled && base::StrEq(styled->text, "Hello World"));
+    utassert(styled && base::StrEq(styled->text, StrL("Hello World")));
     utassertnear(root->style.lineHeight, 1.25f);
     utassert(root->style.fontSize == 0);
     utassert(styled && styled->nSpans == 2);
@@ -121,7 +121,7 @@ static void RenderUsesOneStyledRunAndRealBullets() {
     El* masked = Label::New(&cx, StrL("A中"))->Masked(true)->IntoEl()->first;
     utassert(masked != nullptr);
     utassert(masked && masked->text.len == 6);
-    utassert(masked && base::StrEq(masked->text, "••"));
+    utassert(masked && base::StrEq(masked->text, StrL("••")));
 
     TempStr longText = AllocStrTemp(80);
     for (int i = 0; i < 80; i++) {

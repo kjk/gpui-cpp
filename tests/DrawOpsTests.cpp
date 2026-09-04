@@ -396,7 +396,7 @@ static void ATextRunIsReadAndPlaced() {
     text.s[0] = 0;
     utassert(FirstText(b.data.els, b.data.len, &x, &y, &size, &tlen, &flags,
                        text.s, text.len + 1));
-    utassert(StrEq(Str(text.s), "crates.io"));
+    utassert(StrEq(Str(text.s), StrL("crates.io")));
     utassertnear(x, 29.5f);
     utassertnear(y, 14.f);
     utassertnear(size, 11.f);
@@ -414,7 +414,7 @@ static void ATextRunIsReadAndPlaced() {
                           &nested));
     utassert(FirstText(nested.data.els, nested.data.len, &x, &y, &size, &tlen,
                        &flags, text.s, text.len + 1));
-    utassert(StrEq(Str(text.s), "CI"));
+    utassert(StrEq(Str(text.s), StrL("CI")));
     utassertnear(x, 22.f);
     utassertnear(y, 14.f);
     utassertnear(size, 11.f);
@@ -442,7 +442,7 @@ static void ATextRunIsReadAndPlaced() {
                           &wrapper));
     utassert(FirstText(wrapper.data.els, wrapper.data.len, &x, &y, &size, &tlen,
                        &flags, text.s, text.len + 1));
-    utassert(StrEq(Str(text.s), "CI"));
+    utassert(StrEq(Str(text.s), StrL("CI")));
     utassertnear(x, 5.f);
     utassertnear(y, 6.f);
 }

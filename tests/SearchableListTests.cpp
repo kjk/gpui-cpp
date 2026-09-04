@@ -97,13 +97,11 @@ static void SourceDelegateQueriesFlatAndGroupedItems() {
     utassert(flat.Position(StrL("banana"), &path));
     utassert(path == IndexPathNew(1));
 
-    SearchableGroup* fruit =
-        SearchableGroup::New(StrL("Fruit"))->Items(kItems, 2);
-    SearchableGroup* more =
-        SearchableGroup::New(StrL("More"))->Item(kItems[3]);
+    SearchableGroup* fruit = SearchableGroup::New(StrL("Fruit"))
+                                 ->Items(kItems, 2);
+    SearchableGroup* more = SearchableGroup::New(StrL("More"))->Item(kItems[3]);
     SearchableGroup* groups[] = {fruit, more};
-    SearchableListDelegate grouped =
-        SearchableListDelegate::Groups(groups, 2);
+    SearchableListDelegate grouped = SearchableListDelegate::Groups(groups, 2);
     utassert(grouped.SectionsCount() == 2);
     utassert(grouped.ItemsCount(1) == 1);
     utassert(grouped.Item(IndexPathNew(0).Section(1)) == &more->items[0]);
@@ -121,7 +119,7 @@ static void SearchableVecRebuildsItsMatchedView() {
     utassert(values->ItemsCount() == 3);
     values->PerformSearch(StrL("app"));
     utassert(values->ItemsCount() == 1);
-    utassert(base::StrEq(values->Item(IndexPathNew(0))->value, "apple"));
+    utassert(base::StrEq(values->Item(IndexPathNew(0))->value, StrL("apple")));
     IndexPath path;
     utassert(!values->Position(StrL("banana"), &path));
 
@@ -170,7 +168,7 @@ static void ItemElementReservesItsCheckAndUsesListSizing() {
     El* visibleCheck = checked->first->first->next;
     utassertnear(visibleCheck->style.opacity, 1.f);
     utassert(base::StrEq(visibleCheck->iconPath,
-                     IconNamePath(IconName::CircleCheck)));
+                         IconNamePath(IconName::CircleCheck)));
 
     ArenaDelete(a);
 }
@@ -182,7 +180,7 @@ static void StateAccessorsUseGroupedIndexPaths() {
     utassert(!s.AddSelectedIndex(IndexPathNew(0).Section(1)));
     Vec<Str> values;
     s.SelectedValues(&values);
-    utassert(values.len == 1 && base::StrEq(values[0], "apple"));
+    utassert(values.len == 1 && base::StrEq(values[0], StrL("apple")));
     utassert(s.RemoveSelectedIndex(IndexPathNew(0).Section(1)));
     utassert(!s.RemoveSelectedIndex(IndexPathNew(0).Section(1)));
 
@@ -191,8 +189,8 @@ static void StateAccessorsUseGroupedIndexPaths() {
     utassert(s.Selection().len == 2);
     s.SelectedValues(&values);
     utassert(values.len == 2);
-    utassert(base::StrEq(values[0], "banana"));
-    utassert(base::StrEq(values[1], "apple"));
+    utassert(base::StrEq(values[0], StrL("banana")));
+    utassert(base::StrEq(values[1], StrL("apple")));
     utassert(!s.IsOpen());
     utassert(s.Focus() == &s.triggerFocus);
     VecReset(values);
@@ -206,7 +204,7 @@ struct DelegateHooks {
 };
 
 static bool HookMatches(void*, const SearchableListItem* item, Str) {
-    return base::StrEq(item->value, "banana");
+    return base::StrEq(item->value, StrL("banana"));
 }
 
 static Str HookSectionTitle(void*, int) {
@@ -217,9 +215,7 @@ static El* HookRenderItem(void* user, Ctx* cx, IndexPath,
                           const SearchableListItem* item, bool checked) {
     DelegateHooks* hooks = (DelegateHooks*)user;
     hooks->renderedItems++;
-    return Div(cx->a)
-        ->Child(TextEl(cx->a, item->title))
-        ->AriaSelected(checked);
+    return Div(cx->a)->Child(TextEl(cx->a, item->title))->AriaSelected(checked);
 }
 
 static El* HookRenderHeader(void* user, Ctx* cx, int) {
@@ -255,8 +251,7 @@ static void DelegateHooksDriveSearchRenderingAndSelection() {
     cx.a = a;
 
     DelegateHooks hooks;
-    SearchableListDelegate delegate =
-        SearchableListDelegate::Items(kItems, 2);
+    SearchableListDelegate delegate = SearchableListDelegate::Items(kItems, 2);
     delegate.user = &hooks;
     delegate.sectionTitle = &HookSectionTitle;
     delegate.matches = &HookMatches;
@@ -278,7 +273,7 @@ static void DelegateHooksDriveSearchRenderingAndSelection() {
     utassert(hooks.renderedItems == 1);
     El* rows = box->first;
     utassert(rows != nullptr && rows->first != nullptr);
-    utassert(base::StrEq(rows->first->text, "Custom header"));
+    utassert(base::StrEq(rows->first->text, StrL("Custom header")));
     utassert(rows->first->next != nullptr);
     utassert(rows->first->next->accessibility.selected);
 

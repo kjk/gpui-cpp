@@ -17,8 +17,8 @@ static void TheBuilderCarriesAlignmentVariantAndReactions() {
             ->Alignment(MessageAlignment::End)
             ->WithVariant(BubbleVariant::Outline)
             ->Content(BubbleContent::New(&cx)->Child(TextEl(a, StrL("Hello"))))
-            ->Reactions(
-                BubbleReactions::New(&cx)->Child(TextEl(a, StrL("👍"))));
+            ->Reactions(BubbleReactions::New(&cx)
+                            ->Child(TextEl(a, StrL("👍"))));
 
     utassert(bubble->hasAlignment);
     utassert(bubble->alignment == MessageAlignment::End);
@@ -33,11 +33,13 @@ static void TheBuilderCarriesAlignmentVariantAndReactions() {
     Bubble* reordered =
         Bubble::New(&cx)
             ->Child(TextEl(a, StrL("Existing")))
-            ->Content(
-                BubbleContent::New(&cx)->Child(TextEl(a, StrL("Configured"))));
+            ->Content(BubbleContent::New(&cx)
+                          ->Child(TextEl(a, StrL("Configured"))));
     utassert(reordered->content->children.len == 2);
-    utassert(base::StrEq(reordered->content->children[0]->text, "Existing"));
-    utassert(base::StrEq(reordered->content->children[1]->text, "Configured"));
+    utassert(
+        base::StrEq(reordered->content->children[0]->text, StrL("Existing")));
+    utassert(
+        base::StrEq(reordered->content->children[1]->text, StrL("Configured")));
 
     BubbleGroup* group = BubbleGroup::New(&cx)
                              ->Child(TextEl(a, StrL("First")))

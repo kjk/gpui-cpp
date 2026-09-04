@@ -78,7 +78,7 @@ void TestMarkdown() {
     Node* code = MiniChild(a, root, 2);
     utassert(code && code->kind == NodeKind::Code);
     utassert(MiniTextIs(a, code, "int x;"));
-    utassert(base::StrEq(NodeGetStr(a, code, NodeStrKind::Lang), "cpp"));
+    utassert(base::StrEq(NodeGetStr(a, code, NodeStrKind::Lang), StrL("cpp")));
 
     root = ToMdast(a, StrL("[home](https://x.dev) ![alt](a.png) &amp; &#65;\n"),
                    options);
@@ -94,8 +94,8 @@ void TestMarkdown() {
     utassert(MiniChild(a, root, 1)->kind == NodeKind::Paragraph);
 
     utassert(DecodeNamed(a, StrL("copy")).s == nullptr);
-    utassert(base::StrEq(DecodeNamed(a, StrL("amp")), "&"));
-    utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), "A"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("amp")), StrL("&")));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), StrL("A")));
     ArenaDelete(a);
 }
 
@@ -243,43 +243,46 @@ static void TestMarkdownOptions() {
 
 static void TestMarkdownCharacterReference(Arena* a) {
     TestSuite("markdown character reference");
-    utassert(base::StrEq(DecodeNamed(a, StrL("amp")), "&"));
-    utassert(base::StrEq(DecodeNamed(a, StrL("AMP")), "&"));
-    utassert(base::StrEq(DecodeNamed(a, StrL("copy")), "\xc2\xa9"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("amp")), StrL("&")));
+    utassert(base::StrEq(DecodeNamed(a, StrL("AMP")), StrL("&")));
+    utassert(base::StrEq(DecodeNamed(a, StrL("copy")), StrL("\xc2\xa9")));
     utassert(
         base::StrEq(DecodeNamed(a, StrL("CounterClockwiseContourIntegral")),
-                    "\xe2\x88\xb3"));
+                    StrL("\xe2\x88\xb3")));
     // The two values `constant.cpp` writes as `\u` escapes rather than as
     // themselves, because gcc rejects a bidi character in a literal.
-    utassert(base::StrEq(DecodeNamed(a, StrL("lrm")), "\xe2\x80\x8e"));
-    utassert(base::StrEq(DecodeNamed(a, StrL("rlm")), "\xe2\x80\x8f"));
+    utassert(base::StrEq(DecodeNamed(a, StrL("lrm")), StrL("\xe2\x80\x8e")));
+    utassert(base::StrEq(DecodeNamed(a, StrL("rlm")), StrL("\xe2\x80\x8f")));
     // Not a name: `None`.
     utassert(DecodeNamed(a, StrL("nope")).s == nullptr);
     utassert(DecodeNamed(a, StrL("")).s == nullptr);
 
-    utassert(base::StrEq(DecodeNumeric(a, StrL("65"), 10), "A"));
-    utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), "A"));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("65"), 10), StrL("A")));
+    utassert(base::StrEq(DecodeNumeric(a, StrL("41"), 16), StrL("A")));
     // Out of range, a surrogate, and a forbidden control: U+FFFD.
+    utassert(base::StrEq(DecodeNumeric(a, StrL("1114112"), 10),
+                         StrL("\xef\xbf\xbd")));
     utassert(
-        base::StrEq(DecodeNumeric(a, StrL("1114112"), 10), "\xef\xbf\xbd"));
-    utassert(base::StrEq(DecodeNumeric(a, StrL("d800"), 16), "\xef\xbf\xbd"));
-    utassert(base::StrEq(DecodeNumeric(a, StrL("0"), 10), "\xef\xbf\xbd"));
+        base::StrEq(DecodeNumeric(a, StrL("d800"), 16), StrL("\xef\xbf\xbd")));
+    utassert(
+        base::StrEq(DecodeNumeric(a, StrL("0"), 10), StrL("\xef\xbf\xbd")));
 }
 
 // ─── src/util/normalize_identifier.rs ─────────────────────────────────────
 
 static void TestMarkdownNormalizeIdentifier(Arena* a) {
     TestSuite("markdown normalize identifier");
-    utassert(base::StrEq(NormalizeIdentifier(a, StrL(" a ")), "A"));
-    utassert(base::StrEq(NormalizeIdentifier(a, StrL(" a\n b")), "A B"));
-    utassert(base::StrEq(NormalizeIdentifier(a, StrL("")), ""));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL(" a ")), StrL("A")));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL(" a\n b")), StrL("A B")));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL("")), StrL("")));
     // The crate's own quirk, kept: whitespace after a word that starts at
     // offset 0 collapses to nothing rather than to a space, because `start`
     // is what it tests for "have we written anything yet". Its doc comment
     // says `a\t\r\nb` normalizes to `a b`; markdown-rs 1.0.0 answers `ab`,
     // and so does this, so a reference here matches the definitions it does.
-    utassert(base::StrEq(NormalizeIdentifier(a, StrL("a\n b")), "AB"));
-    utassert(base::StrEq(NormalizeIdentifier(a, StrL("Foo\t\tBar")), "FOOBAR"));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL("a\n b")), StrL("AB")));
+    utassert(base::StrEq(NormalizeIdentifier(a, StrL("Foo\t\tBar")),
+                         StrL("FOOBAR")));
 }
 
 static void TestMarkdownPositions() {

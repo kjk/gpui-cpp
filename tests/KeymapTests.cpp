@@ -697,25 +697,25 @@ static void TheChordAnActionIsReachedBy() {
     utassert(!KeymapBindingForAction(0, &editor, 1, &c));
 
     // The name a key goes by, which is what spells the chord back out.
-    utassert(base::StrEq(KeyName('S'), "s"));
-    utassert(base::StrEq(KeyName(KeyPageDown), "pagedown"));
-    utassert(base::StrEq(KeyName('7'), "7"));
+    utassert(base::StrEq(KeyName('S'), StrL("s")));
+    utassert(base::StrEq(KeyName(KeyPageDown), StrL("pagedown")));
+    utassert(base::StrEq(KeyName('7'), StrL("7")));
 
     // A function key is spelled the way a binding writes it, both halves of
     // the range: a menu row bound on one has to be able to show it.
-    utassert(base::StrEq(KeyName(112), "f1"));
-    utassert(base::StrEq(KeyName(115), "f4"));
-    utassert(base::StrEq(KeyName(120), "f9"));
-    utassert(base::StrEq(KeyName(121), "f10"));
-    utassert(base::StrEq(KeyName(123), "f12"));
-    utassert(base::StrEq(KeyName(KeyF24), "f24"));
-    utassert(base::StrEq(KeyName(KeyF25), "f25"));
-    utassert(base::StrEq(KeyName(KeyF35), "f35"));
+    utassert(base::StrEq(KeyName(112), StrL("f1")));
+    utassert(base::StrEq(KeyName(115), StrL("f4")));
+    utassert(base::StrEq(KeyName(120), StrL("f9")));
+    utassert(base::StrEq(KeyName(121), StrL("f10")));
+    utassert(base::StrEq(KeyName(123), StrL("f12")));
+    utassert(base::StrEq(KeyName(KeyF24), StrL("f24")));
+    utassert(base::StrEq(KeyName(KeyF25), StrL("f25")));
+    utassert(base::StrEq(KeyName(KeyF35), StrL("f35")));
     utassert(KeyName(KeyKpBegin + 1).len == 0);
-    utassert(base::StrEq(KeyName(KeyInsert), "insert"));
-    utassert(base::StrEq(KeyName(KeyBrowserBack), "back"));
-    utassert(base::StrEq(KeyName(KeyBrowserForward), "forward"));
-    utassert(base::StrEq(KeyName(KeyApps), "menu"));
+    utassert(base::StrEq(KeyName(KeyInsert), StrL("insert")));
+    utassert(base::StrEq(KeyName(KeyBrowserBack), StrL("back")));
+    utassert(base::StrEq(KeyName(KeyBrowserForward), StrL("forward")));
+    utassert(base::StrEq(KeyName(KeyApps), StrL("menu")));
 
     // Round trip: every name KeyChordParse reads, KeyName spells again.
     const char* specs[] = {

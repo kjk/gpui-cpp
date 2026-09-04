@@ -79,13 +79,13 @@ bool WinPaintOptionsTakeArg(Str arg) {
     const Str msaa = StrL("__msaa=");
     if (base::StrStartsWith(arg, msaa)) {
         Str value(arg.s + msaa.len, arg.len - msaa.len);
-        if (base::StrEq(value, "1")) {
+        if (base::StrEq(value, StrL("1"))) {
             gWinPaintOptions.msaa = WinPaintMsaa::X1;
-        } else if (base::StrEq(value, "2")) {
+        } else if (base::StrEq(value, StrL("2"))) {
             gWinPaintOptions.msaa = WinPaintMsaa::X2;
-        } else if (base::StrEq(value, "4")) {
+        } else if (base::StrEq(value, StrL("4"))) {
             gWinPaintOptions.msaa = WinPaintMsaa::X4;
-        } else if (base::StrEq(value, "8")) {
+        } else if (base::StrEq(value, StrL("8"))) {
             gWinPaintOptions.msaa = WinPaintMsaa::X8;
         }
         return true;
@@ -1396,8 +1396,9 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     if (SUCCEEDED(hr) && w > 0 && h > 0) {
         IWICBitmapSource* source = conv;
         IWICBitmapScaler* scaler = nullptr;
-        // Clamp maximum dimensions to 1920 (sufficient for 1080p display presentation)
-        // to prevent gigantic multi-megapixel screenshots from ballooning memory.
+        // Clamp maximum dimensions to 1920 (sufficient for 1080p display
+        // presentation) to prevent gigantic multi-megapixel screenshots from
+        // ballooning memory.
         const UINT kMaxDim = 1920;
         if (w > kMaxDim || h > kMaxDim) {
             UINT targetW = w;
@@ -1412,8 +1413,9 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
                 if (targetW == 0) targetW = 1;
             }
             if (SUCCEEDED(wic->CreateBitmapScaler(&scaler))) {
-                if (SUCCEEDED(scaler->Initialize(conv, targetW, targetH,
-                                                 WICBitmapInterpolationModeFant))) {
+                if (SUCCEEDED(
+                        scaler->Initialize(conv, targetW, targetH,
+                                           WICBitmapInterpolationModeFant))) {
                     source = scaler;
                     w = targetW;
                     h = targetH;

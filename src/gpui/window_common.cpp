@@ -2901,7 +2901,7 @@ int GpuiTakeRuntimeArgs(int argc, char** argv) {
         if (i > 0 && argument && LayoutReuseTakeArg(argument)) {
             continue;
         }
-        if (i > 0 && StrEq(argument, "-gpui-inspector")) {
+        if (i > 0 && StrEq(argument, StrL("-gpui-inspector"))) {
             gInspectorAsked = true;
             continue;
         }

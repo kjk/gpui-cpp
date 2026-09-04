@@ -14,8 +14,8 @@ static bool IsSource(Str name) {
 }
 
 static bool SkipDirectory(Str name) {
-    return !name || name.s[0] == '.' || StrEq(name, "node_modules") ||
-           StrEq(name, "target");
+    return !name || name.s[0] == '.' || StrEq(name, StrL("node_modules")) ||
+           StrEq(name, StrL("target"));
 }
 
 bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,

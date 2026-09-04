@@ -3445,10 +3445,10 @@ bool LayoutReuseTakeArg(Str arg) {
         return false;
     }
     Str value(arg.s + k.len, arg.len - k.len);
-    if (base::StrEqI(value, "off") || base::StrEq(value, "0")) {
+    if (base::StrEqI(value, "off") || base::StrEq(value, StrL("0"))) {
         gLayoutReuse = 0;
         logf("layout: reuse off (__layout_reuse=off), rebuilding every frame");
-    } else if (base::StrEqI(value, "on") || base::StrEq(value, "1")) {
+    } else if (base::StrEqI(value, "on") || base::StrEq(value, StrL("1"))) {
         gLayoutReuse = 1;
     }
     return true;

@@ -99,13 +99,13 @@ static void SourceTokenDefaultsKeepTypographyAndShadowStructure() {
              tk.radius.md == 6.f && tk.radius.full == 9999.f);
     utassert(tk.spacing.xxs == 2.f && tk.spacing.md == 12.f &&
              tk.spacing.xxl == 32.f);
-    utassert(base::StrEq(tk.typography.sans, ".SystemUIFont"));
+    utassert(base::StrEq(tk.typography.sans, StrL(".SystemUIFont")));
 #if GPUI_OS_WINDOWS
-    utassert(base::StrEq(tk.typography.mono, "Consolas"));
+    utassert(base::StrEq(tk.typography.mono, StrL("Consolas")));
 #elif GPUI_OS_MAC
-    utassert(base::StrEq(tk.typography.mono, "Menlo"));
+    utassert(base::StrEq(tk.typography.mono, StrL("Menlo")));
 #else
-    utassert(base::StrEq(tk.typography.mono, "DejaVu Sans Mono"));
+    utassert(base::StrEq(tk.typography.mono, StrL("DejaVu Sans Mono")));
 #endif
     utassert(tk.typography.xs.size == 12.f && tk.typography.xs
                                                       .lineHeight == 16.f);

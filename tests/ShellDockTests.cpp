@@ -530,7 +530,7 @@ static void AScriptBindsAChordAndDispatchesItsAction() {
         uint32_t save = ShellActionOf(StrL("save"));
         uint32_t palette = ShellActionOf(StrL("palette"));
         utassert(save != palette);
-        utassert(StrEq(ShellActionScriptId(save), "save"));
+        utassert(StrEq(ShellActionScriptId(save), StrL("save")));
         bool sawSave = false, sawPalette = false;
         for (ActionSlot* at = root->actions; at; at = at->next) {
             sawSave = sawSave || at->action == save;

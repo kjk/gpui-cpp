@@ -1711,7 +1711,7 @@ void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
         // the Minimize / Zoom / Bring All to Front rows and one row per open
         // window, which is what makes a Mac application's Window menu behave
         // the way every other one does.
-        if (StrEq(Str(it.label), "Window")) {
+        if (StrEq(Str(it.label), StrL("Window"))) {
             [NSApp setWindowsMenu:sub];
         }
     }

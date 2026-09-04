@@ -28,8 +28,10 @@ static void MaskNone() {
     MaskPattern mask;
     utassert(MaskIsNone(mask));
     utassert(MaskIsValid(mask, StrL("1124124ASLDJKljk")));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("hello-world")), "hello-world"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("hello-world")), "hello-world"));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("hello-world")),
+                         StrL("hello-world")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("hello-world")),
+                         StrL("hello-world")));
 }
 
 static void Pattern1() {
@@ -61,15 +63,23 @@ static void Pattern1() {
 
     utassert(MaskIsValid(mask, StrL("(AB)123-456")));
 
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123456")), "(AB)123-456"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("(AB)123-456")), "(AB)123-456"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("(AB123456")), "(AB)123-456"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123-456")), "(AB)123-456"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123-")), "(AB)123-"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123--")), "(AB)123-"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123-4")), "(AB)123-4"));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123456")),
+                         StrL("(AB)123-456")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("(AB)123-456")),
+                         StrL("(AB)123-456")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("(AB123456")),
+                         StrL("(AB)123-456")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123-456")),
+                         StrL("(AB)123-456")));
+    utassert(
+        base::StrEq(MaskApply(Tmp(), mask, StrL("AB123-")), StrL("(AB)123-")));
+    utassert(
+        base::StrEq(MaskApply(Tmp(), mask, StrL("AB123--")), StrL("(AB)123-")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("AB123-4")),
+                         StrL("(AB)123-4")));
 
-    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("(AB)123-456")), "AB123456"));
+    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("(AB)123-456")),
+                         StrL("AB123456")));
 
     utassert(!MaskIsValid(mask, StrL("12AB345")));
     utassert(!MaskIsValid(mask, StrL("(11)123-456")));
@@ -88,8 +98,9 @@ static void Pattern2() {
     utassert(TokenIs(mask, 13, MaskToken::Any, 0));
 
     Str masked = MaskApply(Tmp(), mask, StrL("123456A(111)"));
-    utassert(base::StrEq(masked, "123-456-A(111)"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), mask, masked), "123456A(111)"));
+    utassert(base::StrEq(masked, StrL("123-456-A(111)")));
+    utassert(
+        base::StrEq(MaskUnapply(Tmp(), mask, masked), StrL("123456A(111)")));
     utassert(MaskIsValid(mask, masked));
 
     MaskPatternFree(&mask);
@@ -97,45 +108,64 @@ static void Pattern2() {
 
 static void NumberWithGroupSeparator() {
     MaskPattern comma = MaskPatternNumber(',');
-    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("1234567")), "1,234,567"));
-    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("1,234,567")), "1,234,567"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), comma, StrL("1,234,567")), "1234567"));
-    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("1234567.89")), "1,234,567.89"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), comma, StrL("1,234,567.89")), "1234567.89"));
+    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("1234567")),
+                         StrL("1,234,567")));
+    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("1,234,567")),
+                         StrL("1,234,567")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), comma, StrL("1,234,567")),
+                         StrL("1234567")));
+    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("1234567.89")),
+                         StrL("1,234,567.89")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), comma, StrL("1,234,567.89")),
+                         StrL("1234567.89")));
 
     MaskPattern space = MaskPatternNumber(' ');
-    utassert(base::StrEq(MaskApply(Tmp(), space, StrL("1234567")), "1 234 567"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), space, StrL("1 234 567")), "1234567"));
-    utassert(base::StrEq(MaskApply(Tmp(), space, StrL("1234567.89")), "1 234 567.89"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), space, StrL("1 234 567.89")), "1234567.89"));
+    utassert(base::StrEq(MaskApply(Tmp(), space, StrL("1234567")),
+                         StrL("1 234 567")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), space, StrL("1 234 567")),
+                         StrL("1234567")));
+    utassert(base::StrEq(MaskApply(Tmp(), space, StrL("1234567.89")),
+                         StrL("1 234 567.89")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), space, StrL("1 234 567.89")),
+                         StrL("1234567.89")));
 
     MaskPattern none = MaskPatternNumber(0);
-    utassert(base::StrEq(MaskApply(Tmp(), none, StrL("1234567")), "1234567"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), none, StrL("1234567")), "1234567"));
-    utassert(base::StrEq(MaskApply(Tmp(), none, StrL("1234567.89")), "1234567.89"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), none, StrL("1234567.89")), "1234567.89"));
+    utassert(
+        base::StrEq(MaskApply(Tmp(), none, StrL("1234567")), StrL("1234567")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), none, StrL("1234567")),
+                         StrL("1234567")));
+    utassert(base::StrEq(MaskApply(Tmp(), none, StrL("1234567.89")),
+                         StrL("1234567.89")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), none, StrL("1234567.89")),
+                         StrL("1234567.89")));
 }
 
 static void NumberWithFractionDigits() {
     MaskPattern mask = MaskPatternNumber(',');
     mask.fraction = 4;
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567")), "1,234,567"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("1,234,567")), "1234567"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.")), "1,234,567."));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.89")), "1,234,567.89"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("1,234,567.890")), "1234567.89"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.891")), "1,234,567.891"));
-    utassert(
-        base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.891234")), "1,234,567.8912"));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567")),
+                         StrL("1,234,567")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("1,234,567")),
+                         StrL("1234567")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.")),
+                         StrL("1,234,567.")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.89")),
+                         StrL("1,234,567.89")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("1,234,567.890")),
+                         StrL("1234567.89")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.891")),
+                         StrL("1,234,567.891")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("1234567.891234")),
+                         StrL("1,234,567.8912")));
 
     MaskPattern unlimited = MaskPatternNumber(',');
     utassert(base::StrEq(MaskApply(Tmp(), unlimited, StrL("1234567.1234567")),
-                "1,234,567.1234567"));
+                         StrL("1,234,567.1234567")));
 
     MaskPattern integer = MaskPatternNumber(',');
     integer.fraction = 0;
-    utassert(
-        base::StrEq(MaskApply(Tmp(), integer, StrL("1234567.1234567")), "1,234,567"));
+    utassert(base::StrEq(MaskApply(Tmp(), integer, StrL("1234567.1234567")),
+                         StrL("1,234,567")));
 }
 
 static void SignedNumbers() {
@@ -167,13 +197,18 @@ static void SignedNumbers() {
     utassert(!MaskIsValid(mask, StrL("+1234567.-")));
 
     // The separator does not show up before the sign, i.e. never "-,123"
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-123")), "-123"));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-123")), StrL("-123")));
 
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-1234567")), "-1,234,567"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("+1234567")), "+1,234,567"));
-    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("-1,234,567")), "-1234567"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-1234567.")), "-1,234,567."));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-1234567.89")), "-1,234,567.89"));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-1234567")),
+                         StrL("-1,234,567")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("+1234567")),
+                         StrL("+1,234,567")));
+    utassert(base::StrEq(MaskUnapply(Tmp(), mask, StrL("-1,234,567")),
+                         StrL("-1234567")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-1234567.")),
+                         StrL("-1,234,567.")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-1234567.89")),
+                         StrL("-1,234,567.89")));
 }
 
 static void NumberLeadingDot() {
@@ -187,35 +222,42 @@ static void NumberLeadingDot() {
 
     // A bare leading dot is kept as-is (not completed to "0."), so deleting
     // the integer part of "1.2" keeps ".2" and stays editable.
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL(".")), "."));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL(".5")), ".5"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-.5")), "-.5"));
-    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("+.5")), "+.5"));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL(".")), StrL(".")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL(".5")), StrL(".5")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("-.5")), StrL("-.5")));
+    utassert(base::StrEq(MaskApply(Tmp(), mask, StrL("+.5")), StrL("+.5")));
 
     MaskPattern comma = MaskPatternNumber(',');
-    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL(".5")), ".5"));
-    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("-.5")), "-.5"));
+    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL(".5")), StrL(".5")));
+    utassert(base::StrEq(MaskApply(Tmp(), comma, StrL("-.5")), StrL("-.5")));
 }
 
 static void NormalizeNumber() {
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("-1,234.5")), "-1,234.5"));
+    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("-1,234.5")),
+                         StrL("-1,234.5")));
     // Full-width digits
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("０１２３４５６７８９")),
-                "0123456789"));
+    utassert(
+        base::StrEq(NormalizeNumberInput(Tmp(), StrL("０１２３４５６７８９")),
+                    StrL("0123456789")));
     // Full-width signs, dot and comma
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("＋1．5")), "+1.5"));
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("－1，234")), "-1,234"));
+    utassert(
+        base::StrEq(NormalizeNumberInput(Tmp(), StrL("＋1．5")), StrL("+1.5")));
+    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("－1，234")),
+                         StrL("-1,234")));
     // Minus sign (U+2212)
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("−1.5")), "-1.5"));
+    utassert(
+        base::StrEq(NormalizeNumberInput(Tmp(), StrL("−1.5")), StrL("-1.5")));
     // Ideographic full stop
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("12。5")), "12.5"));
+    utassert(
+        base::StrEq(NormalizeNumberInput(Tmp(), StrL("12。5")), StrL("12.5")));
     // Other characters are kept as-is
-    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("ab 中 1")), "ab 中 1"));
+    utassert(base::StrEq(NormalizeNumberInput(Tmp(), StrL("ab 中 1")),
+                         StrL("ab 中 1")));
 }
 
 static void Placeholder() {
     MaskPattern mask = MaskPatternNew(StrL("(999) 999-9999"));
-    utassert(base::StrEq(MaskPlaceholder(Tmp(), mask), "(___) ___-____"));
+    utassert(base::StrEq(MaskPlaceholder(Tmp(), mask), StrL("(___) ___-____")));
     MaskPatternFree(&mask);
 }
 

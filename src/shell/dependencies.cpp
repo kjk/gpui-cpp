@@ -754,7 +754,7 @@ void GitDependencyStore::Prune(Str modules, const Vec<Str>& declared) {
         for (int i = 0; i < count && i < kEditorPruneMaxEntries; i++) {
             const DirEntry& item = entries[i];
             Str name = Str(item.name);
-            if (StrEq(name, ".") || StrEq(name, "..")) continue;
+            if (StrEq(name, StrL(".")) || StrEq(name, StrL(".."))) continue;
             Str path = JoinPath(directory.path, name);
             bool isDeclared = false;
             for (int d = 0; d < declared.len; d++)

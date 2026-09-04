@@ -25,21 +25,10 @@ static Str Join(Arena* arena, Str left, Str right) {
 
 static const char* JsonTypeName(const JsonValue* value) {
     if (!value) return "missing";
-    switch (value->kind) {
-        case JsonKind::Null:
-            return "null";
-        case JsonKind::Bool:
-            return "a boolean";
-        case JsonKind::Number:
-            return "a number";
-        case JsonKind::String:
-            return "a string";
-        case JsonKind::Array:
-            return "an array";
-        case JsonKind::Object:
-            return "an object";
-    }
-    return "a value";
+    static const char names[] =
+        "null\0a boolean\0a number\0a string\0an array\0an object\0";
+    Str name = SeqStrByIndex(names, (int)value->kind);
+    return name ? name.s : "a value";
 }
 
 static bool HasOnly(const JsonValue* object, const char* const* names,
@@ -182,8 +171,8 @@ static bool ValidatePlaceholders(const Vec<Str>& paths, Str field,
                 return false;
             }
             Str placeholder(value.s + i, end - i + 1);
-            if (!StrEq(placeholder, "${pluginDir}") &&
-                !StrEq(placeholder, "${dataDir}")) {
+            if (!StrEq(placeholder, StrL("${pluginDir}")) &&
+                !StrEq(placeholder, StrL("${dataDir}"))) {
                 SetError(error, fmt("unknown placeholder `%s` in %s",
                                     placeholder, field));
                 return false;
@@ -212,7 +201,7 @@ static Str TrimAscii(Str value) {
 // `valid_git_ref_name`: git-check-ref-format's rules, so a selector cannot be
 // a refspec.
 static bool ValidGitRefName(Str reference) {
-    if (!reference || StrEq(reference, "@")) return false;
+    if (!reference || StrEq(reference, StrL("@"))) return false;
     char first = reference.s[0];
     char last = reference.s[reference.len - 1];
     if (first == '.' || first == '/' || last == '.' || last == '/')
@@ -240,7 +229,8 @@ static bool ValidGitRefName(Str reference) {
 }
 
 static bool ValidGitHubComponent(Str component) {
-    if (component.len == 0 || StrEq(component, ".") || StrEq(component, ".."))
+    if (component.len == 0 || StrEq(component, StrL(".")) ||
+        StrEq(component, StrL("..")))
         return false;
     for (int i = 0; i < component.len; i++) {
         char c = component.s[i];
@@ -340,7 +330,7 @@ static bool ValidBareModuleName(Str name) {
     for (int i = 0; i <= name.len; i++) {
         if (i < name.len && name.s[i] != '/') continue;
         Str part(name.s + start, i - start);
-        if (part.len == 0 || StrEq(part, "..")) return false;
+        if (part.len == 0 || StrEq(part, StrL(".."))) return false;
         start = i + 1;
     }
     return true;
@@ -537,7 +527,7 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
             return false;
         const JsonValue* execute = JsonGet(fs, "execute");
         if (execute && execute->kind == JsonKind::String &&
-            StrEq(execute->str, "*")) {
+            StrEq(execute->str, StrL("*"))) {
             out->executeUnrestricted = true;
         } else if (execute &&
                    !ParseStringArray(out->arena, execute, &out->execute,
@@ -585,8 +575,8 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
             Str host;
             if (!RequiredString(rule, "host", &host, error)) return false;
             parsed->host = StrDup(out->arena, host);
-            if ((!StrEq(parsed->scheme, "http") &&
-                 !StrEq(parsed->scheme, "https")) ||
+            if ((!StrEq(parsed->scheme, StrL("http")) &&
+                 !StrEq(parsed->scheme, StrL("https"))) ||
                 StrFind(host, StrL("://")) >= 0 ||
                 StrFind(host, StrL("/")) >= 0) {
                 SetError(
@@ -620,8 +610,8 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
                     StrL("capabilities.network.http.path_prefixes"), error))
                 return false;
             for (int i = 0; i < parsed->methods.len; i++) {
-                if (!StrEq(parsed->methods[i], "GET") &&
-                    !StrEq(parsed->methods[i], "POST")) {
+                if (!StrEq(parsed->methods[i], StrL("GET")) &&
+                    !StrEq(parsed->methods[i], StrL("POST"))) {
                     SetError(error, fmt("invalid HTTP method `%s`",
                                         parsed->methods[i]));
                     return false;
@@ -728,7 +718,7 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
                           ? JsonString(version)
                           : StrL("unknown");
     if ((version && version->kind != JsonKind::Null && !versionText) ||
-        (versionText && !StrEq(versionText, "unknown") &&
+        (versionText && !StrEq(versionText, StrL("unknown")) &&
          !ParseSemver(versionText, nullptr, nullptr, nullptr))) {
         SetError(error,
                  fmt("invalid `version` `%s`: expected a semantic version",
@@ -819,11 +809,12 @@ static bool AbsolutePath(Str path) {
 static Str ExpandPath(Str raw, Str plugin, Str data) {
     StrBuilder out;
     for (int i = 0; i < raw.len;) {
-        if (i + 12 <= raw.len && StrEq(Str(raw.s + i, 12), "${pluginDir}")) {
+        if (i + 12 <= raw.len &&
+            StrEq(Str(raw.s + i, 12), StrL("${pluginDir}"))) {
             out.Append(plugin);
             i += 12;
         } else if (i + 10 <= raw.len &&
-                   StrEq(Str(raw.s + i, 10), "${dataDir}")) {
+                   StrEq(Str(raw.s + i, 10), StrL("${dataDir}"))) {
             out.Append(data);
             i += 10;
         } else {

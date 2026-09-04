@@ -30,8 +30,8 @@ static void TheBuilderCarriesStatusAxisSizeAndSlots() {
                           ->Title(AttachmentTitle::New(&cx, StrL("report.pdf")))
                           ->Description(AttachmentDescription::New(
                               &cx, StrL("Uploading"))))
-            ->Actions(AttachmentActions::New(&cx)->Child(
-                TextEl(a, StrL("Cancel"))));
+            ->Actions(AttachmentActions::New(&cx)
+                          ->Child(TextEl(a, StrL("Cancel"))));
 
     utassert(attachment->status == AttachmentStatus::Uploading);
     utassert(attachment->axis == Axis::Vertical);
@@ -64,11 +64,10 @@ static void TheWholeCardClickNeedsBothAnIdAndAHandler() {
 
     Listener handler;
     handler.fn = (void*)&TheWholeCardClickNeedsBothAnIdAndAHandler;
-    Attachment* clickable = Attachment::New(&cx)
-                                ->Id(StrL("report-attachment"))
-                                ->OnClick(handler);
+    Attachment* clickable =
+        Attachment::New(&cx)->Id(StrL("report-attachment"))->OnClick(handler);
     utassert(clickable->hasId &&
-             base::StrEq(clickable->id, "report-attachment"));
+             base::StrEq(clickable->id, StrL("report-attachment")));
     utassert(clickable->onClick.IsValid());
 
     AppGlobalClear(&app);
@@ -103,8 +102,8 @@ static void TheSlotsAreComposable() {
     cx.app = &app;
     cx.a = a;
 
-    AttachmentMedia* media =
-        AttachmentMedia::New(&cx)->Child(TextEl(a, StrL("icon")));
+    AttachmentMedia* media = AttachmentMedia::New(&cx)
+                                 ->Child(TextEl(a, StrL("icon")));
     utassert(media->children.len == 1);
 
     AttachmentContent* content =
@@ -119,13 +118,14 @@ static void TheSlotsAreComposable() {
 
     // A title added through the plain child slot stays an ordinary element
     // and no longer inherits the card's status.
-    AttachmentContent* legacy = AttachmentContent::New(&cx)->Child(
-        AttachmentTitle::New(&cx, StrL("legacy"))->IntoEl());
+    AttachmentContent* legacy =
+        AttachmentContent::New(&cx)
+            ->Child(AttachmentTitle::New(&cx, StrL("legacy"))->IntoEl());
     utassert(legacy->children[0].element != nullptr);
     utassert(legacy->children[0].title == nullptr);
 
-    AttachmentActions* actions =
-        AttachmentActions::New(&cx)->Child(TextEl(a, StrL("remove")));
+    AttachmentActions* actions = AttachmentActions::New(&cx)
+                                     ->Child(TextEl(a, StrL("remove")));
     utassert(actions->children.len == 1);
 
     AttachmentGroup* group = AttachmentGroup::New(&cx, StrL("attachments"))
@@ -155,11 +155,10 @@ static void TypedContentInheritsTheCardStatus() {
     attachment->LayoutSlots();
     AttachmentContent* content = attachment->content;
     utassert(content->children[0].title->hasStatus);
-    utassert(content->children[0].title->status ==
-             AttachmentStatus::Uploading);
+    utassert(content->children[0].title->status == AttachmentStatus::Uploading);
     utassert(content->children[1].description->hasStatus);
-    utassert(content->children[1].description->status ==
-             AttachmentStatus::Uploading);
+    utassert(content->children[1]
+                 .description->status == AttachmentStatus::Uploading);
 
     AppGlobalClear(&app);
     ArenaDelete(a);
@@ -180,15 +179,14 @@ static void AnExplicitChildStatusOverridesTheCard() {
                 AttachmentContent::New(&cx)
                     ->Title(AttachmentTitle::New(&cx, StrL("report.pdf"))
                                 ->Status(AttachmentStatus::Processing))
-                    ->Description(
-                        AttachmentDescription::New(
-                            &cx, StrL("Previous upload completed"))
-                            ->Status(AttachmentStatus::Complete)));
+                    ->Description(AttachmentDescription::New(
+                                      &cx, StrL("Previous upload completed"))
+                                      ->Status(AttachmentStatus::Complete)));
     attachment->LayoutSlots();
-    utassert(attachment->content->children[0].title->status ==
-             AttachmentStatus::Processing);
-    utassert(attachment->content->children[1].description->status ==
-             AttachmentStatus::Complete);
+    utassert(attachment->content->children[0]
+                 .title->status == AttachmentStatus::Processing);
+    utassert(attachment->content->children[1]
+                 .description->status == AttachmentStatus::Complete);
 
     AppGlobalClear(&app);
     ArenaDelete(a);
@@ -253,8 +251,9 @@ static void MediaInheritsTheCardSizeUnlessItNamesOne() {
     utassert(inherited->axis == Axis::Vertical);
 
     AttachmentMedia* explicitSize =
-        AttachmentMedia::New(&cx)->WithSize(UiSize::XSmall)->Layout(
-            UiSize::Large, AttachmentStatus::Failed, Axis::Horizontal);
+        AttachmentMedia::New(&cx)
+            ->WithSize(UiSize::XSmall)
+            ->Layout(UiSize::Large, AttachmentStatus::Failed, Axis::Horizontal);
     utassert(explicitSize->size == UiSize::XSmall);
     utassert(explicitSize->status == AttachmentStatus::Failed);
 
@@ -277,8 +276,8 @@ static void TheClickLayerSitsBelowTheActions() {
     El* card = Attachment::New(&cx)
                    ->Id(StrL("attachment"))
                    ->OnClick(handler)
-                   ->Actions(AttachmentActions::New(&cx)->Child(
-                       TextEl(a, StrL("Open"))))
+                   ->Actions(AttachmentActions::New(&cx)
+                                 ->Child(TextEl(a, StrL("Open"))))
                    ->IntoEl();
 
     // [click layer, actions]: the layer is added first, so the actions paint
@@ -295,8 +294,8 @@ static void TheClickLayerSitsBelowTheActions() {
     // Without a handler there is no layer at all, and the card does not light
     // under the pointer.
     El* plain = Attachment::New(&cx)
-                    ->Actions(AttachmentActions::New(&cx)->Child(
-                        TextEl(a, StrL("Open"))))
+                    ->Actions(AttachmentActions::New(&cx)
+                                  ->Child(TextEl(a, StrL("Open"))))
                     ->IntoEl();
     utassert(plain->first && plain->first->stopMouseDown);
     utassert(!plain->style.hasHoverBg);
@@ -314,10 +313,11 @@ static void TheSizeScaleAndTheTwoAxes() {
     cx.app = &app;
     cx.a = a;
 
-    El* medium = Attachment::New(&cx)
-                     ->Content(AttachmentContent::New(&cx)->Title(
-                         AttachmentTitle::New(&cx, StrL("a"))))
-                     ->IntoEl();
+    El* medium =
+        Attachment::New(&cx)
+            ->Content(AttachmentContent::New(&cx)
+                          ->Title(AttachmentTitle::New(&cx, StrL("a"))))
+            ->IntoEl();
     utassertnear(medium->style.gapX, 8.f);
     utassertnear(medium->style.fontSize, 14.f);
     utassertnear(medium->style.pad.left, 10.f);
@@ -325,28 +325,31 @@ static void TheSizeScaleAndTheTwoAxes() {
     utassertnear(medium->style.minW, 160.f);
 
     // A card with media takes the uniform padding, which wins over px/py.
-    El* withMedia = Attachment::New(&cx)
-                        ->WithSize(UiSize::Large)
-                        ->Media(AttachmentMedia::New(&cx))
-                        ->Content(AttachmentContent::New(&cx)->Title(
-                            AttachmentTitle::New(&cx, StrL("a"))))
-                        ->IntoEl();
+    El* withMedia =
+        Attachment::New(&cx)
+            ->WithSize(UiSize::Large)
+            ->Media(AttachmentMedia::New(&cx))
+            ->Content(AttachmentContent::New(&cx)
+                          ->Title(AttachmentTitle::New(&cx, StrL("a"))))
+            ->IntoEl();
     utassertnear(withMedia->style.gapX, 12.f);
     utassertnear(withMedia->style.fontSize, 16.f);
     utassertnear(withMedia->style.pad.left, 12.f);
     utassertnear(withMedia->style.pad.top, 12.f);
 
     // Vertical with metadata is rems(7.5) wide; without it, w_24.
-    El* vertical = Attachment::New(&cx)
-                       ->WithAxis(Axis::Vertical)
-                       ->Content(AttachmentContent::New(&cx)->Title(
-                           AttachmentTitle::New(&cx, StrL("a"))))
-                       ->IntoEl();
+    El* vertical =
+        Attachment::New(&cx)
+            ->WithAxis(Axis::Vertical)
+            ->Content(AttachmentContent::New(&cx)
+                          ->Title(AttachmentTitle::New(&cx, StrL("a"))))
+            ->IntoEl();
     utassertnear(vertical->style.width, 120.f);
     utassert(vertical->style.dir == FlexDir::Col);
-    El* bare =
-        Attachment::New(&cx)->WithAxis(Axis::Vertical)->Media(
-            AttachmentMedia::New(&cx))->IntoEl();
+    El* bare = Attachment::New(&cx)
+                   ->WithAxis(Axis::Vertical)
+                   ->Media(AttachmentMedia::New(&cx))
+                   ->IntoEl();
     utassertnear(bare->style.width, 96.f);
 
     // A pending card is dashed; a failed one borders in destructive.

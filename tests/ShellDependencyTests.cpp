@@ -155,11 +155,12 @@ static void ManifestsDescribeGitDependenciesBeforeAnythingRuns() {
             &manifest, &error));
         utassert(manifest.dependencies.len == 1);
         const GitDependency& dependency = manifest.dependencies[0];
-        utassert(
-            StrEq(dependency.name, "omarchy-ui") &&
-            StrEq(dependency.git, "https://github.com/huacnlee/omarchy-ui") &&
-            StrEq(dependency.branch, "main") && !dependency.tag &&
-            StrEq(dependency.entry, "index.js") && !dependency.packageEntry);
+        utassert(StrEq(dependency.name, StrL("omarchy-ui")) &&
+                 StrEq(dependency.git,
+                       StrL("https://github.com/huacnlee/omarchy-ui")) &&
+                 StrEq(dependency.branch, StrL("main")) && !dependency.tag &&
+                 StrEq(dependency.entry, StrL("index.js")) &&
+                 !dependency.packageEntry);
         ShellErrorClear(&error);
     }
     {
@@ -171,8 +172,8 @@ static void ManifestsDescribeGitDependenciesBeforeAnythingRuns() {
                  "\"tag\":\"v1.2.0\",\"entry\":\"src/public.js\"}"),
             &manifest, &error));
         const GitDependency& dependency = manifest.dependencies[0];
-        utassert(!dependency.branch && StrEq(dependency.tag, "v1.2.0") &&
-                 StrEq(dependency.entry, "src/public.js") &&
+        utassert(!dependency.branch && StrEq(dependency.tag, StrL("v1.2.0")) &&
+                 StrEq(dependency.entry, StrL("src/public.js")) &&
                  !dependency.packageEntry);
         ShellErrorClear(&error);
     }
@@ -211,7 +212,7 @@ static void ManifestsDescribeGitDependenciesBeforeAnythingRuns() {
                      ? StrEq(dependency.reference, strings[i].reference)
                      : !dependency.reference);
         utassert(dependency.packageEntry &&
-                 StrEq(dependency.entry, "index.js"));
+                 StrEq(dependency.entry, StrL("index.js")));
         ShellErrorClear(&error);
     }
 
@@ -300,8 +301,8 @@ static void ManifestsDescribeGitDependenciesBeforeAnythingRuns() {
             "\"zeta\":\"a/zeta\",\"alpha\":\"a/alpha\"}}");
         utassert(PluginManifestParse(source, &manifest, &error));
         utassert(manifest.dependencies.len == 2 &&
-                 StrEq(manifest.dependencies[0].name, "alpha") &&
-                 StrEq(manifest.dependencies[1].name, "zeta"));
+                 StrEq(manifest.dependencies[0].name, StrL("alpha")) &&
+                 StrEq(manifest.dependencies[1].name, StrL("zeta")));
         ShellErrorClear(&error);
     }
 }
@@ -537,7 +538,7 @@ static void GitDependenciesResolveRefreshAndStayInsideTheirCheckout() {
                                &first, &error));
     utassert(!error);
     Str text = ReadWhole(first.entry);
-    utassert(StrEq(text, "export const version = 1;"));
+    utassert(StrEq(text, StrL("export const version = 1;")));
     StrFree(text);
 
     // A branch dependency refreshes to the remote head, and the checkout an
@@ -548,10 +549,10 @@ static void GitDependenciesResolveRefreshAndStayInsideTheirCheckout() {
     utassert(store.Materialize(StrL("omarchy-ui"), manifest.dependencies[0],
                                &second, &error));
     text = ReadWhole(second.entry);
-    utassert(StrEq(text, "export const version = 2;"));
+    utassert(StrEq(text, StrL("export const version = 2;")));
     StrFree(text);
     text = ReadWhole(first.entry);
-    utassert(StrEq(text, "export const version = 1;"));
+    utassert(StrEq(text, StrL("export const version = 1;")));
     StrFree(text);
 
     // A cache may not silently change repository identity.
@@ -598,7 +599,7 @@ static void ATagDependencyStaysAtTheTaggedCommit() {
     utassert(store.Materialize(StrL("omarchy-ui"), manifest.dependencies[0],
                                &package, &error));
     Str text = ReadWhole(package.entry);
-    utassert(StrEq(text, "export const version = 1;"));
+    utassert(StrEq(text, StrL("export const version = 1;")));
     StrFree(text);
     package.Free();
     StrFree(error);
@@ -628,7 +629,7 @@ static void PackageDependenciesReadPackageMainAndRefuseWhatEscapes() {
         utassert(store.Materialize(StrL("omarchy-ui"), manifest.dependencies[0],
                                    &package, &error));
         Str text = ReadWhole(package.entry);
-        utassert(StrEq(text, "export const entry = 'package main';"));
+        utassert(StrEq(text, StrL("export const entry = 'package main';")));
         StrFree(text);
         package.Free();
         StrFree(error);

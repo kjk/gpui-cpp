@@ -13,7 +13,7 @@ static void RadarLabelsRetainTextAndElements() {
     El element = {};
     RadarLabel custom = RadarLabel::Element(&element);
     utassert(text.kind == RadarLabel::Kind::Text);
-    utassert(base::StrEq(text.text, "Sales"));
+    utassert(base::StrEq(text.text, StrL("Sales")));
     utassert(text.element == nullptr);
     utassert(custom.kind == RadarLabel::Kind::Element);
     utassert(custom.element == &element);
@@ -76,7 +76,7 @@ static void SankeyLabelsCarryIndependentStylesAndDoNotCap() {
     Rgba red = RgbaHex(0xff0000);
     SankeyLabel plain = SankeyLabel::New(StrL("a"));
     SankeyLabel styled = SankeyLabel::New(StrL("b")).Color(red).FontSize(14);
-    utassert(base::StrEq(plain.text, "a"));
+    utassert(base::StrEq(plain.text, StrL("a")));
     utassert(!plain.hasColor);
     utassert(plain.fontSize == 0);
     // plot/label.rs: TEXT_SIZE 10 + TEXT_GAP 2.
@@ -98,8 +98,8 @@ static void SankeyLabelsCarryIndependentStylesAndDoNotCap() {
     const SankeyChartNode& node = chart->nodes[0];
     utassert(node.hasCustomLabels);
     utassert(node.labels.len == 40);
-    utassert(base::StrEq(node.labels[0].text, "a"));
-    utassert(base::StrEq(node.labels[39].text, "b"));
+    utassert(base::StrEq(node.labels[0].text, StrL("a")));
+    utassert(base::StrEq(node.labels[39].text, StrL("b")));
     utassertnear(node.labels[39].fontSize, 14);
 
     AppGlobalClear(&app);

@@ -24,13 +24,9 @@ static ShellRootWindowState* RootWindowState(Window* window) {
 }
 
 const char* ToastLevelName(ToastLevel level) {
-    switch (level) {
-        case ToastLevel::Info: return "info";
-        case ToastLevel::Success: return "success";
-        case ToastLevel::Warning: return "warning";
-        case ToastLevel::Error: return "error";
-    }
-    return "info";
+    static const char names[] = "info\0success\0warning\0error\0";
+    Str name = SeqStrByIndex(names, (int)level);
+    return name ? name.s : names;
 }
 
 static const char kFpsAnchorNames[] =
@@ -42,21 +38,21 @@ SeqStrings FpsAnchorNames() {
 }
 
 bool FpsAnchorFromName(Str name, FpsAnchor* out) {
-    if (StrEq(name, "top_left"))
+    if (StrEq(name, StrL("top_left")))
         *out = FpsAnchor::TopLeft;
-    else if (StrEq(name, "top_right"))
+    else if (StrEq(name, StrL("top_right")))
         *out = FpsAnchor::TopRight;
-    else if (StrEq(name, "bottom_left"))
+    else if (StrEq(name, StrL("bottom_left")))
         *out = FpsAnchor::BottomLeft;
-    else if (StrEq(name, "bottom_right"))
+    else if (StrEq(name, StrL("bottom_right")))
         *out = FpsAnchor::BottomRight;
-    else if (StrEq(name, "top_center"))
+    else if (StrEq(name, StrL("top_center")))
         *out = FpsAnchor::TopCenter;
-    else if (StrEq(name, "bottom_center"))
+    else if (StrEq(name, StrL("bottom_center")))
         *out = FpsAnchor::BottomCenter;
-    else if (StrEq(name, "left_center"))
+    else if (StrEq(name, StrL("left_center")))
         *out = FpsAnchor::LeftCenter;
-    else if (StrEq(name, "right_center"))
+    else if (StrEq(name, StrL("right_center")))
         *out = FpsAnchor::RightCenter;
     else
         return false;
@@ -64,11 +60,16 @@ bool FpsAnchorFromName(Str name, FpsAnchor* out) {
 }
 
 bool ToastLevelFromName(Str name, ToastLevel* out) {
-    if (StrEq(name, "info")) *out = ToastLevel::Info;
-    else if (StrEq(name, "success")) *out = ToastLevel::Success;
-    else if (StrEq(name, "warning")) *out = ToastLevel::Warning;
-    else if (StrEq(name, "error")) *out = ToastLevel::Error;
-    else return false;
+    if (StrEq(name, StrL("info")))
+        *out = ToastLevel::Info;
+    else if (StrEq(name, StrL("success")))
+        *out = ToastLevel::Success;
+    else if (StrEq(name, StrL("warning")))
+        *out = ToastLevel::Warning;
+    else if (StrEq(name, StrL("error")))
+        *out = ToastLevel::Error;
+    else
+        return false;
     return true;
 }
 
@@ -201,8 +202,8 @@ struct ShellDialogLayer {
             return;
         WindowLayers* layers = WindowLayersOf(cx->win);
         bool topmost = layers && layers->dialogs.len > 0 &&
-                       layers->dialogs[layers->dialogs.len - 1].view ==
-                           cx->self;
+                       layers->dialogs[layers->dialogs.len - 1]
+                               .view == cx->self;
         if (!topmost) return;
         WindowStopPropagation(cx);
         Close(self, cx, event);
@@ -213,18 +214,19 @@ struct ShellDialogLayer {
         const Theme& theme = ThemeNow(cx->app);
         WindowLayers* layers = WindowLayersOf(cx->win);
         bool topmost = layers && layers->dialogs.len > 0 &&
-                       layers->dialogs[layers->dialogs.len - 1].view ==
-                           cx->self;
+                       layers->dialogs[layers->dialogs.len - 1]
+                               .view == cx->self;
         El* backdrop = nullptr;
         if (topmost) {
-            backdrop = DialogBackdrop::New(cx)
-                           ->Bg(Rgba8(0, 0, 0, 128))
-                           ->OnMouseDown(Listen(cx, &ShellDialogLayer::OnBackdrop));
+            backdrop =
+                DialogBackdrop::New(cx)
+                    ->Bg(Rgba8(0, 0, 0, 128))
+                    ->OnMouseDown(Listen(cx, &ShellDialogLayer::OnBackdrop));
         }
-        El* child = self->content.IsValid()
-                        ? EntityRender(cx->app, cx->win, cx->a,
-                                       self->content.id)
-                        : nullptr;
+        El* child =
+            self->content.IsValid()
+                ? EntityRender(cx->app, cx->win, cx->a, self->content.id)
+                : nullptr;
         El* surface = Div(cx->a)
                           ->FlexCol()
                           ->Bg(theme.popover)
@@ -276,7 +278,8 @@ bool ShellRootCloseDialog(Ctx* cx) {
     if (!cx || !ShellRootOf(cx->win, cx->app)) return false;
     WindowLayers* layers = WindowLayersOf(cx->win);
     if (!layers || layers->dialogs.len == 0) return false;
-    Entity<ShellDialogLayer> layer{layers->dialogs[layers->dialogs.len - 1].view};
+    Entity<ShellDialogLayer> layer{layers->dialogs[layers->dialogs.len - 1]
+                                       .view};
     ShellDialogLayer* state = layer.Get(cx);
     FocusHandle restore = state ? state->restore : FocusHandle{};
     WindowCloseDialog(cx);
@@ -289,8 +292,8 @@ int ShellRootCloseAllDialogs(Ctx* cx) {
     WindowLayers* layers = WindowLayersOf(cx->win);
     int count = layers ? layers->dialogs.len : 0;
     if (count == 0) return 0;
-    ShellDialogLayer* first =
-        Entity<ShellDialogLayer>{layers->dialogs[0].view}.Get(cx);
+    ShellDialogLayer* first = Entity<ShellDialogLayer>{layers->dialogs[0].view}
+                                  .Get(cx);
     FocusHandle restore = first ? first->restore : FocusHandle{};
     WindowCloseAllDialogs(cx);
     RestoreOverlayFocus(cx, restore);
@@ -322,10 +325,10 @@ struct ShellSheetLayer {
     static El* Render(ShellSheetLayer* self, Ctx* cx) {
         RebuildScriptOverlay(cx, self->content);
         const Theme& theme = ThemeNow(cx->app);
-        El* child = self->content.IsValid()
-                        ? EntityRender(cx->app, cx->win, cx->a,
-                                       self->content.id)
-                        : nullptr;
+        El* child =
+            self->content.IsValid()
+                ? EntityRender(cx->app, cx->win, cx->a, self->content.id)
+                : nullptr;
         WinSize size = WindowSize(cx->win);
         El* surface = Div(cx->a)
                           ->FlexCol()
@@ -351,8 +354,13 @@ struct ShellSheetLayer {
         }
         return Sheet::New(cx)
             ->Trap(StrL("shell-sheet"))
-            ->Overlay(Div(cx->a)->Absolute()->Top(0)->Left(0)->Right(0)->Bottom(0)->Bg(
-                Rgba8(0, 0, 0, 128)))
+            ->Overlay(Div(cx->a)
+                          ->Absolute()
+                          ->Top(0)
+                          ->Left(0)
+                          ->Right(0)
+                          ->Bottom(0)
+                          ->Bg(Rgba8(0, 0, 0, 128)))
             ->Surface(surface)
             ->RequestClose(Listen(cx, &ShellSheetLayer::Close))
             ->IntoEl()
@@ -367,8 +375,8 @@ bool ShellRootOpenSheet(Ctx* cx, Entity<ScriptView> content,
     FocusHandle restore = WindowFocused(cx->win);
     WindowLayers* layers = WindowLayersOf(cx->win);
     if (layers && layers->hasSheet) {
-        ShellSheetLayer* current =
-            Entity<ShellSheetLayer>{layers->sheet.view}.Get(cx);
+        ShellSheetLayer* current = Entity<ShellSheetLayer>{layers->sheet.view}
+                                       .Get(cx);
         if (current) restore = current->restore;
     }
     Entity<ShellSheetLayer> layer = EntityNew<ShellSheetLayer>(cx->app);
@@ -393,8 +401,8 @@ bool ShellRootCloseSheet(Ctx* cx) {
     if (!cx || !ShellRootOf(cx->win, cx->app)) return false;
     WindowLayers* layers = WindowLayersOf(cx->win);
     if (!layers || !layers->hasSheet) return false;
-    ShellSheetLayer* state =
-        Entity<ShellSheetLayer>{layers->sheet.view}.Get(cx);
+    ShellSheetLayer* state = Entity<ShellSheetLayer>{layers->sheet.view}
+                                 .Get(cx);
     FocusHandle restore = state ? state->restore : FocusHandle{};
     WindowCloseSheet(cx);
     RestoreOverlayFocus(cx, restore);
@@ -407,10 +415,14 @@ bool ShellRootHasSheet(Ctx* cx) {
 
 static component::NotificationType NotificationTypeFor(ToastLevel level) {
     switch (level) {
-        case ToastLevel::Info: return component::NotificationType::Info;
-        case ToastLevel::Success: return component::NotificationType::Success;
-        case ToastLevel::Warning: return component::NotificationType::Warning;
-        case ToastLevel::Error: return component::NotificationType::Error;
+        case ToastLevel::Info:
+            return component::NotificationType::Info;
+        case ToastLevel::Success:
+            return component::NotificationType::Success;
+        case ToastLevel::Warning:
+            return component::NotificationType::Warning;
+        case ToastLevel::Error:
+            return component::NotificationType::Error;
     }
     return component::NotificationType::Info;
 }
@@ -443,8 +455,7 @@ bool ShellRootPushToast(Ctx* cx, const ToastRequest& request) {
     Str id = request.id;
     if (!request.hasId) {
         root->nextToastOrdinal++;
-        id = StrDup(cx->a,
-                    fmt("shell-toast-%llu", root->nextToastOrdinal));
+        id = StrDup(cx->a, fmt("shell-toast-%llu", root->nextToastOrdinal));
     }
     component::Notification toast = component::Notification::New();
     toast.Id1<ShellRoot>(id)
@@ -473,8 +484,7 @@ bool ShellRootRemoveToast(Ctx* cx, Str id) {
             break;
         }
     }
-    if (found)
-        WindowRemoveNotification1<ShellRoot>(cx, key);
+    if (found) WindowRemoveNotification1<ShellRoot>(cx, key);
     return found;
 }
 
@@ -483,9 +493,8 @@ void ShellRootClearToasts(Ctx* cx) {
 }
 
 int ShellRootToastCount(Ctx* cx) {
-    return cx && ShellRootOf(cx->win, cx->app)
-               ? WindowNotificationCount(cx)
-               : 0;
+    return cx && ShellRootOf(cx->win, cx->app) ? WindowNotificationCount(cx)
+                                               : 0;
 }
 
 } // namespace gpui

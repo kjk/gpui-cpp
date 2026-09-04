@@ -83,7 +83,7 @@ void EmitText(Results* res, Str rule, Str part) {
     // An enable/disable marker in a comment flips the toggle from here on —
     // including for this very comment, which is why the toggle is read
     // before is_enabled below.
-    if (StrEq(rule, "comment") || StrEq(rule, "COMMENT")) {
+    if (StrEq(rule, StrL("comment")) || StrEq(rule, StrL("COMMENT"))) {
         Toggle t = ToggleParse(part);
         if (t.kind != ToggleKind::None) {
             res->toggle = t;
@@ -214,7 +214,7 @@ void EmitCodeblock(Results* res, Str part, Str lang, Str code) {
 }
 
 void EmitInlineScript(Results* res, Str rule, Str part) {
-    Str lang = StrEq(rule, "inline_style") ? StrL("css") : StrL("js");
+    Str lang = StrEq(rule, StrL("inline_style")) ? StrL("css") : StrL("js");
     EmitSub(res, part, lang, part, false);
 }
 

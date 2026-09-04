@@ -240,10 +240,10 @@ static int KeyFor(const EmscriptenKeyboardEvent* e) {
     }
     if (vk == 0) {
         Str code = Str(e->code);
-        if (StrEq(code, "BracketLeft")) {
+        if (StrEq(code, StrL("BracketLeft"))) {
             return KeyLeftBracket;
         }
-        if (StrEq(code, "BracketRight")) {
+        if (StrEq(code, StrL("BracketRight"))) {
             return KeyRightBracket;
         }
     }

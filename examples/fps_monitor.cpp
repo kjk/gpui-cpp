@@ -429,13 +429,13 @@ int GpuiMain(int argc, char** argv) {
     int winH = 600;
     for (int i = 1; i < argc; i++) {
         Str argument = Str(argv[i]);
-        if (StrEq(argument, "-bench") && i + 1 < argc) {
+        if (StrEq(argument, StrL("-bench")) && i + 1 < argc) {
             self->benchSecs = StrToFloatUnchecked(Str(argv[++i]));
-        } else if (StrEq(argument, "-bench-out") && i + 1 < argc) {
+        } else if (StrEq(argument, StrL("-bench-out")) && i + 1 < argc) {
             self->benchOut = Str(argv[++i]);
-        } else if (StrEq(argument, "-curves") && i + 1 < argc) {
+        } else if (StrEq(argument, StrL("-curves")) && i + 1 < argc) {
             self->curves = StrToIntUnchecked(Str(argv[++i]));
-        } else if (StrEq(argument, "-size") && i + 1 < argc) {
+        } else if (StrEq(argument, StrL("-size")) && i + 1 < argc) {
             // -size WxH: the load knob the curve count is not. Line drawing
             // costs what it covers, so a number measured at one window size
             // says nothing about another.

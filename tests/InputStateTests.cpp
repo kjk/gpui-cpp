@@ -99,10 +99,10 @@ static void SetSelectedRange() {
 
     InputSetSelectedRange(&s, nullptr, nullptr, 0, 5);
     utassert(RangeIs(s, 0, 5));
-    utassert(base::StrEq(InputSelectedValue(&s), "hello"));
+    utassert(base::StrEq(InputSelectedValue(&s), StrL("hello")));
 
     InputSetSelectedRange(&s, nullptr, nullptr, 6, 11);
-    utassert(base::StrEq(InputSelectedValue(&s), "world"));
+    utassert(base::StrEq(InputSelectedValue(&s), StrL("world")));
 
     // clamped + collapsed
     InputSetSelectedRange(&s, nullptr, nullptr, 100, 100);
@@ -373,8 +373,8 @@ static void EveryProviderIsAsked() {
     InputSetSelectedRange(&s, nullptr, nullptr, 0, 5);
     Act(&s, InputAction::ToggleCodeActions);
     utassert(s.codeActions.open && s.codeActions.items.len == 2);
-    utassert(base::StrEq(s.codeActions.items[0].title, "first"));
-    utassert(base::StrEq(s.codeActions.items[1].title, "second"));
+    utassert(base::StrEq(s.codeActions.items[0].title, StrL("first")));
+    utassert(base::StrEq(s.codeActions.items[1].title, StrL("second")));
     utassert(s.codeActions.items[0].provider == 0);
     utassert(s.codeActions.items[1].provider == 1);
 
@@ -433,8 +433,8 @@ static void CodeActionCollectionsGrowToTheirAnswers() {
     InputSetSelectedRange(&mixed, nullptr, nullptr, 0, 5);
     Act(&mixed, InputAction::ToggleCodeActions);
     utassert(mixed.codeActions.items.len == 2);
-    utassert(base::StrEq(mixed.codeActions.items[0].title, "first"));
-    utassert(base::StrEq(mixed.codeActions.items[1].title, "second"));
+    utassert(base::StrEq(mixed.codeActions.items[0].title, StrL("first")));
+    utassert(base::StrEq(mixed.codeActions.items[1].title, StrL("second")));
 
     InputState manyAnswers;
     manyAnswers.kind = InputKind::Editor;
@@ -699,7 +699,7 @@ static void CompletionResponsesGrowPastTheOldBuffer() {
     InputShowCompletions(&s, nullptr, nullptr);
     utassert(s.completion.open);
     utassert(s.completion.items.len == 257);
-    utassert(base::StrEq(s.completion.items[256].label, "candidate"));
+    utassert(base::StrEq(s.completion.items[256].label, StrL("candidate")));
 }
 
 static Str TestResolve(void* data, Arena* a, const CompletionItem* item) {
@@ -770,12 +770,12 @@ static void DocumentationIsResolvedOnce() {
 
     s.completionResolve = &TestResolve;
     Str doc = InputCompletionDocumentation(&s);
-    utassert(base::StrEq(doc, "Exit a loop immediately."));
+    utassert(base::StrEq(doc, StrL("Exit a loop immediately.")));
     utassert(gResolveCalls == 1);
     // Asked once: the answer is written back into the item, and the frame
     // after this one reads it rather than asking again.
     utassert(base::StrEq(InputCompletionDocumentation(&s),
-                         "Exit a loop immediately."));
+                         StrL("Exit a loop immediately.")));
     utassert(gResolveCalls == 1);
 }
 
@@ -923,11 +923,11 @@ static void TheDeltaEncodingIsUnpacked() {
     int n = SemanticTokensDecode(toks, 2, kSemanticLegend, 2, out, 4);
     utassert(n == 2);
     utassert(out[0].line == 0 && out[0].col == 0 && out[0].len == 4);
-    utassert(base::StrEq(out[0].name, "keyword"));
+    utassert(base::StrEq(out[0].name, StrL("keyword")));
     // The second token's line is relative to the first, and its column
     // starts over because the line moved.
     utassert(out[1].line == 1 && out[1].col == 2 && out[1].len == 5);
-    utassert(base::StrEq(out[1].name, "comment"));
+    utassert(base::StrEq(out[1].name, StrL("comment")));
 }
 
 static void ATokenOutsideTheLegendIsSkipped() {
@@ -946,7 +946,7 @@ static void OnlyTheVisibleTokensAreResolved() {
     int n = SemanticTokensForRange(toks, 2, text, Selection{0, 19}, out, 4);
     utassert(n == 1);
     utassert(out[0].range.start == 0 && out[0].range.end == 6);
-    utassert(base::StrEq(out[0].name, "keyword"));
+    utassert(base::StrEq(out[0].name, StrL("keyword")));
 }
 
 static void TheWindowIsBinarySearched() {
@@ -1018,7 +1018,7 @@ static int TestDefinitions(void* data, Arena* a, Str text, int offset,
         return 0;
     }
     Str word(text.s + wa, wb - wa);
-    if (base::StrEq(word, "Duration")) {
+    if (base::StrEq(word, StrL("Duration"))) {
         if (cap > 0 && out) {
             out[0].origin = {wa, wb};
             out[0].uri = Str{};
@@ -1026,7 +1026,7 @@ static int TestDefinitions(void* data, Arena* a, Str text, int offset,
         }
         return 1;
     }
-    if (base::StrEq(word, "Arc")) {
+    if (base::StrEq(word, StrL("Arc"))) {
         if (cap > 0 && out) {
             out[0].origin = {wa, wb};
             out[0].uri =
@@ -1251,10 +1251,10 @@ static void SelectWordAndLine() {
     InputSetValue(&s, StrL("hello brave\nnew world"));
 
     InputSelectWord(&s, nullptr, nullptr, 7);
-    utassert(base::StrEq(InputSelectedValue(&s), "brave"));
+    utassert(base::StrEq(InputSelectedValue(&s), StrL("brave")));
 
     InputSelectLine(&s, nullptr, nullptr, 14);
-    utassert(base::StrEq(InputSelectedValue(&s), "new world"));
+    utassert(base::StrEq(InputSelectedValue(&s), StrL("new world")));
 }
 
 // The word a double click took stays whole while the drag goes on.
@@ -1419,7 +1419,7 @@ static void MaskFormatsWhileTyping() {
     InputState s;
     InputSetMaskPattern(&s, MaskPatternNew(StrL("(999)999-9999")));
     // The cue comes from the pattern.
-    utassert(base::StrEq(s.placeholder, "(___)___-____"));
+    utassert(base::StrEq(s.placeholder, StrL("(___)___-____")));
 
     Type(&s, "1");
     utassert(ValueIs(s, "(1"));
@@ -1846,7 +1846,7 @@ static void TypingAWordOpensTheMenu() {
 
     int start = -1;
     Str query = InputCompletionQuery(&s, &start);
-    utassert(start == 0 && base::StrEq(query, "co"));
+    utassert(start == 0 && base::StrEq(query, StrL("co")));
 
     // A word nothing answers to closes it rather than showing an empty menu.
     TypeChars(&s, "zz");
@@ -2294,7 +2294,7 @@ static void BaseInputCoreKeepsTheSourceModeAndPresentationSeams() {
     InputPresentation presentation = InputPresentation::Of(arena, &state);
     utassert(presentation.readonly && presentation.multiLine);
     utassert(presentation.codeEditor && presentation.masked);
-    utassert(base::StrEq(presentation.placeholder, "value"));
+    utassert(base::StrEq(presentation.placeholder, StrL("value")));
 
     Style normal;
     normal.color = Rgb(1, 2, 3);
@@ -2384,10 +2384,10 @@ static void DiagnosticSetOwnsMetadataAndAnswersRanges() {
 
     const DiagnosticEntry* found = set.ForOffset(10);
     utassert(found &&
-             base::StrEq(found->diagnostic.message, "Spelling mistake"));
+             base::StrEq(found->diagnostic.message, StrL("Spelling mistake")));
     utassert(found->diagnostic.nRelatedInformation == 1);
     utassert(base::StrEq(found->diagnostic.relatedInformation[0].message,
-                         "first declared here"));
+                         StrL("first declared here")));
     utassert(found->diagnostic.tags[0] == DiagnosticTag::Deprecated);
     utassert(set.ForOffset(30) == nullptr);
 
@@ -2398,7 +2398,7 @@ static void DiagnosticSetOwnsMetadataAndAnswersRanges() {
 }
 
 static bool ResolveKeyword(void*, Str name, TextSpan* out) {
-    if (!base::StrEq(name, "keyword")) {
+    if (!base::StrEq(name, StrL("keyword"))) {
         return false;
     }
     out->color = Rgb(10, 20, 30);
@@ -2430,7 +2430,7 @@ static void HighlighterContractsAreDependencyFreeAndFunctional() {
     InputHighlighter highlighter;
     highlighter.language = HighlighterLanguage;
     highlighter.styles = HighlighterStyles;
-    utassert(base::StrEq(highlighter.Language(), "cpp"));
+    utassert(base::StrEq(highlighter.Language(), StrL("cpp")));
     Arena* a = ArenaNew();
     TextSpan* spans = nullptr;
     utassert(highlighter.Styles({2, 5}, &resolver, a, &spans) == 1);
@@ -2517,7 +2517,7 @@ static void LspFacadesInstallCapabilitiesAndExposeOverlayState() {
     CompletionMenuState completionState = CompletionMenuState::Of(&state);
     utassert(completionState.open && completionState.nItems == 1);
     utassert(completionState.triggerStartOffset == 1);
-    utassert(base::StrEq(completionState.query, "val"));
+    utassert(base::StrEq(completionState.query, StrL("val")));
 
     CodeActionItem actionItem;
     actionItem.title = StrL("Fix");
@@ -2529,7 +2529,7 @@ static void LspFacadesInstallCapabilitiesAndExposeOverlayState() {
     InputPresentHover(&state, {0, 5}, StrL("documentation"));
     HoverPopoverState hoverState = HoverPopoverState::Of(&state);
     utassert(hoverState.open && hoverState.symbolRange.end == 5);
-    utassert(base::StrEq(hoverState.hover, "documentation"));
+    utassert(base::StrEq(hoverState.hover, StrL("documentation")));
 
     VecAppend(state.documentColors, {{0, 2}, Rgb(1, 2, 3)});
     DocumentColor colors[1] = {};

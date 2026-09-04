@@ -66,11 +66,11 @@ static void TheBuilderCarriesVariantLoadingAndSlots() {
 
     utassert(Marker::New(&cx)->role.kind == RoleOverrideKind::Implicit);
     utassert(!Marker::New(&cx)->hasId);
-    Marker* status = Marker::New(&cx)
-                         ->Id(StrL("sync-status"))
-                         ->Role(RoleOverride::Explicit(
-                             AccessibilityRole::Status));
-    utassert(status->hasId && base::StrEq(status->id, "sync-status"));
+    Marker* status =
+        Marker::New(&cx)
+            ->Id(StrL("sync-status"))
+            ->Role(RoleOverride::Explicit(AccessibilityRole::Status));
+    utassert(status->hasId && base::StrEq(status->id, StrL("sync-status")));
     utassert(status->role.kind == RoleOverrideKind::Role);
     utassert(status->role.role == AccessibilityRole::Status);
 

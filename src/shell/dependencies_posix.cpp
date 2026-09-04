@@ -50,7 +50,7 @@ static void RemoveTreeAt(const char* path) {
     if (dir) {
         for (struct dirent* entry = readdir(dir); entry; entry = readdir(dir)) {
             Str name = Str(entry->d_name);
-            if (StrEq(name, ".") || StrEq(name, "..")) continue;
+            if (StrEq(name, StrL(".")) || StrEq(name, StrL(".."))) continue;
             TempStr child = fmt("%s/%s", Str(path), name);
             if (child.len < kMaxPath) RemoveTreeAt(child.s);
         }

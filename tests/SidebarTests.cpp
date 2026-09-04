@@ -122,19 +122,20 @@ static void SidebarItemAllowsGenericNestedContent() {
     cx.a = a;
 
     CustomSidebarItem nested = {};
-    SidebarGroup* group = SidebarGroup::New(&cx, StrL("Custom"))->Child(
-        SidebarItem::New(&nested, &RenderCustomSidebarItem));
+    SidebarGroup* group =
+        SidebarGroup::New(&cx, StrL("Custom"))
+            ->Child(SidebarItem::New(&nested, &RenderCustomSidebarItem));
     El* groupEl = group->IntoEl(StrL("group"));
     utassert(groupEl != nullptr);
     utassert(nested.renders == 1);
     utassert(!nested.collapsed);
-    utassert(base::StrEq(nested.id, "0"));
+    utassert(base::StrEq(nested.id, StrL("0")));
 
     CustomSidebarItem direct = {};
-    Sidebar* sidebar = Sidebar::New(&cx, StrL("generic-sidebar"))
-                           ->Collapsed(true)
-                           ->Child(SidebarItem::New(
-                               &direct, &RenderCustomSidebarItem));
+    Sidebar* sidebar =
+        Sidebar::New(&cx, StrL("generic-sidebar"))
+            ->Collapsed(true)
+            ->Child(SidebarItem::New(&direct, &RenderCustomSidebarItem));
     El* wrapper = sidebar->IntoEl();
     utassert(wrapper != nullptr);
     utassert(direct.renders == 1);
@@ -206,17 +207,17 @@ static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
     cx.a = a;
 
     // Set collapsed before rendering, as SidebarItem::Render does.
-    SidebarMenuItem* iconItem =
-        SidebarMenuItem::New(&cx, StrL("Projects"))->Icon(IconName::Folder);
+    SidebarMenuItem* iconItem = SidebarMenuItem::New(&cx, StrL("Projects"))
+                                    ->Icon(IconName::Folder);
     iconItem->collapsed = true;
     El* iconRow = iconItem->IntoEl(StrL("collapsed-icon"))->first;
     SidebarMenuItem* plainItem = SidebarMenuItem::New(&cx, StrL("Plain"));
     plainItem->collapsed = true;
     El* plainRow = plainItem->IntoEl(StrL("collapsed-plain"))->first;
-    utassert(iconRow && base::StrEq(iconRow->style.tooltip, "Projects"));
+    utassert(iconRow && base::StrEq(iconRow->style.tooltip, StrL("Projects")));
     utassert(plainRow && !plainRow->style.tooltip.s);
-    utassert(iconRow && base::StrEq(iconRow->id, "item"));
-    utassert(plainRow && base::StrEq(plainRow->id, "item"));
+    utassert(iconRow && base::StrEq(iconRow->id, StrL("item")));
+    utassert(plainRow && base::StrEq(plainRow->id, StrL("item")));
     El* activeRow = SidebarMenuItem::New(&cx, StrL("Active"))
                         ->Active(true)
                         ->IntoEl(StrL("active"))
@@ -229,7 +230,7 @@ static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
     El* root = sidebar->IntoEl();
     El* content = root ? root->first : nullptr;
     El* viewport = content ? content->first : nullptr;
-    utassert(root && base::StrEq(root->id, "scrolling-sidebar"));
+    utassert(root && base::StrEq(root->id, StrL("scrolling-sidebar")));
     utassert(content && content->style.minH == 0);
     utassert(viewport && viewport->style.overflowY == Overflow::Scroll);
     utassert(viewport && viewport->onScroll.IsValid());
@@ -238,11 +239,11 @@ static void CollapsedTooltipRequiresAnIconAndContentScrolls() {
     fill.width = kFill;
     fill.borderR = 5;
     fill.pad = EdgesAll(99);
-    El* nonPixel = Sidebar::New(&cx, StrL("fill-sidebar"))
-                       ->Refine(fill, StyleFieldWidth | StyleFieldBorderR |
-                                          StyleFieldPad)
-                       ->IntoEl();
-    utassert(nonPixel && base::StrEq(nonPixel->id, "fill-sidebar"));
+    El* nonPixel =
+        Sidebar::New(&cx, StrL("fill-sidebar"))
+            ->Refine(fill, StyleFieldWidth | StyleFieldBorderR | StyleFieldPad)
+            ->IntoEl();
+    utassert(nonPixel && base::StrEq(nonPixel->id, StrL("fill-sidebar")));
     utassertnear(nonPixel->style.width, kFill);
     utassertnear(nonPixel->style.borderR, 5);
     utassertnear(nonPixel->style.pad.left, 0);

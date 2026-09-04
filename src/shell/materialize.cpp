@@ -182,17 +182,12 @@ static shell::EntityHandle AsHandle(const shell::SpecOp& op, int at) {
 }
 
 static PopupAnchor AnchorOf(Str name, bool* found) {
-    *found = true;
-    if (StrEq(name, "top_left")) return PopupAnchor::TopLeft;
-    if (StrEq(name, "top_right")) return PopupAnchor::TopRight;
-    if (StrEq(name, "bottom_left")) return PopupAnchor::BottomLeft;
-    if (StrEq(name, "bottom_right")) return PopupAnchor::BottomRight;
-    if (StrEq(name, "top_center")) return PopupAnchor::TopCenter;
-    if (StrEq(name, "bottom_center")) return PopupAnchor::BottomCenter;
-    if (StrEq(name, "left_center")) return PopupAnchor::LeftCenter;
-    if (StrEq(name, "right_center")) return PopupAnchor::RightCenter;
-    *found = false;
-    return PopupAnchor::TopLeft;
+    static const char names[] =
+        "top_left\0top_center\0top_right\0bottom_left\0bottom_center\0"
+        "bottom_right\0left_center\0right_center\0";
+    int ix = SeqStrIndex(names, name);
+    *found = ix >= 0;
+    return ix < 0 ? PopupAnchor::TopLeft : (PopupAnchor)ix;
 }
 
 // A dock command carries no script value: it names a container in the area and
@@ -201,10 +196,9 @@ static PopupAnchor AnchorOf(Str name, bool* found) {
 // callback registered inside one would pile up the way a virtual list's row
 // handlers would.
 static DockPlacement DockPlacementOfName(Str name) {
-    if (StrEq(name, "left")) return DockPlacement::Left;
-    if (StrEq(name, "right")) return DockPlacement::Right;
-    if (StrEq(name, "bottom")) return DockPlacement::Bottom;
-    return DockPlacement::Center;
+    static const char names[] = "center\0left\0bottom\0right\0";
+    int ix = SeqStrIndex(names, name);
+    return ix < 0 ? DockPlacement::Center : (DockPlacement)ix;
 }
 
 static bool IsDockCommandName(Str name) {
@@ -221,64 +215,64 @@ static void ResolveBehavior(const shell::SpecNode* node,
                             MaterialBehavior* out) {
     for (const shell::SpecOp& op : node->ops) {
         if (op.kind == shell::SpecOpKind::Callback) {
-            if (StrEq(op.name, "on_click"))
+            if (StrEq(op.name, StrL("on_click")))
                 out->onClick = op.callback;
-            else if (StrEq(op.name, "on_change"))
+            else if (StrEq(op.name, StrL("on_change")))
                 out->onChange = op.callback;
-            else if (StrEq(op.name, "on_hover"))
+            else if (StrEq(op.name, StrL("on_hover")))
                 out->onHover = op.callback;
-            else if (StrEq(op.name, "on_mouse_move"))
+            else if (StrEq(op.name, StrL("on_mouse_move")))
                 out->onMouseMove = op.callback;
-            else if (StrEq(op.name, "on_open_change"))
+            else if (StrEq(op.name, StrL("on_open_change")))
                 out->onOpenChange = op.callback;
-            else if (StrEq(op.name, "on_confirm"))
+            else if (StrEq(op.name, StrL("on_confirm")))
                 out->onConfirm = op.callback;
-            else if (StrEq(op.name, "on_dismiss"))
+            else if (StrEq(op.name, StrL("on_dismiss")))
                 out->onDismiss = op.callback;
-            else if (StrEq(op.name, "on_step"))
+            else if (StrEq(op.name, StrL("on_step")))
                 out->onStep = op.callback;
-            else if (StrEq(op.name, "on_resize"))
+            else if (StrEq(op.name, StrL("on_resize")))
                 out->onResize = op.callback;
-            else if (StrEq(op.name, "on_item_click"))
+            else if (StrEq(op.name, StrL("on_item_click")))
                 out->onItemClick = op.callback;
-            else if (StrEq(op.name, "on_item_secondary_click"))
+            else if (StrEq(op.name, StrL("on_item_secondary_click")))
                 out->onItemSecondaryClick = op.callback;
-            else if (StrEq(op.name, "on_key_down"))
+            else if (StrEq(op.name, StrL("on_key_down")))
                 out->onKeyDown = op.callback;
-            else if (StrEq(op.name, "on_key_up"))
+            else if (StrEq(op.name, StrL("on_key_up")))
                 out->onKeyUp = op.callback;
             // The button is carried in the op name rather than beside it:
             // three fixed names cost nothing next to widening every op to
             // carry an argument only these six use.
-            else if (StrEq(op.name, "on_mouse_down_left")) {
+            else if (StrEq(op.name, StrL("on_mouse_down_left"))) {
                 out->mouseDown.left = op.callback;
                 out->hasMouseDown = true;
-            } else if (StrEq(op.name, "on_mouse_down_right")) {
+            } else if (StrEq(op.name, StrL("on_mouse_down_right"))) {
                 out->mouseDown.right = op.callback;
                 out->hasMouseDown = true;
-            } else if (StrEq(op.name, "on_mouse_down_middle")) {
+            } else if (StrEq(op.name, StrL("on_mouse_down_middle"))) {
                 out->mouseDown.middle = op.callback;
                 out->hasMouseDown = true;
-            } else if (StrEq(op.name, "on_mouse_up_left")) {
+            } else if (StrEq(op.name, StrL("on_mouse_up_left"))) {
                 out->mouseUp.left = op.callback;
                 out->hasMouseUp = true;
-            } else if (StrEq(op.name, "on_mouse_up_right")) {
+            } else if (StrEq(op.name, StrL("on_mouse_up_right"))) {
                 out->mouseUp.right = op.callback;
                 out->hasMouseUp = true;
-            } else if (StrEq(op.name, "on_mouse_up_middle")) {
+            } else if (StrEq(op.name, StrL("on_mouse_up_middle"))) {
                 out->mouseUp.middle = op.callback;
                 out->hasMouseUp = true;
-            } else if (StrEq(op.name, "on_mouse_down_out")) {
+            } else if (StrEq(op.name, StrL("on_mouse_down_out"))) {
                 out->onMouseDownOut = op.callback;
-            } else if (StrEq(op.name, "on_scroll_wheel")) {
+            } else if (StrEq(op.name, StrL("on_scroll_wheel"))) {
                 out->onScrollWheel = op.callback;
-            } else if (StrEq(op.name, "tab_bar")) {
+            } else if (StrEq(op.name, StrL("tab_bar"))) {
                 out->dockChrome.tabBar = op.callback;
-            } else if (StrEq(op.name, "empty_group")) {
+            } else if (StrEq(op.name, StrL("empty_group"))) {
                 out->dockChrome.emptyGroup = op.callback;
-            } else if (StrEq(op.name, "drop_indicator")) {
+            } else if (StrEq(op.name, StrL("drop_indicator"))) {
                 out->dockChrome.dropIndicator = op.callback;
-            } else if (StrEq(op.name, "dock")) {
+            } else if (StrEq(op.name, StrL("dock"))) {
                 out->dockChrome.dock = op.callback;
             }
             continue;
@@ -301,127 +295,128 @@ static void ResolveBehavior(const shell::SpecNode* node,
             }
             continue;
         }
-        if (StrEq(op.name, "id"))
+        if (StrEq(op.name, StrL("id")))
             out->key = AsString(op, 0);
-        else if (StrEq(op.name, "accessibility_label"))
+        else if (StrEq(op.name, StrL("accessibility_label")))
             out->accessibilityLabel = AsString(op, 0);
-        else if (StrEq(op.name, "href"))
+        else if (StrEq(op.name, StrL("href")))
             out->href = AsString(op, 0);
-        else if (StrEq(op.name, "disabled"))
+        else if (StrEq(op.name, StrL("disabled")))
             out->disabled = AsBool(op, 0, true);
-        else if (StrEq(op.name, "selected"))
+        else if (StrEq(op.name, StrL("selected")))
             out->selected = AsBool(op, 0, true);
-        else if (StrEq(op.name, "checked"))
+        else if (StrEq(op.name, StrL("checked")))
             out->checked = AsBool(op, 0, true);
-        else if (StrEq(op.name, "pressed"))
+        else if (StrEq(op.name, StrL("pressed")))
             out->pressed = AsBool(op, 0, true);
-        else if (StrEq(op.name, "indeterminate"))
+        else if (StrEq(op.name, StrL("indeterminate")))
             out->indeterminate = AsBool(op, 0, true);
-        else if (StrEq(op.name, "open")) {
+        else if (StrEq(op.name, StrL("open"))) {
             out->open = AsBool(op, 0, true);
             out->hasOpen = true;
-        } else if (StrEq(op.name, "default_open"))
+        } else if (StrEq(op.name, StrL("default_open")))
             out->defaultOpen = AsBool(op, 0, true);
-        else if (StrEq(op.name, "overlay_closable"))
+        else if (StrEq(op.name, StrL("overlay_closable")))
             out->overlayClosable = AsBool(op, 0, true);
-        else if (StrEq(op.name, "controls_right"))
+        else if (StrEq(op.name, StrL("controls_right")))
             out->controlsRight = AsBool(op, 0, true);
-        else if (StrEq(op.name, "start"))
+        else if (StrEq(op.name, StrL("start")))
             out->start = AsBool(op, 0, true);
-        else if (StrEq(op.name, "value"))
+        else if (StrEq(op.name, StrL("value")))
             out->value = AsNumber(op, 0);
-        else if (StrEq(op.name, "row_count"))
+        else if (StrEq(op.name, StrL("row_count")))
             out->rowCount = (int)AsNumber(op, 0, -1);
-        else if (StrEq(op.name, "column_count"))
+        else if (StrEq(op.name, StrL("column_count")))
             out->columnCount = (int)AsNumber(op, 0, -1);
-        else if (StrEq(op.name, "tab_index"))
+        else if (StrEq(op.name, StrL("tab_index")))
             out->tabIndex = (int)AsNumber(op, 0);
-        else if (StrEq(op.name, "tab_stop"))
+        else if (StrEq(op.name, StrL("tab_stop")))
             out->tabStop = AsBool(op, 0, true);
-        else if (StrEq(op.name, "overflow_scroll"))
+        else if (StrEq(op.name, StrL("overflow_scroll")))
             out->scrollX = out->scrollY = true;
-        else if (StrEq(op.name, "overflow_x_scroll"))
+        else if (StrEq(op.name, StrL("overflow_x_scroll")))
             out->scrollX = true;
-        else if (StrEq(op.name, "overflow_y_scroll"))
+        else if (StrEq(op.name, StrL("overflow_y_scroll")))
             out->scrollY = true;
-        else if (StrEq(op.name, "overflow_scrollbar")) {
+        else if (StrEq(op.name, StrL("overflow_scrollbar"))) {
             out->scrollX = out->scrollY = out->scrollbar = true;
-        } else if (StrEq(op.name, "overflow_x_scrollbar")) {
+        } else if (StrEq(op.name, StrL("overflow_x_scrollbar"))) {
             out->scrollX = out->scrollbar = true;
-        } else if (StrEq(op.name, "overflow_y_scrollbar")) {
+        } else if (StrEq(op.name, StrL("overflow_y_scrollbar"))) {
             out->scrollY = out->scrollbar = true;
-        } else if (StrEq(op.name, "mode")) {
+        } else if (StrEq(op.name, StrL("mode"))) {
             Str mode = AsString(op, 0);
             out->hasScrollbarMode = true;
-            if (StrEq(mode, "hover"))
+            if (StrEq(mode, StrL("hover")))
                 out->scrollbarMode = ScrollbarMode::Hover;
-            else if (StrEq(mode, "always"))
+            else if (StrEq(mode, StrL("always")))
                 out->scrollbarMode = ScrollbarMode::Always;
             else
                 out->scrollbarMode = ScrollbarMode::Scrolling;
-        } else if (StrEq(op.name, "viewport_from_layout")) {
+        } else if (StrEq(op.name, StrL("viewport_from_layout"))) {
             out->viewportFromLayout = true;
-        } else if (StrEq(op.name, "scroll_size")) {
+        } else if (StrEq(op.name, StrL("scroll_size"))) {
             out->scrollSize = {AsNumber(op, 0), AsNumber(op, 1)};
             out->hasScrollSize = true;
-        } else if (StrEq(op.name, "panel_visible")) {
+        } else if (StrEq(op.name, StrL("panel_visible"))) {
             out->panelVisible = AsBool(op, 0, true);
             out->hasPanelVisible = true;
-        } else if (StrEq(op.name, "panel_size")) {
+        } else if (StrEq(op.name, StrL("panel_size"))) {
             out->panelSize = AsNumber(op, 0);
             out->hasPanelSize = true;
-        } else if (StrEq(op.name, "size_range")) {
+        } else if (StrEq(op.name, StrL("size_range"))) {
             out->panelMin = AsNumber(op, 0, kResizablePanelMinSize);
             out->panelMax = AsNumber(op, 1, 0);
             out->hasSizeRange = true;
-        } else if (StrEq(op.name, "set_position")) {
+        } else if (StrEq(op.name, StrL("set_position"))) {
             out->positionInSet = (int)AsNumber(op, 0);
             out->sizeOfSet = (int)AsNumber(op, 1);
             out->hasPosition = true;
-        } else if (StrEq(op.name, "anchor")) {
+        } else if (StrEq(op.name, StrL("anchor"))) {
             out->anchor = AnchorOf(AsString(op, 0), &out->hasAnchor);
-        } else if (StrEq(op.name, "mouse_button")) {
+        } else if (StrEq(op.name, StrL("mouse_button"))) {
             Str button = AsString(op, 0);
             out->mouseButton =
-                StrEq(button, "right")
+                StrEq(button, StrL("right"))
                     ? MouseButton::Right
-                    : (StrEq(button, "middle") ? MouseButton::Middle
-                                               : MouseButton::Left);
-        } else if (StrEq(op.name, "open_delay")) {
+                    : (StrEq(button, StrL("middle")) ? MouseButton::Middle
+                                                     : MouseButton::Left);
+        } else if (StrEq(op.name, StrL("open_delay"))) {
             out->openDelayMs = (int)AsNumber(op, 0, 600);
-        } else if (StrEq(op.name, "close_delay")) {
+        } else if (StrEq(op.name, StrL("close_delay"))) {
             out->closeDelayMs = (int)AsNumber(op, 0, 300);
-        } else if (StrEq(op.name, "track_focus")) {
+        } else if (StrEq(op.name, StrL("track_focus"))) {
             out->focus = AsHandle(op, 0);
-        } else if (StrEq(op.name, "content_focus_handle")) {
+        } else if (StrEq(op.name, StrL("content_focus_handle"))) {
             out->contentFocus = AsHandle(op, 0);
-        } else if (StrEq(op.name, "role")) {
+        } else if (StrEq(op.name, StrL("role"))) {
             out->role = AsString(op, 0);
-        } else if (StrEq(op.name, "aria_selected")) {
+        } else if (StrEq(op.name, StrL("aria_selected"))) {
             out->ariaSelected = AsBool(op, 0, true);
             out->hasAriaSelected = true;
-        } else if (StrEq(op.name, "aria_active_descendant")) {
+        } else if (StrEq(op.name, StrL("aria_active_descendant"))) {
             out->ariaActiveDescendant = true;
-        } else if (StrEq(op.name, "tooltip")) {
+        } else if (StrEq(op.name, StrL("tooltip"))) {
             out->tooltip = AsString(op, 0);
-        } else if (StrEq(op.name, "track_scroll")) {
+        } else if (StrEq(op.name, StrL("track_scroll"))) {
             const shell::Bridged* handle = Arg(op, 0);
             if (handle && handle->kind == shell::BridgedKind::Number &&
                 handle->number >= 0)
                 out->virtualScroll = (shell::EntityHandle)handle->number;
-        } else if (StrEq(op.name, "axis")) {
-            out->axis = StrEq(AsString(op, 0), "vertical") ? Axis::Vertical
-                                                           : Axis::Horizontal;
-        } else if (StrEq(op.name, "with_item_to_measure_index")) {
+        } else if (StrEq(op.name, StrL("axis"))) {
+            out->axis = StrEq(AsString(op, 0), StrL("vertical"))
+                            ? Axis::Vertical
+                            : Axis::Horizontal;
+        } else if (StrEq(op.name, StrL("with_item_to_measure_index"))) {
             out->itemToMeasure = (int)AsNumber(op, 0);
             out->hasItemToMeasure = true;
-        } else if (StrEq(op.name, "key_context")) {
+        } else if (StrEq(op.name, StrL("key_context"))) {
             out->keyContext = AsString(op, 0);
-        } else if (StrEq(op.name, "aria_level")) {
+        } else if (StrEq(op.name, StrL("aria_level"))) {
             // Announced, not drawn, and base defaults it to 3.
             float level = AsNumber(op, 0, 3);
             out->ariaLevel = (int)(level < 1 ? 1 : level);
-        } else if (StrEq(op.name, "keep_mounted")) {
+        } else if (StrEq(op.name, StrL("keep_mounted"))) {
             out->keepMounted = AsBool(op, 0, true);
         }
     }
@@ -470,7 +465,7 @@ static MaterialLength LengthOf(const shell::Bridged* value) {
     }
     if (value->kind != shell::BridgedKind::String) return result;
     Str text = TrimSpace(value->string);
-    if (StrEq(text, "auto")) {
+    if (StrEq(text, StrL("auto"))) {
         result.automatic = true;
         result.valid = true;
         return result;
@@ -526,124 +521,124 @@ static bool PresetNumberIs(Str name, Str prefix, float* value) {
 }
 
 static bool ApplyNullary(El* element, Str name) {
-    if (StrEq(name, "flex"))
+    if (StrEq(name, StrL("flex")))
         element->Flex();
-    else if (StrEq(name, "flex_row"))
+    else if (StrEq(name, StrL("flex_row")))
         element->FlexRow();
-    else if (StrEq(name, "flex_col"))
+    else if (StrEq(name, StrL("flex_col")))
         element->FlexCol();
-    else if (StrEq(name, "flex_row_reverse"))
+    else if (StrEq(name, StrL("flex_row_reverse")))
         element->FlexRowReverse();
-    else if (StrEq(name, "flex_col_reverse"))
+    else if (StrEq(name, StrL("flex_col_reverse")))
         element->FlexColReverse();
-    else if (StrEq(name, "flex_wrap"))
+    else if (StrEq(name, StrL("flex_wrap")))
         element->FlexWrap();
-    else if (StrEq(name, "flex_1"))
+    else if (StrEq(name, StrL("flex_1")))
         element->Flex1();
-    else if (StrEq(name, "flex_none"))
+    else if (StrEq(name, StrL("flex_none")))
         element->FlexNone();
-    else if (StrEq(name, "grow"))
+    else if (StrEq(name, StrL("grow")))
         element->Grow();
-    else if (StrEq(name, "shrink_0"))
+    else if (StrEq(name, StrL("shrink_0")))
         element->Shrink0();
-    else if (StrEq(name, "size_full"))
+    else if (StrEq(name, StrL("size_full")))
         element->SizeFull();
-    else if (StrEq(name, "w_full"))
+    else if (StrEq(name, StrL("w_full")))
         element->W(kFill);
-    else if (StrEq(name, "h_full"))
+    else if (StrEq(name, StrL("h_full")))
         element->H(kFill);
-    else if (StrEq(name, "w_auto"))
+    else if (StrEq(name, StrL("w_auto")))
         element->style.width = kAuto;
-    else if (StrEq(name, "h_auto"))
+    else if (StrEq(name, StrL("h_auto")))
         element->style.height = kAuto;
-    else if (StrEq(name, "items_center"))
+    else if (StrEq(name, StrL("items_center")))
         element->ItemsCenter();
-    else if (StrEq(name, "items_start"))
+    else if (StrEq(name, StrL("items_start")))
         element->ItemsStart();
-    else if (StrEq(name, "items_end"))
+    else if (StrEq(name, StrL("items_end")))
         element->ItemsEnd();
-    else if (StrEq(name, "items_stretch"))
+    else if (StrEq(name, StrL("items_stretch")))
         element->ItemsStretch();
-    else if (StrEq(name, "justify_center"))
+    else if (StrEq(name, StrL("justify_center")))
         element->JustifyCenter();
-    else if (StrEq(name, "justify_start"))
+    else if (StrEq(name, StrL("justify_start")))
         element->JustifyStart();
-    else if (StrEq(name, "justify_end"))
+    else if (StrEq(name, StrL("justify_end")))
         element->JustifyEnd();
-    else if (StrEq(name, "justify_between"))
+    else if (StrEq(name, StrL("justify_between")))
         element->JustifyBetween();
-    else if (StrEq(name, "justify_around"))
+    else if (StrEq(name, StrL("justify_around")))
         element->JustifyAround();
-    else if (StrEq(name, "absolute"))
+    else if (StrEq(name, StrL("absolute")))
         element->Absolute();
     // `relative()` is the position an element already has — GPUI's own
     // default — so it says nothing rather than being unknown. A script writes
     // it to mark the box an absolutely placed child is measured against, which
     // is what it means in CSS and what it means here.
-    else if (StrEq(name, "relative")) {
-    } else if (StrEq(name, "fixed"))
+    else if (StrEq(name, StrL("relative"))) {
+    } else if (StrEq(name, StrL("fixed")))
         element->Fixed();
-    else if (StrEq(name, "overflow_hidden"))
+    else if (StrEq(name, StrL("overflow_hidden")))
         element->ClipX()->ClipY();
-    else if (StrEq(name, "overflow_x_hidden"))
+    else if (StrEq(name, StrL("overflow_x_hidden")))
         element->ClipX();
-    else if (StrEq(name, "overflow_y_hidden"))
+    else if (StrEq(name, StrL("overflow_y_hidden")))
         element->ClipY();
-    else if (StrEq(name, "overflow_scroll"))
+    else if (StrEq(name, StrL("overflow_scroll")))
         element->ScrollX(0)->ScrollY(0);
-    else if (StrEq(name, "overflow_x_scroll"))
+    else if (StrEq(name, StrL("overflow_x_scroll")))
         element->ScrollX(0);
-    else if (StrEq(name, "overflow_y_scroll"))
+    else if (StrEq(name, StrL("overflow_y_scroll")))
         element->ScrollY(0);
-    else if (StrEq(name, "truncate"))
+    else if (StrEq(name, StrL("truncate")))
         element->Truncate();
-    else if (StrEq(name, "whitespace_normal"))
+    else if (StrEq(name, StrL("whitespace_normal")))
         element->Wrap();
-    else if (StrEq(name, "underline"))
+    else if (StrEq(name, StrL("underline")))
         element->Underline();
-    else if (StrEq(name, "italic"))
+    else if (StrEq(name, StrL("italic")))
         element->Italic();
-    else if (StrEq(name, "line_through"))
+    else if (StrEq(name, StrL("line_through")))
         element->Strikethrough();
-    else if (StrEq(name, "font_medium"))
+    else if (StrEq(name, StrL("font_medium")))
         element->Medium();
-    else if (StrEq(name, "font_semibold"))
+    else if (StrEq(name, StrL("font_semibold")))
         element->Semibold();
-    else if (StrEq(name, "font_bold"))
+    else if (StrEq(name, StrL("font_bold")))
         element->Bold();
-    else if (StrEq(name, "font_normal"))
+    else if (StrEq(name, StrL("font_normal")))
         element->Weight(FontWeight::Normal);
-    else if (StrEq(name, "font_thin"))
+    else if (StrEq(name, StrL("font_thin")))
         element->Weight((FontWeight)100);
-    else if (StrEq(name, "font_extralight"))
+    else if (StrEq(name, StrL("font_extralight")))
         element->Weight((FontWeight)200);
-    else if (StrEq(name, "font_light"))
+    else if (StrEq(name, StrL("font_light")))
         element->Weight((FontWeight)300);
-    else if (StrEq(name, "font_extrabold"))
+    else if (StrEq(name, StrL("font_extrabold")))
         element->Weight((FontWeight)800);
-    else if (StrEq(name, "font_black"))
+    else if (StrEq(name, StrL("font_black")))
         element->Weight((FontWeight)900);
-    else if (StrEq(name, "text_xs"))
+    else if (StrEq(name, StrL("text_xs")))
         element->Font(12);
-    else if (StrEq(name, "text_sm"))
+    else if (StrEq(name, StrL("text_sm")))
         element->Font(14);
-    else if (StrEq(name, "text_base"))
+    else if (StrEq(name, StrL("text_base")))
         element->Font(16);
-    else if (StrEq(name, "text_lg"))
+    else if (StrEq(name, StrL("text_lg")))
         element->Font(18);
-    else if (StrEq(name, "text_xl"))
+    else if (StrEq(name, StrL("text_xl")))
         element->Font(20);
-    else if (StrEq(name, "cursor_pointer"))
+    else if (StrEq(name, StrL("cursor_pointer")))
         element->Cursor(CursorKind::Pointer);
-    else if (StrEq(name, "cursor_text"))
+    else if (StrEq(name, StrL("cursor_text")))
         element->Cursor(CursorKind::IBeam);
-    else if (StrEq(name, "cursor_col_resize"))
+    else if (StrEq(name, StrL("cursor_col_resize")))
         element->Cursor(CursorKind::ColResize);
-    else if (StrEq(name, "cursor_row_resize"))
+    else if (StrEq(name, StrL("cursor_row_resize")))
         element->Cursor(CursorKind::RowResize);
-    else if (StrEq(name, "invisible"))
+    else if (StrEq(name, StrL("invisible")))
         element->Opacity(0);
-    else if (StrEq(name, "visible"))
+    else if (StrEq(name, StrL("visible")))
         element->Opacity(1);
     else {
         bool found = false;
@@ -695,146 +690,146 @@ static bool ApplyNullary(El* element, Str name) {
 static bool ApplyParam(El* e, const shell::SpecOp& op) {
     MaterialLength length = LengthOf(Arg(op, 0));
     Rgba color = {};
-    if (StrEq(op.name, "w") && length.valid) {
+    if (StrEq(op.name, StrL("w")) && length.valid) {
         if (length.fraction != 0)
             e->WFrac(length.fraction);
         else
             e->style.width = length.automatic ? kAuto : length.pixels;
-    } else if (StrEq(op.name, "h") && length.valid)
+    } else if (StrEq(op.name, StrL("h")) && length.valid)
         e->style.height = length.automatic ? kAuto : length.pixels;
-    else if (StrEq(op.name, "size") && length.valid) {
+    else if (StrEq(op.name, StrL("size")) && length.valid) {
         e->style.width = e->style
                              .height = length.automatic ? kAuto : length.pixels;
-    } else if (StrEq(op.name, "min_w") && length.valid)
+    } else if (StrEq(op.name, StrL("min_w")) && length.valid)
         e->style.minW = length.automatic ? kAuto : length.pixels;
-    else if (StrEq(op.name, "min_h") && length.valid)
+    else if (StrEq(op.name, StrL("min_h")) && length.valid)
         e->style.minH = length.automatic ? kAuto : length.pixels;
-    else if (StrEq(op.name, "min_size") && length.valid)
+    else if (StrEq(op.name, StrL("min_size")) && length.valid)
         e->style.minW = e->style
                             .minH = length.automatic ? kAuto : length.pixels;
-    else if (StrEq(op.name, "max_w") && length.valid)
+    else if (StrEq(op.name, StrL("max_w")) && length.valid)
         e->style.maxW = length.automatic ? 1e9f : length.pixels;
-    else if (StrEq(op.name, "max_h") && length.valid)
+    else if (StrEq(op.name, StrL("max_h")) && length.valid)
         e->style.maxH = length.automatic ? 1e9f : length.pixels;
-    else if (StrEq(op.name, "max_size") && length.valid)
+    else if (StrEq(op.name, StrL("max_size")) && length.valid)
         e->style.maxW = e->style.maxH = length.automatic ? 1e9f : length.pixels;
-    else if (StrEq(op.name, "p") && length.valid)
+    else if (StrEq(op.name, StrL("p")) && length.valid)
         e->Pad(length.pixels);
-    else if (StrEq(op.name, "px") && length.valid)
+    else if (StrEq(op.name, StrL("px")) && length.valid)
         e->PadX(length.pixels);
-    else if (StrEq(op.name, "py") && length.valid)
+    else if (StrEq(op.name, StrL("py")) && length.valid)
         e->PadY(length.pixels);
-    else if (StrEq(op.name, "pt") && length.valid)
+    else if (StrEq(op.name, StrL("pt")) && length.valid)
         e->PadT(length.pixels);
-    else if (StrEq(op.name, "pb") && length.valid)
+    else if (StrEq(op.name, StrL("pb")) && length.valid)
         e->PadB(length.pixels);
-    else if (StrEq(op.name, "pl") && length.valid)
+    else if (StrEq(op.name, StrL("pl")) && length.valid)
         e->PadL(length.pixels);
-    else if (StrEq(op.name, "pr") && length.valid)
+    else if (StrEq(op.name, StrL("pr")) && length.valid)
         e->PadR(length.pixels);
-    else if (StrEq(op.name, "m") && length.valid)
+    else if (StrEq(op.name, StrL("m")) && length.valid)
         e->Margin(length.pixels);
-    else if (StrEq(op.name, "mx") && length.valid)
+    else if (StrEq(op.name, StrL("mx")) && length.valid)
         e->MarginX(length.pixels);
-    else if (StrEq(op.name, "my") && length.valid)
+    else if (StrEq(op.name, StrL("my")) && length.valid)
         e->MarginY(length.pixels);
-    else if (StrEq(op.name, "mt") && length.valid)
+    else if (StrEq(op.name, StrL("mt")) && length.valid)
         e->MarginT(length.pixels);
-    else if (StrEq(op.name, "mb") && length.valid)
+    else if (StrEq(op.name, StrL("mb")) && length.valid)
         e->MarginB(length.pixels);
-    else if (StrEq(op.name, "ml") && length.valid)
+    else if (StrEq(op.name, StrL("ml")) && length.valid)
         e->MarginL(length.pixels);
-    else if (StrEq(op.name, "mr") && length.valid)
+    else if (StrEq(op.name, StrL("mr")) && length.valid)
         e->MarginR(length.pixels);
-    else if (StrEq(op.name, "inset") && length.valid)
+    else if (StrEq(op.name, StrL("inset")) && length.valid)
         e->Top(length.pixels)
             ->Bottom(length.pixels)
             ->Left(length.pixels)
             ->Right(length.pixels);
-    else if (StrEq(op.name, "top") && length.valid) {
+    else if (StrEq(op.name, StrL("top")) && length.valid) {
         if (length.fraction != 0)
             e->TopRel(length.fraction);
         else
             e->Top(length.pixels);
-    } else if (StrEq(op.name, "bottom") && length.valid) {
+    } else if (StrEq(op.name, StrL("bottom")) && length.valid) {
         if (length.fraction != 0)
             e->BottomRel(length.fraction);
         else
             e->Bottom(length.pixels);
-    } else if (StrEq(op.name, "left") && length.valid) {
+    } else if (StrEq(op.name, StrL("left")) && length.valid) {
         if (length.fraction != 0)
             e->LeftRel(length.fraction);
         else
             e->Left(length.pixels);
-    } else if (StrEq(op.name, "right") && length.valid) {
+    } else if (StrEq(op.name, StrL("right")) && length.valid) {
         if (length.fraction != 0)
             e->RightRel(length.fraction);
         else
             e->Right(length.pixels);
-    } else if (StrEq(op.name, "gap") && length.valid)
+    } else if (StrEq(op.name, StrL("gap")) && length.valid)
         e->Gap(length.pixels);
-    else if (StrEq(op.name, "gap_x") && length.valid)
+    else if (StrEq(op.name, StrL("gap_x")) && length.valid)
         e->GapX(length.pixels);
-    else if (StrEq(op.name, "gap_y") && length.valid)
+    else if (StrEq(op.name, StrL("gap_y")) && length.valid)
         e->GapY(length.pixels);
-    else if (StrEq(op.name, "flex_grow"))
+    else if (StrEq(op.name, StrL("flex_grow")))
         e->Grow(AsNumber(op, 0));
-    else if (StrEq(op.name, "flex_shrink"))
+    else if (StrEq(op.name, StrL("flex_shrink")))
         e->Shrink(AsNumber(op, 0));
-    else if (StrEq(op.name, "flex_basis") && length.valid)
+    else if (StrEq(op.name, StrL("flex_basis")) && length.valid)
         e->Basis(length.pixels);
-    else if (StrEq(op.name, "bg") && StyleColor(op, &color))
+    else if (StrEq(op.name, StrL("bg")) && StyleColor(op, &color))
         e->Bg(color);
-    else if (StrEq(op.name, "text_color") && StyleColor(op, &color))
+    else if (StrEq(op.name, StrL("text_color")) && StyleColor(op, &color))
         e->Fg(color);
-    else if (StrEq(op.name, "text_size") && length.valid)
+    else if (StrEq(op.name, StrL("text_size")) && length.valid)
         e->Font(length.pixels);
-    else if (StrEq(op.name, "font_family")) {
-        if (StrEq(AsString(op, 0), "monospace")) e->Mono();
-    } else if (StrEq(op.name, "font_weight"))
+    else if (StrEq(op.name, StrL("font_family"))) {
+        if (StrEq(AsString(op, 0), StrL("monospace"))) e->Mono();
+    } else if (StrEq(op.name, StrL("font_weight")))
         e->Weight((FontWeight)(int)AsNumber(op, 0, 400));
-    else if (StrEq(op.name, "line_height")) {
+    else if (StrEq(op.name, StrL("line_height"))) {
         const shell::Bridged* value = Arg(op, 0);
         if (value && value->kind == shell::BridgedKind::Number)
             e->LineHeight((float)value->number);
         else if (length.valid)
             e->LineHeight(length.pixels /
                           (e->style.fontSize > 0 ? e->style.fontSize : 16));
-    } else if (StrEq(op.name, "opacity"))
+    } else if (StrEq(op.name, StrL("opacity")))
         e->Opacity(AsNumber(op, 0, 1));
-    else if (StrEq(op.name, "border_color") && StyleColor(op, &color))
+    else if (StrEq(op.name, StrL("border_color")) && StyleColor(op, &color))
         e->style.borderColor = color;
-    else if (StrEq(op.name, "border") && length.valid)
+    else if (StrEq(op.name, StrL("border")) && length.valid)
         e->style.border = length.pixels;
-    else if (StrEq(op.name, "border_t") && length.valid)
+    else if (StrEq(op.name, StrL("border_t")) && length.valid)
         e->style.borderT = length.pixels;
-    else if (StrEq(op.name, "border_b") && length.valid)
+    else if (StrEq(op.name, StrL("border_b")) && length.valid)
         e->style.borderB = length.pixels;
-    else if (StrEq(op.name, "border_l") && length.valid)
+    else if (StrEq(op.name, StrL("border_l")) && length.valid)
         e->style.borderL = length.pixels;
-    else if (StrEq(op.name, "border_r") && length.valid)
+    else if (StrEq(op.name, StrL("border_r")) && length.valid)
         e->style.borderR = length.pixels;
-    else if (StrEq(op.name, "border_x") && length.valid)
+    else if (StrEq(op.name, StrL("border_x")) && length.valid)
         e->style.borderL = e->style.borderR = length.pixels;
-    else if (StrEq(op.name, "border_y") && length.valid)
+    else if (StrEq(op.name, StrL("border_y")) && length.valid)
         e->style.borderT = e->style.borderB = length.pixels;
-    else if (StrEq(op.name, "rounded") && length.valid)
+    else if (StrEq(op.name, StrL("rounded")) && length.valid)
         e->Radius(length.pixels);
-    else if (StrEq(op.name, "rounded_t") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_t")) && length.valid)
         e->Corners(length.pixels, length.pixels, 0, 0);
-    else if (StrEq(op.name, "rounded_b") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_b")) && length.valid)
         e->Corners(0, 0, length.pixels, length.pixels);
-    else if (StrEq(op.name, "rounded_l") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_l")) && length.valid)
         e->Corners(length.pixels, 0, 0, length.pixels);
-    else if (StrEq(op.name, "rounded_r") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_r")) && length.valid)
         e->Corners(0, length.pixels, length.pixels, 0);
-    else if (StrEq(op.name, "rounded_tl") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_tl")) && length.valid)
         e->Corners(length.pixels, 0, 0, 0);
-    else if (StrEq(op.name, "rounded_tr") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_tr")) && length.valid)
         e->Corners(0, length.pixels, 0, 0);
-    else if (StrEq(op.name, "rounded_br") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_br")) && length.valid)
         e->Corners(0, 0, length.pixels, 0);
-    else if (StrEq(op.name, "rounded_bl") && length.valid)
+    else if (StrEq(op.name, StrL("rounded_bl")) && length.valid)
         e->Corners(0, 0, 0, length.pixels);
     else
         return false;
@@ -842,39 +837,45 @@ static bool ApplyParam(El* e, const shell::SpecOp& op) {
 }
 
 static uint32_t StyleFieldsFor(Str name) {
-    if (StrEq(name, "bg")) return StyleFieldBg;
-    if (StrEq(name, "text_color")) return StyleFieldColor;
-    if (StrEq(name, "border_color")) return StyleFieldBorderColor;
-    if (StrEq(name, "opacity") || StrEq(name, "invisible") ||
-        StrEq(name, "visible"))
+    if (StrEq(name, StrL("bg"))) return StyleFieldBg;
+    if (StrEq(name, StrL("text_color"))) return StyleFieldColor;
+    if (StrEq(name, StrL("border_color"))) return StyleFieldBorderColor;
+    if (StrEq(name, StrL("opacity")) || StrEq(name, StrL("invisible")) ||
+        StrEq(name, StrL("visible")))
         return StyleFieldOpacity;
-    if (StrEq(name, "w") || StrEq(name, "w_full") || StrEq(name, "w_auto"))
+    if (StrEq(name, StrL("w")) || StrEq(name, StrL("w_full")) ||
+        StrEq(name, StrL("w_auto")))
         return StyleFieldWidth;
-    if (StrEq(name, "h") || StrEq(name, "h_full") || StrEq(name, "h_auto"))
+    if (StrEq(name, StrL("h")) || StrEq(name, StrL("h_full")) ||
+        StrEq(name, StrL("h_auto")))
         return StyleFieldHeight;
-    if (StrEq(name, "size") || StrEq(name, "size_full"))
+    if (StrEq(name, StrL("size")) || StrEq(name, StrL("size_full")))
         return StyleFieldWidth | StyleFieldHeight;
-    if (StrEq(name, "text_size") || StrStartsWith(name, "text_"))
+    if (StrEq(name, StrL("text_size")) || StrStartsWith(name, "text_"))
         return StyleFieldFontSize;
-    if (StrEq(name, "gap") || StrEq(name, "gap_x") || StrEq(name, "gap_y") ||
-        StrStartsWith(name, "gap_"))
+    if (StrEq(name, StrL("gap")) || StrEq(name, StrL("gap_x")) ||
+        StrEq(name, StrL("gap_y")) || StrStartsWith(name, "gap_"))
         return StyleFieldGap;
-    if (StrEq(name, "p") || StrEq(name, "px") || StrEq(name, "py") ||
-        StrEq(name, "pt") || StrEq(name, "pb") || StrEq(name, "pl") ||
-        StrEq(name, "pr") || StrStartsWith(name, "p_"))
+    if (StrEq(name, StrL("p")) || StrEq(name, StrL("px")) ||
+        StrEq(name, StrL("py")) || StrEq(name, StrL("pt")) ||
+        StrEq(name, StrL("pb")) || StrEq(name, StrL("pl")) ||
+        StrEq(name, StrL("pr")) || StrStartsWith(name, "p_"))
         return StyleFieldPad;
-    if (StrEq(name, "m") || StrEq(name, "mx") || StrEq(name, "my") ||
-        StrEq(name, "mt") || StrEq(name, "mb") || StrEq(name, "ml") ||
-        StrEq(name, "mr") || StrStartsWith(name, "m_"))
+    if (StrEq(name, StrL("m")) || StrEq(name, StrL("mx")) ||
+        StrEq(name, StrL("my")) || StrEq(name, StrL("mt")) ||
+        StrEq(name, StrL("mb")) || StrEq(name, StrL("ml")) ||
+        StrEq(name, StrL("mr")) || StrStartsWith(name, "m_"))
         return StyleFieldMargin;
     if (StrStartsWith(name, "rounded")) return StyleFieldRadius;
-    if (StrEq(name, "border_t")) return StyleFieldBorderT;
-    if (StrEq(name, "border_b")) return StyleFieldBorderB;
-    if (StrEq(name, "border_l")) return StyleFieldBorderL;
-    if (StrEq(name, "border_r")) return StyleFieldBorderR;
-    if (StrEq(name, "border_x")) return StyleFieldBorderL | StyleFieldBorderR;
-    if (StrEq(name, "border_y")) return StyleFieldBorderT | StyleFieldBorderB;
-    if (StrEq(name, "border") || StrStartsWith(name, "border_"))
+    if (StrEq(name, StrL("border_t"))) return StyleFieldBorderT;
+    if (StrEq(name, StrL("border_b"))) return StyleFieldBorderB;
+    if (StrEq(name, StrL("border_l"))) return StyleFieldBorderL;
+    if (StrEq(name, StrL("border_r"))) return StyleFieldBorderR;
+    if (StrEq(name, StrL("border_x")))
+        return StyleFieldBorderL | StyleFieldBorderR;
+    if (StrEq(name, StrL("border_y")))
+        return StyleFieldBorderT | StyleFieldBorderB;
+    if (StrEq(name, StrL("border")) || StrStartsWith(name, "border_"))
         return StyleFieldBorder;
     return 0;
 }
@@ -923,11 +924,11 @@ static void ApplyStateNode(Ctx* cx, const shell::SpecNode* state, El* target,
     StateStyle style;
     style.style = resolved->style;
     style.set = fields;
-    if (StrEq(kind, "hover"))
+    if (StrEq(kind, StrL("hover")))
         target->Hover(style);
-    else if (StrEq(kind, "active"))
+    else if (StrEq(kind, StrL("active")))
         target->Active(style);
-    else if (StrEq(kind, "focus"))
+    else if (StrEq(kind, StrL("focus")))
         target->Focus(style);
 }
 
@@ -1083,20 +1084,20 @@ static void PaintMaterialPath(PaintCtx* ctx, El* element, void* user) {
     Point current = {}, start = {};
     bool hasCurrent = false;
     for (const shell::SpecOp& op : node->ops) {
-        if (StrEq(op.name, "move_to")) {
+        if (StrEq(op.name, StrL("move_to"))) {
             Point point;
             if (!PathPoint(op, 0, bounds, &point)) continue;
             PathMoveTo(path, point.x, point.y);
             current = start = point;
             hasCurrent = true;
-        } else if (StrEq(op.name, "line_to")) {
+        } else if (StrEq(op.name, StrL("line_to"))) {
             Point point;
             if (!PathPoint(op, 0, bounds, &point)) continue;
             PathLineTo(path, point.x, point.y);
             current = point;
             if (!hasCurrent) start = point;
             hasCurrent = true;
-        } else if (StrEq(op.name, "curve_to") && hasCurrent) {
+        } else if (StrEq(op.name, StrL("curve_to")) && hasCurrent) {
             Point to, control;
             if (!PathPoint(op, 0, bounds, &to) ||
                 !PathPoint(op, 2, bounds, &control))
@@ -1107,14 +1108,14 @@ static void PaintMaterialPath(PaintCtx* ctx, El* element, void* user) {
                        to.y + (control.y - to.y) * 2.f / 3.f};
             PathCubicTo(path, a.x, a.y, b.x, b.y, to.x, to.y);
             current = to;
-        } else if (StrEq(op.name, "cubic_bezier_to") && hasCurrent) {
+        } else if (StrEq(op.name, StrL("cubic_bezier_to")) && hasCurrent) {
             Point to, a, b;
             if (!PathPoint(op, 0, bounds, &to) ||
                 !PathPoint(op, 2, bounds, &a) || !PathPoint(op, 4, bounds, &b))
                 continue;
             PathCubicTo(path, a.x, a.y, b.x, b.y, to.x, to.y);
             current = to;
-        } else if (StrEq(op.name, "arc_to") && hasCurrent) {
+        } else if (StrEq(op.name, StrL("arc_to")) && hasCurrent) {
             float rx = 0, ry = 0;
             Point to;
             if (!PathCoordinate(Arg(op, 0), 0, bounds.w, &rx) ||
@@ -1124,7 +1125,7 @@ static void PaintMaterialPath(PaintCtx* ctx, El* element, void* user) {
             PathEllipticalArc(path, current, to, rx, ry, AsNumber(op, 2),
                               AsBool(op, 3), AsBool(op, 4));
             current = to;
-        } else if (StrEq(op.name, "close") && hasCurrent) {
+        } else if (StrEq(op.name, StrL("close")) && hasCurrent) {
             PathClose(path);
             current = start;
         }
@@ -1149,7 +1150,8 @@ static const shell::SpecOp* MotionFor(const shell::SpecNode* node,
     const shell::SpecOp* found = nullptr;
     if (!node) return nullptr;
     for (const shell::SpecOp& op : node->ops) {
-        if ((!StrEq(op.name, "transition") && !StrEq(op.name, "spring")) ||
+        if ((!StrEq(op.name, StrL("transition")) &&
+             !StrEq(op.name, StrL("spring"))) ||
             !StrEq(AsString(op, 0), property))
             continue;
         found = &op;
@@ -1161,30 +1163,31 @@ static bool MotionTarget(const shell::SpecNode* node, Str property,
                          const Style& style, float* target) {
     bool declared = false;
     for (const shell::SpecOp& op : node->ops) {
-        if ((StrEq(property, "opacity") && StrEq(op.name, "opacity")) ||
-            (StrEq(property, "width") &&
-             (StrEq(op.name, "w") || StrEq(op.name, "size"))) ||
-            (StrEq(property, "height") &&
-             (StrEq(op.name, "h") || StrEq(op.name, "size"))) ||
-            (StrEq(property, "left") && StrEq(op.name, "left")) ||
-            (StrEq(property, "top") && StrEq(op.name, "top")))
+        if ((StrEq(property, StrL("opacity")) &&
+             StrEq(op.name, StrL("opacity"))) ||
+            (StrEq(property, StrL("width")) &&
+             (StrEq(op.name, StrL("w")) || StrEq(op.name, StrL("size")))) ||
+            (StrEq(property, StrL("height")) &&
+             (StrEq(op.name, StrL("h")) || StrEq(op.name, StrL("size")))) ||
+            (StrEq(property, StrL("left")) && StrEq(op.name, StrL("left"))) ||
+            (StrEq(property, StrL("top")) && StrEq(op.name, StrL("top"))))
             declared = true;
     }
     if (!declared) return false;
-    if (StrEq(property, "opacity"))
+    if (StrEq(property, StrL("opacity")))
         *target = style.opacity;
-    else if (StrEq(property, "width")) {
+    else if (StrEq(property, StrL("width"))) {
         if (style.width == kAuto || style.width == kFill ||
             style.widthFrac != 0)
             return false;
         *target = style.width;
-    } else if (StrEq(property, "height")) {
+    } else if (StrEq(property, StrL("height"))) {
         if (style.height == kAuto || style.height == kFill) return false;
         *target = style.height;
-    } else if (StrEq(property, "left")) {
+    } else if (StrEq(property, StrL("left"))) {
         if (style.absLeft == kAuto || style.absLeftRel != 0) return false;
         *target = style.absLeft;
-    } else if (StrEq(property, "top")) {
+    } else if (StrEq(property, StrL("top"))) {
         if (style.absTop == kAuto || style.absTopRel != 0) return false;
         *target = style.absTop;
     } else {
@@ -1273,7 +1276,7 @@ static void ApplyMotions(Ctx* cx, const shell::SpecNode* node,
             continue;
         uint32_t key = MotionId(identity, property);
         float sampled = target;
-        if (StrEq(op->name, "spring")) {
+        if (StrEq(op->name, StrL("spring"))) {
             Spring spring = SpringNew(AsNumber(*op, 1, 250));
             spring.damping = AsNumber(*op, 2, 1);
             spring.epsilon = AsNumber(*op, 3, 0.001f);
@@ -1283,21 +1286,21 @@ static void ApplyMotions(Ctx* cx, const shell::SpecNode* node,
                 motion::Transition::New(AsNumber(*op, 1));
             policy.delayMs = AsNumber(*op, 2);
             Str easing = AsString(*op, 3);
-            if (StrEq(easing, "linear"))
+            if (StrEq(easing, StrL("linear")))
                 policy.easing = Easing::Custom(EaseLinear);
-            else if (StrEq(easing, "ease-in"))
+            else if (StrEq(easing, StrL("ease-in")))
                 policy.easing = Easing::Custom(EaseInCubic);
-            else if (StrEq(easing, "ease-in-out"))
+            else if (StrEq(easing, StrL("ease-in-out")))
                 policy.easing = Easing::Custom(EaseInOutCubic);
             sampled = MotionValue(cx, key, target, policy);
         }
-        if (StrEq(property, "opacity"))
+        if (StrEq(property, StrL("opacity")))
             element->style.opacity = sampled;
-        else if (StrEq(property, "width"))
+        else if (StrEq(property, StrL("width")))
             element->style.width = sampled;
-        else if (StrEq(property, "height"))
+        else if (StrEq(property, StrL("height")))
             element->style.height = sampled;
-        else if (StrEq(property, "left"))
+        else if (StrEq(property, StrL("left")))
             element->style.absLeft = sampled;
         else
             element->style.absTop = sampled;
@@ -1472,9 +1475,9 @@ static El* WireDockCommands(Ctx* cx, El* element,
         }
         const DockTabGroup* group = frame->group;
         const DockCtx* region = frame->dockCtx;
-        if (StrEq(op.name, "select_tab") && group) {
+        if (StrEq(op.name, StrL("select_tab")) && group) {
             element = DockBindTab(group, (int)AsNumber(op, 2, -1), element);
-        } else if (StrEq(op.name, "close_panel") && group) {
+        } else if (StrEq(op.name, StrL("close_panel")) && group) {
             // The script holds the panel id the area reported; base binds by
             // position in the row, and the two are one lookup apart.
             // A panel id is a whole 64-bit number; float would round it.
@@ -1491,19 +1494,19 @@ static El* WireDockCommands(Ctx* cx, El* element,
                 }
             }
             if (at >= 0) element = DockBindClose(group, at, element);
-        } else if (StrEq(op.name, "toggle_zoom") && group) {
+        } else if (StrEq(op.name, StrL("toggle_zoom")) && group) {
             int active = DockGroupActiveIx(group);
             if (active >= 0) element = DockBindZoom(group, active, element);
-        } else if (StrEq(op.name, "drag_tab") && group) {
+        } else if (StrEq(op.name, StrL("drag_tab")) && group) {
             element =
                 DockBindTitleDrag(group, (int)AsNumber(op, 2, -1), element);
-        } else if (StrEq(op.name, "drop_tab") && group) {
+        } else if (StrEq(op.name, StrL("drop_tab")) && group) {
             // A tab bar that names no slot means "append", which is what a
             // drop past the last tab is.
             float at = AsNumber(op, 2, -1);
             element = at < 0 ? DockBindTabRest(group, element)
                              : DockBindTab(group, (int)at, element);
-        } else if (StrEq(op.name, "toggle_dock") && (group || region)) {
+        } else if (StrEq(op.name, StrL("toggle_dock")) && (group || region)) {
             DockPlacement placement = DockPlacementOfName(AsString(op, 1));
             if (group) {
                 element = DockBindToggle(group, placement, element);
@@ -1518,7 +1521,7 @@ static El* WireDockCommands(Ctx* cx, El* element,
                                        (intptr_t)placement));
                 element->TabStop(false);
             }
-        } else if (StrEq(op.name, "resize_dock") && region) {
+        } else if (StrEq(op.name, StrL("resize_dock")) && region) {
             element = DockBindResizeStrip(region, element);
         } else {
             logf(

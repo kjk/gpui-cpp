@@ -197,7 +197,7 @@ static bool OpenParent(HANDLE root, Str rootName, Str relative, HANDLE* parent,
                        WCHAR leaf[256], Str* error) {
     *parent = nullptr;
     leaf[0] = 0;
-    if (StrEq(relative, ".")) {
+    if (StrEq(relative, StrL("."))) {
         if (!DuplicateHandle(GetCurrentProcess(), root, GetCurrentProcess(),
                              parent, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
             FsError(error, fmt("cannot open `%s/%s`: Windows error %u",
@@ -251,7 +251,7 @@ static bool OpenParent(HANDLE root, Str rootName, Str relative, HANDLE* parent,
 
 static HANDLE OpenDirectory(HANDLE root, Str rootName, Str relative,
                             Str* error) {
-    if (StrEq(relative, ".")) {
+    if (StrEq(relative, StrL("."))) {
         HANDLE copy = nullptr;
         DuplicateHandle(GetCurrentProcess(), root, GetCurrentProcess(), &copy,
                         0, FALSE, DUPLICATE_SAME_ACCESS);
@@ -436,7 +436,7 @@ static bool ReadDirectory(HANDLE root, Str rootName, Str relative,
 
 static bool MakeDirectoryRecursive(HANDLE root, Str rootName, Str relative,
                                    Str* error) {
-    if (StrEq(relative, ".")) return true;
+    if (StrEq(relative, StrL("."))) return true;
     WCHAR* path = WideDup(relative);
     if (!path) return false;
     HANDLE current = nullptr;

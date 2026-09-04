@@ -166,7 +166,7 @@ static void ReplacingItemsResetsBothInteractionIndices() {
     TreeSetItems(&s, nullptr, &only, 1);
     utassert(s.items.len == 1 && s.entries.len == 1);
     utassert(s.selected == -1 && s.rightClicked == -1);
-    utassert(base::StrEq(TreeEntryAt(&s, 0).item->id, "Cargo.toml"));
+    utassert(base::StrEq(TreeEntryAt(&s, 0).item->id, StrL("Cargo.toml")));
 }
 
 static void TheStateOwnsTheStringsItIsGiven() {
@@ -179,16 +179,16 @@ static void TheStateOwnsTheStringsItIsGiven() {
     utassert(TreeAddItem(&s, id, label, -1) == 0);
     id.s[0] = 'X';
     label.s[0] = 'Y';
-    utassert(base::StrEq(s.items[0].id, "root"));
-    utassert(base::StrEq(s.items[0].label, "Root"));
+    utassert(base::StrEq(s.items[0].id, StrL("root")));
+    utassert(base::StrEq(s.items[0].label, StrL("Root")));
 
     TreeItem only = {};
     only.id = StrL("Cargo.toml");
     only.label = only.id;
     TreeSetItems(&s, nullptr, &only, 1);
     utassert(s.items.len == 1);
-    utassert(base::StrEq(s.items[0].id, "Cargo.toml"));
-    utassert(base::StrEq(s.items[0].label, "Cargo.toml"));
+    utassert(base::StrEq(s.items[0].id, StrL("Cargo.toml")));
+    utassert(base::StrEq(s.items[0].label, StrL("Cargo.toml")));
 }
 
 static void SelectingHiddenItemExpandsItsAncestors() {
@@ -197,7 +197,7 @@ static void SelectingHiddenItemExpandsItsAncestors() {
     utassert(TreeIndexOf(&s, StrL("b1")) == -1);
     TreeSetSelectedItem(&s, nullptr, StrL("b1"));
     utassert(s.selected == 3);
-    utassert(base::StrEq(TreeEntryItem(&s, s.selected)->id, "b1"));
+    utassert(base::StrEq(TreeEntryItem(&s, s.selected)->id, StrL("b1")));
     utassert(s.items[0].expanded && s.items[2].expanded);
     TreeSetSelectedItem(&s, nullptr, {});
     utassert(s.selected == -1);

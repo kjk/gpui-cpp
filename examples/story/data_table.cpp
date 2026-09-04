@@ -601,8 +601,9 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
         case 1:
             // render_td's market arm: US in blue and every other exchange
             // in magenta.
-            return StoryTxt(cx, Str(s.market), 16,
-                            StrEq(Str(s.market), "US") ? th.blue : th.magenta)
+            return StoryTxt(
+                       cx, Str(s.market), 16,
+                       StrEq(Str(s.market), StrL("US")) ? th.blue : th.magenta)
                 ->LineHeight(1.f);
         case 2:
             // The table clips the cell to its column, so a long name is cut

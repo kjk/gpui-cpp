@@ -23,9 +23,9 @@ static void TestSharedSurface(Arena* a) {
         ParseFragment(a, StrL("<p id='a&amp;b'>one<br>two &lt; three</p>"));
     Node* p = ElementChild(a, doc, StrL("p"));
     utassert(p != nullptr);
-    utassert(base::StrEq(AttrValue(a, p, StrL("id")), "a&b"));
+    utassert(base::StrEq(AttrValue(a, p, StrL("id")), StrL("a&b")));
     Node* first = NodeFirst(a, p);
-    utassert(first && base::StrEq(NodeData(a, first), "one"));
+    utassert(first && base::StrEq(NodeData(a, first), StrL("one")));
     utassert(ElementChild(a, p, StrL("br")) != nullptr);
 
     Str serialized = Serialize(a, doc);
@@ -49,9 +49,9 @@ static void TestDocumentAndImpliedEnds(Arena* a) {
     Node* second = ElementChild(a, body, StrL("p"), 1);
     utassert(first && second);
     utassert(NodeFirst(a, first) &&
-             base::StrEq(NodeData(a, NodeFirst(a, first)), "one"));
+             base::StrEq(NodeData(a, NodeFirst(a, first)), StrL("one")));
     utassert(NodeFirst(a, second) &&
-             base::StrEq(NodeData(a, NodeFirst(a, second)), "two"));
+             base::StrEq(NodeData(a, NodeFirst(a, second)), StrL("two")));
 }
 
 static void TestTableModes(Arena* a) {
@@ -60,7 +60,7 @@ static void TestTableModes(Arena* a) {
     Node* body = DocumentBody(a, doc);
     utassert(body && NodeFirst(a, body) &&
              NodeFirst(a, body)->kind == NodeKind::Text);
-    utassert(base::StrEq(NodeData(a, NodeFirst(a, body)), "before"));
+    utassert(base::StrEq(NodeData(a, NodeFirst(a, body)), StrL("before")));
     Node* table = ElementChild(a, body, StrL("table"));
     Node* tbody = ElementChild(a, table, StrL("tbody"));
     utassert(tbody && tbody->implicit);
