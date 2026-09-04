@@ -1289,17 +1289,15 @@ AnchoredPosition AnchoredCornerResolve(Anchor anchor, Point at, Size popup,
                                        Size view, float margin);
 
 struct Style {
-    Display display = Display::Block;
-    FlexDir dir = FlexDir::Row;
-    FlexAlign align = FlexAlign::Stretch;
-    // align_self, which overrides the line's align_items for this item alone
-    // — `self_start()` / `self_end()`, how a chat bubble sits at one edge of
-    // a column that stretches everything else. Unset is "follow the line".
-    FlexAlign alignSelf = FlexAlign::Stretch;
-    bool hasAlignSelf = false;
-    Justify justify = Justify::Start;
-    Overflow overflowY = Overflow::Visible;
-    Overflow overflowX = Overflow::Visible;
+    // Keep pointer-aligned members together at the front, then 32-bit values,
+    // then the 16- and 8-bit tail. Style is copied into every frame element,
+    // so padding here is paid throughout the UI tree.
+    // Arena-owned copy of Styled::shadow(Vec<BoxShadow>). Shadows do not
+    // participate in layout; they paint behind the element in declaration
+    // order, as GPUI's box-shadow list does.
+    const BoxShadow* shadows = nullptr;
+    Str tooltip;
+
     float width = kAuto;
     float height = kAuto;
     // w_1_2 / w_2_3 / …: a fraction of the parent's content box, which GPUI
@@ -1349,17 +1347,12 @@ struct Style {
     float borderL = 0;
     float borderR = 0;
     float radius = 0;
-    // The four corners, when they are not all `radius`. `hasCorners` is what
-    // says to read them at all, so the ordinary case costs one bool.
+    // The four corners, when they are not all `radius`. `hasCorners` below is
+    // what says to read them at all.
     Corners corners = {};
-    bool hasCorners = false;
     Background bg = {};
     Rgba borderColor = {};
     Rgba color = {};
-    // Arena-owned copy of Styled::shadow(Vec<BoxShadow>). Shadows do not
-    // participate in layout; they paint behind the element in declaration
-    // order, as GPUI's box-shadow list does.
-    const BoxShadow* shadows = nullptr;
     int shadowCount = 0;
     // Transformation::rotate: turns clockwise about the element's own centre,
     // where 1 is a whole one. Only an icon reads it — a rotated box would want
@@ -1371,33 +1364,97 @@ struct Style {
     float fontSize = 0; // 0 = inherit
     // line_height as a multiple of the font size. 0 = GPUI's default, phi.
     float lineHeight = 0;
-    bool truncate = false;
-    bool wrap = false;
-    // flex_wrap on a row: children that do not fit start a new line.
-    bool flexWrap = false;
-    bool hasBg = false;
-    bool hasColor = false;
-    bool fontBold = false;
-    bool fontSemibold = false;
-    bool fontMedium = false; // font_medium(): DWrite weight 500
-    uint16_t fontWeight = 0;
-    bool fontMono = false;  // font_family("Consolas")
-    bool underline = false; // text_decoration_1()
-    // text_decoration_line_through(): a ~~del~~ run, an HTML <s> or <del>.
-    bool strike = false;
-    bool italic = false; // *emphasis*
-    bool borderDashed = false;
     // Dash on/off lengths for a dashed border, in stroke widths. GPUI's
     // border_dashed draws 2 on, 1 off; a dashed Separator paints its own path
     // with 4 on, 2 off.
     float dashOn = 2;
     float dashOff = 1;
-    bool absolute = false;
-    bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
-    // Laid out where it sits, painted after everything else — GPUI's
-    // deferred(): a popup anchored to its trigger still draws over the page
-    // below it, and hit-tests before it.
-    bool deferred = false;
+    float anchorGap = 0;
+    float anchorMargin = 4;
+    // Base Positioner's standalone element path. Unlike AnchorCorner and
+    // AnchorBelow, which derive the anchor from the parent El, this carries
+    // the captured window-coordinate bounds/point Rust gives Positioner.
+    Bounds positionerTrigger = {};
+    Point positionerPoint = {};
+    float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
+    // left(relative(f)) / right(relative(f)): the offset is that fraction of
+    // the parent's width, added to the pixel one. A stepper's connector needs
+    // it to reach from the middle of one step to the middle of the next.
+    float absLeftRel = 0, absRightRel = 0;
+    float absTopRel = 0, absBottomRel = 0;
+    Background hoverBg = {};
+    // hover(|style| style.text_color(..)): what the subtree under a hovered
+    // element paints with, for the descendants that set no color of their own.
+    Rgba hoverFg = {};
+    // active(|style| style.bg(..)): what the box paints with while it is held
+    // down. GPUI's `clicked_state` is set by the press and cleared by the
+    // release, so it stays on while the pointer slides off the element.
+    Background activeBg = {};
+    // .group_hover("", |this| this.bg(c)): the fill while the pointer is
+    // anywhere inside the group. The element's own hover and active fills win.
+    Background groupHoverBg = {};
+    int focusId = 0;
+    // FocusHandle::tab_index groups traversal by index, then paint order.
+    int tabIndex = 0;
+    // div().key_context(".."): the context a keystroke is resolved against
+    // while focus is anywhere in this subtree. Hashed, since that is all an
+    // id is; KeyContextOf keeps the parse behind the hash.
+    uint32_t keyContext = 0;
+    int trapId = 0;
+
+    // These 32 one-bit fields occupy one uint32_t allocation unit. Keep the
+    // three non-zero/default-sensitive focus flags in the byte-sized tail.
+    uint32_t hasAlignSelf : 1 = false;
+    uint32_t hasCorners : 1 = false;
+    uint32_t truncate : 1 = false;
+    uint32_t wrap : 1 = false;
+    // flex_wrap on a row: children that do not fit start a new line.
+    uint32_t flexWrap : 1 = false;
+    uint32_t hasBg : 1 = false;
+    uint32_t hasColor : 1 = false;
+    uint32_t fontBold : 1 = false;
+    uint32_t fontSemibold : 1 = false;
+    uint32_t fontMedium : 1 = false; // DWrite weight 500
+    uint32_t fontMono : 1 = false;   // font_family("Consolas")
+    uint32_t underline : 1 = false;  // text_decoration_1()
+    uint32_t strike : 1 = false;     // ~~del~~ or HTML <s>/<del>
+    uint32_t italic : 1 = false;     // *emphasis*
+    uint32_t borderDashed : 1 = false;
+    uint32_t absolute : 1 = false;
+    // fixed is out-of-flow in window coordinates; deferred paints an
+    // in-layout element after the page so popups draw and hit-test above it.
+    uint32_t fixed : 1 = false;
+    uint32_t deferred : 1 = false;
+    // Side placement can flip; the other anchors position against the parent.
+    uint32_t anchorFlip : 1 = false;
+    uint32_t anchorBelow : 1 = false;
+    uint32_t anchorAbove : 1 = false;
+    uint32_t anchorCenterX : 1 = false;
+    uint32_t anchorCorner : 1 = false;
+    uint32_t explicitPositioner : 1 = false;
+    uint32_t positionerCorner : 1 = false;
+    uint32_t hasHoverBg : 1 = false;
+    uint32_t hasHoverFg : 1 = false;
+    uint32_t hasActiveBg : 1 = false;
+    // A group resolves descendant group_hover styles from this element.
+    uint32_t group : 1 = false;
+    // Invisible until its group is hovered, while retaining its layout box.
+    uint32_t groupHoverVisible : 1 = false;
+    uint32_t hasGroupHoverBg : 1 = false;
+    // El::PathId supplies focusId after the tree path is known.
+    uint32_t focusFromPath : 1 = false;
+
+    uint16_t fontWeight = 0;
+    Display display = Display::Block;
+    FlexDir dir = FlexDir::Row;
+    FlexAlign align = FlexAlign::Stretch;
+    // align_self, which overrides the line's align_items for this item alone
+    // — `self_start()` / `self_end()`, how a chat bubble sits at one edge of
+    // a column that stretches everything else. Unset is "follow the line".
+    FlexAlign alignSelf = FlexAlign::Stretch;
+    Justify justify = Justify::Start;
+    Overflow overflowY = Overflow::Visible;
+    Overflow overflowX = Overflow::Visible;
     // Rust sorts deferred elements by priority. Zero is the normal popup
     // layer; TooltipOverlay asks for the dedicated layer above it.
     uint8_t deferredLayer = 0;
@@ -1406,76 +1463,11 @@ struct Style {
     // the two when neither does — `Positioner::side`, which is what a dropdown
     // uses upstream so a menu near the bottom of the window opens upward
     // instead of being clamped against the edge.
-    bool anchorFlip = false;
-    bool anchorBelow = false;   // absolute, just under the parent box
-    bool anchorAbove = false;   // absolute, just over it
-    bool anchorCenterX = false; // absolute, centered on the parent box
-    // Positioner::corner: `anchor`'s point on this element is placed at the
-    // matching point derived from its parent, then clamped without flipping.
-    bool anchorCorner = false;
     Anchor anchor = Anchor::TopLeft;
-    float anchorGap = 0;
-    float anchorMargin = 4;
-    // Base Positioner's standalone element path. Unlike AnchorCorner and
-    // AnchorBelow, which derive the anchor from the parent El, this carries
-    // the captured window-coordinate bounds/point Rust gives Positioner.
     // placement is Placement's Top/Bottom/Left/Right ordinal, or -1 for its
     // default Top preference; align is Positioner Align's ordinal.
-    bool explicitPositioner = false;
-    bool positionerCorner = false;
-    Bounds positionerTrigger = {};
-    Point positionerPoint = {};
     int8_t positionerPlacement = -1;
     uint8_t positionerAlign = 1;
-    float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
-    // left(relative(f)) / right(relative(f)): the offset is that fraction of
-    // the parent's width, added to the pixel one. A stepper's connector needs
-    // it to reach from the middle of one step to the middle of the next.
-    float absLeftRel = 0, absRightRel = 0;
-    float absTopRel = 0, absBottomRel = 0;
-    Background hoverBg = {};
-    bool hasHoverBg = false;
-    // hover(|style| style.text_color(..)): what the subtree under a hovered
-    // element paints with, for the descendants that set no color of their own.
-    Rgba hoverFg = {};
-    bool hasHoverFg = false;
-    // active(|style| style.bg(..)): what the box paints with while it is held
-    // down. GPUI's `clicked_state` is set by the press and cleared by the
-    // release, so it stays on while the pointer slides off the element —
-    // which is what lets a reader see a button still pressed as they move
-    // away from it, and see it come back to hover when they move back.
-    Background activeBg = {};
-    bool hasActiveBg = false;
-    // div().group(""): this element is the group a descendant's
-    // `group_hover` is resolved against, and the pointer being anywhere in
-    // its box is what counts as hovered — not the pointer being on this
-    // element rather than on something drawn over it.
-    bool group = false;
-    // .invisible().group_hover("", |this| this.visible()): the element keeps
-    // its box in layout and is simply not drawn while the group around it is
-    // not hovered, which is how a card's close button takes its corner
-    // whether or not it is showing.
-    bool groupHoverVisible = false;
-    // .group_hover("", |this| this.bg(c)): the fill while the pointer is
-    // anywhere inside the group, which is a different question from this
-    // element being the hovered one. The element's own hover and active
-    // fills still win over it.
-    Background groupHoverBg = {};
-    bool hasGroupHoverBg = false;
-    int focusId = 0;
-    // El::PathId asked for the focus id to be the element's path, which is
-    // only known once the tree is built. An explicit FocusId(v) — including
-    // FocusId(0), which is how a decorated wrapper stays out of the tab
-    // order — clears this and wins.
-    bool focusFromPath = false;
-    // FocusHandle::tab_index / tab_stop. The index groups the traversal: Tab
-    // visits every element of the lowest index in the order they were painted,
-    // then the next index, and so on, which is how a control can be reached
-    // before one that is laid out above it. A handle that is not a tab stop
-    // keeps its focus and its ring and is simply skipped by the traversal —
-    // an input's clear button, or a dock tab bar's tools, which the keyboard
-    // reaches through the thing they belong to rather than one at a time.
-    int tabIndex = 0;
     bool tabStop = true;
     // Whether a press on this element moves focus to it. GPUI's `track_focus`
     // does not: every widget in gpui-component that takes focus from a click
@@ -1485,20 +1477,15 @@ struct Style {
     // press used to focus anything with a handle here, which is why a clicked
     // button kept a focus ring the Rust one never shows.
     bool focusOnPress = false;
-    // div().key_context(".."): the context a keystroke is resolved against
-    // while focus is anywhere in this subtree, which a binding's predicate
-    // reads — "Editor", or "Editor mode=full". Hashed, since that is all an
-    // id is; KeyContextOf keeps the parse behind the hash.
-    uint32_t keyContext = 0;
     // Whether this focused element asked for the component focus appearance.
     // FocusId / TrackFocus only route keyboard input; Rust draws no generic
     // outline for them. A themed control calls focus_ring_style explicitly,
     // which is El::FocusRing(true) here. Turning it off drops the tinted
     // border along with the outside ring.
     bool focusRing = false;
-    int trapId = 0;
-    Str tooltip;
 };
+
+static_assert(sizeof(Style) <= 408, "keep Style members packed by alignment");
 
 // One `on_action` handler. The tree is frame-arena, so a handful of these
 // chained off an element costs a pointer each and dies with the frame.
