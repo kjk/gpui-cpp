@@ -22,7 +22,7 @@
 // The upstream pins are here too — which gpui-kit checkin this port
 // matches, and which crates it ports — because -compare is the only thing
 // that fetches anything from them, and this script has to carry them into
-// gpui-cpp-dist, where it and build.ts are the whole of cmd/. `-versions`
+// gpui-kit-cpp-dist, where it and build.ts are the whole of cmd/. `-versions`
 // prints them and syncs the tree.
 //
 // To run the Linux build from a Windows checkout, use cmd/wsl-run.ts.
@@ -532,7 +532,7 @@ function findDebugger(want: "any" | DebuggerKind, plat: Platform, exe: string, a
 //
 // These live in run.ts rather than in a module of their own because -compare
 // is the only thing that acts on them, and run.ts is one of the two scripts
-// gpui-cpp-dist carries: a snapshot has to be able to fetch and cargo-build
+// gpui-kit-cpp-dist carries: a snapshot has to be able to fetch and cargo-build
 // the Rust twin without the rest of cmd/ coming along for the ride.
 
 /** Spec we port: crates/base, crates/ui, crates/story, crates/webview, crates/shell, crates/component-shell, examples. */
@@ -899,7 +899,7 @@ function buildRustTwin(target: string, debug: boolean): string {
 // Accessibility, so a tiny Cocoa shim is injected into each locally-built
 // process to place its own first window when that window becomes visible.
 function ensureMacWindowPlacer(): string {
-  // Beside this script: cmd/ here, the top level in gpui-cpp-dist.
+  // Beside this script: cmd/ here, the top level in gpui-kit-cpp-dist.
   const source = join(scriptDir, "mac-window-place.m");
   const outputDir = join(root, ".work/mac-window-place");
   const output = join(outputDir, "mac-window-place.dylib");

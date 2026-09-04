@@ -613,8 +613,8 @@ in either order. All of it is the same on every platform.
   CI all go through it. There it is the sources concatenated and nothing else,
   comments and all, so a line is the line its `#line 1 "src/..."` marker says.
 - The published copy is a repo of its own,
-  [gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to
-  `.work/gpui-cpp-dist` and refreshed **only by running `bun
+  [gpui-kit-cpp-dist](https://github.com/kjk/gpui-kit-cpp-dist), cloned to
+  `.work/gpui-kit-cpp-dist` and refreshed **only by running `bun
   cmd/update-dist.ts` by hand**: it syncs the clone, writes the pairs, builds
   every example against it (`GPUI_AMALGAM_DIR`, objects in `out/*_dist`),
   rewrites the readme with the commit it came from, then commits and pushes.

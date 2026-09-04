@@ -141,7 +141,7 @@ if ((r.exitCode ?? 1) !== 0) {
   console.error(`Build failed on ${host}. First time on a fresh Mac:`);
   console.error(`  ssh ${host} 'xcode-select --install'`);
   console.error(`  ssh ${host} 'curl -fsSL https://bun.sh/install | bash'`);
-  console.error(`  ssh ${host} 'git clone https://github.com/kjk/gpui-cpp.git ${dir}'`);
+  console.error(`  ssh ${host} 'git clone https://github.com/kjk/gpui-kit-cpp.git ${dir}'`);
 }
 const check = out(["git", "status", "--porcelain"]);
 if (check.ok && check.text) {

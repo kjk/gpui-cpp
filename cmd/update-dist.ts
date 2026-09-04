@@ -63,12 +63,12 @@ import {
 const root = resolve(import.meta.dir, "..");
 
 // Where the source lives, and where the published source set lives. The GPUI
-// pair plus the QuickJS pair are the compiled part of gpui-cpp-dist; it has no
+// pair plus the QuickJS pair are the compiled part of gpui-kit-cpp-dist; it has no
 // history of its own worth reading, it is a snapshot of this repo.
-export const srcRepoUrl = "https://github.com/kjk/gpui-cpp";
+export const srcRepoUrl = "https://github.com/kjk/gpui-kit-cpp";
 export const srcBranch = "main";
-export const distRepoUrl = "https://github.com/kjk/gpui-cpp-dist.git";
-export const distRepoDir = ".work/gpui-cpp-dist";
+export const distRepoUrl = "https://github.com/kjk/gpui-kit-cpp-dist.git";
+export const distRepoDir = ".work/gpui-kit-cpp-dist";
 export const distBranch = "main";
 
 export type DistOutDir = ".work" | typeof distRepoDir;

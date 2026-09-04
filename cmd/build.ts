@@ -29,7 +29,7 @@
 // compiler command line.
 //
 // This script runs in two trees. Here it lives in cmd/ and the amalgam it
-// compiles is regenerated from src/** before every build. In gpui-cpp-dist it
+// compiles is regenerated from src/** before every build. In gpui-kit-cpp-dist it
 // lives at the top level beside a checked-in gpui.h + gpui.cpp, which are the
 // only sources that repo has, and there is no src/** and no update-dist.ts to
 // regenerate from. Everything that differs between the two hangs off `isDist`
@@ -43,7 +43,7 @@ import { tmpdir } from "node:os";
 export const scriptDir = import.meta.dir;
 
 /**
- * True in a gpui-cpp-dist checkout, false in gpui-cpp. gpui.h beside the
+ * True in a gpui-kit-cpp-dist checkout, false in gpui-kit-cpp. gpui.h beside the
  * script is the whole test, and it is a good one: it is the file the dist
  * repo exists to carry, and this repo never has one there — its amalgam goes
  * to gitignored .work/ precisely so nothing but cmd/update-dist.ts writes a
@@ -78,7 +78,7 @@ function ensureWinShadersCurrent(fail: (msg: string) => never): void {
 
 /**
  * Repo-relative directory holding the gpui.h + gpui.cpp a build compiles:
- * the top level in gpui-cpp-dist, gitignored .work/ here. GPUI_AMALGAM_DIR
+ * the top level in gpui-kit-cpp-dist, gitignored .work/ here. GPUI_AMALGAM_DIR
  * overrides both — cmd/update-dist.ts sets it to the dist checkout so the
  * examples get built against the published copy as its correctness check.
  */
@@ -93,7 +93,7 @@ export function amalgamIsWork(): boolean {
 
 /**
  * A file in the amalgam directory, repo-relative: `.work/gpui.cpp` here,
- * plain `gpui.cpp` in gpui-cpp-dist, where the directory is the repo root.
+ * plain `gpui.cpp` in gpui-kit-cpp-dist, where the directory is the repo root.
  * Joining by hand would make that one `./gpui.cpp`, which compiles the same
  * and reads like a path that got away from somebody -- and these strings are
  * matched against each other as well as printed, so one spelling is the only
@@ -106,7 +106,7 @@ export function amalgamPath(name: string): string {
 
 /**
  * How to spell one of these scripts on a command line from the repo root:
- * `cmd/run.ts` here, `run.ts` in gpui-cpp-dist. Only usage text needs it, but
+ * `cmd/run.ts` here, `run.ts` in gpui-kit-cpp-dist. Only usage text needs it, but
  * usage text that tells a reader to type a path that is not there is worse
  * than no usage text.
  */
@@ -383,7 +383,7 @@ export function outDirName(plat: Platform, f: BuildFlags): string {
   }
   // Only in this repo, where a plain build is the .work/ source set and a
   // GPUI_AMALGAM_DIR build is a published one: two amalgams, two out/ trees.
-  // In gpui-cpp-dist every build is the published source set, so out/rel is out/rel.
+  // In gpui-kit-cpp-dist every build is the published source set, so out/rel is out/rel.
   if (!isDist && !amalgamIsWork()) {
     name += "_dist";
   }
@@ -1362,10 +1362,10 @@ function spawnOrExit(tc: Toolchain, cmd: string[]): void {
  * take the other path and compile that source set exactly as written:
  * GPUI_AMALGAM_DIR naming
  * another copy (cmd/update-dist.ts pointing at the dist repo), and being in
- * gpui-cpp-dist at all, where the files beside this script *are* the source.
+ * gpui-kit-cpp-dist at all, where the files beside this script *are* the source.
  *
  * cmd/update-dist.ts is imported dynamically, and only on the branch that
- * amalgamates: it does not exist in gpui-cpp-dist, and a static import of it
+ * amalgamates: it does not exist in gpui-kit-cpp-dist, and a static import of it
  * would fail there at module load — before this function ever decides it has
  * nothing to amalgamate.
  */
