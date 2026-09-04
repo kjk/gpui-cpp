@@ -1124,10 +1124,10 @@ static void ShellMaterializesStateTemplatesInputsAndPaths() {
     El* number = states ? states->next : nullptr;
     El* otp = number ? number->next : nullptr;
     El* path = otp ? otp->next : nullptr;
-    utassert(states && states->hoverSet & StyleFieldBg);
-    utassert(states && states->hoverSet & StyleFieldPad);
-    utassert(states && states->activeSet & StyleFieldBg);
-    utassert(states && states->focusSet & StyleFieldOpacity);
+    utassert(states && states->StyleStates()->hoverSet & StyleFieldBg);
+    utassert(states && states->StyleStates()->hoverSet & StyleFieldPad);
+    utassert(states && states->StyleStates()->activeSet & StyleFieldBg);
+    utassert(states && states->StyleStates()->focusSet & StyleFieldOpacity);
     utassert(states && states->style.width == 100);
     utassert(number && number->accessibility
                                .role == AccessibilityRole::SpinButton);

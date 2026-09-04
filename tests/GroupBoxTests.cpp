@@ -9,22 +9,19 @@ static bool GroupBoxColorEq(Rgba a, Rgba b) {
 }
 
 static void VariantsRoundTripPinnedNames() {
-    utassert(GroupBoxVariantFromStr(StrL("normal")) ==
-             GroupBoxVariant::Normal);
+    utassert(GroupBoxVariantFromStr(StrL("normal")) == GroupBoxVariant::Normal);
     utassert(GroupBoxVariantFromStr(StrL("fill")) == GroupBoxVariant::Fill);
     utassert(GroupBoxVariantFromStr(StrL("outline")) ==
              GroupBoxVariant::Outline);
-    utassert(GroupBoxVariantFromStr(StrL("other")) ==
-             GroupBoxVariant::Normal);
+    utassert(GroupBoxVariantFromStr(StrL("other")) == GroupBoxVariant::Normal);
     utassert(GroupBoxVariantFromStr(StrL("FILL")) == GroupBoxVariant::Fill);
     utassert(GroupBoxVariantFromStr(StrL("OutLine")) ==
              GroupBoxVariant::Outline);
-    utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Normal),
-                     "normal"));
-    utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Fill),
-                     "fill"));
-    utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Outline),
-                     "outline"));
+    utassert(
+        base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Normal), "normal"));
+    utassert(base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Fill), "fill"));
+    utassert(
+        base::StrEq(GroupBoxVariantAsStr(GroupBoxVariant::Outline), "outline"));
 }
 
 static void VariantBuildersAndChildrenMatchTheSourceTree() {
@@ -106,13 +103,13 @@ static void ElementTitlesAndThreeRefinementsAreRetained() {
 
     El* title = root->first;
     El* content = title ? title->next : nullptr;
-    utassert(root->refineSet == StyleFieldOpacity);
-    utassertnear(root->refine.opacity, 0.5f);
+    utassert(root->StyleStates()->refineSet == StyleFieldOpacity);
+    utassertnear(root->StyleStates()->refine.opacity, 0.5f);
     utassert(title && title->first == customTitle);
-    utassert(title && title->refineSet == StyleFieldPad);
-    utassert(title && title->refine.pad.left == 7);
-    utassert(content && content->refineSet == StyleFieldRadius);
-    utassert(content && content->refine.radius == 11);
+    utassert(title && title->StyleStates()->refineSet == StyleFieldPad);
+    utassert(title && title->StyleStates()->refine.pad.left == 7);
+    utassert(content && content->StyleStates()->refineSet == StyleFieldRadius);
+    utassert(content && content->StyleStates()->refine.radius == 11);
 
     AppGlobalClear(&app);
     ArenaDelete(a);

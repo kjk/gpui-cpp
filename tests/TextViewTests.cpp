@@ -980,11 +980,12 @@ static void TestMarkdownTableThemeTokens() {
                                            installed.style.codeBackground));
         utassert(head && SameTextViewColor(head->style.color, installed.style
                                                                   .foreground));
-        utassert(head && (head->refineSet & StyleFieldBg) &&
-                 SameTextViewColor(head->refine.bg.color, th.tokens.tableHead
-                                                              .color));
-        utassert(head && (head->refineSet & StyleFieldColor) &&
-                 SameTextViewColor(head->refine.color, th.tableHeadFg));
+        utassert(head && (head->StyleStates()->refineSet & StyleFieldBg) &&
+                 SameTextViewColor(head->StyleStates()->refine.bg.color,
+                                   th.tokens.tableHead.color));
+        utassert(head && (head->StyleStates()->refineSet & StyleFieldColor) &&
+                 SameTextViewColor(head->StyleStates()->refine.color,
+                                   th.tableHeadFg));
         // Row rules and column rules are the style's border now, not the
         // table theme's own row border.
         utassert(head && head->style.borderB == 1 &&

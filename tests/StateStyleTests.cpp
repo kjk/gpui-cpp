@@ -90,66 +90,65 @@ static void SemanticControlStylesFollowTheSharedPriority() {
     RadioStyles radioStyles;
     radioStyles.Checked(StateStyle().Opacity(.8f))
         .Disabled(StateStyle().Opacity(.5f));
-    El* radio = Radio::New(&cx, StrL("radio"), true, true, {}, &radioStyles,
-                           &instance);
-    utassert(radio->refineSet & StateFieldOpacity);
-    utassertnear(radio->refine.opacity, .5f);
+    El* radio =
+        Radio::New(&cx, StrL("radio"), true, true, {}, &radioStyles, &instance);
+    utassert(radio->StyleStates()->refineSet & StateFieldOpacity);
+    utassertnear(radio->StyleStates()->refine.opacity, .5f);
 
     ToggleStyles toggleStyles;
     toggleStyles.Pressed(StateStyle().Opacity(.8f))
         .Disabled(StateStyle().Opacity(.5f));
     El* toggle = Toggle::New(&cx, StrL("toggle"), true, false, {},
                              &toggleStyles, &instance);
-    utassertnear(toggle->refine.opacity, .8f);
+    utassertnear(toggle->StyleStates()->refine.opacity, .8f);
 
     CheckboxStyles checkboxStyles;
     checkboxStyles.Checked(StateStyle().Border(1, kSelected))
         .Indeterminate(StateStyle().Opacity(.7f))
         .Disabled(StateStyle().Opacity(.5f));
-    El* checkbox = Checkbox::New(&cx, StrL("checkbox"),
-                                 CheckboxState::Checked, true, {},
-                                 &checkboxStyles, &instance);
-    utassertnear(checkbox->refine.opacity, .5f);
-    utassert(checkbox->refineSet & StateFieldBorder);
-    utassert(Same(checkbox->refine.borderColor, kSelected));
+    El* checkbox = Checkbox::New(&cx, StrL("checkbox"), CheckboxState::Checked,
+                                 true, {}, &checkboxStyles, &instance);
+    utassertnear(checkbox->StyleStates()->refine.opacity, .5f);
+    utassert(checkbox->StyleStates()->refineSet & StateFieldBorder);
+    utassert(Same(checkbox->StyleStates()->refine.borderColor, kSelected));
 
     CheckboxIndicatorStyles indicatorStyles;
     indicatorStyles.Checked(StateStyle().Border(1, kSelected))
         .Indeterminate(StateStyle().Opacity(.7f))
         .Disabled(StateStyle().Border(1, kDisabled));
-    El* indicator = CheckboxIndicator::New(
-        &cx, CheckboxState::Checked, true, &indicatorStyles, &instance);
-    utassertnear(indicator->refine.opacity, .9f);
-    utassert(Same(indicator->refine.borderColor, kDisabled));
+    El* indicator = CheckboxIndicator::New(&cx, CheckboxState::Checked, true,
+                                           &indicatorStyles, &instance);
+    utassertnear(indicator->StyleStates()->refine.opacity, .9f);
+    utassert(Same(indicator->StyleStates()->refine.borderColor, kDisabled));
 
     SwitchStyles switchStyles;
     switchStyles.Checked(StateStyle().Opacity(.8f))
         .Disabled(StateStyle().Opacity(.5f));
     El* switchRoot = Switch::New(&cx, StrL("switch"), true, true, {},
                                  &switchStyles, &instance);
-    utassertnear(switchRoot->refine.opacity, .5f);
+    utassertnear(switchRoot->StyleStates()->refine.opacity, .5f);
     utassert(switchRoot->stopMouseDown);
 
     SwitchTrackStyles trackStyles;
     trackStyles.Checked(StateStyle().Bg(kSelected))
         .Disabled(StateStyle().Bg(kDisabled));
-    El* switchTrack = SwitchTrack::New(&cx, StrL("switch-track"), true,
-                                       true, &trackStyles, &instance);
-    utassert(Same(switchTrack->refine.bg.color, kDisabled));
+    El* switchTrack = SwitchTrack::New(&cx, StrL("switch-track"), true, true,
+                                       &trackStyles, &instance);
+    utassert(Same(switchTrack->StyleStates()->refine.bg.color, kDisabled));
 
     SwitchThumbStyles thumbStyles;
     thumbStyles.Checked(StateStyle().Border(1, kSelected))
         .Disabled(StateStyle().Opacity(.5f));
-    El* switchThumb = SwitchThumb::New(&cx, true, true, &thumbStyles,
-                                       &instance);
-    utassertnear(switchThumb->refine.opacity, .5f);
-    utassert(Same(switchThumb->refine.borderColor, kSelected));
+    El* switchThumb =
+        SwitchThumb::New(&cx, true, true, &thumbStyles, &instance);
+    utassertnear(switchThumb->StyleStates()->refine.opacity, .5f);
+    utassert(Same(switchThumb->StyleStates()->refine.borderColor, kSelected));
 
     FocusHandle supplied = {-77};
-    checkbox = Checkbox::New(
-        &cx, StrL("focused-checkbox"), CheckboxState::Unchecked, false, {},
-        nullptr, nullptr, StrL("Choice"), 4, false, supplied,
-        AccessibilityRole::None);
+    checkbox =
+        Checkbox::New(&cx, StrL("focused-checkbox"), CheckboxState::Unchecked,
+                      false, {}, nullptr, nullptr, StrL("Choice"), 4, false,
+                      supplied, AccessibilityRole::None);
     utassert(checkbox->style.focusId == supplied.id);
     utassert(checkbox->style.tabIndex == 4 && !checkbox->style.tabStop);
     utassert(checkbox->accessibility.role == AccessibilityRole::None);
@@ -157,9 +156,9 @@ static void SemanticControlStylesFollowTheSharedPriority() {
     TabStyles tabStyles;
     tabStyles.Selected(StateStyle().Opacity(.8f))
         .Disabled(StateStyle().Opacity(.5f));
-    El* tab = Tab::New(&cx, StrL("tab"), true, {}, true, {}, 0, 0,
-                       &tabStyles, &instance);
-    utassertnear(tab->refine.opacity, .5f);
+    El* tab = Tab::New(&cx, StrL("tab"), true, {}, true, {}, 0, 0, &tabStyles,
+                       &instance);
+    utassertnear(tab->StyleStates()->refine.opacity, .5f);
     utassert(tab->stopMouseDown);
     utassert(Toggle::New(&cx, StrL("disabled-toggle"), false, true)
                  ->stopMouseDown);
@@ -215,8 +214,9 @@ static void AResolvedStyleGoesOntoTheElement() {
     s.Bg(kSelected).Border(2, kDisabled);
     El* e = Div(a)->Radius(4);
     ElRefine(e, s);
-    utassert(e->refineSet == s.set);
-    StyleApplyFields(&e->style, e->refine, e->refineSet);
+    utassert(e->StyleStates()->refineSet == s.set);
+    StyleApplyFields(&e->style, e->StyleStates()->refine,
+                     e->StyleStates()->refineSet);
     utassert(e->style.hasBg && Same(e->style.bg.color, kSelected));
     utassertnear(e->style.border, 2.f);
     utassert(Same(e->style.borderColor, kDisabled));
@@ -235,7 +235,8 @@ static void AStateWinsOverWhatIsChainedAfterIt() {
     s.Bg(kDisabled);
     El* e = ElRefine(Div(a), s)->Bg(kSelected)->Radius(6);
     utassert(Same(e->style.bg.color, kSelected));
-    StyleApplyFields(&e->style, e->refine, e->refineSet);
+    StyleApplyFields(&e->style, e->StyleStates()->refine,
+                     e->StyleStates()->refineSet);
     utassert(Same(e->style.bg.color, kDisabled));
     utassertnear(e->style.radius, 6.f);
     ArenaDelete(a);

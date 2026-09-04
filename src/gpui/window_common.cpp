@@ -13,6 +13,7 @@
 #include "gpui/scene.h"
 #include "sys/http.h"
 #include "sys/executor.h"
+#include "sys/sysinfo.h"
 #include "base/focus_trap.h"
 #include "base/global_state.h"
 #include "base/text_selection.h"
@@ -96,10 +97,13 @@ static void InteractionBenchRecord(Window* win, const FrameTiming& timing) {
         return;
     }
     const scene::SceneStats& sc = scene::Stats(&win->paint);
+    uint64_t privateBytes = 0;
+    SysSelfPrivateMemory(&privateBytes);
     logf(
         "interaction-bench frame=%llu draw=%.6f build=%.6f layout=%.6f "
         "paint=%.6f presented=%d invalidations=%llu prims=%d changed=%d "
-        "damage=%.6f pathHits=%d pathMisses=%d pathBuild=%.6f",
+        "damage=%.6f pathHits=%d pathMisses=%d pathBuild=%.6f arena=%llu "
+        "arenaAllocs=%llu private=%llu",
         (unsigned long long)win->frameSeq, timing.drawSecs * 1000.f,
         gFrameBuildSecs * 1000.0, gFrameLayoutSecs * 1000.0,
         gFramePaintSecs * 1000.0, timing.presentAt >= 0 ? 1 : 0,
@@ -107,7 +111,10 @@ static void InteractionBenchRecord(Window* win, const FrameTiming& timing) {
         SceneOn() ? sc.primsChanged : -1, SceneOn() ? sc.damageFraction : -1.f,
         SceneOn() ? sc.framePathCacheHits : -1,
         SceneOn() ? sc.framePathCacheMisses : -1,
-        SceneOn() ? sc.framePathBuildMs : -1.f);
+        SceneOn() ? sc.framePathBuildMs : -1.f,
+        (unsigned long long)ArenaUsed(win->frameArena),
+        (unsigned long long)win->frameArena->nAllocsSinceReset,
+        (unsigned long long)privateBytes);
 }
 
 static void FrameBenchTick(Window* win, float secs) {
@@ -185,6 +192,12 @@ static void FrameBenchTick(Window* win, float secs) {
     }
     logf("frame-bench phases build=%.3fms layout=%.3fms paint=%.3fms", sb / n,
          sl / n, sp / n);
+    uint64_t privateBytes = 0;
+    SysSelfPrivateMemory(&privateBytes);
+    logf("frame-bench memory arena=%llu arenaAllocs=%llu El=%llu private=%llu",
+         (unsigned long long)ArenaUsed(win->frameArena),
+         (unsigned long long)win->frameArena->nAllocsSinceReset,
+         (unsigned long long)sizeof(El), (unsigned long long)privateBytes);
     // What the last frame's layout had to tell taffy about. On a page that
     // did not change, made and dropped are zero and restyled is the handful
     // of boxes whose style is a function of something that moved.

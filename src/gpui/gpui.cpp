@@ -464,12 +464,14 @@ El* ProgressEl(Arena* a, float value01to100, float barW, float barH) {
 El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
             Rgba fillBot, int tickMargin) {
     El* e = NewEl(a, ElKind::Chart);
-    e->chart.ys = ys;
-    e->chart.n = n;
-    e->chart.stroke = stroke;
-    e->chart.fillTop = fillTop;
-    e->chart.fillBot = fillBot;
-    e->chart.tickMargin = tickMargin > 0 ? tickMargin : 15;
+    ChartSeries* chart = ArenaNew<ChartSeries>(a);
+    e->chart = ArenaPtrOf(a, chart);
+    chart->ys = ys;
+    chart->n = n;
+    chart->stroke = stroke;
+    chart->fillTop = fillTop;
+    chart->fillBot = fillBot;
+    chart->tickMargin = tickMargin > 0 ? tickMargin : 15;
     e->style.flexGrow = 1;
     e->style.height = kFill;
     e->style.minH = 80;
@@ -1572,34 +1574,58 @@ El* El::OnDrop(Str acceptKind, Listener l) {
     onDrop = l;
     return this;
 }
+ElStyleStates* El::StyleStates() {
+    return ArenaPtrGet(arena, styleStates);
+}
+const ElStyleStates* El::StyleStates() const {
+    return ArenaPtrGet(arena, styleStates);
+}
+ElStyleStates* El::EnsureStyleStates() {
+    ElStyleStates* states = StyleStates();
+    if (!states) {
+        states = ArenaNew<ElStyleStates>(arena);
+        styleStates = ArenaPtrOf(arena, states);
+    }
+    return states;
+}
+ChartSeries* El::Chart() {
+    return ArenaPtrGet(arena, chart);
+}
+const ChartSeries* El::Chart() const {
+    return ArenaPtrGet(arena, chart);
+}
 El* El::Hover(const StateStyle& s) {
     if (s.set) {
-        StyleApplyFields(&hoverStyle, s.style, s.set);
-        hoverSet |= s.set;
+        ElStyleStates* states = EnsureStyleStates();
+        StyleApplyFields(&states->hover, s.style, s.set);
+        states->hoverSet |= s.set;
     }
     return this;
 }
 
 El* El::Active(const StateStyle& s) {
     if (s.set) {
-        StyleApplyFields(&activeStyle, s.style, s.set);
-        activeSet |= s.set;
+        ElStyleStates* states = EnsureStyleStates();
+        StyleApplyFields(&states->active, s.style, s.set);
+        states->activeSet |= s.set;
     }
     return this;
 }
 
 El* El::Focus(const StateStyle& s) {
     if (s.set) {
-        StyleApplyFields(&focusStyle, s.style, s.set);
-        focusSet |= s.set;
+        ElStyleStates* states = EnsureStyleStates();
+        StyleApplyFields(&states->focus, s.style, s.set);
+        states->focusSet |= s.set;
     }
     return this;
 }
 El* El::DragOver(Str dragKind, const StateStyle& s) {
     if (s.set) {
-        dragOverKind = dragKind;
-        StyleApplyFields(&dragOverStyle, s.style, s.set);
-        dragOverSet |= s.set;
+        ElStyleStates* states = EnsureStyleStates();
+        states->dragOverKind = ArenaStrDup(arena, dragKind);
+        StyleApplyFields(&states->dragOver, s.style, s.set);
+        states->dragOverSet |= s.set;
     }
     return this;
 }
@@ -1609,8 +1635,9 @@ El* El::Refine(const Style& s, uint32_t fields) {
     }
     // Two refinements on one element merge, the way StyleRefinement::refine
     // does: the second names what it names and leaves the rest.
-    StyleApplyFields(&refine, s, fields);
-    refineSet |= fields;
+    ElStyleStates* states = EnsureStyleStates();
+    StyleApplyFields(&states->refine, s, fields);
+    states->refineSet |= fields;
     return this;
 }
 
@@ -2422,7 +2449,8 @@ void TextMeasEndFrame(PaintCtx* ctx) {
         if (!slots[i].occupied || !slots[i].layout) {
             continue;
         }
-        if (frame > kLayoutKeepFrames && slots[i].lastUsed + kLayoutKeepFrames < frame) {
+        if (frame > kLayoutKeepFrames &&
+            slots[i].lastUsed + kLayoutKeepFrames < frame) {
             TextLayoutRelease(slots[i].layout);
             slots[i].layout = nullptr;
         } else {
@@ -2431,7 +2459,8 @@ void TextMeasEndFrame(PaintCtx* ctx) {
     }
     if (liveLayouts > kMaxLiveLayouts) {
         for (int i = 0; i < cap && liveLayouts > kMaxLiveLayouts; i++) {
-            if (slots[i].occupied && slots[i].layout && slots[i].lastUsed < frame) {
+            if (slots[i].occupied && slots[i].layout &&
+                slots[i].lastUsed < frame) {
                 TextLayoutRelease(slots[i].layout);
                 slots[i].layout = nullptr;
                 liveLayouts--;
@@ -3298,27 +3327,32 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     // The element's own refinement first — a semantic state, which is meant
     // to win over whatever the caller chained on — and then the inspector's
     // live edit, which wins over everything.
-    if (e->refineSet) {
-        StyleApplyFields(&e->style, e->refine, e->refineSet);
-        e->refineSet = 0;
+    ElStyleStates* states = e->StyleStates();
+    if (states && states->refineSet) {
+        StyleApplyFields(&e->style, states->refine, states->refineSet);
+        states->refineSet = 0;
     }
     // Then the two that hold only while something is true of the pointer.
     // Both need a click id of their own, for the same reason HoverBg does:
     // without one the element would match a hoverId of 0, which is what
     // "nothing is hovered" is spelled as.
-    if (e->hoverSet && e->clickId && ctx && e->clickId == ctx->hoverId) {
-        StyleApplyFields(&e->style, e->hoverStyle, e->hoverSet);
+    if (states && states->hoverSet && e->clickId && ctx &&
+        e->clickId == ctx->hoverId) {
+        StyleApplyFields(&e->style, states->hover, states->hoverSet);
     }
-    if (e->activeSet && e->clickId && ctx && e->clickId == ctx->activeId) {
-        StyleApplyFields(&e->style, e->activeStyle, e->activeSet);
+    if (states && states->activeSet && e->clickId && ctx &&
+        e->clickId == ctx->activeId) {
+        StyleApplyFields(&e->style, states->active, states->activeSet);
     }
-    if (e->focusSet && e->style.focusId && ctx &&
+    if (states && states->focusSet && e->style.focusId && ctx &&
         e->style.focusId == ctx->focusId) {
-        StyleApplyFields(&e->style, e->focusStyle, e->focusSet);
+        StyleApplyFields(&e->style, states->focus, states->focusSet);
     }
-    if (e->dragOverSet && e->clickId && ctx && e->clickId == ctx->dragOverId &&
-        base::StrEq(e->dragOverKind, ctx->dragKind)) {
-        StyleApplyFields(&e->style, e->dragOverStyle, e->dragOverSet);
+    if (states && states->dragOverSet && e->clickId && ctx &&
+        e->clickId == ctx->dragOverId &&
+        base::StrEq(ArenaStrGet(e->arena, states->dragOverKind),
+                    ctx->dragKind)) {
+        StyleApplyFields(&e->style, states->dragOver, states->dragOverSet);
     }
     StyleOverrideApply(e);
 
@@ -4775,7 +4809,11 @@ static void DrawChart(PaintCtx* ctx, El* e) {
     if (plotH < 8 || w < 8) {
         return;
     }
-    const ChartSeries& c = e->chart;
+    const ChartSeries* chart = e->Chart();
+    if (!chart) {
+        return;
+    }
+    const ChartSeries& c = *chart;
     // VALUE_AXIS_GAP: what the value-axis tick labels take out of the band
     // axis — left of vertical bars, and below horizontal ones, where they sit
     // past the end of the band axis and so need none of it. Like the axis gap

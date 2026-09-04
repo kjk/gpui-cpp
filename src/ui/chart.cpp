@@ -86,15 +86,16 @@ AreaChart* AreaChart::StepAfter() {
 }
 El* AreaChart::IntoEl() {
     El* e = ChartEl(a, ys, n, stroke, fill, fillBottom, tickMargin);
-    e->chart.labels = labels;
-    e->chart.strokeStyle = strokeStyle;
-    e->chart.overlay = overlay;
-    e->chart.tooltip = tooltip;
-    e->chart.name = tooltipName;
+    ChartSeries* chart = e->Chart();
+    chart->labels = labels;
+    chart->strokeStyle = strokeStyle;
+    chart->overlay = overlay;
+    chart->tooltip = tooltip;
+    chart->name = tooltipName;
     // The builder is on the frame arena, so the element can point at its
     // array rather than copying it.
-    e->chart.more = more.Flatten(a);
-    e->chart.nMore = more.len;
+    chart->more = more.Flatten(a);
+    chart->nMore = more.len;
     return e;
 }
 
@@ -145,14 +146,15 @@ LineChart* LineChart::Dot(bool v) {
 El* LineChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, stroke, none, none, tickMargin);
-    e->chart.kind = ChartKind::Line;
-    e->chart.labels = labels;
-    e->chart.strokeStyle = strokeStyle;
-    e->chart.dot = dot;
-    e->chart.domainMin = domainMin;
-    e->chart.domainMax = domainMax;
-    e->chart.tooltip = tooltip;
-    e->chart.name = tooltipName;
+    ChartSeries* chart = e->Chart();
+    chart->kind = ChartKind::Line;
+    chart->labels = labels;
+    chart->strokeStyle = strokeStyle;
+    chart->dot = dot;
+    chart->domainMin = domainMin;
+    chart->domainMax = domainMax;
+    chart->tooltip = tooltip;
+    chart->name = tooltipName;
     return e;
 }
 
@@ -233,26 +235,27 @@ BarChart* BarChart::FillGradientDiagonal(Rgba from, Rgba to) {
 El* BarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, fill, none, none, tickMargin);
-    e->chart.kind = ChartKind::Bar;
-    e->chart.labels = labels;
-    e->chart.barAlign = align;
-    e->chart.bases = bases;
-    e->chart.overlay = overlay;
-    e->chart.barLabels = labelValues;
-    e->chart.valueAxis = valueAxis;
-    e->chart.valueTickCount = valueTickCount;
-    e->chart.barFills = fills;
-    e->chart.barGradient = gradient;
-    e->chart.barGradientPerBar = gradientPerBar;
-    e->chart.barGradientDiagonal = gradientDiagonal;
-    e->chart.barFillFrom = gradientFrom;
-    e->chart.barFillTo = gradientTo;
-    e->chart.bandPadding = padding;
-    e->chart.barRadius = radius;
-    e->chart.domainMin = domainMin;
-    e->chart.domainMax = domainMax;
-    e->chart.tooltip = tooltip;
-    e->chart.name = tooltipName;
+    ChartSeries* chart = e->Chart();
+    chart->kind = ChartKind::Bar;
+    chart->labels = labels;
+    chart->barAlign = align;
+    chart->bases = bases;
+    chart->overlay = overlay;
+    chart->barLabels = labelValues;
+    chart->valueAxis = valueAxis;
+    chart->valueTickCount = valueTickCount;
+    chart->barFills = fills;
+    chart->barGradient = gradient;
+    chart->barGradientPerBar = gradientPerBar;
+    chart->barGradientDiagonal = gradientDiagonal;
+    chart->barFillFrom = gradientFrom;
+    chart->barFillTo = gradientTo;
+    chart->bandPadding = padding;
+    chart->barRadius = radius;
+    chart->domainMin = domainMin;
+    chart->domainMax = domainMax;
+    chart->tooltip = tooltip;
+    chart->name = tooltipName;
     return e;
 }
 
@@ -307,15 +310,16 @@ El* CandlestickChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     // The closes are the series; the other three ride along beside them.
     El* e = ChartEl(a, closes, n, up, none, none, tickMargin);
-    e->chart.kind = ChartKind::Candlestick;
-    e->chart.labels = labels;
-    e->chart.opens = opens;
-    e->chart.highs = highs;
-    e->chart.lows = lows;
-    e->chart.up = up;
-    e->chart.down = down;
-    e->chart.bandPadding = padding;
-    e->chart.bodyWidthRatio = bodyWidthRatio;
+    ChartSeries* chart = e->Chart();
+    chart->kind = ChartKind::Candlestick;
+    chart->labels = labels;
+    chart->opens = opens;
+    chart->highs = highs;
+    chart->lows = lows;
+    chart->up = up;
+    chart->down = down;
+    chart->bandPadding = padding;
+    chart->bodyWidthRatio = bodyWidthRatio;
     return e;
 }
 
@@ -467,13 +471,14 @@ RadarChart* RadarChart::GridLevels(int v) {
 El* RadarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, values, n, stroke, fill, none, 1);
-    e->chart.kind = ChartKind::Radar;
-    e->chart.overlay = overlay;
-    e->chart.dot = dot;
-    e->chart.radarRadius = outerRadius;
-    e->chart.gridLevels = gridLevels;
-    e->chart.domainMin = domainMin;
-    e->chart.domainMax = domainMax;
+    ChartSeries* chart = e->Chart();
+    chart->kind = ChartKind::Radar;
+    chart->overlay = overlay;
+    chart->dot = dot;
+    chart->radarRadius = outerRadius;
+    chart->gridLevels = gridLevels;
+    chart->domainMin = domainMin;
+    chart->domainMax = domainMax;
     if (labels) {
         e->customPaint = PaintRadarLabels;
         e->customUser = this;

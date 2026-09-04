@@ -2200,7 +2200,7 @@ static void TheUiInputFacadeKeepsTheSourceShapes() {
     utassert(editor->style.tabIndex == 3);
     utassert(editor->accessibility
                  .role == AccessibilityRole::MultilineTextInput);
-    utassert((editor->refineSet & StyleFieldWidth) != 0);
+    utassert((editor->StyleStates()->refineSet & StyleFieldWidth) != 0);
     utassert(state.focus.IsValid());
 
     state.disabled = false;

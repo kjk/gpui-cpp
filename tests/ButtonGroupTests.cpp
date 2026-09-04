@@ -7,9 +7,7 @@ struct ButtonGroupHarness {
     int count = 0;
     int selected[80] = {};
 
-    static El* Render(ButtonGroupHarness*, Ctx* cx) {
-        return Div(cx->a);
-    }
+    static El* Render(ButtonGroupHarness*, Ctx* cx) { return Div(cx->a); }
 
     static void OnChange(ButtonGroupHarness* self, Ctx*,
                          const component::ButtonGroupEvent* ev) {
@@ -55,10 +53,8 @@ static void BaseButtonCentersOrdinaryChildGeometry() {
     Ctx cx{&app, win, arena, {}};
 
     El* child = Div(arena)->W(48)->H(12);
-    El* button = Button::New(&cx, StrL("alignment-button"))
-                     ->W(120)
-                     ->H(40)
-                     ->Child(child);
+    El* button =
+        Button::New(&cx, StrL("alignment-button"))->W(120)->H(40)->Child(child);
     utassert(button->style.display == Display::Flex);
     utassert(button->style.align == FlexAlign::Center);
     utassert(button->style.justify == Justify::Center);
@@ -67,8 +63,7 @@ static void BaseButtonCentersOrdinaryChildGeometry() {
     win->paint.app = &app;
     win->paint.window = win;
     const RuntimeStyle& th = RuntimeStyleNow(&app);
-    LayoutEl(&win->paint, button, 0, 0, 120, 40, th.fontSize,
-             th.foreground);
+    LayoutEl(&win->paint, button, 0, 0, 120, 40, th.fontSize, th.foreground);
     utassertnear(child->Bounds().CenterX(), button->Bounds().CenterX());
     utassertnear(child->Bounds().CenterY(), button->Bounds().CenterY());
 
@@ -89,10 +84,8 @@ static void BaseTabAndToggleCenterOrdinaryChildGeometry() {
     const RuntimeStyle& th = RuntimeStyleNow(&app);
 
     El* tabChild = Div(arena)->W(48)->H(12);
-    El* tab = Tab::New(&cx, StrL("alignment-tab"))
-                  ->W(120)
-                  ->H(40)
-                  ->Child(tabChild);
+    El* tab =
+        Tab::New(&cx, StrL("alignment-tab"))->W(120)->H(40)->Child(tabChild);
     utassert(tab->style.display == Display::Flex);
     utassert(tab->style.align == FlexAlign::Center);
     utassert(tab->style.justify == Justify::Center);
@@ -110,8 +103,7 @@ static void BaseTabAndToggleCenterOrdinaryChildGeometry() {
     utassert(toggle->style.align == FlexAlign::Center);
     utassert(toggle->style.justify == Justify::Center);
     utassertnear(toggle->style.lineHeight, 1.f);
-    LayoutEl(&win->paint, toggle, 0, 0, 120, 40, th.fontSize,
-             th.foreground);
+    LayoutEl(&win->paint, toggle, 0, 0, 120, 40, th.fontSize, th.foreground);
     utassertnear(toggleChild->Bounds().CenterX(), toggle->Bounds().CenterX());
     utassertnear(toggleChild->Bounds().CenterY(), toggle->Bounds().CenterY());
 
@@ -136,9 +128,8 @@ static void SelectionEventsAreOrderedAndNotWordSized() {
             ->OnClick(Listen(&cx, &ButtonGroupHarness::OnChange));
     for (int i = 0; i < 70; i++) {
         Str id = StrDup(arena, fmt("button-%d", i));
-        group->Child(component::Button::New(&cx, id)
-                         ->Label(id)
-                         ->Selected(i == 1 || i == 65));
+        group->Child(component::Button::New(&cx, id)->Label(id)->Selected(
+            i == 1 || i == 65));
     }
     El* root = group->IntoEl();
     IdsCollect(root);
@@ -147,8 +138,8 @@ static void SelectionEventsAreOrderedAndNotWordSized() {
     const AccessibilityNode* button69 = ButtonAt(win->accessibility, 69);
     utassert(button69 != nullptr);
     if (button69) {
-        utassert(WindowAccessibilityPerform(
-            win, button69->id, AccessibilityAction::Default));
+        utassert(WindowAccessibilityPerform(win, button69->id,
+                                            AccessibilityAction::Default));
     }
     ButtonGroupHarness* state = harness.Get(&app);
     utassert(state && state->calls == 1);
@@ -184,7 +175,8 @@ static void SourceButtonVariantsRoundingAndIconsRemainConcrete() {
             .Active(RgbaOpacity(theme.magenta, 0.2f))
             .Shadow();
     utassert(base.color.a == 0 && !base.shadow);
-    utassert(custom.shadow && SameButtonColor(custom.foreground, theme.magenta));
+    utassert(custom.shadow &&
+             SameButtonColor(custom.foreground, theme.magenta));
 
     component::Button* button =
         component::Button::New(&cx, StrL("custom-button"))
@@ -194,9 +186,9 @@ static void SourceButtonVariantsRoundingAndIconsRemainConcrete() {
     El* rendered = button->IntoEl();
     utassert(button->variant == component::ButtonVariant::Custom);
     utassertnear(rendered->style.corners.tl, theme.radius * 2.f);
-    utassert(SameButtonColor(
-        rendered->style.bg.color,
-        RgbaMixOklab(theme.magenta, Rgba8(0, 0, 0, 0), 0.2f)));
+    utassert(
+        SameButtonColor(rendered->style.bg.color,
+                        RgbaMixOklab(theme.magenta, Rgba8(0, 0, 0, 0), 0.2f)));
     utassert(rendered->style.shadowCount == 1);
     utassertnear(rendered->style.shadows[0].y, 1.f);
     utassertnear(rendered->style.shadows[0].blur, 2.f);
@@ -204,8 +196,7 @@ static void SourceButtonVariantsRoundingAndIconsRemainConcrete() {
     component::ButtonVariants::Primary(button);
     utassert(button->variant == component::ButtonVariant::Primary &&
              !button->hasCustom);
-    utassert(component::ButtonVariantIsGhost(
-        component::ButtonVariant::Ghost));
+    utassert(component::ButtonVariantIsGhost(component::ButtonVariant::Ghost));
     utassert(component::ButtonVariantIsLink(component::ButtonVariant::Link));
     utassert(component::ButtonVariantIsText(component::ButtonVariant::Text));
 
@@ -245,8 +236,8 @@ static void SourceButtonVariantsRoundingAndIconsRemainConcrete() {
                           ->Loading(true)
                           ->IntoEl();
     utassert(ButtonChildCount(textLoading) == 1);
-    component::ButtonIcon* spinner = component::ButtonIcon::New(
-        &cx, component::Spinner::New(&cx));
+    component::ButtonIcon* spinner =
+        component::ButtonIcon::New(&cx, component::Spinner::New(&cx));
     component::ButtonIcon* progress = component::ButtonIcon::New(
         &cx, component::ProgressCircle::New(&cx)->Value(75));
     utassert(spinner->IsSpinner() && !spinner->IsProgress());
@@ -287,18 +278,17 @@ static void SourceToggleAndSegmentedGroupKeepStateAndGeometry() {
     Ctx cx{&app, win, arena, harness.id};
     const Theme& theme = ThemeNow(&app);
 
-    component::Toggle* checked =
-        component::Toggle::New(&cx, StrL("checked"))
-            ->Label(StrL("Bold"))
-            ->Icon(IconName::Check)
-            ->Checked(true)
-            ->Outline()
-            ->WithSize(UiSize::Small);
+    component::Toggle* checked = component::Toggle::New(&cx, StrL("checked"))
+                                     ->Label(StrL("Bold"))
+                                     ->Icon(IconName::Check)
+                                     ->Checked(true)
+                                     ->Outline()
+                                     ->WithSize(UiSize::Small);
     El* checkedEl = checked->IntoEl();
     utassert(checked->variant == component::ToggleVariant::Outline);
     utassertnear(checkedEl->style.height, 24.f);
     utassertnear(checkedEl->style.minW, 24.f);
-    utassert(SameButtonColor(checkedEl->refine.bg.color,
+    utassert(SameButtonColor(checkedEl->StyleStates()->refine.bg.color,
                              theme.tokens.accent.color));
     utassert(ButtonChildCount(checkedEl) == 2);
 
@@ -323,8 +313,8 @@ static void SourceToggleAndSegmentedGroupKeepStateAndGeometry() {
     const AccessibilityNode* second = ButtonAt(win->accessibility, 1);
     utassert(second != nullptr);
     if (second) {
-        utassert(WindowAccessibilityPerform(
-            win, second->id, AccessibilityAction::Default));
+        utassert(WindowAccessibilityPerform(win, second->id,
+                                            AccessibilityAction::Default));
     }
     ToggleGroupHarness* state = harness.Get(&app);
     utassert(state && state->calls == 1 && state->count == 2);
@@ -355,11 +345,9 @@ static void ButtonGroupsAssignSourceCornersWithoutAWrapperClip() {
     utassert(!root->style.hasCorners);
     utassert(ButtonChildCount(root) == 2);
     utassertnear(root->first->style.corners.tr, 0.f);
-    utassertnear(root->first->style.corners.tl,
-                 ThemeNow(&app).radius);
+    utassertnear(root->first->style.corners.tl, ThemeNow(&app).radius);
     utassertnear(root->first->next->style.corners.tl, 0.f);
-    utassertnear(root->first->next->style.corners.tr,
-                 ThemeNow(&app).radius);
+    utassertnear(root->first->next->style.corners.tr, ThemeNow(&app).radius);
 
     WindowKeyedFree(win);
     delete win;

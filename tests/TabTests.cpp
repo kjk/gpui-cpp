@@ -181,22 +181,21 @@ static void SourceNamedTabAndTabBarKeepContentAndCallbackRules() {
     El* prefix = Div(a)->Id(StrL("tab-prefix"));
     El* content = Div(a)->Id(StrL("tab-content"));
     El* suffix = Div(a)->Id(StrL("tab-suffix"));
-    component::Tab* item = component::Tab::New(&cx)
-                               ->Label(StrL("First"))
-                               ->AriaLabel(StrL("First accessible"))
-                               ->Prefix(prefix)
-                               ->Child(content)
-                               ->Suffix(suffix)
-                               ->OnClick(Listen(&cx,
-                                                &TabCallbackRecorder::Child));
+    component::Tab* item =
+        component::Tab::New(&cx)
+            ->Label(StrL("First"))
+            ->AriaLabel(StrL("First accessible"))
+            ->Prefix(prefix)
+            ->Child(content)
+            ->Suffix(suffix)
+            ->OnClick(Listen(&cx, &TabCallbackRecorder::Child));
     TabBar* bar = TabBar::New(&cx, StrL("source-tabs"))
                       ->Child(item)
                       ->OnClick(Listen(&cx, &TabCallbackRecorder::Group));
     El* root = bar->IntoEl();
     El* tab = FindNamedTab(root, "0");
     utassert(tab != nullptr);
-    utassert(tab && base::StrEq(tab->accessibility.label,
-                            "First accessible"));
+    utassert(tab && base::StrEq(tab->accessibility.label, "First accessible"));
     El* prefixWrap = tab ? tab->first : nullptr;
     El* inner = prefixWrap ? prefixWrap->next : nullptr;
     El* suffixWrap = inner ? inner->next : nullptr;
@@ -216,10 +215,12 @@ static void SourceNamedTabAndTabBarKeepContentAndCallbackRules() {
     utassert(seen && seen->child == 1 && seen->group == 1);
 
     item->Disabled();
-    El* disabled = FindNamedTab(
-        TabBar::New(&cx, StrL("disabled"))->Child(item)->OnClick(
-            Listen(&cx, &TabCallbackRecorder::Group))->IntoEl(),
-        "0");
+    El* disabled =
+        FindNamedTab(TabBar::New(&cx, StrL("disabled"))
+                         ->Child(item)
+                         ->OnClick(Listen(&cx, &TabCallbackRecorder::Group))
+                         ->IntoEl(),
+                     "0");
     utassert(disabled && !disabled->listener.IsValid());
 
     WindowMotionFree(win);
@@ -238,25 +239,24 @@ static void TabBarRetainsStyleSpacingScrollAndUnboundedChildren() {
         EntityNewState<TabCallbackRecorder>(&app);
     Ctx cx = {&app, win, a, recorder.id};
 
-    component::Tab* item = component::Tab::New(&cx, StrL("Many"))
-                               ->MaxWidth(90)
-                               ->Selected();
+    component::Tab* item =
+        component::Tab::New(&cx, StrL("Many"))->MaxWidth(90)->Selected();
     for (int i = 0; i < 40; i++) {
         item->Child(Div(a));
     }
     Style refinement = {};
     refinement.opacity = 0.5f;
     El* empty = Div(a)->Id(StrL("last-empty"))->W(19);
-    TabBar* bar = TabBar::New(&cx, StrL("complete-tabs"))
-                      ->Child(item)
-                      ->Pill()
-                      ->Menu()
-                      ->LastEmptySpace(empty)
-                      ->TrackScroll(77, 15,
-                                    Listen(&cx, &TabCallbackRecorder::Scroll))
-                      ->Refine(refinement, StyleFieldOpacity);
+    TabBar* bar =
+        TabBar::New(&cx, StrL("complete-tabs"))
+            ->Child(item)
+            ->Pill()
+            ->Menu()
+            ->LastEmptySpace(empty)
+            ->TrackScroll(77, 15, Listen(&cx, &TabCallbackRecorder::Scroll))
+            ->Refine(refinement, StyleFieldOpacity);
     El* root = bar->IntoEl();
-    utassert(root->refineSet == StyleFieldOpacity);
+    utassert(root->StyleStates()->refineSet == StyleFieldOpacity);
     El* strip = FindNamedTab(root, "tabs-inner");
     utassert(strip != nullptr);
     utassert(strip && strip->style.overflowX == Overflow::Scroll);

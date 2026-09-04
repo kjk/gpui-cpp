@@ -4,7 +4,7 @@
 //
 //   bun cmd/bench-scene.ts
 //   bun cmd/bench-scene.ts -n=20 -nobuild
-//   bun cmd/bench-scene.ts -only=icon-scroll
+//   bun cmd/bench-scene.ts -only=introduction-scroll
 //   bun cmd/bench-scene.ts -only=icon-scroll -paint=d3d11
 //   bun cmd/bench-scene.ts -only=icon-scroll -absolute-paths
 
@@ -77,6 +77,24 @@ const scenarios: Scenario[] = [
     name: "scroll",
     exe: "table_in_scrollable",
     args: [],
+    deterministic: true,
+    expectVisibleChange: true,
+    drive: async (hwnd) => {
+      const r = getClientRect(hwnd);
+      const x = Math.floor(r.right / 2);
+      const y = Math.floor(r.bottom / 2);
+      const screen = clientToScreen(hwnd, x, y);
+      for (let i = 0; i < cycles; i++) {
+        const delta = i < Math.floor((cycles * 3) / 4) ? -120 : 120;
+        sendMessage(hwnd, 0x020a /* WM_MOUSEWHEEL */, (delta << 16) >>> 0, packCoords(screen.x, screen.y));
+        await sleep(45);
+      }
+    },
+  },
+  {
+    name: "introduction-scroll",
+    exe: "story",
+    args: ["introduction"],
     deterministic: true,
     expectVisibleChange: true,
     drive: async (hwnd) => {
@@ -187,6 +205,9 @@ type Frame = {
   pathHits: number;
   pathMisses: number;
   pathBuild: number;
+  arena: number;
+  arenaAllocs: number;
+  privateBytes: number;
 };
 type Result = {
   scenario: string;
@@ -232,7 +253,7 @@ const logPath = join(root, "out", "gpui.log");
 function parseFrames(text: string): Frame[] {
   const frames: Frame[] = [];
   const pattern =
-    /interaction-bench frame=\d+ draw=([\d.]+) build=([\d.]+) layout=([\d.]+) paint=([\d.]+) presented=(\d+) invalidations=\d+ prims=-?\d+ changed=-?\d+ damage=(-?[\d.]+) pathHits=(-?\d+) pathMisses=(-?\d+) pathBuild=(-?[\d.]+)/g;
+    /interaction-bench frame=\d+ draw=([\d.]+) build=([\d.]+) layout=([\d.]+) paint=([\d.]+) presented=(\d+) invalidations=\d+ prims=-?\d+ changed=-?\d+ damage=(-?[\d.]+) pathHits=(-?\d+) pathMisses=(-?\d+) pathBuild=(-?[\d.]+) arena=(\d+) arenaAllocs=(\d+) private=(\d+)/g;
   for (const match of text.matchAll(pattern)) {
     frames.push({
       draw: Number(match[1]),
@@ -244,6 +265,9 @@ function parseFrames(text: string): Frame[] {
       pathHits: Number(match[7]),
       pathMisses: Number(match[8]),
       pathBuild: Number(match[9]),
+      arena: Number(match[10]),
+      arenaAllocs: Number(match[11]),
+      privateBytes: Number(match[12]),
     });
   }
   return frames;
@@ -327,7 +351,10 @@ function percentile(frames: Frame[], field: keyof Pick<Frame, "draw" | "paint" |
   return values[Math.min(values.length - 1, Math.floor(values.length * p))]!;
 }
 
-function mean(frames: Frame[], field: keyof Pick<Frame, "build" | "layout" | "damage" | "pathBuild">): number {
+function mean(
+  frames: Frame[],
+  field: keyof Pick<Frame, "build" | "layout" | "damage" | "pathBuild" | "arena" | "arenaAllocs" | "privateBytes">,
+): number {
   return frames.reduce((sum, frame) => sum + frame[field], 0) / frames.length;
 }
 
@@ -351,13 +378,13 @@ const lines = [
   `Generated ${new Date().toISOString()} with \`bun cmd/bench-scene.ts -n=${cycles}${onlyName ? ` -only=${onlyName}` : ""}${paintName ? ` -paint=${paintName}` : ""}${absolutePaths ? " -absolute-paths" : ""}\`.`,
   "Times are milliseconds. Startup frames are excluded before each interaction begins.",
   "",
-  "| scenario | scene | frames | draw median | draw p95 | paint median | paint p95 | build mean | layout mean | mean damage | path hits | path misses | path build mean / p95 | presents |",
-  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+  "| scenario | scene | frames | draw median | draw p95 | paint median | paint p95 | build mean | layout mean | arena KiB | arena allocs | private MiB | mean damage | path hits | path misses | path build mean / p95 | presents |",
+  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
 ];
 for (const result of results) {
   const f = result.frames;
   lines.push(
-    `| ${result.scenario} | ${result.mode} | ${f.length} | ${percentile(f, "draw", 0.5).toFixed(3)} | ${percentile(f, "draw", 0.95).toFixed(3)} | ${percentile(f, "paint", 0.5).toFixed(3)} | ${percentile(f, "paint", 0.95).toFixed(3)} | ${mean(f, "build").toFixed(3)} | ${mean(f, "layout").toFixed(3)} | ${mean(f, "damage").toFixed(3)} | ${f.reduce((n, frame) => n + Math.max(0, frame.pathHits), 0)} | ${f.reduce((n, frame) => n + Math.max(0, frame.pathMisses), 0)} | ${mean(f, "pathBuild").toFixed(3)} / ${percentile(f, "pathBuild", 0.95).toFixed(3)} | ${f.reduce((n, frame) => n + frame.presented, 0)} |`,
+    `| ${result.scenario} | ${result.mode} | ${f.length} | ${percentile(f, "draw", 0.5).toFixed(3)} | ${percentile(f, "draw", 0.95).toFixed(3)} | ${percentile(f, "paint", 0.5).toFixed(3)} | ${percentile(f, "paint", 0.95).toFixed(3)} | ${mean(f, "build").toFixed(3)} | ${mean(f, "layout").toFixed(3)} | ${(mean(f, "arena") / 1024).toFixed(1)} | ${mean(f, "arenaAllocs").toFixed(1)} | ${(mean(f, "privateBytes") / (1024 * 1024)).toFixed(1)} | ${mean(f, "damage").toFixed(3)} | ${f.reduce((n, frame) => n + Math.max(0, frame.pathHits), 0)} | ${f.reduce((n, frame) => n + Math.max(0, frame.pathMisses), 0)} | ${mean(f, "pathBuild").toFixed(3)} / ${percentile(f, "pathBuild", 0.95).toFixed(3)} | ${f.reduce((n, frame) => n + frame.presented, 0)} |`,
   );
 }
 

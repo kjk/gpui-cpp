@@ -1840,6 +1840,25 @@ struct AccessibilityInfo {
     bool disabled = false;
 };
 
+// Interactive refinements are absent from most elements. Keeping five full
+// Styles inline cost 2,320 bytes on every El, including plain Markdown text
+// and layout-only wrappers. The frame arena owns this rare sidecar and the El
+// names it with a four-byte offset. Its drag kind uses the same arena-relative
+// representation instead of paying for a pointer plus length beside it.
+struct ElStyleStates {
+    Style refine = {};
+    uint32_t refineSet = 0;
+    Style hover = {};
+    uint32_t hoverSet = 0;
+    Style active = {};
+    uint32_t activeSet = 0;
+    Style focus = {};
+    uint32_t focusSet = 0;
+    Style dragOver = {};
+    uint32_t dragOverSet = 0;
+    ArenaStr dragOverKind = kArenaStrNone;
+};
+
 struct El {
     ElKind kind = ElKind::Div;
     // The frame arena this was built on, so a builder that has to allocate —
@@ -1854,7 +1873,9 @@ struct El {
     // ElKind::Image: what the document called the image. gpui/image.h says
     // what that may name.
     Str imgSrc;
-    ChartSeries chart = {};
+    // Only Chart elements carry this 192-byte payload. All other elements
+    // keep one four-byte arena offset instead.
+    ArenaPtr<ChartSeries> chart = {};
     float progress = 0; // 0..100
     int clickId = 0;
     // GlobalElementId. GPUI identifies an element by the *stack* of
@@ -1927,8 +1948,7 @@ struct El {
     // element handler does.
     Listener onMouseDownOut;
     // The refinement above, and the fields it names. Zero is no refinement.
-    Style refine = {};
-    uint32_t refineSet = 0;
+    ArenaPtr<ElStyleStates> styleStates = {};
     // `div().hover(|this| ..)` and `div().drag_over::<T>(|this, ..| ..)`:
     // refinements that hold only while the pointer is over the box, or while
     // a drag of `dragOverKind` is. Resolved where GPUI resolves them — in
@@ -1936,18 +1956,8 @@ struct El {
     // — so unlike `HoverBg` they can name any field a refinement can, and a
     // caller no longer has to ask the window whether it is hovered and branch
     // on the answer while building.
-    Style hoverStyle = {};
-    uint32_t hoverSet = 0;
-    // The other two StatefulInteractiveElement refinements. Unlike
-    // Style::activeBg these may name any field carried by a refinement; they
-    // are resolved beside hoverStyle after element ids have been collected.
-    Style activeStyle = {};
-    uint32_t activeSet = 0;
-    Style focusStyle = {};
-    uint32_t focusSet = 0;
-    Style dragOverStyle = {};
-    uint32_t dragOverSet = 0;
-    Str dragOverKind = {};
+    // StatefulInteractiveElement refinements are resolved after element ids
+    // have been collected. See ElStyleStates above.
     // on_drag: what a press on this element picks up. The payload rides along
     // on every DragMoveEvent the drag produces.
     DragPayload drag = {};
@@ -2332,6 +2342,11 @@ struct El {
     // `div().drag_over::<T>(..)`, where `kind` is the drag payload's kind the
     // way `OnDrop` names it.
     El* DragOver(Str dragKind, const struct StateStyle& s);
+    ElStyleStates* StyleStates();
+    const ElStyleStates* StyleStates() const;
+    ElStyleStates* EnsureStyleStates();
+    ChartSeries* Chart();
+    const ChartSeries* Chart() const;
     El* BoundsOut(gpui::Bounds* out);
     El* ReportLineSpan(float lineHeight);
     El* LineClamp(float cap, Listener onChange = {});
