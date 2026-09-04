@@ -60,6 +60,7 @@ type DebuggerKind = "windbg" | "cdb" | "gdb" | "lldb";
 const self = scriptPath("run.ts");
 
 const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
+                     [-markdown=mini|full] [-html=mini|full]
                      [--win-backend=d2d|d3d11|d3d12|all]
                      [-debugger|-windbg|-cdb|-gdb|-lldb] [-compare]
                      [-no-build] [-no-open] [-port N] <example> [-- <args...>]
@@ -70,6 +71,8 @@ const usage = `Usage: bun ${self} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean]
   -asan       AddressSanitizer; combines with -rel or -dbg
   -clang      Windows: build with clang-cl instead of cl.exe
   -clean      delete out/<dir>/ before building
+  -markdown=mini|full  Markdown parser implementation (default full)
+  -html=mini|full      HTML parser implementation (default full)
   -no-build   launch what is already in out/, without compiling
   --win-backend=d2d|d3d11|d3d12|all
               Windows renderer implementations compiled into the executable;

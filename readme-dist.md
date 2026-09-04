@@ -70,11 +70,11 @@ extras/              the ported library crates as standalone amalgams, one
                      is for using the parser without gpui
   markdown-mini/     a smaller parser implementing the same markdown.h
                      API (not an upstream crate); inside gpui.cpp only
-                     when built with GPUI_MARKDOWN=mini
+                     when built with -markdown=mini
   html5ever/         the HTML parser, crate html5ever <html5ever-version>.
                      Also inside gpui.cpp — this copy is standalone
   html5ever-mini/    a smaller parser implementing the same html5ever.h API;
-                     selected with GPUI_HTML5EVER=mini
+                     selected with -html=mini
   wry/               the webview, crate lb-wry <wry-version> (WebView2 on
                      Windows, WKWebView on macOS, stubs elsewhere). Also
                      inside gpui.cpp

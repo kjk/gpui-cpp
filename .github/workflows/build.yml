@@ -135,15 +135,11 @@ jobs:
           for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSPATH=%%i"
           if not defined VSPATH (echo could not find a VC toolset & exit /b 1)
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          set GPUI_MARKDOWN=mini
-          set GPUI_HTML5EVER=mini
-          bun cmd/build.ts -clang -rel --win-backend=all -all || exit /b 1
-          set GPUI_MARKDOWN=full
-          set GPUI_HTML5EVER=full
-          bun cmd/test.ts -clang -rel
+          bun cmd/build.ts -clang -rel -markdown=mini -html=mini --win-backend=all -all || exit /b 1
+          bun cmd/test.ts -clang -rel -markdown=full -html=full
 
       - name: Build and test (clang++)
         if: matrix.name == 'linux-clang-mini'
         run: |
-          GPUI_MARKDOWN=mini GPUI_HTML5EVER=mini bun cmd/build.ts -clang -rel -all
-          GPUI_MARKDOWN=full GPUI_HTML5EVER=full bun cmd/test.ts -clang -rel
+          bun cmd/build.ts -clang -rel -markdown=mini -html=mini -all
+          bun cmd/test.ts -clang -rel -markdown=full -html=full

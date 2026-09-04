@@ -38,7 +38,7 @@
 //   bun cmd/update-dist.ts -work        # just the .work/ sources a build compiles
 //
 // import { buildDist } from "./update-dist.ts";
-// buildDist({ outDir: ".work" });   // what a build script may do
+// buildDist({ outDir: ".work", markdown: "full", html5ever: "full" });
 //
 // The two destinations differ. dist/ is what a reader opens: GPUI comments are
 // stripped, runs of blank lines collapse to one, and the #include lines are
@@ -84,6 +84,9 @@ export type BuildDistOpts = {
    * it, so a build script has to say ".work" out loud.
    */
   outDir: DistOutDir;
+  /** Parser implementations to include in the amalgam. */
+  markdown: MarkdownVariant;
+  html5ever: Html5everVariant;
 };
 
 export type BuildDistResult = {
@@ -115,29 +118,6 @@ export type BuildDistResult = {
 
 export type MarkdownVariant = "full" | "mini";
 export type Html5everVariant = "full" | "mini";
-
-// GPUI_MARKDOWN is a build-time choice: the amalgam contains one parser or
-// the other, never both. Keep the complete CommonMark + GFM port as the
-// default; the mini parser is for applications where executable size matters
-// more than the long tail of the grammar.
-function markdownVariant(): MarkdownVariant {
-  const value = process.env.GPUI_MARKDOWN ?? "full";
-  if (value !== "full" && value !== "mini") {
-    throw new Error(`GPUI_MARKDOWN must be full or mini, got "${value}"`);
-  }
-  return value;
-}
-
-// Like markdown, html5ever has a faithful default and an API-compatible
-// size build. The environment chooses which source reaches the amalgam; the
-// generated macros let callers and tests describe the resulting binary.
-function html5everVariant(): Html5everVariant {
-  const value = process.env.GPUI_HTML5EVER ?? "full";
-  if (value !== "full" && value !== "mini") {
-    throw new Error(`GPUI_HTML5EVER must be full or mini, got "${value}"`);
-  }
-  return value;
-}
 
 // Which platform halves a source file belongs to. Empty means it is portable
 // and goes in gpui.cpp; the two _posix suffixes belong to more than one.
@@ -633,8 +613,8 @@ function checkIsolation(files: string[]): void {
 
 export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const outDir = opts.outDir;
-  const markdown = markdownVariant();
-  const html5ever = html5everVariant();
+  const markdown = opts.markdown;
+  const html5ever = opts.html5ever;
   // QuickJS is already its own upstream-generated amalgam, compiled as C11.
   // Folding it into gpui.h/gpui.cpp would both expose its API as GPUI's and
   // ask a C++ compiler to parse C source. The autocorrect port also stays
@@ -1287,12 +1267,18 @@ function parseCli(argv: string[]): {
   check: boolean;
   sync: boolean;
   publish: boolean;
+  markdown: MarkdownVariant;
+  html5ever: Html5everVariant;
 } {
   let outDir: DistOutDir = distRepoDir;
   let check = true;
   let sync = true;
   let publish = true;
-  const usage = "usage: bun cmd/update-dist.ts [-work] [-no-check] [-no-sync] [-no-publish]";
+  let markdown: MarkdownVariant = "full";
+  let html5ever: Html5everVariant = "full";
+  const usage =
+    "usage: bun cmd/update-dist.ts [-work] [-no-check] [-no-sync] [-no-publish] " +
+    "[-markdown=mini|full] [-html=mini|full]";
   for (const raw of argv) {
     if (raw === "-work" || raw === "--work") {
       outDir = ".work";
@@ -1313,18 +1299,28 @@ function parseCli(argv: string[]): {
       sync = false;
       continue;
     }
+    const markdownMatch = raw.match(/^-markdown=(mini|full)$/i);
+    if (markdownMatch) {
+      markdown = markdownMatch[1]!.toLowerCase() as MarkdownVariant;
+      continue;
+    }
+    const htmlMatch = raw.match(/^-html=(mini|full)$/i);
+    if (htmlMatch) {
+      html5ever = htmlMatch[1]!.toLowerCase() as Html5everVariant;
+      continue;
+    }
     const what = raw.startsWith("-") ? "unknown option" : "unknown argument";
     die(`${what}: ${raw}\n${usage}`);
   }
-  return { outDir, check, sync, publish };
+  return { outDir, check, sync, publish, markdown, html5ever };
 }
 
 function main(): void {
-  const { outDir, check, sync, publish } = parseCli(Bun.argv.slice(2));
+  const { outDir, check, sync, publish, markdown, html5ever } = parseCli(Bun.argv.slice(2));
   if (sync) {
     syncDistRepo();
   }
-  const built = buildDist({ outDir });
+  const built = buildDist({ outDir, markdown, html5ever });
   console.log(
     `wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${formatCount(built.headerBytes)} bytes, ` +
       `${formatCount(built.headerLines)} lines, ${built.headerCount} headers)`,

@@ -46,7 +46,7 @@ the upstream projection tests; numeric references are complete.
 
 ## Mini and standalone builds
 
-`GPUI_HTML5EVER=mini` selects [`src/html5ever-mini`](../html5ever-mini), which
+`-html=mini` selects [`src/html5ever-mini`](../html5ever-mini), which
 implements the same public header with the former small reader-mode parser.
 The generated `GPUI_HTML5EVER_FULL` / `GPUI_HTML5EVER_MINI` macros describe
 which implementation is present.

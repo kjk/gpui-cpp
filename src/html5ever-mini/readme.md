@@ -4,7 +4,7 @@
 [`src/html5ever/html5ever.h`](../html5ever/html5ever.h). Select it with:
 
 ```text
-GPUI_HTML5EVER=mini bun cmd/build.ts -rel story
+bun cmd/build.ts -html=mini -rel story
 ```
 
 The full html5ever 0.27 port is the default. The mini parser is the former

@@ -127,8 +127,8 @@ Markdown defaults to the complete CommonMark + GFM parser. Applications that
 prefer a smaller executable can select the basic parser at build time:
 
 ```
-GPUI_MARKDOWN=mini bun cmd/build.ts -rel story
-GPUI_MARKDOWN=full bun cmd/build.ts -rel story   # default
+bun cmd/build.ts -markdown=mini -rel story
+bun cmd/build.ts -markdown=full -rel story   # default
 ```
 
 The mini feature list and intentional omissions are in
@@ -138,8 +138,8 @@ HTML parsing has the same build-time choice. The html5ever port is the
 default; the former reader-mode parser is the smaller drop-in implementation:
 
 ```
-GPUI_HTML5EVER=mini bun cmd/build.ts -rel story
-GPUI_HTML5EVER=full bun cmd/build.ts -rel story   # default
+bun cmd/build.ts -html=mini -rel story
+bun cmd/build.ts -html=full -rel story   # default
 ```
 
 See [`src/html5ever/readme.md`](src/html5ever/readme.md) and

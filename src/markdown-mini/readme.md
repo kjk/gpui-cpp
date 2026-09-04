@@ -4,10 +4,10 @@
 produces the same `markdown::Node` mdast. Select it when building with:
 
 ```text
-GPUI_MARKDOWN=mini bun cmd/build.ts -rel story
+bun cmd/build.ts -markdown=mini -rel story
 ```
 
-`GPUI_MARKDOWN=full` is the default. Selection happens while `gpui.cpp` is
+`-markdown=full` is the default. Selection happens while `gpui.cpp` is
 amalgamated, so only one parser reaches the compiler and linker.
 
 The mini parser supports paragraphs, ATX and setext headings, bold, italic,

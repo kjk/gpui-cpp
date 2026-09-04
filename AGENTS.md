@@ -439,11 +439,11 @@ those names under `component::`, derives a `TextViewStyle` from the component
 `TextViewDefaults` whenever the theme is set.
 
 `src/markdown-mini/` is the size-oriented alternative selected by
-`GPUI_MARKDOWN=mini`. It shares `markdown.h` and `mdast.*` but is **not** an
+`-markdown=mini`. It shares `markdown.h` and `mdast.*` but is **not** an
 upstream crate — keep its smaller contract (`src/markdown-mini/readme.md`).
 
 `src/html5ever-mini/` is the corresponding size-oriented HTML parser selected
-by `GPUI_HTML5EVER=mini`. It implements `src/html5ever/html5ever.h`; keep its
+by `-html=mini`. It implements `src/html5ever/html5ever.h`; keep its
 smaller contract (`src/html5ever-mini/readme.md`).
 
 ## Code style

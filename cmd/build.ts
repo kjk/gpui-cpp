@@ -257,12 +257,17 @@ export type BuildFlags = {
   clean: boolean;
   /** Compile the library's individual source files instead of gpui.cpp. */
   nonAmalgam: boolean;
+  /** Markdown parser implementation compiled into the library. */
+  markdown: ParserVariant;
+  /** HTML parser implementation compiled into the library. */
+  html: ParserVariant;
   /** Windows renderer implementations compiled into the executable. */
   winBackend: WindowsBackend;
   sawWinBackend: boolean;
 };
 
 export type WindowsBackend = "d2d" | "d3d11" | "d3d12" | "all";
+export type ParserVariant = "full" | "mini";
 
 export function defaultBuildFlags(): BuildFlags {
   return {
@@ -274,6 +279,8 @@ export function defaultBuildFlags(): BuildFlags {
     wasm: false,
     clean: false,
     nonAmalgam: false,
+    markdown: "full",
+    html: "full",
     winBackend: "d2d",
     sawWinBackend: false,
   };
@@ -284,6 +291,16 @@ export function defaultBuildFlags(): BuildFlags {
  * build flag, which is how cmd/run.ts layers its own on top of these.
  */
 export function takeBuildFlag(arg: string, f: BuildFlags): boolean {
+  const markdown = arg.match(/^-markdown=(mini|full)$/i);
+  if (markdown) {
+    f.markdown = markdown[1]!.toLowerCase() as ParserVariant;
+    return true;
+  }
+  const html = arg.match(/^-html=(mini|full)$/i);
+  if (html) {
+    f.html = html[1]!.toLowerCase() as ParserVariant;
+    return true;
+  }
   const winBackend = arg.match(/^--win-backend=(d2d|d3d11|d3d12|all)$/i);
   if (winBackend) {
     f.winBackend = winBackend[1]!.toLowerCase() as WindowsBackend;
@@ -448,24 +465,22 @@ function allCppDir(rel: string): string[] {
   return result;
 }
 
-function sourcesFor(name: string, plat: Platform, nonAmalgam: boolean): string[] | null {
-  if (nonAmalgam) {
+function sourcesFor(name: string, plat: Platform, f: BuildFlags): string[] | null {
+  if (f.nonAmalgam) {
     // hello_world proves every src object compiles and links as a normal
     // app; editor is the one example that additionally uses src/autocorrect
     // (the standard build compiles the extras/autocorrect amalgam instead,
     // and editor.cpp switches its include on GPUI_AMALGAM).
     if (name !== "hello_world" && name !== "hello_world_no_amalgam" && name !== "editor") return null;
-    const markdown = process.env.GPUI_MARKDOWN ?? "full";
-    const html5ever = process.env.GPUI_HTML5EVER ?? "full";
     const example = name === "hello_world_no_amalgam" ? "examples/hello_world_no_amalgam.cpp" : `examples/${name}.cpp`;
     return [
       example,
-      ...allCppDir("src").filter((f) => {
-        if (!sourcePlatform(f, plat)) return false;
-        if (markdown === "full" && f.startsWith("src/markdown-mini/")) return false;
-        if (markdown !== "full" && f.startsWith("src/markdown/") && f !== "src/markdown/mdast.cpp") return false;
-        if (html5ever === "full" && f.startsWith("src/html5ever-mini/")) return false;
-        if (html5ever !== "full" && f.startsWith("src/html5ever/")) return false;
+      ...allCppDir("src").filter((rel) => {
+        if (!sourcePlatform(rel, plat)) return false;
+        if (f.markdown === "full" && rel.startsWith("src/markdown-mini/")) return false;
+        if (f.markdown === "mini" && rel.startsWith("src/markdown/") && rel !== "src/markdown/mdast.cpp") return false;
+        if (f.html === "full" && rel.startsWith("src/html5ever-mini/")) return false;
+        if (f.html === "mini" && rel.startsWith("src/html5ever/")) return false;
         return true;
       }),
       "src/quickjs/quickjs.c",
@@ -1370,10 +1385,10 @@ const extrasPairs = [
   ["extras/wry", "wry"],
 ] as const;
 
-export async function ensureAmalgam(fail: (msg: string) => never): Promise<void> {
+export async function ensureAmalgam(f: BuildFlags, fail: (msg: string) => never): Promise<void> {
   if (!isDist && amalgamIsWork()) {
     const { buildDist } = await import("./update-dist.ts");
-    const a = buildDist({ outDir: ".work" });
+    const a = buildDist({ outDir: ".work", markdown: f.markdown, html5ever: f.html });
     const extrasBytes = a.extras.reduce((n, e) => n + e.bytes, 0);
     const extrasLines = a.extras.reduce((n, e) => n + e.lines, 0);
     console.log(
@@ -1457,7 +1472,7 @@ function copyAsanDll(tc: Toolchain, dir: string): void {
 
 function buildOne(name: string, tc: Toolchain, f: BuildFlags, fail: (msg: string) => never): void {
   const started = performance.now();
-  const src = sourcesFor(name, tc.plat, f.nonAmalgam);
+  const src = sourcesFor(name, tc.plat, f);
   if (!src) {
     fail(`Unknown target: ${name}`);
   }
@@ -1670,7 +1685,7 @@ export async function build(req: BuildRequest): Promise<void> {
   console.log(Object.keys(tc.env).length > 0 ? `${from}, in a shell with the MSVC environment set` : from);
   console.log(`Using ${tc.exe}`);
   if (!flags.nonAmalgam) {
-    await ensureAmalgam(fail);
+    await ensureAmalgam(flags, fail);
   }
   const dir = outDir(plat, flags);
   if (flags.clean) {
@@ -1724,6 +1739,7 @@ const amalgamLine = isDist
 against that source set.`;
 
 const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean] [-all]
+                     [-markdown=mini|full] [-html=mini|full]
                      [--win-backend=d2d|d3d11|d3d12|all] [<example>]
 
   -rel    release (default)
@@ -1734,6 +1750,8 @@ const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang]
   -wasm   build a page for the browser with emscripten, from any host
   -clean  delete out/<dir>/ before building
   -all    build every example (amalgamation + compile); print total elapsed
+  -markdown=mini|full  Markdown parser implementation (default full)
+  -html=mini|full      HTML parser implementation (default full)
 
 Windows renderer (compile-time, default d2d):
   --win-backend=d2d|d3d11|d3d12|all

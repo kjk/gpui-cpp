@@ -11,7 +11,7 @@ The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`markdown`)
 alongside the gpui-component, Zed GPUI and taffy pins, and moves when they do
 — see [`port-upstream.md`](../../port-upstream.md).
 
-This remains the default parser. `GPUI_MARKDOWN=mini` selects the independent,
+This remains the default parser. `-markdown=mini` selects the independent,
 size-focused implementation in [`src/markdown-mini`](../markdown-mini) while
 keeping this directory's public `markdown.h` and compact mdast representation.
 

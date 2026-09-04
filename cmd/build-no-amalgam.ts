@@ -11,6 +11,7 @@
 import { build, checkBuildFlags, defaultBuildFlags, formatElapsed, platformFor, takeBuildFlag } from "./build.ts";
 
 const usage = `Usage: bun cmd/build-no-amalgam.ts [-rel|-dbg] [-asan] [-clang] [-clean]
+                         [-markdown=mini|full] [-html=mini|full]
                          [--win-backend=d2d|d3d11|d3d12|all]
 
 Compiles every platform-appropriate src/**/*.cpp into its own object and links

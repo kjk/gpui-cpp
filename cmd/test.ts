@@ -1,5 +1,6 @@
 // Build and run the test suite: bun cmd/test.ts [-dbg|-rel] [-asan] [-clang]
 //                                      [-clean] [--win-backend=<backend>]
+//                                      [-markdown=mini|full] [-html=mini|full]
 //
 // The tests live in tests/ and are ports of the pure-logic ones in
 // .work/gpui-component at the SHA pinned in cmd/run.ts. The runner is an

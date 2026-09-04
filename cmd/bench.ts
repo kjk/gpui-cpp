@@ -1,5 +1,7 @@
 // Build and run the layout benchmarks: bun cmd/bench.ts [-dbg|-rel] [-asan]
 //                                                       [-clang] [-clean]
+//                                                       [-markdown=mini|full]
+//                                                       [-html=mini|full]
 //                                                       [-small] [-large]
 //                                                       [-n=<count>] [<filter>]
 //
