@@ -46,9 +46,9 @@ static bool In(SeqStrings set, Str value) {
     return SeqStrIndexIS(set, value) >= 0;
 }
 
-static Str LowerCopy(Arena* a, Str value) {
-    Str result = StrDup(a, value);
-    StrLowerAscii(result.s);
+static ArenaStr LowerCopy(Arena* a, Str value) {
+    ArenaStr result = ArenaStrDup(a, value);
+    StrLowerAscii(ArenaStrGet(a, result).s);
     return result;
 }
 
@@ -133,7 +133,16 @@ static void AppendCp(Arena* a, StrBuilder& out, uint32_t cp) {
     StrBuilderAppend(a, out, Str(bytes, n));
 }
 
-static Str Decode(Arena* a, Str value, bool attribute) {
+static ArenaStr Decode(Arena* a, Str value, bool attribute) {
+    bool needsDecode = false;
+    for (int i = 0; i < value.len; i++) {
+        if (value.s[i] == '&' || value.s[i] == '\r' || value.s[i] == 0) {
+            needsDecode = true;
+            break;
+        }
+    }
+    if (!needsDecode) return ArenaStrDup(a, value);
+
     StrBuilder out;
     StrBuilderReserve(a, out, value.len);
     for (int i = 0; i < value.len;) {
@@ -202,7 +211,7 @@ static Str Decode(Arena* a, Str value, bool attribute) {
         StrBuilderAppend(a, out, decoded);
         i += matched + (semi ? 1 : 0);
     }
-    return StrBuilderTakeStr(a, out);
+    return ArenaStrDup(a, StrBuilderTakeStr(a, out));
 }
 
 struct Scanner {
@@ -225,7 +234,7 @@ static void Error(Scanner* s, const char* message) {
     if (!s->options.exactErrors) return;
     Token token;
     token.kind = TokenKind::ParseError;
-    token.data = Str((char*)message);
+    token.data = ArenaStrDup(s->a, Str((char*)message));
     token.line = s->line;
     Emit(s, token);
 }
@@ -236,7 +245,7 @@ static void SkipSpace(Scanner* s) {
     }
 }
 
-static Str ScanName(Scanner* s) {
+static ArenaStr ScanName(Scanner* s) {
     int start = s->at;
     while (s->at < s->source.len && IsNameChar(s->source.s[s->at])) s->at++;
     return LowerCopy(s->a, Str(s->source.s + start, s->at - start));
@@ -271,10 +280,10 @@ static Attribute* ScanAttrs(Scanner* s, bool* selfClosing) {
             s->at++;
             continue;
         }
-        Str name =
+        ArenaStr name =
             LowerCopy(s->a, Str(s->source.s + nameStart, s->at - nameStart));
         SkipSpace(s);
-        Str value = StrDup(s->a, StrL(""));
+        ArenaStr value = {};
         if (s->at < s->source.len && s->source.s[s->at] == '=') {
             s->at++;
             SkipSpace(s);
@@ -299,8 +308,10 @@ static Attribute* ScanAttrs(Scanner* s, bool* selfClosing) {
             }
         }
         bool duplicate = false;
-        for (Attribute* at = first; at; at = at->next) {
-            if (StrEq(at->name, name)) duplicate = true;
+        for (Attribute* at = first; at; at = AttributeNext(s->a, at)) {
+            if (StrEq(AttributeName(s->a, at), ArenaStrGet(s->a, name))) {
+                duplicate = true;
+            }
         }
         if (duplicate) {
             Error(s, "duplicate attribute");
@@ -310,7 +321,7 @@ static Attribute* ScanAttrs(Scanner* s, bool* selfClosing) {
         attr->name = name;
         attr->value = value;
         if (last)
-            last->next = attr;
+            last->next = ArenaPtrOf(s->a, attr);
         else
             first = attr;
         last = attr;
@@ -345,8 +356,8 @@ static void TokenizeRun(Scanner* s) {
                 Token text;
                 text.kind = TokenKind::Character;
                 Str raw(s->source.s + s->at, end - s->at);
-                text.data =
-                    s->rcdata ? Decode(s->a, raw, false) : StrDup(s->a, raw);
+                text.data = s->rcdata ? Decode(s->a, raw, false)
+                                      : ArenaStrDup(s->a, raw);
                 text.line = s->line;
                 for (int i = s->at; i < end; i++) {
                     if (s->source.s[i] == '\n') s->line++;
@@ -384,8 +395,8 @@ static void TokenizeRun(Scanner* s) {
             }
             Token comment;
             comment.kind = TokenKind::Comment;
-            comment
-                .data = StrDup(s->a, Str(s->source.s + start, s->at - start));
+            comment.data =
+                ArenaStrDup(s->a, Str(s->source.s + start, s->at - start));
             comment.line = tokenLine;
             if (s->at + 2 < s->source.len)
                 s->at += 3;
@@ -410,10 +421,10 @@ static void TokenizeRun(Scanner* s) {
                 int n = 0;
                 while (n < body.len && !IsSpace(body.s[n])) n++;
                 token.name = LowerCopy(s->a, Str(body.s, n));
-                token.forceQuirks = !StrEqI(token.name, "html");
+                token.forceQuirks = !StrEqI(TokenName(s->a, &token), "html");
             } else {
                 token.kind = TokenKind::Comment;
-                token.data = StrDup(s->a, body);
+                token.data = ArenaStrDup(s->a, body);
             }
             Emit(s, token);
             continue;
@@ -436,18 +447,19 @@ static void TokenizeRun(Scanner* s) {
             token.kind = TokenKind::StartTag;
             token.name = ScanName(s);
             token.line = tokenLine;
-            token.attrs = ScanAttrs(s, &token.selfClosing);
+            token.attrs = ArenaPtrOf(s->a, ScanAttrs(s, &token.selfClosing));
             Emit(s, token);
-            if (!token.selfClosing && (In(kRawElements, token.name) ||
-                                       In(kRcdataElements, token.name))) {
-                s->rawName = token.name;
-                s->rcdata = In(kRcdataElements, token.name);
+            Str name = TokenName(s->a, &token);
+            if (!token.selfClosing &&
+                (In(kRawElements, name) || In(kRcdataElements, name))) {
+                s->rawName = name;
+                s->rcdata = In(kRcdataElements, name);
             }
             continue;
         }
         Token text;
         text.kind = TokenKind::Character;
-        text.data = StrDup(s->a, Str(s->source.s + s->at, 1));
+        text.data = ArenaStrDup(s->a, Str(s->source.s + s->at, 1));
         text.line = tokenLine;
         s->at++;
         Emit(s, text);
@@ -473,45 +485,46 @@ void Tokenize(Arena* a, Str source, TokenSink sink, void* user,
 static Node* NewNode(Arena* a, NodeKind kind, Str name = {}) {
     Node* node = ArenaNew<Node>(a);
     node->kind = kind;
-    node->name = name;
+    node->name = ArenaStrDup(a, name);
     return node;
 }
 
-static void Append(Node* parent, Node* child) {
-    child->parent = parent;
-    child->next = nullptr;
-    if (parent->last)
-        parent->last->next = child;
+static void Append(Arena* a, Node* parent, Node* child) {
+    child->parent = ArenaPtrOf(a, parent);
+    child->next = {};
+    Node* last = NodeLast(a, parent);
+    if (last)
+        last->next = ArenaPtrOf(a, child);
     else
-        parent->first = child;
-    parent->last = child;
+        parent->first = ArenaPtrOf(a, child);
+    parent->last = ArenaPtrOf(a, child);
 }
 
-static void InsertBefore(Node* before, Node* child) {
-    Node* parent = before ? before->parent : nullptr;
+static void InsertBefore(Arena* a, Node* before, Node* child) {
+    Node* parent = NodeParent(a, before);
     if (!parent) return;
-    child->parent = parent;
-    if (parent->first == before) {
-        child->next = before;
-        parent->first = child;
+    child->parent = ArenaPtrOf(a, parent);
+    if (NodeFirst(a, parent) == before) {
+        child->next = ArenaPtrOf(a, before);
+        parent->first = ArenaPtrOf(a, child);
         return;
     }
-    Node* prev = parent->first;
-    while (prev && prev->next != before) prev = prev->next;
+    Node* prev = NodeFirst(a, parent);
+    while (prev && NodeNext(a, prev) != before) prev = NodeNext(a, prev);
     if (!prev) return;
-    prev->next = child;
-    child->next = before;
+    prev->next = ArenaPtrOf(a, child);
+    child->next = ArenaPtrOf(a, before);
 }
 
 static Attribute* CloneAttrs(Arena* a, const Attribute* attrs) {
     Attribute* first = nullptr;
     Attribute* last = nullptr;
-    for (; attrs; attrs = attrs->next) {
+    for (; attrs; attrs = AttributeNext(a, attrs)) {
         Attribute* copy = ArenaNew<Attribute>(a);
         *copy = *attrs;
-        copy->next = nullptr;
+        copy->next = {};
         if (last)
-            last->next = copy;
+            last->next = ArenaPtrOf(a, copy);
         else
             first = copy;
         last = copy;
@@ -537,7 +550,7 @@ static Node* Current(Builder* b) {
 
 static int OpenIndex(Builder* b, Str name) {
     for (int i = b->open.len - 1; i >= 0; i--) {
-        if (StrEqI(b->open[i]->name, name)) return i;
+        if (StrEqI(NodeName(b->a, b->open[i]), name)) return i;
     }
     return -1;
 }
@@ -546,10 +559,20 @@ static bool HasOpen(Builder* b, const char* name) {
     return OpenIndex(b, Str((char*)name)) >= 0;
 }
 
-static Node* Element(Builder* b, Str name, Attribute* attrs,
+static Node* Element(Builder* b, Str name, const Attribute* attrs,
                      Namespace ns = Namespace::Html) {
-    Node* node = NewNode(b->a, NodeKind::Element, StrDup(b->a, name));
-    node->attrs = CloneAttrs(b->a, attrs);
+    Node* node = NewNode(b->a, NodeKind::Element, name);
+    node->attrs = ArenaPtrOf(b->a, CloneAttrs(b->a, attrs));
+    node->ns = ns;
+    return node;
+}
+
+static Node* ElementFromToken(Builder* b, const Token* token,
+                              Namespace ns = Namespace::Html) {
+    Node* node = ArenaNew<Node>(b->a);
+    node->kind = NodeKind::Element;
+    node->name = token->name;
+    node->attrs = token->attrs;
     node->ns = ns;
     return node;
 }
@@ -559,7 +582,7 @@ static Node* EnsureWrapper(Builder* b, Node** slot, const char* name,
     if (*slot) return *slot;
     *slot = Element(b, Str((char*)name), nullptr);
     (*slot)->implicit = true;
-    Append(parent, *slot);
+    Append(b->a, parent, *slot);
     return *slot;
 }
 
@@ -579,7 +602,7 @@ static bool AllSpace(Str value) {
 
 static Node* TableInScope(Builder* b) {
     for (int i = b->open.len - 1; i >= 0; i--) {
-        if (StrEqI(b->open[i]->name, "table")) return b->open[i];
+        if (StrEqI(NodeName(b->a, b->open[i]), "table")) return b->open[i];
     }
     return nullptr;
 }
@@ -602,26 +625,31 @@ static bool TableAllows(Str parent, Str child) {
 static Node* InsertionParent(Builder* b, Str child, bool textIsSpace = false) {
     Node* current = Current(b);
     Node* table = TableInScope(b);
-    if (table && !TableAllows(current->name, child) && !textIsSpace) {
-        return table->parent ? table->parent : current;
+    if (table && !TableAllows(NodeName(b->a, current), child) && !textIsSpace) {
+        Node* tableParent = NodeParent(b->a, table);
+        return tableParent ? tableParent : current;
     }
     return current == b->doc ? Body(b) : current;
 }
 
-static void AppendText(Builder* b, Str data) {
+static void AppendText(Builder* b, ArenaStr stored) {
+    Str data = ArenaStrGet(b->a, stored);
     if (data.len <= 0) return;
     Node* parent = InsertionParent(b, {}, AllSpace(data));
     Node* table = TableInScope(b);
-    Node* text = NewNode(b->a, NodeKind::Text);
-    text->data = StrDup(b->a, data);
-    if (table && parent == table->parent && !AllSpace(data)) {
-        InsertBefore(table, text);
-    } else if (parent->last && parent->last->kind == NodeKind::Text) {
-        ArenaStr joined = ArenaStrDup(b->a, parent->last->data);
-        joined = ArenaStrAppend(b->a, joined, data);
-        parent->last->data = ArenaStrGet(b->a, joined);
+    if (table && parent == NodeParent(b->a, table) && !AllSpace(data)) {
+        Node* text = NewNode(b->a, NodeKind::Text);
+        text->data = stored;
+        InsertBefore(b->a, table, text);
     } else {
-        Append(parent, text);
+        Node* last = NodeLast(b->a, parent);
+        if (last && last->kind == NodeKind::Text) {
+            last->data = ArenaStrAppend(b->a, last->data, data);
+        } else {
+            Node* text = NewNode(b->a, NodeKind::Text);
+            text->data = stored;
+            Append(b->a, parent, text);
+        }
     }
 }
 
@@ -659,7 +687,7 @@ static void CloseImplied(Builder* b, Str name) {
     if (name.len == 2 && name.s[0] == 'h' && name.s[1] >= '1' &&
         name.s[1] <= '6') {
         for (int i = b->open.len - 1; i >= 0; i--) {
-            Str n = b->open[i]->name;
+            Str n = NodeName(b->a, b->open[i]);
             if (n.len == 2 && n.s[0] == 'h' && n.s[1] >= '1' && n.s[1] <= '6') {
                 b->open.Truncate(i);
                 break;
@@ -668,43 +696,47 @@ static void CloseImplied(Builder* b, Str name) {
     }
 }
 
-static void MergeAttrs(Arena* a, Node* node, Attribute* attrs) {
-    for (; attrs; attrs = attrs->next) {
+static void MergeAttrs(Arena* a, Node* node, const Attribute* attrs) {
+    for (; attrs; attrs = AttributeNext(a, attrs)) {
         bool exists = false;
-        for (Attribute* at = node->attrs; at; at = at->next) {
-            if (StrEq(at->name, attrs->name)) exists = true;
+        for (Attribute* at = NodeAttrs(a, node); at;
+             at = AttributeNext(a, at)) {
+            if (StrEq(AttributeName(a, at), AttributeName(a, attrs))) {
+                exists = true;
+            }
         }
         if (exists) continue;
         Attribute* copy = ArenaNew<Attribute>(a);
         *copy = *attrs;
         copy->next = node->attrs;
-        node->attrs = copy;
+        node->attrs = ArenaPtrOf(a, copy);
     }
 }
 
 static Node* PushElement(Builder* b, const Token* token,
                          Namespace ns = Namespace::Html) {
-    Node* parent = InsertionParent(b, token->name);
-    Node* node = Element(b, token->name, token->attrs, ns);
+    Str name = TokenName(b->a, token);
+    Node* parent = InsertionParent(b, name);
+    Node* node = ElementFromToken(b, token, ns);
     Node* table = TableInScope(b);
-    if (table && parent == table->parent &&
-        !TableAllows(Current(b)->name, token->name)) {
-        InsertBefore(table, node);
+    if (table && parent == NodeParent(b->a, table) &&
+        !TableAllows(NodeName(b->a, Current(b)), name)) {
+        InsertBefore(b->a, table, node);
     } else {
-        Append(parent, node);
+        Append(b->a, parent, node);
     }
-    if (!token->selfClosing && !In(kVoidElements, token->name)) {
+    if (!token->selfClosing && !In(kVoidElements, name)) {
         b->open.Append(b->a, node);
     }
     return node;
 }
 
 static void StartTag(Builder* b, const Token* token) {
-    Str name = token->name;
+    Str name = TokenName(b->a, token);
     if (!b->fragment && StrEqI(name, "html")) {
         Node* html = EnsureWrapper(b, &b->html, "html", b->doc);
         html->implicit = false;
-        MergeAttrs(b->a, html, token->attrs);
+        MergeAttrs(b->a, html, TokenAttrs(b->a, token));
         if (b->open.len == 0) b->open.Append(b->a, html);
         return;
     }
@@ -712,13 +744,13 @@ static void StartTag(Builder* b, const Token* token) {
         EnsureWrapper(b, &b->html, "html", b->doc);
         Node* head = EnsureWrapper(b, &b->head, "head", b->html);
         head->implicit = false;
-        MergeAttrs(b->a, head, token->attrs);
+        MergeAttrs(b->a, head, TokenAttrs(b->a, token));
         if (!HasOpen(b, "head")) b->open.Append(b->a, head);
         return;
     }
     if (!b->fragment && StrEqI(name, "body")) {
         Body(b)->implicit = false;
-        MergeAttrs(b->a, b->body, token->attrs);
+        MergeAttrs(b->a, b->body, TokenAttrs(b->a, token));
         while (b->open.len && b->open[b->open.len - 1] != b->html)
             b->open.Pop();
         if (!HasOpen(b, "html")) b->open.Append(b->a, b->html);
@@ -728,8 +760,8 @@ static void StartTag(Builder* b, const Token* token) {
     if (!b->fragment && In(kHeadElements, name) && !b->body) {
         EnsureWrapper(b, &b->html, "html", b->doc);
         Node* head = EnsureWrapper(b, &b->head, "head", b->html);
-        Node* node = Element(b, name, token->attrs);
-        Append(head, node);
+        Node* node = ElementFromToken(b, token);
+        Append(b->a, head, node);
         if (!token->selfClosing && !In(kVoidElements, name)) {
             b->open.Append(b->a, node);
         }
@@ -744,28 +776,28 @@ static void StartTag(Builder* b, const Token* token) {
     }
 
     CloseImplied(b, name);
-    if (StrEqI(name, "tr") && StrEqI(Current(b)->name, "table")) {
+    if (StrEqI(name, "tr") && StrEqI(NodeName(b->a, Current(b)), "table")) {
         Node* tbody = Element(b, StrL("tbody"), nullptr);
         tbody->implicit = true;
-        Append(Current(b), tbody);
+        Append(b->a, Current(b), tbody);
         b->open.Append(b->a, tbody);
     } else if ((StrEqI(name, "td") || StrEqI(name, "th")) &&
-               StrEqI(Current(b)->name, "table")) {
+               StrEqI(NodeName(b->a, Current(b)), "table")) {
         Node* tbody = Element(b, StrL("tbody"), nullptr);
         tbody->implicit = true;
-        Append(Current(b), tbody);
+        Append(b->a, Current(b), tbody);
         b->open.Append(b->a, tbody);
         Node* tr = Element(b, StrL("tr"), nullptr);
         tr->implicit = true;
-        Append(Current(b), tr);
+        Append(b->a, Current(b), tr);
         b->open.Append(b->a, tr);
     } else if ((StrEqI(name, "td") || StrEqI(name, "th")) &&
-               (StrEqI(Current(b)->name, "tbody") ||
-                StrEqI(Current(b)->name, "thead") ||
-                StrEqI(Current(b)->name, "tfoot"))) {
+               (StrEqI(NodeName(b->a, Current(b)), "tbody") ||
+                StrEqI(NodeName(b->a, Current(b)), "thead") ||
+                StrEqI(NodeName(b->a, Current(b)), "tfoot"))) {
         Node* tr = Element(b, StrL("tr"), nullptr);
         tr->implicit = true;
-        Append(Current(b), tr);
+        Append(b->a, Current(b), tr);
         b->open.Append(b->a, tr);
     }
     Namespace ns = Current(b)->ns;
@@ -781,23 +813,24 @@ static void EndFormatting(Builder* b, Str name) {
     if (at < 0) return;
     ArenaVec<Node*> reopen;
     for (int i = at + 1; i < b->open.len; i++) {
-        if (In(kFormattingElements, b->open[i]->name)) {
+        if (In(kFormattingElements, NodeName(b->a, b->open[i]))) {
             reopen.Append(b->a, b->open[i]);
         }
     }
-    Node* parent = b->open[at]->parent;
+    Node* parent = NodeParent(b->a, b->open[at]);
     b->open.Truncate(at);
     for (int i = 0; i < reopen.len; i++) {
         Node* old = reopen[i];
-        Node* node = Element(b, old->name, old->attrs, old->ns);
-        Append(parent, node);
+        Node* node =
+            Element(b, NodeName(b->a, old), NodeAttrs(b->a, old), old->ns);
+        Append(b->a, parent, node);
         b->open.Append(b->a, node);
         parent = node;
     }
 }
 
 static void EndTag(Builder* b, const Token* token) {
-    Str name = token->name;
+    Str name = TokenName(b->a, token);
     if (StrEqI(name, "head")) {
         CloseNamed(b, "head");
         return;
@@ -824,17 +857,17 @@ static void BuildToken(void* user, const Token* token) {
             break;
         case TokenKind::Comment: {
             Node* comment = NewNode(b->a, NodeKind::Comment);
-            comment->data = StrDup(b->a, token->data);
-            Append(Current(b), comment);
+            comment->data = token->data;
+            Append(b->a, Current(b), comment);
             break;
         }
         case TokenKind::Doctype:
             if (!b->options.dropDoctype && !b->fragment) {
                 Node* node =
-                    NewNode(b->a, NodeKind::Doctype, StrDup(b->a, token->name));
-                node->data = StrDup(b->a, token->data);
-                node->systemId = StrDup(b->a, token->systemId);
-                Append(b->doc, node);
+                    NewNode(b->a, NodeKind::Doctype, TokenName(b->a, token));
+                node->data = token->data;
+                node->systemId = token->systemId;
+                Append(b->a, b->doc, node);
             }
             break;
         case TokenKind::StartTag:
@@ -858,7 +891,8 @@ static Node* Parse(Arena* a, Str source, Str context, ParseOptions options,
     builder.context = context;
     builder.doc = NewNode(a, NodeKind::Document);
     if (fragment) {
-        builder.doc->name = context.s ? LowerCopy(a, context) : StrL("body");
+        builder.doc->name =
+            context.s ? LowerCopy(a, context) : ArenaStrDup(a, StrL("body"));
         builder.doc->ns = StrEqI(context, "svg")    ? Namespace::Svg
                           : StrEqI(context, "math") ? Namespace::MathMl
                                                     : Namespace::Html;
@@ -891,17 +925,17 @@ Node* ParseFragment(Arena* a, Str source, Str context, ParseOptions options) {
     return Parse(a, source, context, options, true);
 }
 
-const Attribute* Attr(const Node* node, Str name) {
+const Attribute* Attr(Arena* a, const Node* node, Str name) {
     if (!node) return nullptr;
-    for (const Attribute* attr = node->attrs; attr; attr = attr->next) {
-        if (StrEqI(attr->name, name)) return attr;
+    for (const Attribute* attr = NodeAttrs(a, node); attr;
+         attr = AttributeNext(a, attr)) {
+        if (StrEqI(AttributeName(a, attr), name)) return attr;
     }
     return nullptr;
 }
 
-Str AttrValue(const Node* node, Str name) {
-    const Attribute* attr = Attr(node, name);
-    return attr ? attr->value : Str{};
+Str AttrValue(Arena* a, const Node* node, Str name) {
+    return AttributeValue(a, Attr(a, node, name));
 }
 
 static void WriteEscaped(Arena* a, StrBuilder& out, Str value, bool attribute) {
@@ -926,26 +960,28 @@ static void WriteNode(Arena* a, StrBuilder& out, const Node* node,
     bool element = node->kind == NodeKind::Element;
     if (include) {
         if (node->kind == NodeKind::Text) {
-            if (node->parent && In(kRawElements, node->parent->name))
-                StrBuilderAppend(a, out, node->data);
+            const Node* parent = NodeParent(a, node);
+            if (parent && In(kRawElements, NodeName(a, parent)))
+                StrBuilderAppend(a, out, NodeData(a, node));
             else
-                WriteEscaped(a, out, node->data, false);
+                WriteEscaped(a, out, NodeData(a, node), false);
         } else if (node->kind == NodeKind::Comment) {
             StrBuilderAppend(a, out, StrL("<!--"));
-            StrBuilderAppend(a, out, node->data);
+            StrBuilderAppend(a, out, NodeData(a, node));
             StrBuilderAppend(a, out, StrL("-->"));
         } else if (node->kind == NodeKind::Doctype) {
             StrBuilderAppend(a, out, StrL("<!DOCTYPE "));
-            StrBuilderAppend(a, out, node->name);
+            StrBuilderAppend(a, out, NodeName(a, node));
             StrBuilderAppendChar(a, out, '>');
         } else if (element) {
             StrBuilderAppendChar(a, out, '<');
-            StrBuilderAppend(a, out, node->name);
-            for (const Attribute* attr = node->attrs; attr; attr = attr->next) {
+            StrBuilderAppend(a, out, NodeName(a, node));
+            for (const Attribute* attr = NodeAttrs(a, node); attr;
+                 attr = AttributeNext(a, attr)) {
                 StrBuilderAppendChar(a, out, ' ');
-                StrBuilderAppend(a, out, attr->name);
+                StrBuilderAppend(a, out, AttributeName(a, attr));
                 StrBuilderAppend(a, out, StrL("=\""));
-                WriteEscaped(a, out, attr->value, true);
+                WriteEscaped(a, out, AttributeValue(a, attr), true);
                 StrBuilderAppendChar(a, out, '"');
             }
             StrBuilderAppendChar(a, out, '>');
@@ -953,13 +989,14 @@ static void WriteNode(Arena* a, StrBuilder& out, const Node* node,
     }
     if (node->kind != NodeKind::Text && node->kind != NodeKind::Comment &&
         node->kind != NodeKind::Doctype) {
-        for (const Node* child = node->first; child; child = child->next) {
+        for (const Node* child = NodeFirst(a, node); child;
+             child = NodeNext(a, child)) {
             WriteNode(a, out, child, true);
         }
     }
-    if (include && element && !In(kVoidElements, node->name)) {
+    if (include && element && !In(kVoidElements, NodeName(a, node))) {
         StrBuilderAppend(a, out, StrL("</"));
-        StrBuilderAppend(a, out, node->name);
+        StrBuilderAppend(a, out, NodeName(a, node));
         StrBuilderAppendChar(a, out, '>');
     }
 }

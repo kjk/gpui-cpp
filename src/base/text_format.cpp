@@ -136,11 +136,12 @@ Str HtmlMinify(Arena* a, Str source) {
     return minifier.Minify(a, source);
 }
 
-static const html5ever::Node* FirstElement(const html5ever::Node* node) {
-    for (const html5ever::Node* at = node ? node->first : nullptr; at;
-         at = at->next) {
+static const html5ever::Node* FirstElement(Arena* a,
+                                           const html5ever::Node* node) {
+    for (const html5ever::Node* at = html5ever::NodeFirst(a, node); at;
+         at = html5ever::NodeNext(a, at)) {
         if (at->kind == html5ever::NodeKind::Element) return at;
-        if (const html5ever::Node* child = FirstElement(at)) return child;
+        if (const html5ever::Node* child = FirstElement(a, at)) return child;
     }
     return nullptr;
 }
@@ -153,7 +154,7 @@ Str HtmlAttrValue(Arena* a, Str attrs, const char* name) {
     StrBuilderAppendChar(a, source, '>');
     Str html = StrBuilderTakeStr(a, source);
     html5ever::Node* doc = html5ever::ParseFragment(a, html);
-    return html5ever::AttrValue(FirstElement(doc), Str((char*)name));
+    return html5ever::AttrValue(a, FirstElement(a, doc), Str((char*)name));
 }
 
 static uint8_t InlineMark(Str name) {
@@ -206,10 +207,11 @@ static Str StyleValue(Str style, const char* name) {
     return {};
 }
 
-static float ElementLength(const html5ever::Node* node, const char* name) {
-    Str value = html5ever::AttrValue(node, Str((char*)name));
+static float ElementLength(Arena* a, const html5ever::Node* node,
+                           const char* name) {
+    Str value = html5ever::AttrValue(a, node, Str((char*)name));
     if (!value.s) {
-        value = StyleValue(html5ever::AttrValue(node, StrL("style")), name);
+        value = StyleValue(html5ever::AttrValue(a, node, StrL("style")), name);
     }
     return LengthValue(value);
 }
@@ -248,15 +250,15 @@ HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag) {
     }
     if (result.close || !result.known) return result;
     html5ever::Node* doc = html5ever::ParseFragment(a, tag);
-    const html5ever::Node* element = FirstElement(doc);
+    const html5ever::Node* element = FirstElement(a, doc);
     if (!element) return result;
     if (result.isImage) {
-        result.alt = html5ever::AttrValue(element, StrL("alt"));
-        result.src = html5ever::AttrValue(element, StrL("src"));
-        result.width = ElementLength(element, "width");
-        result.height = ElementLength(element, "height");
+        result.alt = html5ever::AttrValue(a, element, StrL("alt"));
+        result.src = html5ever::AttrValue(a, element, StrL("src"));
+        result.width = ElementLength(a, element, "width");
+        result.height = ElementLength(a, element, "height");
     } else if (result.mark == MdLink) {
-        result.href = html5ever::AttrValue(element, StrL("href"));
+        result.href = html5ever::AttrValue(a, element, StrL("href"));
     }
     return result;
 }
@@ -276,10 +278,10 @@ static const MdKind kBlockKinds[] = {
     MdKind::Group,     MdKind::Group,     MdKind::Group,
 };
 
-static bool BlockKind(const html5ever::Node* node, MdKind* kind,
+static bool BlockKind(Arena* a, const html5ever::Node* node, MdKind* kind,
                       uint8_t* level) {
     *level = 0;
-    Str name = node->name;
+    Str name = html5ever::NodeName(a, node);
     if (name.len == 2 && name.s[0] == 'h' && name.s[1] >= '1' &&
         name.s[1] <= '6') {
         *kind = MdKind::Heading;
@@ -376,14 +378,14 @@ static void AddText(Project* p, Str text) {
 }
 
 static void AddImage(Project* p, const html5ever::Node* node) {
-    Str src = html5ever::AttrValue(node, StrL("src"));
+    Str src = html5ever::AttrValue(p->a, node, StrL("src"));
     if (src.len <= 0) return;
     MdNode* target = TextTarget(p);
     MdRun* run = ArenaNew<MdRun>(p->a);
     run->imgSrc = src;
-    run->text = html5ever::AttrValue(node, StrL("alt"));
-    run->imgW = ElementLength(node, "width");
-    run->imgH = ElementLength(node, "height");
+    run->text = html5ever::AttrValue(p->a, node, StrL("alt"));
+    run->imgW = ElementLength(p->a, node, "width");
+    run->imgH = ElementLength(p->a, node, "height");
     run->marks = p->marks;
     run->href = p->href;
     if (target->runLast)
@@ -401,17 +403,17 @@ static uint8_t AlignValue(Str value) {
     return MdAlignDefault;
 }
 
-static uint8_t CellAlign(const html5ever::Node* node) {
-    Str value = html5ever::AttrValue(node, StrL("align"));
+static uint8_t CellAlign(Arena* a, const html5ever::Node* node) {
+    Str value = html5ever::AttrValue(a, node, StrL("align"));
     if (!value.s) {
-        value =
-            StyleValue(html5ever::AttrValue(node, StrL("style")), "text-align");
+        value = StyleValue(html5ever::AttrValue(a, node, StrL("style")),
+                           "text-align");
     }
     return AlignValue(value);
 }
 
-static int ListStart(const html5ever::Node* node) {
-    Str value = html5ever::AttrValue(node, StrL("start"));
+static int ListStart(Arena* a, const html5ever::Node* node) {
+    Str value = html5ever::AttrValue(a, node, StrL("start"));
     if (!value.s || value.len <= 0) return 1;
     int result = 0;
     for (int i = 0; i < value.len; i++) {
@@ -424,14 +426,14 @@ static int ListStart(const html5ever::Node* node) {
 static void ProjectNode(Project* p, const html5ever::Node* source);
 
 static void ProjectChildren(Project* p, const html5ever::Node* source) {
-    for (const html5ever::Node* child = source->first; child;
-         child = child->next) {
+    for (const html5ever::Node* child = html5ever::NodeFirst(p->a, source);
+         child; child = html5ever::NodeNext(p->a, child)) {
         ProjectNode(p, child);
     }
 }
 
 static void ProjectElement(Project* p, const html5ever::Node* source) {
-    Str name = source->name;
+    Str name = html5ever::NodeName(p->a, source);
     if (StrEqI(name, "head") || StrEqI(name, "title") ||
         StrEqI(name, "script") || StrEqI(name, "style")) {
         return;
@@ -464,29 +466,33 @@ static void ProjectElement(Project* p, const html5ever::Node* source) {
     }
     MdKind kind = MdKind::Group;
     uint8_t level = 0;
-    if (BlockKind(source, &kind, &level)) {
+    if (BlockKind(p->a, source, &kind, &level)) {
         p->para = nullptr;
         MdNode* parent = p->cur;
         MdNode* node = NewMd(p, kind);
         node->level = level;
         if (kind == MdKind::List) {
             node->ordered = StrEqI(name, "ol");
-            node->start = ListStart(source);
+            node->start = ListStart(p->a, source);
         } else if (kind == MdKind::Row) {
+            const html5ever::Node* sourceParent =
+                html5ever::NodeParent(p->a, source);
             node->head =
                 p->tableHead ||
-                (source->parent && StrEqI(source->parent->name, "thead"));
+                (sourceParent &&
+                 StrEqI(html5ever::NodeName(p->a, sourceParent), "thead"));
         } else if (kind == MdKind::Cell) {
-            node->align = CellAlign(source);
+            node->align = CellAlign(p->a, source);
             if (StrEqI(name, "th") && node->parent) node->parent->head = true;
         }
         bool oldRaw = p->raw;
         p->raw = kind == MdKind::Code;
         p->cur = node;
-        if (kind == MdKind::Code && source->first &&
-            source->first->kind == html5ever::NodeKind::Element &&
-            StrEqI(source->first->name, "code")) {
-            Str cls = html5ever::AttrValue(source->first, StrL("class"));
+        const html5ever::Node* first = html5ever::NodeFirst(p->a, source);
+        if (kind == MdKind::Code && first &&
+            first->kind == html5ever::NodeKind::Element &&
+            StrEqI(html5ever::NodeName(p->a, first), "code")) {
+            Str cls = html5ever::AttrValue(p->a, first, StrL("class"));
             if (StrStartsWith(cls, "language-")) {
                 node->lang = Str(cls.s + 9, cls.len - 9);
             }
@@ -502,7 +508,7 @@ static void ProjectElement(Project* p, const html5ever::Node* source) {
     uint8_t mark = InlineMark(name);
     if (StrEqI(name, "a")) {
         p->marks = (uint8_t)(p->marks | MdLink);
-        p->href = html5ever::AttrValue(source, StrL("href"));
+        p->href = html5ever::AttrValue(p->a, source, StrL("href"));
     } else {
         p->marks = (uint8_t)(p->marks | mark);
     }
@@ -514,7 +520,7 @@ static void ProjectElement(Project* p, const html5ever::Node* source) {
 static void ProjectNode(Project* p, const html5ever::Node* source) {
     if (!source) return;
     if (source->kind == html5ever::NodeKind::Text) {
-        AddText(p, source->data);
+        AddText(p, html5ever::NodeData(p->a, source));
     } else if (source->kind == html5ever::NodeKind::Element) {
         ProjectElement(p, source);
     } else if (source->kind == html5ever::NodeKind::Document) {

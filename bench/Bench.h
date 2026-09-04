@@ -4,8 +4,9 @@
    directory, one file per Rust one. That directory is a crate of its own —
    `taffy_benchmarks` — and is not part of the published crate, so it comes
    from the git checkout the recipe in port-upstream.md clones.
-   `MarkdownBench.cpp` is not a port: markdown-rs carries no benchmarks to
-   translate, so those cases are ours, and that file says what each measures.
+   `MarkdownBench.cpp` and `Html5everBench.cpp` are not ports: their crates
+   carry no comparable benchmarks to translate, so those cases are ours and
+   the files say what each measures.
 
    The Rust runs on criterion, which warms up, estimates a sample count and
    reports a confidence interval. This runs a fixed number of samples and
@@ -150,12 +151,14 @@ struct TreeBuilder {
     void ComputeLayout(taffy::Optf availableWidth, taffy::Optf availableHeight);
 };
 
-// The benchmark files. The first three are taffy's; the last is ours, and
-// says why in its own header.
+// The benchmark files. The parser benchmarks are ours and say why in their
+// own headers.
 void BenchFlexbox();
 void BenchGrid();
 void BenchTreeCreation();
 void BenchMarkdown();
+// bench/Html5everBench.cpp -- a large generated HTML document.
+void BenchHtml5ever();
 // bench/MotionBench.cpp — the motion core's steady sampling paths.
 void BenchMotion();
 
