@@ -102,21 +102,21 @@ static bool ImeComposition(Window* win, LPARAM lParam) {
     if (!imc) {
         return false;
     }
-    char buf[1024];
+    TempStr buf = AllocStrTemp(1023);
     if (lParam & GCS_RESULTSTR) {
-        int n = ImeStringUtf8(imc, GCS_RESULTSTR, buf, (int)sizeof(buf));
+        int n = ImeStringUtf8(imc, GCS_RESULTSTR, buf.s, buf.len + 1);
         if (n > 0) {
             // The commit replaces the marked run, which replace_text_in_range
             // does for a null range, and clears the mark with it.
-            InputReplaceTextInRange(in, win->app, win, nullptr, Str(buf, n));
+            InputReplaceTextInRange(in, win->app, win, nullptr, Str(buf.s, n));
         } else {
             InputUnmarkText(in, win->app, win);
         }
     }
     if (lParam & GCS_COMPSTR) {
-        int n = ImeStringUtf8(imc, GCS_COMPSTR, buf, (int)sizeof(buf));
+        int n = ImeStringUtf8(imc, GCS_COMPSTR, buf.s, buf.len + 1);
         if (n >= 0) {
-            Str text = Str(buf, n);
+            Str text = Str(buf.s, n);
             LONG caret =
                 ImmGetCompositionStringW(imc, GCS_CURSORPOS, nullptr, 0);
             Selection sel = {};
@@ -1119,16 +1119,12 @@ void OpenUrl(Str url) {
 // everything this runs on; COM is already up (apartment threaded) because the
 // drag-and-drop registration needs it. The dialog runs its own loop, so this
 // blocks until the user is done, which is what the platform does either way.
-bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
-    if (!out || cap <= 0) {
-        return false;
-    }
-    out[0] = 0;
+TempStr PromptForPathTemp(Window* win, const PathPrompt& opts) {
     IFileOpenDialog* dlg = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr,
                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
     if (FAILED(hr) || !dlg) {
-        return false;
+        return {};
     }
     DWORD flags = 0;
     dlg->GetOptions(&flags);
@@ -1147,18 +1143,25 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
     }
     HWND owner = win && win->plat ? win->plat->hwnd : nullptr;
     hr = dlg->Show(owner);
-    bool got = false;
+    TempStr result;
     if (SUCCEEDED(hr)) {
         IShellItem* item = nullptr;
         if (SUCCEEDED(dlg->GetResult(&item)) && item) {
             PWSTR wide = nullptr;
             if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &wide)) &&
                 wide) {
-                int n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, out, cap,
+                int n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0,
                                             nullptr, nullptr);
-                got = n > 0;
-                if (!got) {
-                    out[0] = 0;
+                if (n > 1) {
+                    result = AllocStrTemp(n - 1);
+                    if (result.s) {
+                        int wrote =
+                            WideCharToMultiByte(CP_UTF8, 0, wide, -1, result.s,
+                                                n, nullptr, nullptr);
+                        if (wrote != n) {
+                            result = {};
+                        }
+                    }
                 }
                 CoTaskMemFree(wide);
             }
@@ -1166,7 +1169,7 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
         }
     }
     dlg->Release();
-    return got;
+    return result;
 }
 
 void ClipboardSetText(Window* win, Str text) {

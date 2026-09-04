@@ -22,6 +22,15 @@ static void CaseInsensitiveEqualityKeepsEmptySliceSemantics() {
     utassert(!base::StrEqI(Str{}, "x"));
 }
 
+static void ComparisonUsesBytesThenLength() {
+    utassert(base::StrCmp(StrL("Alpha"), StrL("Alpha")) == 0);
+    utassert(base::StrCmp(StrL("Alpha"), StrL("Beta")) < 0);
+    utassert(base::StrCmp(StrL("Beta"), StrL("Alpha")) > 0);
+    utassert(base::StrCmp(StrL("Alpha"), StrL("Alphabet")) < 0);
+    utassert(base::StrCmp(StrL("Alphabet"), StrL("Alpha")) > 0);
+    utassert(base::StrCmp(Str{}, Str{}) == 0);
+}
+
 static void CaseInsensitivePrefixUsesBothOverloads() {
     Str text = StrL("Alpha");
     utassert(base::StrStartsWithI(text, "aL"));
@@ -76,24 +85,24 @@ static void TrimAsciiReturnsASlice() {
 }
 
 static void BuilderBorrowsThenGrowsLikeAVec() {
-    char scratch[5] = {};
+    TempStr scratch = AllocStrTemp(4);
     StrBuilder b;
-    StrBuilderUseExternalBuffer(b, Str(scratch, (int)sizeof(scratch)));
+    StrBuilderUseExternalBuffer(b, Str(scratch.s, scratch.len + 1));
     utassert(b.cap == -4); // the fifth byte is held back for the NUL
     utassert(b.Append(StrL("four")));
-    utassert(b.els == scratch && scratch[4] == 0);
+    utassert(b.els == scratch.s && scratch.s[4] == 0);
 
     // Taking borrowed storage copies the result and keeps the scratch bound.
     Str four = b.TakeStr();
     utassert(base::StrEq(four, "four"));
-    utassert(four.s != scratch && b.els == scratch && b.len == 0);
+    utassert(four.s != scratch.s && b.els == scratch.s && b.len == 0);
     StrFree(four);
 
     // The next append past the lent capacity allocates and copies. The caller's
     // buffer remains untouched, and the heap block can be handed over.
     utassert(b.Append(StrL("abcde")));
-    utassert(b.els != scratch && b.cap > 0);
-    utassert(scratch[0] == 0);
+    utassert(b.els != scratch.s && b.cap > 0);
+    utassert(scratch.s[0] == 0);
     Str five = b.TakeStr();
     utassert(base::StrEq(five, "abcde"));
     utassert(b.els == nullptr && b.cap == 0 && b.len == 0);
@@ -159,6 +168,7 @@ void TestStr() {
     TestSuite("str");
     CaseInsensitiveEqualityRejectsLengthFirst();
     CaseInsensitiveEqualityKeepsEmptySliceSemantics();
+    ComparisonUsesBytesThenLength();
     CaseInsensitivePrefixUsesBothOverloads();
     ReplaceAllReplacesNonOverlappingMatches();
     ReplaceAllHandlesEmptyAndMissingMatches();

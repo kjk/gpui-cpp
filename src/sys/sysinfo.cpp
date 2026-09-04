@@ -55,7 +55,7 @@ void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
     }
 }
 
-TempStr FormatBytes(uint64_t bytes) {
+TempStr FormatBytesTemp(uint64_t bytes) {
     const uint64_t KB = 1024;
     const uint64_t MB = KB * 1024;
     const uint64_t GB = MB * 1024;
@@ -71,7 +71,7 @@ TempStr FormatBytes(uint64_t bytes) {
     return fmt("%d B", (int)bytes);
 }
 
-TempStr FormatPct(float v, int decimals) {
+TempStr FormatPctTemp(float v, int decimals) {
     if (decimals <= 0) {
         return fmt("%.0f%%", v);
     }

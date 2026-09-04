@@ -439,18 +439,26 @@ struct SrcDoc {
 };
 
 // The whole document, copied in `fmt`.
-static Str SrcCopy(SrcDoc* d, SelectionFormat fmt, char* buf, int cap) {
+static TempStr SrcCopyTemp(SrcDoc* d, SelectionFormat fmt) {
+    TempStr buf = AllocStrTemp(511);
     // One short of the gap after the last run, so nothing reaches past it.
-    int n =
-        CopyTextHitsIn(&d->ctx, 0, d->ctx.textDocLen - 1, -1, buf, cap, fmt);
-    return Str(buf, n);
+    int n = CopyTextHitsIn(&d->ctx, 0, d->ctx.textDocLen - 1, -1, buf.s,
+                           buf.len + 1, fmt);
+    buf.len = n;
+    return buf;
+}
+
+static TempStr SrcRangeCopyTemp(SrcDoc* d, int start, int end) {
+    TempStr buf = AllocStrTemp(511);
+    buf.len = CopyTextHitsIn(&d->ctx, start, end, -1, buf.s, buf.len + 1,
+                             SelectionFormat::Source);
+    return buf;
 }
 
 // A mark group split over several word elements wraps once, not per word —
 // which is what reconstruct_markdown gets from walking mark ranges rather
 // than words.
 static void TestSourceMarks() {
-    char buf[512];
     SelBlock para = {};
     SelSource bold = {StrL("**"), StrL("**"), &para};
     SelSource plain = {{}, {}, &para};
@@ -458,30 +466,26 @@ static void TestSourceMarks() {
     d.Run("one ", &bold, false);
     d.Run("two ", &bold, true);
     d.Run("three", &plain, true);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "**one two **three"));
     // The same runs in Plain are the text as rendered, on one line: a
     // paragraph is one InlineState.text in Rust however it is copied.
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                         "one two three"));
+    utassert(
+        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "one two three"));
 }
 
 // reconstruct_markdown: a partial selection inside a marked run still wraps
 // the slice.
 static void TestSourcePartialMark() {
-    char buf[512];
     SelBlock para = {};
     SelSource bold = {StrL("**"), StrL("**"), &para};
     SrcDoc d;
     d.Run("bold", &bold, false);
-    int n = CopyTextHitsIn(&d.ctx, 1, 3, -1, buf, sizeof(buf),
-                           SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), "**ol**"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 1, 3), "**ol**"));
 }
 
 // reconstruct_markdown_emits_unmarked_text_verbatim, and a link's tail.
 static void TestSourceCodeAndLink() {
-    char buf[512];
     SelBlock para = {};
     SelSource plain = {{}, {}, &para};
     SelSource code = {StrL("`"), StrL("`"), &para};
@@ -491,14 +495,13 @@ static void TestSourceCodeAndLink() {
     d.Run("b", &code, true);
     d.Run(" c ", &plain, true);
     d.Run("home", &link, true);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "a `b` c [home](https://x.dev)"));
 }
 
 // A selected heading round-trips with its marker, and the paragraph under it
 // starts a line of its own.
 static void TestSourceHeading() {
-    char buf[512];
     SelBlock head = {StrL("## "), {}, {}, false};
     SelBlock para = {};
     SelSource h = {{}, {}, &head};
@@ -506,16 +509,15 @@ static void TestSourceHeading() {
     SrcDoc d;
     d.Run("Title", &h, false);
     d.Run("body", &p, false);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "## Title\nbody"));
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                         "Title\nbody"));
+    utassert(
+        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "Title\nbody"));
 }
 
 // Every line of a blockquote carries its prefix, including the ones inside a
 // run that holds its own line breaks.
 static void TestSourceBlockquote() {
-    char buf[512];
     SelBlock q1 = {StrL("> "), {}, StrL("> "), false};
     SelBlock q2 = {StrL("> "), {}, StrL("> "), false};
     SelSource a = {{}, {}, &q1};
@@ -523,27 +525,25 @@ static void TestSourceBlockquote() {
     SrcDoc d;
     d.Run("first", &a, false);
     d.Run("second\nthird", &b, false);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "> first\n> second\n> third"));
 }
 
 // code_block.selected_source: the code comes back fenced, with the block's
 // language on the opening fence.
 static void TestSourceCodeBlock() {
-    char buf[512];
     SelBlock fence = {StrL("```rust\n"), StrL("\n```"), {}, false};
     SelSource tok = {{}, {}, &fence};
     SrcDoc d;
     d.Run("let x", &tok, false);
     d.Run(" = 1;", &tok, true);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "```rust\nlet x = 1;\n```"));
 }
 
 // table_selected_source: the row is piped and the alignment row follows the
 // header. In Plain the cells of a row are joined with a space.
 static void TestSourceTable() {
-    char buf[512];
     SelBlock h0 = {StrL("| "), StrL(" "), {}, false};
     SelBlock h1 = {StrL("| "), StrL(" |\n| :-- | :-: |"), {}, true};
     SelBlock b0 = {StrL("| "), StrL(" "), {}, false};
@@ -557,16 +557,15 @@ static void TestSourceTable() {
     d.Run("Qty", &s1, false);
     d.Run("Nut", &s2, false);
     d.Run("3", &s3, false);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "| Name | Qty |\n| :-- | :-: |\n| Nut | 3 |"));
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
                          "Name Qty\nNut 3"));
 }
 
 // A list item's marker is the markdown one, not the bullet glyph it draws
 // with, and the lines under it are indented by the marker's width.
 static void TestSourceList() {
-    char buf[512];
     SelBlock item = {StrL("- "), {}, StrL("  "), false};
     SelBlock nested = {StrL("  - "), {}, StrL("    "), false};
     SelSource a = {{}, {}, &item};
@@ -574,7 +573,7 @@ static void TestSourceList() {
     SrcDoc d;
     d.Run("first", &a, false);
     d.Run("under", &b, false);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "- first\n  - under"));
 }
 
@@ -582,7 +581,6 @@ static void TestSourceList() {
 // and indents the lines under it by the marker alone, so the `[x] ` stays on
 // the first line.
 static void TestSourceTaskList() {
-    char buf[512];
     SelBlock done = {StrL("- [x] "), {}, StrL("  "), false};
     SelBlock todo = {StrL("- [ ] "), {}, StrL("  "), false};
     SelSource a = {{}, {}, &done};
@@ -590,11 +588,11 @@ static void TestSourceTaskList() {
     SrcDoc d;
     d.Run("shipped", &a, false);
     d.Run("pending", &b, false);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "- [x] shipped\n- [ ] pending"));
     // The rendered text is the item's words: the checkbox is drawn, not
     // written.
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain),
                          "shipped\npending"));
 }
 
@@ -603,7 +601,6 @@ static void TestSourceTaskList() {
 // beginning — and copies as nothing in Plain, since Paragraph::text lays the
 // children's text end to end and an image child has none.
 static void TestSourceImage() {
-    char buf[512];
     SelBlock para = {};
     SelSource plain = {{}, {}, &para};
     SelSource img = {StrL("![alt](a.png)"), {}, &para};
@@ -611,29 +608,21 @@ static void TestSourceImage() {
     d.Run("see ", &plain, false);
     d.Image(&img, true);
     d.Run(" now", &plain, true);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source),
                          "see ![alt](a.png) now"));
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                         "see  now"));
+    utassert(base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "see  now"));
     // Stopping at the end of the run before it still reaches it: the run
     // after has nothing selected in it, which is the trailing case.
-    int n = CopyTextHitsIn(&d.ctx, 0, 4, -1, buf, sizeof(buf),
-                           SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), "see ![alt](a.png)"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 0, 4), "see ![alt](a.png)"));
     // Stopping short of that end does not.
-    n = CopyTextHitsIn(&d.ctx, 0, 2, -1, buf, sizeof(buf),
-                       SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), "se"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 0, 2), "se"));
     // Nor does a selection that starts after the picture.
-    n = CopyTextHitsIn(&d.ctx, 6, 10, -1, buf, sizeof(buf),
-                       SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), " now"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&d, 6, 10), " now"));
 }
 
 // The two ends of the same rule: a paragraph that begins or ends with an
 // image has no run on that side, and that counts as reaching it.
 static void TestSourceImageAtTheEnds() {
-    char buf[512];
     SelBlock para = {};
     SelSource plain = {{}, {}, &para};
     SelSource img = {StrL("![alt](a.png)"), {}, &para};
@@ -641,16 +630,12 @@ static void TestSourceImageAtTheEnds() {
     SrcDoc lead;
     lead.Image(&img, false);
     lead.Run(" now", &plain, true);
-    int n = CopyTextHitsIn(&lead.ctx, 1, 5, -1, buf, sizeof(buf),
-                           SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), "![alt](a.png) now"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&lead, 1, 5), "![alt](a.png) now"));
     // Trailing: selecting the words before it does too.
     SrcDoc tail;
     tail.Run("see ", &plain, false);
     tail.Image(&img, true);
-    n = CopyTextHitsIn(&tail.ctx, 0, 4, -1, buf, sizeof(buf),
-                       SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), "see ![alt](a.png)"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&tail, 0, 4), "see ![alt](a.png)"));
     // A picture with no words either side is the whole paragraph, and Rust
     // emits nothing for such a paragraph: it is the document walk that takes
     // it when what encloses it is selected. Here that is the selection having
@@ -660,27 +645,23 @@ static void TestSourceImageAtTheEnds() {
     SrcDoc lone;
     lone.Image(&img, false);
     lone.Run("after", &below, false);
-    utassert(
-        base::StrEq(SrcCopy(&lone, SelectionFormat::Source, buf, sizeof(buf)),
-                    "![alt](a.png)\nafter"));
+    utassert(base::StrEq(SrcCopyTemp(&lone, SelectionFormat::Source),
+                         "![alt](a.png)\nafter"));
     // The paragraph below it on its own leaves it behind.
-    n = CopyTextHitsIn(&lone.ctx, 1, 6, -1, buf, sizeof(buf),
-                       SelectionFormat::Source);
-    utassert(base::StrEq(Str(buf, n), "after"));
+    utassert(base::StrEq(SrcRangeCopyTemp(&lone, 1, 6), "after"));
 }
 
 // A run that names no source — everything outside a TextView — copies as its
 // own text in both formats, one run per line, which is what the copier did
 // before there was a second format at all.
 static void TestSourceIgnoresPlainRuns() {
-    char buf[512];
     SrcDoc d;
     d.Run("hello", nullptr, false);
     d.Run("world", nullptr, false);
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
-                         "hello\nworld"));
-    utassert(base::StrEq(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
-                         "hello\nworld"));
+    utassert(
+        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Source), "hello\nworld"));
+    utassert(
+        base::StrEq(SrcCopyTemp(&d, SelectionFormat::Plain), "hello\nworld"));
 }
 
 #if GPUI_MARKDOWN_FULL
@@ -1166,9 +1147,9 @@ static void TestManagedTextViewAndParseTimePlugins(Arena* a) {
 
     managed->SelectAll(&window, &app);
     utassert(managed->HasSelection(&window));
-    char selected[64] = {};
-    int n = managed->SelectedText(&window, selected, (int)sizeof(selected));
-    utassert(base::StrEq(Str(selected, n), "alpha\nomega"));
+    TempStr selected = AllocStrTemp(63);
+    int n = managed->SelectedText(&window, selected.s, selected.len + 1);
+    utassert(base::StrEq(Str(selected.s, n), "alpha\nomega"));
     managed->ClearSelection(&window, &app);
     utassert(!managed->HasSelection(&window));
 

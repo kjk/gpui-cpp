@@ -25,11 +25,11 @@ namespace autocorrect {
 // ─── match helpers ────────────────────────────────────────────────────────
 
 static int LitLen(Str s, int i, const char* lit) {
-    int n = (int)strlen(lit);
-    if (i + n > s.len || memcmp(s.s + i, lit, (size_t)n) != 0) {
+    Str literal = Str(lit);
+    if (i + literal.len > s.len || !StrEq(Str(s.s + i, literal.len), literal)) {
         return -1;
     }
-    return n;
+    return literal.len;
 }
 
 // `prefix ~ (!NEWLINE ~ ANY)*`
@@ -51,9 +51,10 @@ static int MatchBlock(Str s, int i, const char* open, const char* close) {
     if (n < 0) {
         return -1;
     }
-    int closeLen = (int)strlen(close);
+    Str closing = Str(close);
+    int closeLen = closing.len;
     for (int at = i + n; at + closeLen <= s.len; at++) {
-        if (memcmp(s.s + at, close, (size_t)closeLen) == 0) {
+        if (StrEq(Str(s.s + at, closeLen), closing)) {
             return at + closeLen - i;
         }
     }
@@ -145,7 +146,7 @@ static void ScanAlts(Results* res, Str raw, const Alt* alts, int nAlts) {
             if (i > ignoreStart) {
                 EmitIgnore(res, Str(raw.s + ignoreStart, i - ignoreStart));
             }
-            EmitText(res, hit->rule, Str(raw.s + i, matched));
+            EmitText(res, Str(hit->rule), Str(raw.s + i, matched));
             ignoreStart = i + matched;
         }
         // An ignored form (a regexp, an include) just extends the run.
@@ -464,10 +465,8 @@ static int GoTimeParse(Str s, int i) {
 
 void ScanGo(Results* res, Str raw) {
     static const Alt kAlts[] = {
-        {CppLineComment, "COMMENT"},
-        {CppBlockComment, "COMMENT"},
-        {GoRegexp, nullptr},
-        {GoTimeParse, nullptr},
+        {CppLineComment, "COMMENT"}, {CppBlockComment, "COMMENT"},
+        {GoRegexp, nullptr},         {GoTimeParse, nullptr},
         {GoString, "string"},
     };
     ScanAlts(res, raw, kAlts, 5);
@@ -657,10 +656,8 @@ static int ScalaRegexp(Str s, int i) {
 
 void ScanScala(Results* res, Str raw) {
     static const Alt kAlts[] = {
-        {CppLineComment, "COMMENT"},
-        {CppBlockComment, "COMMENT"},
-        {ScalaRegexp, nullptr},
-        {ScalaStringLiteral, nullptr},
+        {CppLineComment, "COMMENT"}, {CppBlockComment, "COMMENT"},
+        {ScalaRegexp, nullptr},      {ScalaStringLiteral, nullptr},
         {ScalaString, "string"},
     };
     ScanAlts(res, raw, kAlts, 5);
@@ -863,7 +860,7 @@ void ScanJavascript(Results* res, Str raw) {
         }
         if (n > 0) {
             flush(i);
-            EmitText(res, "COMMENT", Str(raw.s + i, n));
+            EmitText(res, StrL("COMMENT"), Str(raw.s + i, n));
             ignoreStart = i + n;
             i += n;
             continue;
@@ -883,14 +880,14 @@ void ScanJavascript(Results* res, Str raw) {
                 int vn = JsString(raw, at);
                 if (vn > 0) {
                     flush(at);
-                    EmitText(res, "string", Str(raw.s + at, vn));
+                    EmitText(res, StrL("string"), Str(raw.s + at, vn));
                     ignoreStart = at + vn;
                     i = at + vn;
                     continue;
                 }
             }
             flush(i);
-            EmitText(res, "string", Str(raw.s + i, n));
+            EmitText(res, StrL("string"), Str(raw.s + i, n));
             ignoreStart = i + n;
             i += n;
             continue;
@@ -918,7 +915,7 @@ void ScanJavascript(Results* res, Str raw) {
                         textEnd++;
                     }
                     flush(at);
-                    EmitText(res, "text", Str(raw.s + at, textEnd - at));
+                    EmitText(res, StrL("text"), Str(raw.s + at, textEnd - at));
                     ignoreStart = textEnd;
                     at = textEnd;
                 }
@@ -956,10 +953,8 @@ void ScanPhp(Results* res, Str raw) {
     int i = 0;
     bool inPhp = false;
     static const Alt kAlts[] = {
-        {CppLineComment, "COMMENT"},
-        {HashLineComment, "COMMENT"},
-        {CppBlockComment, "COMMENT"},
-        {PhpRegexp, nullptr},
+        {CppLineComment, "COMMENT"},  {HashLineComment, "COMMENT"},
+        {CppBlockComment, "COMMENT"}, {PhpRegexp, nullptr},
         {PhpString, "string"},
     };
     while (i < raw.len) {
@@ -979,7 +974,7 @@ void ScanPhp(Results* res, Str raw) {
                 if (i > ignoreStart) {
                     EmitIgnore(res, Str(raw.s + ignoreStart, i - ignoreStart));
                 }
-                EmitText(res, hit->rule, Str(raw.s + i, matched));
+                EmitText(res, Str(hit->rule), Str(raw.s + i, matched));
                 ignoreStart = i + matched;
                 i += matched;
                 continue;
@@ -1014,7 +1009,7 @@ void ScanPhp(Results* res, Str raw) {
             if (i > ignoreStart) {
                 EmitIgnore(res, Str(raw.s + ignoreStart, i - ignoreStart));
             }
-            EmitText(res, hit->rule, Str(raw.s + i, matched));
+            EmitText(res, Str(hit->rule), Str(raw.s + i, matched));
             ignoreStart = i + matched;
         }
         i += matched;
@@ -1058,7 +1053,7 @@ void ScanJson(Results* res, Str raw) {
             if (i > ignoreStart) {
                 EmitIgnore(res, Str(raw.s + ignoreStart, i - ignoreStart));
             }
-            EmitText(res, "COMMENT", Str(raw.s + i, n));
+            EmitText(res, StrL("COMMENT"), Str(raw.s + i, n));
             ignoreStart = i + n;
             i += n;
             continue;
@@ -1075,7 +1070,7 @@ void ScanJson(Results* res, Str raw) {
                 if (i > ignoreStart) {
                     EmitIgnore(res, Str(raw.s + ignoreStart, i - ignoreStart));
                 }
-                EmitText(res, "string", Str(raw.s + i, n));
+                EmitText(res, StrL("string"), Str(raw.s + i, n));
                 ignoreStart = i + n;
             }
             i += n;
@@ -1106,7 +1101,7 @@ void ScanYaml(Results* res, Str raw) {
             if (at > ignoreStart) {
                 EmitIgnore(res, Str(raw.s + ignoreStart, at - ignoreStart));
             }
-            EmitText(res, "comment", Str(raw.s + at, end - at));
+            EmitText(res, StrL("comment"), Str(raw.s + at, end - at));
             ignoreStart = end;
             i = end < raw.len ? end + 1 : end;
             continue;
@@ -1155,7 +1150,8 @@ void ScanYaml(Results* res, Str raw) {
         if (valueStart > ignoreStart) {
             EmitIgnore(res, Str(raw.s + ignoreStart, valueStart - ignoreStart));
         }
-        EmitText(res, "string", Str(raw.s + valueStart, valueEnd - valueStart));
+        EmitText(res, StrL("string"),
+                 Str(raw.s + valueStart, valueEnd - valueStart));
         ignoreStart = valueEnd;
         i = valueEnd;
         while (i < raw.len && raw.s[i] != '\n') {

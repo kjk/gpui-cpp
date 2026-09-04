@@ -242,8 +242,8 @@ struct NotificationSystemEntry {
 
 // NotificationId::system_tag: SYSTEM_TAG_PREFIX and the notification's id,
 // written into `buf`. Namespaced so a response to a notification the
-// application posted itself is not ours to answer.
-Str NotificationSystemTag(char* buf, int cap, int id);
+// application posted itself is not ours to answer. Temp-arena backed.
+TempStr NotificationSystemTagTemp(int id);
 // The id inside one of those tags. False for anybody else's.
 bool NotificationTagId(Str tag, int* outId);
 // notification::init: install the app-global response handler. Idempotent,

@@ -62,12 +62,12 @@ const LocaleRow* LocaleRowAt(int i) {
 // The rows are written sorted by key, so this is a binary search rather than
 // a walk: a frame asks for a handful of them and the table is small, but the
 // order costs the generator nothing.
-static const LocaleRow* FindRow(const char* key) {
+static const LocaleRow* FindRow(Str key) {
     int lo = 0;
     int hi = kLocaleRowCount - 1;
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
-        int cmp = strcmp(kLocaleRows[mid].key, key);
+        int cmp = StrCmp(Str(kLocaleRows[mid].key), key);
         if (cmp == 0) {
             return &kLocaleRows[mid];
         }
@@ -84,7 +84,7 @@ Str Tr(const char* key) {
     if (!key || !key[0]) {
         return {};
     }
-    const LocaleRow* row = FindRow(key);
+    const LocaleRow* row = FindRow(Str(key));
     if (!row) {
         // rust_i18n answers with the key path, which is what makes a missing
         // one obvious on screen instead of blank.

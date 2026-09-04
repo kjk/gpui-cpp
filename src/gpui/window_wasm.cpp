@@ -239,10 +239,11 @@ static int KeyFor(const EmscriptenKeyboardEvent* e) {
         vk = (int)e->which;
     }
     if (vk == 0) {
-        if (strcmp(e->code, "BracketLeft") == 0) {
+        Str code = Str(e->code);
+        if (StrEq(code, "BracketLeft")) {
             return KeyLeftBracket;
         }
-        if (strcmp(e->code, "BracketRight") == 0) {
+        if (StrEq(code, "BracketRight")) {
             return KeyRightBracket;
         }
     }
@@ -252,13 +253,13 @@ static int KeyFor(const EmscriptenKeyboardEvent* e) {
 // The one codepoint `key` names, or 0 when it names a key rather than a
 // character ("Enter", "ArrowLeft", "Shift").
 static uint32_t CharOf(const EmscriptenKeyboardEvent* e) {
-    const char* k = e->key;
-    if (!k || !k[0]) {
+    Str key = Str(e->key);
+    if (!key) {
         return 0;
     }
-    uint8_t c0 = (uint8_t)k[0];
+    uint8_t c0 = (uint8_t)key.s[0];
     int need = c0 < 0x80 ? 1 : (c0 < 0xe0 ? 2 : (c0 < 0xf0 ? 3 : 4));
-    if ((int)strlen(k) != need) {
+    if (key.len != need) {
         // More than one codepoint: a name, not a character.
         return 0;
     }
@@ -266,13 +267,14 @@ static uint32_t CharOf(const EmscriptenKeyboardEvent* e) {
     if (need == 1) {
         cp = c0;
     } else if (need == 2) {
-        cp = ((uint32_t)(c0 & 0x1f) << 6) | (uint8_t)(k[1] & 0x3f);
+        cp = ((uint32_t)(c0 & 0x1f) << 6) | (uint8_t)(key.s[1] & 0x3f);
     } else if (need == 3) {
-        cp = ((uint32_t)(c0 & 0x0f) << 12) | ((uint32_t)(k[1] & 0x3f) << 6) |
-             (uint8_t)(k[2] & 0x3f);
+        cp = ((uint32_t)(c0 & 0x0f) << 12) |
+             ((uint32_t)(key.s[1] & 0x3f) << 6) | (uint8_t)(key.s[2] & 0x3f);
     } else {
-        cp = ((uint32_t)(c0 & 0x07) << 18) | ((uint32_t)(k[1] & 0x3f) << 12) |
-             ((uint32_t)(k[2] & 0x3f) << 6) | (uint8_t)(k[3] & 0x3f);
+        cp = ((uint32_t)(c0 & 0x07) << 18) |
+             ((uint32_t)(key.s[1] & 0x3f) << 12) |
+             ((uint32_t)(key.s[2] & 0x3f) << 6) | (uint8_t)(key.s[3] & 0x3f);
     }
     return cp;
 }
@@ -667,13 +669,10 @@ void OpenUrl(Str url) {
 // cx.prompt_for_paths. A page cannot open a file picker of its own and read
 // what it chose without a user gesture and a callback, and nothing here has
 // asked for one, so this says so rather than pretending.
-bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+TempStr PromptForPathTemp(Window* win, const PathPrompt& opts) {
     (void)win;
     (void)opts;
-    if (out && cap > 0) {
-        out[0] = 0;
-    }
-    return false;
+    return {};
 }
 
 void ClipboardSetText(Window* win, Str text) {

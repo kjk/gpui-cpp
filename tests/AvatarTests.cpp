@@ -9,8 +9,7 @@
 using namespace gpui::component;
 
 static void CheckInitials(const char* name, const char* want) {
-    char buf[8];
-    Str got = AvatarInitials(buf, (int)sizeof(buf), Str(name));
+    TempStr got = AvatarInitialsTemp(Str(name));
     // Not StrEqI: the point of the last step is the case.
     utassert(base::StrEq(got, want));
 }

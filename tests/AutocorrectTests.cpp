@@ -675,9 +675,8 @@ end
 static const char* kIgnoreDir = "autocorrect_ignorer_test_root";
 
 static bool WriteIgnoreFile(const char* name, const char* content) {
-    char path[kMaxPath] = {};
-    snprintf(path, sizeof(path), "%s/%s", kIgnoreDir, name);
-    FILE* f = fopen(path, "wb");
+    TempStr path = fmt("%s/%s", Str(kIgnoreDir), Str(name));
+    FILE* f = fopen(path.s, "wb");
     if (!f) {
         return false;
     }
@@ -688,9 +687,8 @@ static bool WriteIgnoreFile(const char* name, const char* content) {
 }
 
 static void RemoveIgnoreFile(const char* name) {
-    char path[kMaxPath] = {};
-    snprintf(path, sizeof(path), "%s/%s", kIgnoreDir, name);
-    remove(path);
+    TempStr path = fmt("%s/%s", Str(kIgnoreDir), Str(name));
+    remove(path.s);
 }
 
 static void TestAutocorrectIgnorer() {

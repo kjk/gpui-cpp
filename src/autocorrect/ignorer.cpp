@@ -19,7 +19,7 @@
 namespace autocorrect {
 
 struct IgnorePattern {
-    Str glob = {};  // heap-owned, normalized (no trailing '/', no leading '/')
+    Str glob = {}; // heap-owned, normalized (no trailing '/', no leading '/')
     bool negated = false;
     bool dirOnly = false;
     bool anchored = false;
@@ -180,19 +180,17 @@ static int MatchedOrParents(const Ignorer* ig, Str path, bool isDir) {
 // ─── loading ──────────────────────────────────────────────────────────────
 
 static void AddPatternsFromFile(base::Vec<IgnorePattern>& out, Str workDir,
-                                const char* name) {
-    char path[1024];
+                                Str name) {
     int dirLen = workDir.len;
-    while (dirLen > 0 && (workDir.s[dirLen - 1] == '/' ||
-                          workDir.s[dirLen - 1] == '\\')) {
+    while (dirLen > 0 &&
+           (workDir.s[dirLen - 1] == '/' || workDir.s[dirLen - 1] == '\\')) {
         dirLen--;
     }
-    int wrote = snprintf(path, sizeof(path), "%.*s/%s", dirLen, workDir.s,
-                         name);
-    if (wrote <= 0 || wrote >= (int)sizeof(path)) {
+    base::TempStr path = base::fmt("%s/%s", Str(workDir.s, dirLen), name);
+    if (path.len >= 1024) {
         return;
     }
-    FILE* f = fopen(path, "rb");
+    FILE* f = fopen(path.s, "rb");
     if (!f) {
         return;
     }
@@ -264,8 +262,8 @@ void IgnorerInit(Ignorer* ig, Str workDir) {
     base::Vec<IgnorePattern> patterns;
     // .autocorrectignore first, .gitignore second: later files win, like
     // the crate's GitignoreBuilder add order.
-    AddPatternsFromFile(patterns, workDir, ".autocorrectignore");
-    AddPatternsFromFile(patterns, workDir, ".gitignore");
+    AddPatternsFromFile(patterns, workDir, StrL(".autocorrectignore"));
+    AddPatternsFromFile(patterns, workDir, StrL(".gitignore"));
     if (patterns.len == 0) {
         return;
     }
@@ -287,18 +285,18 @@ bool IgnorerIsIgnored(const Ignorer* ig, Str relativePath) {
         return false;
     }
     // Normalize: backslashes to slashes, a leading "./" dropped.
-    char buf[1024];
+    base::TempStr buf = base::AllocStrTemp(std::min(relativePath.len, 1024));
     int n = 0;
     int start = 0;
     if (relativePath.len >= 2 && relativePath.s[0] == '.' &&
         (relativePath.s[1] == '/' || relativePath.s[1] == '\\')) {
         start = 2;
     }
-    for (int i = start; i < relativePath.len && n < (int)sizeof(buf); i++) {
+    for (int i = start; i < relativePath.len && n < buf.len; i++) {
         char c = relativePath.s[i];
-        buf[n++] = c == '\\' ? '/' : c;
+        buf.s[n++] = c == '\\' ? '/' : c;
     }
-    Str path(buf, n);
+    Str path(buf.s, n);
     // is_ignored: matched with is_dir false, then true — either ignores.
     return MatchedOrParents(ig, path, false) == 1 ||
            MatchedOrParents(ig, path, true) == 1;

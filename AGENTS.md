@@ -453,7 +453,10 @@ void FormatBytes(uint64_t bytes, StrBuilder& out);
 ```
 
 - Include the base header first.
-- `Str s = fmt("%.1f%%", cpu);` — a temp-arena string; do not `free` it.
+- `TempStr s = fmt("%.1f%%", cpu);` — `fmt()` returns a temp-arena string; do
+  not `free` it.
+- Functions returning `TempStr` are named with a `Temp` suffix; `fmt()` is the
+  established formatting-shorthand exception.
 - Own a heap `Str` only if it must survive a frame: `StrDup` / `StrFree`.
 - `Vec<T>` for arrays of POD, not for `Str` graphs — hold a `char name[kMax]`
   or an arena `Str` in the element.

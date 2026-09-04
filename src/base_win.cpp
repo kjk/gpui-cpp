@@ -194,10 +194,9 @@ int PlatListDir(const char* dir, DirEntry* out, int max) {
     if (!dir || !out || max <= 0) {
         return 0;
     }
-    char pattern[kMaxPath];
-    _snprintf_s(pattern, kMaxPath, _TRUNCATE, "%s\\*", dir);
+    TempStr pattern = fmt("%s\\*", Str(dir));
     WIN32_FIND_DATAW fd = {};
-    HANDLE h = FindFirstFileW(ToCWstrTemp(Str(pattern)), &fd);
+    HANDLE h = FindFirstFileW(ToCWstrTemp(pattern), &fd);
     if (h == INVALID_HANDLE_VALUE) {
         return 0;
     }

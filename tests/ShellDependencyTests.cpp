@@ -45,11 +45,9 @@ static Str DepTempDir() {
 }
 
 static bool DepWrite(Str path, Str contents) {
-    char name[kMaxPath];
     if (path.len >= kMaxPath) return false;
-    memcpy(name, path.s, (size_t)path.len);
-    name[path.len] = 0;
-    FILE* file = fopen(name, "wb");
+    TempStr name = StrDupTemp(path);
+    FILE* file = fopen(name.s, "wb");
     if (!file) return false;
     bool ok = contents.len == 0 || fwrite(contents.s, 1, (size_t)contents.len,
                                           file) == (size_t)contents.len;
@@ -496,9 +494,10 @@ struct GitFixture {
     // The absolute path git was handed, which is also the origin identity the
     // cache is checked against.
     Str Url() {
-        char resolved[kMaxPath] = {};
-        if (!PlatCanonicalPath(remote.s, resolved, kMaxPath)) return {};
-        Str url = StrDup(Str(resolved));
+        TempStr resolved = AllocStrTemp(kMaxPath - 1);
+        if (!PlatCanonicalPath(remote.s, resolved.s, resolved.len + 1))
+            return {};
+        Str url = StrDup(Str(resolved.s));
         for (int i = 0; i < url.len; i++)
             if (url.s[i] == '\\') url.s[i] = '/';
         return url;
@@ -506,16 +505,14 @@ struct GitFixture {
 };
 
 static Str ReadWhole(Str path) {
-    char name[kMaxPath];
     if (!path || path.len >= kMaxPath) return {};
-    memcpy(name, path.s, (size_t)path.len);
-    name[path.len] = 0;
-    FILE* file = fopen(name, "rb");
+    TempStr name = StrDupTemp(path);
+    FILE* file = fopen(name.s, "rb");
     if (!file) return {};
-    char block[4096];
-    size_t read = fread(block, 1, sizeof(block), file);
+    TempStr block = AllocStrTemp(4096);
+    size_t read = fread(block.s, 1, (size_t)block.len, file);
     fclose(file);
-    return StrDup(Str(block, (int)read));
+    return StrDup(Str(block.s, (int)read));
 }
 
 static void GitDependenciesResolveRefreshAndStayInsideTheirCheckout() {

@@ -72,8 +72,8 @@ enum class ProcessSort : uint8_t {
 void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
                       int keepTop);
 
-TempStr FormatBytes(uint64_t bytes);
-TempStr FormatPct(float v, int decimals);
+TempStr FormatBytesTemp(uint64_t bytes);
+TempStr FormatPctTemp(float v, int decimals);
 
 // crates/fps/src/memory.rs: how much memory this process is responsible for,
 // as opposed to how many pages it happens to have mapped. The resident set

@@ -153,8 +153,8 @@ static void FilesystemGrantsReturnRootRelativeAuthority() {
     capabilities.AddReadRoot(root).AddWriteRoot(root);
     CapabilityPath path = {};
     CapabilityError error = {};
-    utassert(capabilities.ResolvePath(absolute, CapabilityAccess::Read, &path,
-                                      &error));
+    utassert(capabilities
+                 .ResolvePath(absolute, CapabilityAccess::Read, &path, &error));
     utassert(StrEq(path.root, root));
     utassert(StrEq(path.relative, "dir/file.txt"));
     path.Free();
@@ -468,8 +468,8 @@ static void ScriptThemesAndOpenUrlsFollowHostScopeRules() {
                  : nullptr;
     output->Reset();
     if (object && runtime) {
-        runtime->RenderToSpec(output, object, &window, &app, {}, nullptr,
-                              &error);
+        runtime
+            ->RenderToSpec(output, object, &window, &app, {}, nullptr, &error);
     }
     utassert(
         StrContains(error.message, StrL("cannot run during render or layout")));
@@ -490,8 +490,8 @@ static void ScriptThemesAndOpenUrlsFollowHostScopeRules() {
                  : nullptr;
     output->Reset();
     if (object && runtime) {
-        runtime->RenderToSpec(output, object, &window, &app, {}, nullptr,
-                              &error);
+        runtime
+            ->RenderToSpec(output, object, &window, &app, {}, nullptr, &error);
     }
     utassert(StrContains(error.message, StrL("absolute HTTP(S) URL")));
     ViewObjectRelease(object);
@@ -538,8 +538,8 @@ static void RuntimeLoadsRendersAndRetiresCallbacks() {
         "        .child('Save'));\n"
         "  }\n"
         "}\n");
-    ViewType* type =
-        runtime->LoadSource(StrL("runtime-test.js"), source, &error);
+    ViewType* type = runtime
+                         ->LoadSource(StrL("runtime-test.js"), source, &error);
     utassert(type != nullptr && !error.IsSet());
     ViewObject* object =
         type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
@@ -566,10 +566,10 @@ static void RuntimeLoadsRendersAndRetiresCallbacks() {
             ClickEvent event = {};
             event.clickCount = 3;
             runtime->DispatchClick(callback, event, &window, &app);
-            utassert(
-                runtime->Eval(StrL("if (globalThis.shellClicks !== 3) throw "
-                                   "new Error('callback did not run')"),
-                              StrL("callback-check.js"), &error));
+            utassert(runtime
+                         ->Eval(StrL("if (globalThis.shellClicks !== 3) throw "
+                                     "new Error('callback did not run')"),
+                                StrL("callback-check.js"), &error));
             utassert(!error.IsSet());
         }
         delete snapshot;
@@ -599,8 +599,8 @@ static void RuntimeAbortsFailedSnapshotTransactions() {
         "    return div().on_click(() => {}).child(child).child(child);\n"
         "  }\n"
         "}\n");
-    ViewType* type =
-        runtime->LoadSource(StrL("failed-render.js"), source, &error);
+    ViewType* type = runtime
+                         ->LoadSource(StrL("failed-render.js"), source, &error);
     ViewObject* object =
         type ? runtime->Instantiate(type, &window, &app, nullptr, &error)
              : nullptr;
@@ -1129,17 +1129,17 @@ static void ShellMaterializesStateTemplatesInputsAndPaths() {
     utassert(states && states->activeSet & StyleFieldBg);
     utassert(states && states->focusSet & StyleFieldOpacity);
     utassert(states && states->style.width == 100);
-    utassert(number &&
-             number->accessibility.role == AccessibilityRole::SpinButton);
+    utassert(number && number->accessibility
+                               .role == AccessibilityRole::SpinButton);
     El* controls = number && number->first ? number->first->next : nullptr;
     El* increment = controls ? controls->first : nullptr;
     utassert(increment && increment->onClick.IsValid());
     if (increment && increment->onClick.IsValid()) increment->onClick.Call();
-    utassert(
-        runtime &&
-        runtime->Eval(StrL("if (globalThis.numberStep !== 'increment') throw "
-                           "new Error('number step was not dispatched')"),
-                      StrL("number-step-check.js"), &error));
+    utassert(runtime &&
+             runtime
+                 ->Eval(StrL("if (globalThis.numberStep !== 'increment') throw "
+                             "new Error('number step was not dispatched')"),
+                        StrL("number-step-check.js"), &error));
     utassert(otp && otp->first && otp->first->next && otp->first->next->next);
     utassert(otp && otp->first && otp->first->style.hasBg);
     utassert(path && path->customPaint != nullptr);
@@ -1235,8 +1235,8 @@ static void ShellRootHostsDialogsSheetsAndToasts() {
         WindowNotifications(&rootCx).Get(&rootCx);
     utassert(notifications && notifications->items.len == 1 &&
              notifications->stack.entries.len == 1 &&
-             notifications->stack.entries[0].status ==
-                 ToastTransitionStatus::Ending);
+             notifications->stack.entries[0]
+                     .status == ToastTransitionStatus::Ending);
     ShellRootClearToasts(&rootCx);
     EntityDrop(&app, shellRoot.id);
     ArenaDelete(frame);
@@ -1338,10 +1338,10 @@ static void RetainedScriptStateSurvivesFramesAndDispatchesEvents() {
         InputEvent changed = {InputEventKind::Change};
         ListenerCall(&app, &window, input->onChange, &changed);
     }
-    utassert(
-        runtime->Eval(StrL("if (globalThis.retainedEvents !== 1) throw new "
-                           "Error('retained event was not dispatched')"),
-                      StrL("retained-event-check.js"), &error));
+    utassert(runtime
+                 ->Eval(StrL("if (globalThis.retainedEvents !== 1) throw new "
+                             "Error('retained event was not dispatched')"),
+                        StrL("retained-event-check.js"), &error));
     utassert(input && StrEq(InputValue(input), "second"));
     utassert(runtime->Eval(StrL("globalThis.retainedInput.release()"),
                            StrL("retained-release.js"), &error));
@@ -1471,9 +1471,9 @@ static void NestedScriptViewsRetainUpdateRollbackAndRelease() {
                            "new Error('failed update state was not restored')"),
                       StrL("nested-rollback-check.js"), &error));
 
-    utassert(runtime &&
-             runtime->Eval(StrL("globalThis.nestedAction = 'release'"),
-                           StrL("nested-release-input.js"), &error));
+    utassert(runtime && runtime
+                            ->Eval(StrL("globalThis.nestedAction = 'release'"),
+                                   StrL("nested-release-input.js"), &error));
     if (callback != UINT64_MAX) {
         ClickEvent click = {};
         runtime->DispatchClick(callback, click, &window, &app);
@@ -1522,10 +1522,10 @@ static void VirtualListsRenderOneVisibleBatch() {
     El* root =
         view.IsValid() ? EntityRender(&app, &window, frame, view.id) : nullptr;
     utassert(root != nullptr && !error.IsSet());
-    utassert(
-        runtime->Eval(StrL("if (globalThis.virtualBatches !== 1) throw new "
-                           "Error('virtual list did not render one range')"),
-                      StrL("virtual-list-check.js"), &error));
+    utassert(runtime
+                 ->Eval(StrL("if (globalThis.virtualBatches !== 1) throw new "
+                             "Error('virtual list did not render one range')"),
+                        StrL("virtual-list-check.js"), &error));
     El* firstRow = root && root->first ? root->first->first : nullptr;
     utassert(firstRow && firstRow->listener.IsValid());
     if (firstRow && firstRow->listener.IsValid()) {
@@ -1550,12 +1550,12 @@ static void ShellSandboxWithholdsCompilersAndSharedPrototypeWrites() {
     ShellSetDevelopmentMode(false);
     ShellRuntime* runtime = ShellRuntime::New(nullptr, &error);
     utassert(runtime != nullptr && !error.IsSet());
-    utassert(runtime &&
-             runtime->Eval(StrL("if (typeof eval !== 'undefined' || "
-                                "!Object.isFrozen(Object.prototype) || "
-                                "typeof std !== 'undefined') throw new "
-                                "Error('sandbox surface is open')"),
-                           StrL("sandbox-check.js"), &error));
+    utassert(runtime && runtime
+                            ->Eval(StrL("if (typeof eval !== 'undefined' || "
+                                        "!Object.isFrozen(Object.prototype) || "
+                                        "typeof std !== 'undefined') throw new "
+                                        "Error('sandbox surface is open')"),
+                                   StrL("sandbox-check.js"), &error));
     utassert(runtime && !runtime->Eval(StrL("new Function('return 1')()"),
                                        StrL("sandbox-function.js"), &error));
     utassert(error.IsSet() && StrContains(error.message, StrL("disabled")));
@@ -2036,7 +2036,7 @@ static void ShellAssetsStayInsideTheApplicationRoot() {
         utassert(assets.Install());
         Vec<uint8_t> bytes;
         utassert(AssetsLoad(StrL("icons/check.svg"), &bytes));
-        utassert(bytes.len == 6 && memcmp(bytes.els, "<svg/>", 6) == 0);
+        utassert(StrEq(Str((char*)bytes.els, bytes.len), "<svg/>"));
         VecReset(bytes);
         Str relative;
         utassert(!assets.Resolve(StrL("../secret.svg"), &relative, &error));
@@ -2746,8 +2746,8 @@ static void ShellDockPanelsPersistAndChromeRunsInLayoutScope() {
     dock.open = true;
     dock.collapsible = true;
     gDockChromeSawLayout = false;
-    El* wrapped =
-        skin.Renderer()->dock(&cx, skin.Renderer()->data, &dock, Div(frame));
+    El* wrapped = skin.Renderer()
+                      ->dock(&cx, skin.Renderer()->data, &dock, Div(frame));
     utassert(wrapped && gDockChromeSawLayout);
     StrBuilder dockData;
     ShellDockData(&dock, &dockData);
@@ -2811,14 +2811,14 @@ static void ShellPluginManifestsDiscoverAuthorizeAndUnload() {
              StrEq(manifest.version, "1.2.0") &&
              StrEq(manifest.shellVersion, kShellVersion) &&
              StrEq(manifest.entry, "main.js"));
-    Capabilities granted =
-        manifest.Grant(StrL("plugin-root"), StrL("data-root"));
+    Capabilities granted = manifest
+                               .Grant(StrL("plugin-root"), StrL("data-root"));
     utassert(granted.HasReadAccess() && granted.HasWriteAccess() &&
              granted.HasStorage() && granted.MayRun(StrL("git")) &&
              granted.MayReach(StrL("API.EXAMPLE.COM")) &&
-             granted.MayRequest(StrL("https"), StrL("readonly.example.com"),
-                                443, false, StrL("GET"),
-                                StrL("/v1/quotes/MSFT")) &&
+             granted
+                 .MayRequest(StrL("https"), StrL("readonly.example.com"), 443,
+                             false, StrL("GET"), StrL("/v1/quotes/MSFT")) &&
              granted.IsClipboardWritable() && granted.MayExit());
 
     PluginManifest omitted;
@@ -3284,8 +3284,8 @@ static void ShellStructureFingerprintsCountRepeatedShapes() {
             : nullptr;
     utassert(first != nullptr);
     // The same shape with a different value in it.
-    runtime->Eval(StrL("globalThis.shellPrice = 'two'"), StrL("edit.js"),
-                  &error);
+    runtime
+        ->Eval(StrL("globalThis.shellPrice = 'two'"), StrL("edit.js"), &error);
     RenderSnapshot* second =
         first
             ? runtime->BuildSnapshot(object, &window, &app, {}, nullptr, &error)

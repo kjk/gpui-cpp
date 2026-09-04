@@ -158,7 +158,7 @@ static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current,
             ->PadY(4)
             ->Child(TextEl(a, title)->Font(14)->Fg(th.foreground))
             ->Child(Div(a)->Flex1())
-            ->Child(TextEl(a, FormatPct(current, 1))->Font(14)->Fg(color));
+            ->Child(TextEl(a, FormatPctTemp(current, 1))->Font(14)->Fg(color));
 
     Rgba fillTop = RgbaOpacity(color, 0.4f);
     Rgba fillBot = RgbaOpacity(th.background, 0.1f);
@@ -274,9 +274,11 @@ static El* ProcTableRow(Arena* a, const ProcessInfo* p, int ix) {
             ->Truncate()
             ->W(kColW[1] - 16)));
     row->Child(Div(a)->W(kColW[2])->H(28)->PadX(8)->ItemsCenter()->Child(
-        TextEl(a, FormatPct(p->cpu, 1))->Font(12)->Fg(CpuColor(th, p->cpu))));
+        TextEl(a, FormatPctTemp(p->cpu, 1))
+            ->Font(12)
+            ->Fg(CpuColor(th, p->cpu))));
     row->Child(Div(a)->W(kColW[3])->H(28)->PadX(8)->ItemsCenter()->Child(
-        TextEl(a, FormatBytes(p->memory))->Font(12)->Fg(th.green)));
+        TextEl(a, FormatBytesTemp(p->memory))->Font(12)->Fg(th.green)));
     return row;
 }
 
@@ -319,7 +321,7 @@ static El* StatusChip(Arena* a, IconName icon, float pct) {
         ->ItemsCenter()
         ->Child(IconEl(a, icon)->Fg(th.mutedFg))
         ->Child(ProgressEl(a, pct, 48, 8))
-        ->Child(TextEl(a, FormatPct(pct, 0))->Font(14)->Fg(th.mutedFg));
+        ->Child(TextEl(a, FormatPctTemp(pct, 0))->Font(14)->Fg(th.mutedFg));
 }
 
 static El* StatusBar(Arena* a, MonitorApp* app) {
@@ -350,7 +352,7 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
             ->Gap(8)
             ->ItemsCenter()
             ->Child(IconEl(a, bi)->Fg(th.mutedFg))
-            ->Child(TextEl(a, FormatPct(app->sys.battery.pct, 0))
+            ->Child(TextEl(a, FormatPctTemp(app->sys.battery.pct, 0))
                         ->Font(14)
                         ->Fg(th.mutedFg));
     }

@@ -1171,58 +1171,25 @@ static bool Await(ShellRuntimeImpl* impl, JSValueConst value,
     return true;
 }
 
-static bool ReadFileBounded(Str path, Str* source, ShellError* error) {
-    if (source) *source = {};
-    char name[kMaxPath] = {};
+static TempStr ReadModuleFileTemp(Str path, ShellError* error) {
     if (path.len <= 0 || path.len >= kMaxPath) {
         SetError(error, StrL("module path is empty or too long"));
-        return false;
+        return {};
     }
-    memcpy(name, path.s, (size_t)path.len);
-    FILE* file = fopen(name, "rb");
-    if (!file) {
+    TempStr source = ReadBoundedFileTemp(path, (int)kMaxModuleBytes);
+    if (!source.s) {
         SetError(error, fmt("reading module `%s` failed", path));
-        return false;
     }
-    if (fseek(file, 0, SEEK_END) != 0) {
-        fclose(file);
-        SetError(error, fmt("reading module `%s` failed", path));
-        return false;
-    }
-    long size = ftell(file);
-    if (size < 0 || (uint64_t)size > kMaxModuleBytes ||
-        fseek(file, 0, SEEK_SET) != 0) {
-        fclose(file);
-        SetError(error, fmt("module `%s` is over the 8 MiB limit", path));
-        return false;
-    }
-    char* bytes = (char*)Alloc(nullptr, (int)size + 1);
-    if (!bytes) {
-        fclose(file);
-        SetError(error, fmt("allocating %ld bytes for module `%s` failed",
-                            size + 1, path));
-        return false;
-    }
-    size_t got = fread(bytes, 1, (size_t)size, file);
-    fclose(file);
-    if (got != (size_t)size) {
-        Free(nullptr, bytes);
-        SetError(error, fmt("reading module `%s` failed", path));
-        return false;
-    }
-    bytes[size] = 0;
-    if (source) *source = Str(bytes, (int)size);
-    return true;
+    return source;
 }
 
-static bool IsBuiltin(const char* name) {
-    return strcmp(name, "gpui") == 0 || strcmp(name, "gpui-base") == 0 ||
-           strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0 ||
-           strcmp(name, "buffer") == 0 || strcmp(name, "console") == 0 ||
-           strcmp(name, "crypto") == 0 || strcmp(name, "fs/promises") == 0 ||
-           strcmp(name, "os") == 0 || strcmp(name, "path") == 0 ||
-           strcmp(name, "process") == 0 || strcmp(name, "url") == 0 ||
-           strcmp(name, "zlib") == 0;
+static bool IsBuiltin(Str name) {
+    return StrEq(name, "gpui") || StrEq(name, "gpui-base") ||
+           StrEq(name, "gpui-shell") || StrEq(name, "gpui-fps") ||
+           StrEq(name, "buffer") || StrEq(name, "console") ||
+           StrEq(name, "crypto") || StrEq(name, "fs/promises") ||
+           StrEq(name, "os") || StrEq(name, "path") || StrEq(name, "process") ||
+           StrEq(name, "url") || StrEq(name, "zlib");
 }
 
 static const char* const kGpuiExports[] = {
@@ -1266,77 +1233,76 @@ static const char* const kUrlExports[] = {"default", "URL", "URLSearchParams",
 static const char* const kZlibExports[] = {
     "default", "deflateSync", "inflateSync", "gzipSync", "gunzipSync"};
 
-static void ModuleExports(const char* name, const char* const** values,
-                          int* count) {
+static void ModuleExports(Str name, const char* const** values, int* count) {
     *values = nullptr;
     *count = 0;
-    if (strcmp(name, "gpui") == 0) {
+    if (StrEq(name, "gpui")) {
         *values = kGpuiExports;
         *count = (int)(sizeof(kGpuiExports) / sizeof(kGpuiExports[0]));
-    } else if (strcmp(name, "gpui-base") == 0) {
+    } else if (StrEq(name, "gpui-base")) {
         *values = kBaseExports;
         *count = (int)(sizeof(kBaseExports) / sizeof(kBaseExports[0]));
-    } else if (strcmp(name, "gpui-fps") == 0) {
+    } else if (StrEq(name, "gpui-fps")) {
         *values = kFpsExports;
         *count = (int)(sizeof(kFpsExports) / sizeof(kFpsExports[0]));
-    } else if (strcmp(name, "buffer") == 0) {
+    } else if (StrEq(name, "buffer")) {
         *values = kBufferExports;
         *count = (int)(sizeof(kBufferExports) / sizeof(kBufferExports[0]));
-    } else if (strcmp(name, "console") == 0) {
+    } else if (StrEq(name, "console")) {
         *values = kConsoleExports;
         *count = (int)(sizeof(kConsoleExports) / sizeof(kConsoleExports[0]));
-    } else if (strcmp(name, "crypto") == 0) {
+    } else if (StrEq(name, "crypto")) {
         *values = kCryptoExports;
         *count = (int)(sizeof(kCryptoExports) / sizeof(kCryptoExports[0]));
-    } else if (strcmp(name, "fs/promises") == 0) {
+    } else if (StrEq(name, "fs/promises")) {
         *values = kFsExports;
         *count = (int)(sizeof(kFsExports) / sizeof(kFsExports[0]));
-    } else if (strcmp(name, "os") == 0) {
+    } else if (StrEq(name, "os")) {
         *values = kOsExports;
         *count = (int)(sizeof(kOsExports) / sizeof(kOsExports[0]));
-    } else if (strcmp(name, "path") == 0) {
+    } else if (StrEq(name, "path")) {
         *values = kPathExports;
         *count = (int)(sizeof(kPathExports) / sizeof(kPathExports[0]));
-    } else if (strcmp(name, "process") == 0) {
+    } else if (StrEq(name, "process")) {
         *values = kProcessExports;
         *count = (int)(sizeof(kProcessExports) / sizeof(kProcessExports[0]));
-    } else if (strcmp(name, "url") == 0) {
+    } else if (StrEq(name, "url")) {
         *values = kUrlExports;
         *count = (int)(sizeof(kUrlExports) / sizeof(kUrlExports[0]));
-    } else if (strcmp(name, "zlib") == 0) {
+    } else if (StrEq(name, "zlib")) {
         *values = kZlibExports;
         *count = (int)(sizeof(kZlibExports) / sizeof(kZlibExports[0]));
     }
 }
 
-static const char* BuiltinObject(const char* name) {
-    if (strcmp(name, "gpui") == 0 || strcmp(name, "gpui-base") == 0 ||
-        strcmp(name, "gpui-shell") == 0 || strcmp(name, "gpui-fps") == 0)
+static const char* BuiltinObject(Str name) {
+    if (StrEq(name, "gpui") || StrEq(name, "gpui-base") ||
+        StrEq(name, "gpui-shell") || StrEq(name, "gpui-fps"))
         return "__gpui";
-    if (strcmp(name, "buffer") == 0) return "__shell_buffer";
-    if (strcmp(name, "console") == 0) return "console";
-    if (strcmp(name, "crypto") == 0) return "__shell_crypto";
-    if (strcmp(name, "fs/promises") == 0) return "__shell_fs";
-    if (strcmp(name, "os") == 0) return "__shell_os";
-    if (strcmp(name, "path") == 0) return "__shell_path";
-    if (strcmp(name, "process") == 0) return "process";
-    if (strcmp(name, "url") == 0) return "__shell_url";
-    if (strcmp(name, "zlib") == 0) return "__shell_zlib";
+    if (StrEq(name, "buffer")) return "__shell_buffer";
+    if (StrEq(name, "console")) return "console";
+    if (StrEq(name, "crypto")) return "__shell_crypto";
+    if (StrEq(name, "fs/promises")) return "__shell_fs";
+    if (StrEq(name, "os")) return "__shell_os";
+    if (StrEq(name, "path")) return "__shell_path";
+    if (StrEq(name, "process")) return "process";
+    if (StrEq(name, "url")) return "__shell_url";
+    if (StrEq(name, "zlib")) return "__shell_zlib";
     return "__gpui";
 }
 
 static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
     JSAtom atom = JS_GetModuleName(ctx, module);
     const char* name = JS_AtomToCString(ctx, atom);
+    Str moduleName = name ? Str(name) : Str{};
     const char* const* exports = nullptr;
     int count = 0;
-    ModuleExports(name ? name : "", &exports, &count);
+    ModuleExports(moduleName, &exports, &count);
     JSValue global = JS_GetGlobalObject(ctx);
-    JSValue api =
-        JS_GetPropertyStr(ctx, global, BuiltinObject(name ? name : ""));
+    JSValue api = JS_GetPropertyStr(ctx, global, BuiltinObject(moduleName));
     int result = 0;
     for (int i = 0; i < count; i++) {
-        JSValue value = strcmp(exports[i], "default") == 0
+        JSValue value = StrEq(Str(exports[i]), "default")
                             ? JS_DupValue(ctx, api)
                             : JS_GetPropertyStr(ctx, api, exports[i]);
         if (JS_IsException(value) ||
@@ -1353,13 +1319,21 @@ static int InitBuiltinModule(JSContext* ctx, JSModuleDef* module) {
     return result;
 }
 
-static AppModule* ApplicationForBase(ShellRuntimeImpl* impl, const char* base) {
-    const char* tag = strrchr(base, '?');
-    if (!tag || strncmp(tag, "?v=", 3) != 0) return nullptr;
+static int LastByte(Str value, char needle) {
+    for (int i = value.len - 1; i >= 0; i--) {
+        if (value.s[i] == needle) return i;
+    }
+    return -1;
+}
+
+static AppModule* ApplicationForBase(ShellRuntimeImpl* impl, Str base) {
+    int tag = LastByte(base, '?');
+    if (tag < 0 || !StrStartsWith(Str(base.s + tag, base.len - tag), "?v="))
+        return nullptr;
     uint32_t generation = 0;
-    for (const char* at = tag + 3; *at; at++) {
-        if (*at < '0' || *at > '9') return nullptr;
-        generation = generation * 10u + (uint32_t)(*at - '0');
+    for (int at = tag + 3; at < base.len; at++) {
+        if (base.s[at] < '0' || base.s[at] > '9') return nullptr;
+        generation = generation * 10u + (uint32_t)(base.s[at] - '0');
     }
     for (int i = impl->modules.len - 1; i >= 0; i--) {
         if (impl->modules[i]->generation == generation) return impl->modules[i];
@@ -1367,22 +1341,24 @@ static AppModule* ApplicationForBase(ShellRuntimeImpl* impl, const char* base) {
     return nullptr;
 }
 
-static void Untag(const char* name, char* out, int cap) {
-    const char* tag = strrchr(name, '?');
-    int len = tag && strncmp(tag, "?v=", 3) == 0 ? (int)(tag - name)
-                                                 : (int)strlen(name);
-    if (len >= cap) len = cap - 1;
-    memcpy(out, name, (size_t)len);
-    out[len] = 0;
+static TempStr UntagTemp(Str name) {
+    int tag = LastByte(name, '?');
+    int len =
+        tag >= 0 && StrStartsWith(Str(name.s + tag, name.len - tag), "?v=")
+            ? tag
+            : name.len;
+    if (len >= kMaxPath) len = kMaxPath - 1;
+    return StrDupTemp(Str(name.s, len));
 }
 
-static void DirectoryName(char* path) {
-    int len = (int)strlen(path);
-    while (len > 0 && path[len - 1] != '/' && path[len - 1] != '\\') {
-        path[--len] = 0;
+static void DirectoryName(Str* path) {
+    while (path->len > 0 && path->s[path->len - 1] != '/' &&
+           path->s[path->len - 1] != '\\') {
+        path->s[--path->len] = 0;
     }
-    while (len > 1 && (path[len - 1] == '/' || path[len - 1] == '\\')) {
-        path[--len] = 0;
+    while (path->len > 1 &&
+           (path->s[path->len - 1] == '/' || path->s[path->len - 1] == '\\')) {
+        path->s[--path->len] = 0;
     }
 }
 
@@ -1391,7 +1367,7 @@ static bool WithinRoot(Str root, Str path) {
 #if GPUI_OS_WINDOWS
     if (StrCmpNI(root.s, path.s, root.len) != 0) return false;
 #else
-    if (memcmp(root.s, path.s, (size_t)root.len) != 0) return false;
+    if (!StrEq(root, Str(path.s, root.len))) return false;
 #endif
     return path.len == root.len || path.s[root.len] == '/';
 }
@@ -1399,10 +1375,11 @@ static bool WithinRoot(Str root, Str path) {
 static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
                              void* opaque) {
     ShellRuntimeImpl* impl = (ShellRuntimeImpl*)opaque;
-    if (IsBuiltin(name)) {
-        size_t len = strlen(name);
-        char* out = (char*)js_malloc(ctx, len + 1);
-        if (out) memcpy(out, name, len + 1);
+    Str baseName = Str(base);
+    Str moduleName = Str(name);
+    if (IsBuiltin(moduleName)) {
+        char* out = (char*)js_malloc(ctx, (size_t)moduleName.len + 1);
+        if (out) memcpy(out, moduleName.s, (size_t)moduleName.len + 1);
         return out;
     }
     if (name[0] != '.' && name[0] != '/' && name[0] != '\\') {
@@ -1413,21 +1390,22 @@ static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
             release = true;
         }
         HostModules* modules = PolicyHostModules(policy);
-        HostModule* found = HostModulesGet(modules, Str(name));
+        HostModule* found = HostModulesGet(modules, moduleName);
         uint64_t generation = HostModulesGeneration(modules);
         HostModulesRelease(modules);
         if (release) PolicyRelease(policy);
         if (found) {
-            int n = snprintf(nullptr, 0, "host:%s?m=%llu", name,
-                             (unsigned long long)generation);
-            char* out = n > 0 ? (char*)js_malloc(ctx, (size_t)n + 1) : nullptr;
-            if (out)
-                snprintf(out, (size_t)n + 1, "host:%s?m=%llu", name,
-                         (unsigned long long)generation);
+            TempStr tagged = fmt("host:%s?m=%llu", moduleName,
+                                 (unsigned long long)generation);
+            char* out = tagged ? (char*)js_malloc(ctx, (size_t)tagged.len + 1)
+                               : nullptr;
+            if (out) {
+                memcpy(out, tagged.s, (size_t)tagged.len + 1);
+            }
             return out;
         }
     }
-    AppModule* application = ApplicationForBase(impl, base);
+    AppModule* application = ApplicationForBase(impl, baseName);
     if (!application) {
         JS_ThrowReferenceError(
             ctx, "cannot identify the application importing `%s` from `%s`",
@@ -1437,21 +1415,21 @@ static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
     // `AppModules::candidate`. A relative specifier stays inside whichever
     // tree the importing module lives in — the application, or the dependency
     // checkout — and a bare one names a dependency, its subpath, or nothing.
-    char basePath[kMaxPath] = {};
-    Untag(base, basePath, kMaxPath);
+    TempStr basePath = UntagTemp(baseName);
     const shell::MaterializedDependency* importing = nullptr;
     for (int i = 0; i < application->dependencies.items.len; i++) {
         const shell::MaterializedDependency& dependency =
             application->dependencies.items[i];
-        if (WithinRoot(dependency.root, Str(basePath))) importing = &dependency;
+        if (WithinRoot(dependency.root, basePath)) importing = &dependency;
     }
-    char start[kMaxPath] = {};
-    char candidate[kMaxPath] = {};
+    TempStr start;
+    TempStr candidate = AllocStrTemp(kMaxPath - 1);
+    candidate.s[0] = 0;
     Str boundary = application->root;
-    const char* tail = name;
+    Str tail = moduleName;
     if (name[0] == '.') {
-        StrCopyZ(start, kMaxPath, basePath);
-        DirectoryName(start);
+        start = StrDupTemp(basePath);
+        DirectoryName(&start);
         if (importing) boundary = importing->root;
     } else {
         const shell::MaterializedDependency* named = nullptr;
@@ -1459,30 +1437,31 @@ static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
             const shell::MaterializedDependency& dependency =
                 application->dependencies.items[i];
             Str dependencyName = dependency.name;
-            if (!StrStartsWith(Str(name), dependencyName)) continue;
-            char after = name[dependencyName.len];
+            if (!StrStartsWith(moduleName, dependencyName)) continue;
+            char after = dependencyName.len < moduleName.len
+                             ? moduleName.s[dependencyName.len]
+                             : 0;
             if (after != 0 && after != '/') continue;
             if (!named || dependencyName.len > named->name.len)
                 named = &dependency;
         }
         if (named) {
-            if (name[named->name.len] == 0) {
+            if (moduleName.len == named->name.len) {
                 // The entry was resolved and confined when it was
                 // materialized; no second file test can improve on that.
-                StrCopyZ(candidate, kMaxPath, named->entry.s);
-                char entryTagged[kMaxPath + 32] = {};
-                int entryLen =
-                    snprintf(entryTagged, sizeof(entryTagged), "%s?v=%u",
-                             candidate, application->generation);
-                if (entryLen <= 0 || entryLen >= (int)sizeof(entryTagged))
+                TempStr entryTagged =
+                    fmt("%s?v=%u", named->entry, application->generation);
+                if (!entryTagged || entryTagged.len >= kMaxPath + 32)
                     return nullptr;
-                char* out = (char*)js_malloc(ctx, (size_t)entryLen + 1);
-                if (out) memcpy(out, entryTagged, (size_t)entryLen + 1);
+                char* out = (char*)js_malloc(ctx, (size_t)entryTagged.len + 1);
+                if (out)
+                    memcpy(out, entryTagged.s, (size_t)entryTagged.len + 1);
                 return out;
             }
-            StrCopyZ(start, kMaxPath, named->root.s);
+            start = StrDupTemp(named->root);
             boundary = named->root;
-            tail = name + named->name.len + 1;
+            tail = Str(moduleName.s + named->name.len + 1,
+                       moduleName.len - named->name.len - 1);
         } else if (importing) {
             // A dependency imports nothing but its own files and the
             // dependencies the application declared.
@@ -1490,57 +1469,55 @@ static char* ModuleNormalize(JSContext* ctx, const char* base, const char* name,
                                    name, base);
             return nullptr;
         } else {
-            StrCopyZ(start, kMaxPath, application->root.s);
+            start = StrDupTemp(application->root);
         }
     }
-    char joined[kMaxPath] = {};
-    int written = snprintf(joined, sizeof(joined), "%s/%s", start, tail);
-    if (written <= 0 || written >= kMaxPath) {
+    TempStr joined = fmt("%s/%s", start, tail);
+    if (!joined || joined.len >= kMaxPath) {
         JS_ThrowReferenceError(ctx, "module path `%s` is too long", name);
         return nullptr;
     }
-    bool found = PlatCanonicalPath(joined, candidate, kMaxPath) &&
-                 PlatFileExists(candidate);
+    bool found = PlatCanonicalPath(joined.s, candidate.s, candidate.len + 1) &&
+                 PlatFileExists(candidate.s);
     if (!found) {
-        int n = snprintf(joined, sizeof(joined), "%s/%s.js", start, tail);
-        found = n > 0 && n < kMaxPath &&
-                PlatCanonicalPath(joined, candidate, kMaxPath) &&
-                PlatFileExists(candidate);
+        joined = fmt("%s/%s.js", start, tail);
+        found = joined && joined.len < kMaxPath &&
+                PlatCanonicalPath(joined.s, candidate.s, candidate.len + 1) &&
+                PlatFileExists(candidate.s);
     }
     if (!found) {
         JS_ThrowReferenceError(ctx, "cannot resolve module `%s` from `%s`",
                                name, base);
         return nullptr;
     }
-    Str canonical(candidate);
+    Str canonical(candidate.s);
     if (!WithinRoot(boundary, canonical)) {
         JS_ThrowReferenceError(
             ctx, "module `%s` resolves outside the application directory `%s`",
             name, boundary.s);
         return nullptr;
     }
-    char tagged[kMaxPath + 32] = {};
-    int n = snprintf(tagged, sizeof(tagged), "%s?v=%u", candidate,
-                     application->generation);
-    if (n <= 0 || n >= (int)sizeof(tagged)) return nullptr;
-    char* out = (char*)js_malloc(ctx, (size_t)n + 1);
-    if (out) memcpy(out, tagged, (size_t)n + 1);
+    TempStr tagged = fmt("%s?v=%u", canonical, application->generation);
+    if (!tagged || tagged.len >= kMaxPath + 32) return nullptr;
+    char* out = (char*)js_malloc(ctx, (size_t)tagged.len + 1);
+    if (out) memcpy(out, tagged.s, (size_t)tagged.len + 1);
     return out;
 }
 
-static bool HostModuleTag(const char* tagged, Str* module,
-                          uint64_t* generation) {
-    if (!tagged || strncmp(tagged, "host:", 5) != 0) return false;
-    const char* tag = strrchr(tagged + 5, '?');
-    if (!tag || strncmp(tag, "?m=", 3) != 0 || tag == tagged + 5) return false;
+static bool HostModuleTag(Str tagged, Str* module, uint64_t* generation) {
+    if (!StrStartsWith(tagged, "host:")) return false;
+    int tag = LastByte(tagged, '?');
+    if (tag < 0 || tag == 5 ||
+        !StrStartsWith(Str(tagged.s + tag, tagged.len - tag), "?m="))
+        return false;
     uint64_t value = 0;
-    for (const char* at = tag + 3; *at; at++) {
-        if (*at < '0' || *at > '9' ||
-            value > (UINT64_MAX - (uint64_t)(*at - '0')) / 10)
+    for (int at = tag + 3; at < tagged.len; at++) {
+        if (tagged.s[at] < '0' || tagged.s[at] > '9' ||
+            value > (UINT64_MAX - (uint64_t)(tagged.s[at] - '0')) / 10)
             return false;
-        value = value * 10 + (uint64_t)(*at - '0');
+        value = value * 10 + (uint64_t)(tagged.s[at] - '0');
     }
-    if (module) *module = Str(tagged + 5, (int)(tag - tagged - 5));
+    if (module) *module = Str(tagged.s + 5, tag - 5);
     if (generation) *generation = value;
     return true;
 }
@@ -1569,7 +1546,7 @@ static void AppendJsQuoted(StrBuilder* out, Str value) {
     out->AppendChar('"');
 }
 
-static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
+static JSModuleDef* LoadHostModule(JSContext* ctx, Str name) {
     Str moduleName;
     uint64_t generation = 0;
     if (!HostModuleTag(name, &moduleName, &generation)) return nullptr;
@@ -1618,7 +1595,7 @@ static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
     if (release) PolicyRelease(policy);
     Str script = source.TakeStr();
     JSValue value =
-        JS_Eval(ctx, script.s ? script.s : "", (size_t)script.len, name,
+        JS_Eval(ctx, script.s ? script.s : "", (size_t)script.len, name.s,
                 JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     StrFree(script);
     if (JS_IsException(value)) return nullptr;
@@ -1628,23 +1605,24 @@ static JSModuleDef* LoadHostModule(JSContext* ctx, const char* name) {
 }
 
 static JSModuleDef* ModuleLoad(JSContext* ctx, const char* name, void*) {
-    if (IsBuiltin(name)) {
+    Str moduleName = Str(name);
+    if (IsBuiltin(moduleName)) {
         JSModuleDef* module = JS_NewCModule(ctx, name, InitBuiltinModule);
         if (!module) return nullptr;
         const char* const* exports = nullptr;
         int count = 0;
-        ModuleExports(name, &exports, &count);
+        ModuleExports(moduleName, &exports, &count);
         for (int i = 0; i < count; i++) {
             if (JS_AddModuleExport(ctx, module, exports[i]) < 0) return nullptr;
         }
         return module;
     }
-    if (strncmp(name, "host:", 5) == 0) return LoadHostModule(ctx, name);
-    char path[kMaxPath] = {};
-    Untag(name, path, kMaxPath);
-    Str source = {};
+    if (StrStartsWith(moduleName, "host:"))
+        return LoadHostModule(ctx, moduleName);
+    TempStr path = UntagTemp(moduleName);
     ShellError error = {};
-    if (!ReadFileBounded(Str(path), &source, &error)) {
+    TempStr source = ReadModuleFileTemp(path, &error);
+    if (!source.s) {
         JS_ThrowReferenceError(
             ctx, "%.*s", error.message.len,
             error.message.s ? error.message.s : "module load failed");
@@ -1653,7 +1631,6 @@ static JSModuleDef* ModuleLoad(JSContext* ctx, const char* name, void*) {
     }
     JSValue value = JS_Eval(ctx, source.s, (size_t)source.len, name,
                             JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
-    Free(nullptr, source.s);
     if (JS_IsException(value)) return nullptr;
     JSModuleDef* module = (JSModuleDef*)JS_VALUE_GET_PTR(value);
     JS_FreeValue(ctx, value);
@@ -1787,11 +1764,10 @@ static bool JsArrayString(JSContext* ctx, JSValueConst array, uint32_t index,
 
 static bool ParseFiniteText(Str text, float* out) {
     if (!text.s || text.len <= 0 || text.len >= 64) return false;
-    char buf[64] = {};
-    memcpy(buf, text.s, (size_t)text.len);
+    TempStr buf = StrDupTemp(text);
     char* end = nullptr;
-    double value = strtod(buf, &end);
-    if (!end || end == buf || *end || !isfinite(value)) return false;
+    double value = strtod(buf.s, &end);
+    if (!end || end == buf.s || *end || !isfinite(value)) return false;
     *out = (float)value;
     return true;
 }
@@ -3100,9 +3076,10 @@ static bool KnownOptions(JSContext* ctx, JSValueConst object,
     bool ok = true;
     for (uint32_t i = 0; i < count && ok; i++) {
         const char* name = JS_AtomToCString(ctx, properties[i].atom);
+        Str optionName = name ? Str(name) : Str{};
         bool found = false;
         for (int j = 0; name && j < knownCount; j++)
-            if (strcmp(name, known[j]) == 0) found = true;
+            if (StrEq(optionName, known[j])) found = true;
         if (!found) {
             JS_ThrowTypeError(ctx, "unknown option `%s` for %s",
                               name ? name : "<symbol>", api);
@@ -5832,8 +5809,8 @@ static JSValue NativeHostAsyncCall(JSContext* ctx, JSValueConst, int argc,
     return promise;
 }
 
-static bool ObjectOnlyOption(JSContext* ctx, JSValueConst object,
-                             const char* allowed, const char* what) {
+static bool ObjectOnlyOption(JSContext* ctx, JSValueConst object, Str allowed,
+                             const char* what) {
     JSPropertyEnum* properties = nullptr;
     uint32_t count = 0;
     if (JS_GetOwnPropertyNames(ctx, &properties, &count, object,
@@ -5843,10 +5820,10 @@ static bool ObjectOnlyOption(JSContext* ctx, JSValueConst object,
     bool ok = true;
     for (uint32_t i = 0; i < count; i++) {
         const char* name = JS_AtomToCString(ctx, properties[i].atom);
-        bool matches = name && strcmp(name, allowed) == 0;
+        bool matches = name && StrEq(Str(name), allowed);
         if (!matches) {
             JS_ThrowTypeError(ctx, "unknown option `%s` for %s; expected %s",
-                              name ? name : "<symbol>", what, allowed);
+                              name ? name : "<symbol>", what, allowed.s);
             ok = false;
         }
         if (name) JS_FreeCString(ctx, name);
@@ -5864,7 +5841,8 @@ static bool FsReadTextOption(JSContext* ctx, JSValueConst value, Arena* arena,
     if (JS_IsString(value)) {
         encoding = JS_DupValue(ctx, value);
     } else if (JS_IsObject(value)) {
-        if (!ObjectOnlyOption(ctx, value, "encoding", "fs.readFile options"))
+        if (!ObjectOnlyOption(ctx, value, StrL("encoding"),
+                              "fs.readFile options"))
             return false;
         encoding = JS_GetPropertyStr(ctx, value, "encoding");
     } else {
@@ -5894,7 +5872,7 @@ static bool FsBoolOption(JSContext* ctx, JSValueConst value, const char* key,
         JS_ThrowTypeError(ctx, "%s expects an options object", what);
         return false;
     }
-    if (!ObjectOnlyOption(ctx, value, key, what)) return false;
+    if (!ObjectOnlyOption(ctx, value, Str(key), what)) return false;
     JSValue option = JS_GetPropertyStr(ctx, value, key);
     if (JS_IsException(option)) return false;
     if (!JS_IsUndefined(option) && !JS_IsBool(option)) {
@@ -8127,10 +8105,8 @@ static JSValue JsDate(JSContext* ctx, LocalDate date) {
     if (date.year == 0 || date.month == 0 || date.day == 0) {
         return JS_NULL;
     }
-    char text[16] = {};
-    snprintf(text, sizeof(text), "%04d-%02d-%02d", date.year, date.month,
-             date.day);
-    return JS_NewString(ctx, text);
+    TempStr text = fmt("%04d-%02d-%02d", date.year, date.month, date.day);
+    return JS_NewString(ctx, text.s);
 }
 
 static bool JsToDate(Str text, LocalDate* out) {
@@ -9715,29 +9691,32 @@ ViewType* ShellRuntime::ReloadApp(Str directory, Str entry, Policy* policy,
                                   const shell::MaterializedDependencies* reuse,
                                   ShellError* error) {
     ShellErrorClear(error);
-    char dir[kMaxPath] = {};
     if (directory.len <= 0 || directory.len >= kMaxPath) {
         SetError(error, StrL("application directory is empty or too long"));
         return nullptr;
     }
-    char input[kMaxPath] = {};
-    memcpy(input, directory.s, (size_t)directory.len);
-    if (!PlatCanonicalPath(input, dir, kMaxPath) || !PlatDirExists(dir)) {
+    TempStr input = StrDupTemp(directory);
+    TempStr dir = AllocStrTemp(kMaxPath - 1);
+    dir.s[0] = 0;
+    if (!PlatCanonicalPath(input.s, dir.s, dir.len + 1) ||
+        !PlatDirExists(dir.s)) {
         SetError(error,
                  fmt("application directory `%s` does not exist", directory));
         return nullptr;
     }
-    char entryPath[kMaxPath] = {};
-    int n = snprintf(entryPath, sizeof(entryPath), "%s/%.*s", dir, entry.len,
-                     entry.s);
-    char canonical[kMaxPath] = {};
-    if (n <= 0 || n >= kMaxPath ||
-        !PlatCanonicalPath(entryPath, canonical, kMaxPath) ||
-        !PlatFileExists(canonical) || !WithinRoot(Str(dir), Str(canonical))) {
+    dir.len = (int)strlen(dir.s);
+    TempStr entryPath = fmt("%s/%s", dir, entry);
+    TempStr canonical = AllocStrTemp(kMaxPath - 1);
+    canonical.s[0] = 0;
+    if (!entryPath || entryPath.len >= kMaxPath ||
+        !PlatCanonicalPath(entryPath.s, canonical.s, canonical.len + 1) ||
+        !PlatFileExists(canonical.s) ||
+        !WithinRoot(Str(dir.s), Str(canonical.s))) {
         SetError(error, fmt("entry module `%s` is not a file inside `%s`",
                             entry, directory));
         return nullptr;
     }
+    canonical.len = (int)strlen(canonical.s);
     // Manifest dependencies are fetched before the entry module compiles, and
     // the same checkouts are linked where an editor finds them. The link is
     // best effort — a read-only directory is not a reason to refuse to run.
@@ -9754,10 +9733,10 @@ ViewType* ShellRuntime::ReloadApp(Str directory, Str entry, Policy* policy,
         }
     }
     Str manifestPath =
-        StrDup(fmt("%s/%s", Str(dir), Str(shell::kShellManifestFile)));
+        StrDup(fmt("%s/%s", dir, Str(shell::kShellManifestFile)));
     if (!reuse && PlatFileExists(manifestPath.s)) {
         shell::PluginManifest manifest;
-        if (!shell::PluginManifestRead(Str(dir), &manifest, error)) {
+        if (!shell::PluginManifestRead(dir, &manifest, error)) {
             StrFree(manifestPath);
             return nullptr;
         }
@@ -9778,7 +9757,7 @@ ViewType* ShellRuntime::ReloadApp(Str directory, Str entry, Policy* policy,
     StrFree(manifestPath);
 
     AppModule* application = new AppModule();
-    application->root = StrDup(Str(dir));
+    application->root = StrDup(dir);
     application->dependencies = dependencies;
     application->generation = impl->nextModuleGeneration++;
     if (application->generation == 0) {
@@ -9786,14 +9765,12 @@ ViewType* ShellRuntime::ReloadApp(Str directory, Str entry, Policy* policy,
     }
     VecAppend(impl->modules, application);
 
-    Str source = {};
-    if (!ReadFileBounded(Str(canonical), &source, error)) return nullptr;
-    Str tagged =
-        StrDup(fmt("%s?v=%u", Str(canonical), application->generation));
+    TempStr source = ReadModuleFileTemp(canonical, error);
+    if (!source.s) return nullptr;
+    Str tagged = StrDup(fmt("%s?v=%u", canonical, application->generation));
     ViewType* result =
         LoadModule(this, tagged, source, application, policy, error);
     StrFree(tagged);
-    Free(nullptr, source.s);
     return result;
 }
 
@@ -10399,27 +10376,31 @@ static void RetainedCallbackIds(const shell::RetainedEntry* entry,
 
 // One codepoint as UTF-8. Written out rather than borrowed from
 // src/markdown/, which is a ported crate this tree keeps to itself.
-static int ShellUtf8(uint32_t cp, char* out) {
+static TempStr ShellUtf8Temp(uint32_t cp) {
+    TempStr out = AllocStrTemp(4);
     if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
+        out.s[0] = (char)cp;
+        out.len = 1;
+        return out;
     }
     if (cp < 0x800) {
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3F));
-        return 2;
+        out.s[0] = (char)(0xC0 | (cp >> 6));
+        out.s[1] = (char)(0x80 | (cp & 0x3F));
+        out.len = 2;
+        return out;
     }
     if (cp < 0x10000) {
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[2] = (char)(0x80 | (cp & 0x3F));
-        return 3;
+        out.s[0] = (char)(0xE0 | (cp >> 12));
+        out.s[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out.s[2] = (char)(0x80 | (cp & 0x3F));
+        out.len = 3;
+        return out;
     }
-    out[0] = (char)(0xF0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-    out[3] = (char)(0x80 | (cp & 0x3F));
-    return 4;
+    out.s[0] = (char)(0xF0 | (cp >> 18));
+    out.s[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out.s[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out.s[3] = (char)(0x80 | (cp & 0x3F));
+    return out;
 }
 
 // One wheel notch, in the DIPs a ScrollWheelEvent reports — see the comment on
@@ -10449,9 +10430,7 @@ static Str ScriptKeystroke(Arena* arena, const KeyEvent& event) {
     if (key) {
         StrBuilderAppend(arena, out, key);
     } else if (event.ch) {
-        char utf8[8] = {};
-        int n = ShellUtf8(event.ch, utf8);
-        StrBuilderAppend(arena, out, Str(utf8, n));
+        StrBuilderAppend(arena, out, ShellUtf8Temp(event.ch));
     }
     return StrBuilderTakeStr(arena, out);
 }
@@ -10498,10 +10477,10 @@ void ShellRuntime::DispatchKey(shell::CallbackId callback,
         impl->context, payload, "keystroke",
         JS_NewStringLen(impl->context, keystroke.s, (size_t)keystroke.len));
     if (event.ch) {
-        char utf8[8] = {};
-        int n = ShellUtf8(event.ch, utf8);
-        JS_SetPropertyStr(impl->context, payload, "key_char",
-                          JS_NewStringLen(impl->context, utf8, (size_t)n));
+        TempStr utf8 = ShellUtf8Temp(event.ch);
+        JS_SetPropertyStr(
+            impl->context, payload, "key_char",
+            JS_NewStringLen(impl->context, utf8.s, (size_t)utf8.len));
     } else {
         JS_SetPropertyStr(impl->context, payload, "key_char", JS_UNDEFINED);
     }

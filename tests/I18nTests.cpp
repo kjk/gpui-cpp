@@ -72,7 +72,8 @@ static void TheRowsAreSorted() {
     int n = LocaleRowCount();
     utassert(n > 40);
     for (int i = 1; i < n; i++) {
-        utassert(strcmp(LocaleRowAt(i - 1)->key, LocaleRowAt(i)->key) < 0);
+        utassert(base::StrCmp(Str(LocaleRowAt(i - 1)->key),
+                              Str(LocaleRowAt(i)->key)) < 0);
     }
     // And every row has the English the fallback needs.
     for (int i = 0; i < n; i++) {

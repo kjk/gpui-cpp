@@ -548,23 +548,22 @@ static void PreeditDraw(XIC, XPointer client, XPointer call) {
     PlatWindow* pw = win->plat;
     // The replacement, decoded to UTF-8. A multibyte text is already in the
     // locale's encoding, which XSetLocaleModifiers has made UTF-8.
-    char ins[512];
+    TempStr ins = AllocStrTemp(511);
     int insLen = 0;
     if (d->text && d->text->length > 0) {
         if (d->text->encoding_is_wchar) {
             const wchar_t* w = d->text->string.wide_char;
-            for (int i = 0;
-                 w && i < d->text->length && insLen < (int)sizeof(ins) - 8;
+            for (int i = 0; w && i < d->text->length && insLen < ins.len - 8;
                  i++) {
-                insLen += PreeditUtf8Encode((uint32_t)w[i], ins + insLen);
+                insLen += PreeditUtf8Encode((uint32_t)w[i], ins.s + insLen);
             }
         } else if (d->text->string.multi_byte) {
             const char* m = d->text->string.multi_byte;
             insLen = (int)strlen(m);
-            if (insLen > (int)sizeof(ins)) {
-                insLen = (int)sizeof(ins);
+            if (insLen > ins.len) {
+                insLen = ins.len;
             }
-            memcpy(ins, m, (size_t)insLen);
+            memcpy(ins.s, m, (size_t)insLen);
         }
     }
     int from = Utf8ByteOfChar(pw->preedit, pw->preeditLen, d->chg_first);
@@ -579,7 +578,7 @@ static void PreeditDraw(XIC, XPointer client, XPointer call) {
         return;
     }
     memmove(pw->preedit + from + insLen, pw->preedit + to, (size_t)tail);
-    memcpy(pw->preedit + from, ins, (size_t)insLen);
+    memcpy(pw->preedit + from, ins.s, (size_t)insLen);
     pw->preeditLen = from + insLen + tail;
     pw->preeditCaret = d->caret;
     PreeditApply(win);
@@ -661,9 +660,10 @@ static void OnKeyRelease(Window* win, XKeyEvent* ke) {
             return;
         }
     }
-    char buf[8] = {};
+    TempStr buf = AllocStrTemp(7);
+    buf.s[0] = 0;
     KeySym ks = 0;
-    XLookupString(ke, buf, (int)sizeof(buf) - 1, &ks, nullptr);
+    XLookupString(ke, buf.s, buf.len, &ks, nullptr);
     int key = KeyFor(ks);
     if (key) {
         WindowKeyUp(win, key, (ke->state & ShiftMask) != 0,
@@ -925,15 +925,12 @@ void OpenUrl(Str url) {
     if (!url.s || url.len <= 0) {
         return;
     }
-    char buf[1024];
-    int n = url.len < (int)sizeof(buf) - 1 ? url.len : (int)sizeof(buf) - 1;
-    memcpy(buf, url.s, (size_t)n);
-    buf[n] = 0;
+    TempStr value = StrDupTemp(url.len < 1023 ? url : Str(url.s, 1023));
     pid_t pid = fork();
     if (pid == 0) {
         // The grandchild is orphaned deliberately: nobody is left to reap it.
         if (fork() == 0) {
-            execlp("xdg-open", "xdg-open", buf, (char*)nullptr);
+            execlp("xdg-open", "xdg-open", value.s, (char*)nullptr);
             _exit(127);
         }
         _exit(0);
@@ -949,23 +946,14 @@ void OpenUrl(Str url) {
 // desktops, kdialog on KDE, whichever is on the PATH. A session with neither
 // answers nothing, which is what a caller has to be ready for anyway — the
 // user can always cancel.
-bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+TempStr PromptForPathTemp(Window* win, const PathPrompt& opts) {
     (void)win;
-    if (!out || cap <= 0) {
-        return false;
-    }
-    out[0] = 0;
-    char title[256];
-    int tn = opts.title.len < (int)sizeof(title) - 1 ? opts.title.len
-                                                     : (int)sizeof(title) - 1;
-    if (tn > 0) {
-        memcpy(title, opts.title.s, (size_t)tn);
-    }
-    title[tn > 0 ? tn : 0] = 0;
+    TempStr title =
+        StrDupTemp(opts.title.len < 255 ? opts.title : Str(opts.title.s, 255));
     bool dirs = opts.directories && !opts.files;
     int fds[2] = {-1, -1};
     if (pipe(fds) != 0) {
-        return false;
+        return {};
     }
     pid_t pid = fork();
     if (pid == 0) {
@@ -976,14 +964,14 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
         // exec that fails falls through to the next.
         if (dirs) {
             execlp("zenity", "zenity", "--file-selection", "--directory",
-                   title[0] ? "--title" : (char*)nullptr,
-                   title[0] ? title : (char*)nullptr, (char*)nullptr);
+                   title ? "--title" : (char*)nullptr,
+                   title ? title.s : (char*)nullptr, (char*)nullptr);
             execlp("kdialog", "kdialog", "--getexistingdirectory", ".",
                    (char*)nullptr);
         } else {
             execlp("zenity", "zenity", "--file-selection",
-                   title[0] ? "--title" : (char*)nullptr,
-                   title[0] ? title : (char*)nullptr, (char*)nullptr);
+                   title ? "--title" : (char*)nullptr,
+                   title ? title.s : (char*)nullptr, (char*)nullptr);
             execlp("kdialog", "kdialog", "--getopenfilename", ".",
                    (char*)nullptr);
         }
@@ -992,16 +980,23 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
     close(fds[1]);
     if (pid < 0) {
         close(fds[0]);
-        return false;
+        return {};
+    }
+    TempStr result = AllocStrTemp(kMaxPath - 1);
+    if (!result.s) {
+        close(fds[0]);
+        int st = 0;
+        waitpid(pid, &st, 0);
+        return {};
     }
     int n = 0;
     for (;;) {
-        ssize_t got = read(fds[0], out + n, (size_t)(cap - 1 - n));
+        ssize_t got = read(fds[0], result.s + n, (size_t)(result.len - n));
         if (got <= 0) {
             break;
         }
         n += (int)got;
-        if (n >= cap - 1) {
+        if (n >= result.len) {
             break;
         }
     }
@@ -1010,11 +1005,12 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
     waitpid(pid, &st, 0);
     // The helper prints the path and a newline, and nothing at all when the
     // user cancelled.
-    while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r')) {
+    while (n > 0 && (result.s[n - 1] == '\n' || result.s[n - 1] == '\r')) {
         n--;
     }
-    out[n] = 0;
-    return n > 0;
+    result.s[n] = 0;
+    result.len = n;
+    return result;
 }
 
 void ClipboardSetText(Window* win, Str text) {

@@ -538,12 +538,11 @@ static bool IsIdentChar(char c) {
            (c >= '0' && c <= '9') || c == '-' || c == '_';
 }
 
-// `name="value"` inside one tag's text, as a slice of the tag. Matched only
-// on a name boundary, so "fill" does not match "fill-rule". A slice rather
-// than a copy because a `d` attribute has no bound worth guessing at — a
-// window-chrome icon traced by a design tool runs past two thousand
-// characters, and a fixed buffer silently drew half of it.
-static bool GetAttrStr(Str tag, const char* name, Str* out) {
+// `name="value"` inside one tag's text. Matched only on a name boundary, so
+// "fill" does not match "fill-rule". The temporary copy has no fixed bound: a
+// window-chrome icon traced by a design tool can have a `d` attribute longer
+// than two thousand characters.
+static TempStr GetAttrTemp(Str tag, const char* name) {
     int nlen = (int)strlen(name);
     const char* p = tag.s;
     const char* end = tag.s + tag.len;
@@ -560,34 +559,19 @@ static bool GetAttrStr(Str tag, const char* name, Str* out) {
             while (p < end && *p != q && *p != '>') {
                 p++;
             }
-            *out = Str(vs, (int)(p - vs));
-            return out->len > 0;
+            return StrDupTemp(Str(vs, (int)(p - vs)));
         }
         p++;
     }
-    return false;
-}
-
-// The same, copied and null-terminated, for the short ones a colour parse
-// wants as a C string.
-static bool GetAttr(Str tag, const char* name, char* out, int outN) {
-    Str v;
-    if (!GetAttrStr(tag, name, &v)) {
-        out[0] = 0;
-        return false;
-    }
-    int n = v.len < outN - 1 ? v.len : outN - 1;
-    memcpy(out, v.s, (size_t)n);
-    out[n] = 0;
-    return n > 0;
+    return {};
 }
 
 static float AttrF(Str tag, const char* name, float def) {
-    char buf[64];
-    if (!GetAttr(tag, name, buf, 64)) {
+    TempStr value = GetAttrTemp(tag, name);
+    if (!value) {
         return def;
     }
-    return StrToFloatUnchecked(Str(buf));
+    return StrToFloatUnchecked(value);
 }
 
 // `fill="#rrggbb"` on a shape. "none" and "currentColor" both leave the shape
@@ -778,9 +762,9 @@ static void EndShape(SvgIcon* ic, int start, Str tag, const SvgMatrix& m) {
         return;
     }
     // The groups this shape sits in, and its own transform after them.
-    Str own;
+    TempStr own = GetAttrTemp(tag, "transform");
     SvgMatrix full = m;
-    if (GetAttrStr(tag, "transform", &own)) {
+    if (own) {
         full = MatMul(m, ParseTransform(own));
     }
     if (!full.IsIdentity()) {
@@ -799,15 +783,13 @@ static void EndShape(SvgIcon* ic, int start, Str tag, const SvgMatrix& m) {
     SvgShape sh;
     sh.start = start;
     sh.count = ic->ops.len - start;
-    char fill[64];
-    if (GetAttr(tag, "fill", fill, 64) &&
-        ParseSvgPaint(ic, Str(fill), &sh.fill)) {
+    TempStr fill = GetAttrTemp(tag, "fill");
+    if (fill && ParseSvgPaint(ic, fill, &sh.fill)) {
         sh.hasFill = true;
         ic->hasOwnColors = true;
     }
-    char stroke[64];
-    if (GetAttr(tag, "stroke", stroke, 64) &&
-        ParseSvgPaint(ic, Str(stroke), &sh.stroke)) {
+    TempStr stroke = GetAttrTemp(tag, "stroke");
+    if (stroke && ParseSvgPaint(ic, stroke, &sh.stroke)) {
         sh.hasStroke = true;
         ic->hasOwnColors = true;
     }
@@ -886,36 +868,38 @@ struct SvgCtx {
 // place.
 static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
     SvgCtx cur = outer;
-    Str tr;
-    if (GetAttrStr(tag, "transform", &tr)) {
+    TempStr tr = GetAttrTemp(tag, "transform");
+    if (tr) {
         cur.m = MatMul(cur.m, ParseTransform(tr));
     }
-    char buf[64];
-    if (GetAttr(tag, "font-size", buf, 64)) {
-        float v = StrToFloatUnchecked(Str(buf));
+    TempStr value = GetAttrTemp(tag, "font-size");
+    if (value) {
+        float v = StrToFloatUnchecked(value);
         if (v > 0) {
             cur.fontSize = v;
         }
     }
-    if (GetAttr(tag, "font-weight", buf, 64)) {
-        cur.bold =
-            StrEqI(Str(buf), "bold") || StrToIntUnchecked(Str(buf)) >= 600;
+    value = GetAttrTemp(tag, "font-weight");
+    if (value) {
+        cur.bold = StrEqI(value, "bold") || StrToIntUnchecked(value) >= 600;
     }
-    if (GetAttr(tag, "text-anchor", buf, 64)) {
-        Str v(buf);
-        cur.anchor = StrEqI(v, "middle") ? kTextAnchorMiddle
-                     : StrEqI(v, "end")  ? kTextAnchorEnd
-                                         : kTextAnchorStart;
+    value = GetAttrTemp(tag, "text-anchor");
+    if (value) {
+        cur.anchor = StrEqI(value, "middle") ? kTextAnchorMiddle
+                     : StrEqI(value, "end")  ? kTextAnchorEnd
+                                             : kTextAnchorStart;
     }
-    if (GetAttr(tag, "fill", buf, 64)) {
+    value = GetAttrTemp(tag, "fill");
+    if (value) {
         Rgba c;
-        if (ParseSvgPaint(ic, Str(buf), &c)) {
+        if (ParseSvgPaint(ic, value, &c)) {
             cur.hasFill = true;
             cur.fill = c;
         }
     }
-    if (GetAttr(tag, "fill-opacity", buf, 64)) {
-        float o = StrToFloatUnchecked(Str(buf));
+    value = GetAttrTemp(tag, "fill-opacity");
+    if (value) {
+        float o = StrToFloatUnchecked(value);
         if (o < 0) {
             o = 0;
         }
@@ -925,20 +909,24 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
         cur.fill.a = (uint8_t)lroundf(o * 255.f);
         cur.hasFill = cur.hasFill || o < 1.f;
     }
-    if (GetAttrStr(tag, "filter", &tr)) {
+    tr = GetAttrTemp(tag, "filter");
+    if (tr) {
         cur.filtered = true;
     }
     // x/y do not inherit the way the rest do -- a tspan without them
     // continues where the last run left off -- but every file this reads
     // names both on whichever element carries the words.
-    if (GetAttr(tag, "x", buf, 64)) {
-        cur.x = StrToFloatUnchecked(Str(buf));
+    value = GetAttrTemp(tag, "x");
+    if (value) {
+        cur.x = StrToFloatUnchecked(value);
     }
-    if (GetAttr(tag, "y", buf, 64)) {
-        cur.y = StrToFloatUnchecked(Str(buf));
+    value = GetAttrTemp(tag, "y");
+    if (value) {
+        cur.y = StrToFloatUnchecked(value);
     }
-    if (GetAttr(tag, "textLength", buf, 64)) {
-        cur.textLength = StrToFloatUnchecked(Str(buf));
+    value = GetAttrTemp(tag, "textLength");
+    if (value) {
+        cur.textLength = StrToFloatUnchecked(value);
     }
     return cur;
 }
@@ -1083,7 +1071,8 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
                     IsTagNamed(tagStart, tagStart + tag.len,
                                "radialGradient")) {
                     SvgGradient g;
-                    if (GetAttrStr(tag, "id", &g.id)) {
+                    g.id = GetAttrTemp(tag, "id");
+                    if (g.id) {
                         VecAppend(ic->gradients, g);
                         gradIx = ic->gradients.len - 1;
                     }
@@ -1098,16 +1087,16 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             if (gradIx >= 0 && gradIx < ic->gradients.len &&
                 !ic->gradients[gradIx].hasColor &&
                 IsTagNamed(tagStart, tagStart + tag.len, "stop")) {
-                char sc[64];
+                TempStr stop = GetAttrTemp(tag, "stop-color");
                 Rgba c;
-                if (GetAttr(tag, "stop-color", sc, 64) &&
-                    ParseSvgColor(Str(sc), &c)) {
+                if (stop && ParseSvgColor(stop, &c)) {
                     // stop-opacity is what makes a shields.io badge's sheen a
                     // sheen: the gradient laid over the whole plate is #bbb at
                     // a tenth, and reading the colour without the opacity
                     // washes the plate out to grey.
-                    if (GetAttr(tag, "stop-opacity", sc, 64)) {
-                        float o = StrToFloatUnchecked(Str(sc));
+                    stop = GetAttrTemp(tag, "stop-opacity");
+                    if (stop) {
+                        float o = StrToFloatUnchecked(stop);
                         if (o < 0) {
                             o = 0;
                         }
@@ -1165,9 +1154,9 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         const SvgMatrix& gm = outer.m;
 
         if (base::StrStartsWithI(tag, "svg")) {
-            char vb[64];
-            if (GetAttr(tag, "viewBox", vb, 64)) {
-                PathScan s{vb, vb + strlen(vb)};
+            TempStr viewBox = GetAttrTemp(tag, "viewBox");
+            if (viewBox) {
+                PathScan s{viewBox.s, viewBox.s + viewBox.len};
                 float a = 0, b = 0, c = 24, d = 24;
                 ParseNum(&s, &a);
                 ParseNum(&s, &b);
@@ -1193,20 +1182,20 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             if (sw > 0) {
                 ic->strokeW = sw;
             }
-            char fill[64];
-            if (GetAttr(tag, "fill", fill, 64)) {
-                ic->filled = !StrEqI(Str(fill), "none");
+            TempStr fill = GetAttrTemp(tag, "fill");
+            if (fill) {
+                ic->filled = !StrEqI(fill, "none");
             }
-            char stroke[64];
-            if (GetAttr(tag, "stroke", stroke, 64)) {
-                ic->stroked = !StrEqI(Str(stroke), "none");
+            TempStr stroke = GetAttrTemp(tag, "stroke");
+            if (stroke) {
+                ic->stroked = !StrEqI(stroke, "none");
             }
             continue;
         }
         if (base::StrStartsWithI(tag, "path")) {
-            Str d;
+            TempStr d = GetAttrTemp(tag, "d");
             int start = ic->ops.len;
-            if (GetAttrStr(tag, "d", &d)) {
+            if (d) {
                 ParsePathD(ic, d);
             }
             EndShape(ic, start, tag, gm);
@@ -1224,18 +1213,18 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             continue;
         }
         if (base::StrStartsWithI(tag, "polyline")) {
-            Str pts;
+            TempStr pts = GetAttrTemp(tag, "points");
             int start = ic->ops.len;
-            if (GetAttrStr(tag, "points", &pts)) {
+            if (pts) {
                 ParsePolyline(ic, pts, false);
             }
             EndShape(ic, start, tag, gm);
             continue;
         }
         if (base::StrStartsWithI(tag, "polygon")) {
-            Str pts;
+            TempStr pts = GetAttrTemp(tag, "points");
             int start = ic->ops.len;
-            if (GetAttrStr(tag, "points", &pts)) {
+            if (pts) {
                 ParsePolyline(ic, pts, true);
             }
             EndShape(ic, start, tag, gm);

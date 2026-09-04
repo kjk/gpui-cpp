@@ -121,13 +121,13 @@ static void ADragAcrossTwoRunsCopiesBoth() {
     WindowSelectionDrag(&win, 115, 45);
     WindowSelectionRelease(&win);
     utassert(WindowSelectionHas(&win));
-    char buf[64];
-    int n = WindowSelectionText(&win, buf, (int)sizeof(buf));
+    TempStr buf = AllocStrTemp(63);
+    int n = WindowSelectionText(&win, buf.s, buf.len + 1);
     utassert(n > 0);
     // Without a text backend a hit resolves to the start of its run, so what
     // is pinned here is the span and the join, not the glyph the drag ended
     // on: the first run, the newline between them, and into the second.
-    utassert(StrEq(Str(buf, 6), "hello\n"));
+    utassert(StrEq(Str(buf.s, 6), "hello\n"));
     WindowSelectionFree(&win);
 }
 
@@ -138,22 +138,22 @@ static void TwoClicksTakeTheWordAndThreeTheLine() {
     Window win;
     AddRun(&win, 0, "hello brave world", 0);
     AddRun(&win, 40, "second", 0);
-    char buf[64];
+    TempStr buf = AllocStrTemp(63);
 
     // Without a text backend a hit resolves to the start of its run, so the
     // word this lands on is the first one.
     WindowSelectionPress(&win, 25, 5, 2, false);
     utassert(WindowSelectionHas(&win));
-    int n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(StrEq(Str(buf, n), "hello"));
+    int n = WindowSelectionText(&win, buf.s, buf.len + 1);
+    utassert(StrEq(Str(buf.s, n), "hello"));
     // The press ended the gesture, so a drag does not grow it.
     WindowSelectionDrag(&win, 115, 45);
-    n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(StrEq(Str(buf, n), "hello"));
+    n = WindowSelectionText(&win, buf.s, buf.len + 1);
+    utassert(StrEq(Str(buf.s, n), "hello"));
 
     WindowSelectionPress(&win, 25, 5, 3, false);
-    n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(StrEq(Str(buf, n), "hello brave world"));
+    n = WindowSelectionText(&win, buf.s, buf.len + 1);
+    utassert(StrEq(Str(buf.s, n), "hello brave world"));
     // And it stops at the run: the line is this run's, not the document's.
     WindowSelectionFree(&win);
 }
@@ -182,9 +182,9 @@ static void ADragOutOfAScopeStaysInIt() {
     // follow it there.
     WindowSelectionDrag(&win, 115, 5);
     WindowSelectionRelease(&win);
-    char buf[64];
-    int n = WindowSelectionText(&win, buf, (int)sizeof(buf));
-    utassert(n == 0 || !StrEq(Str(buf, n), "page"));
+    TempStr buf = AllocStrTemp(63);
+    int n = WindowSelectionText(&win, buf.s, buf.len + 1);
+    utassert(n == 0 || !StrEq(Str(buf.s, n), "page"));
     // And the frame is told which scope the range belongs to, so a run
     // outside it does not paint one.
     WindowSelectionApply(&win);
@@ -203,8 +203,8 @@ static void AMarginOnlyDragPublishesNothing() {
     WindowSelectionDrag(&win, 40, 220);
     WindowSelectionRelease(&win);
     utassert(!WindowSelectionHas(&win));
-    char buf[16];
-    utassert(WindowSelectionText(&win, buf, (int)sizeof(buf)) == 0);
+    TempStr buf = AllocStrTemp(15);
+    utassert(WindowSelectionText(&win, buf.s, buf.len + 1) == 0);
     WindowSelectionApply(&win);
     utassert(win.paint.selA < 0);
     WindowSelectionFree(&win);
@@ -371,19 +371,19 @@ static void SourceParticipantContractsProjectAcrossAWindow() {
                                                          .hasContentKey);
     utassert(observed->focused == 1 && observed->autoScroll > 0);
 
-    char selected[64];
-    int selectedLen = TextSelection::SelectedText(&win, &app, selected,
-                                                  (int)sizeof(selected));
-    utassert(StrEq(Str(selected, selectedLen), "first\nsecond"));
+    TempStr selected = AllocStrTemp(63);
+    int selectedLen =
+        TextSelection::SelectedText(&win, &app, selected.s, selected.len + 1);
+    utassert(StrEq(Str(selected.s, selectedLen), "first\nsecond"));
     utassert(TextSelection::HasSelection(&win, &app));
     WindowSelectionRelease(&win);
     utassert(first.Snapshot(&app, &firstSnapshot) && !firstSnapshot
                                                           .IsSelecting());
     outside.CopyWith(&ParticipantCopy, nullptr, &app);
     outside.SetLocalSelection(true, &app);
-    selectedLen = TextSelection::SelectedText(&win, &app, selected,
-                                              (int)sizeof(selected));
-    utassert(StrEq(Str(selected, selectedLen), "first\nsecond\ncustom"));
+    selectedLen =
+        TextSelection::SelectedText(&win, &app, selected.s, selected.len + 1);
+    utassert(StrEq(Str(selected.s, selectedLen), "first\nsecond\ncustom"));
     outside.SetLocalSelection(false, &app);
 
     TextSelectionRun run =

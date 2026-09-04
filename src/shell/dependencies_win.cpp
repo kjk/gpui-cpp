@@ -23,22 +23,20 @@ bool DependencyMakeDirectories(Str path, Str* error) {
                         StrL("dependency cache path is empty or too long"));
         return false;
     }
-    char buffer[kMaxPath];
-    memcpy(buffer, path.s, (size_t)path.len);
-    buffer[path.len] = 0;
+    TempStr buffer = StrDupTemp(path);
     for (int i = 1; i <= path.len; i++) {
-        if (i < path.len && buffer[i] != '/' && buffer[i] != '\\') continue;
-        char saved = buffer[i];
-        buffer[i] = 0;
+        if (i < path.len && buffer.s[i] != '/' && buffer.s[i] != '\\') continue;
+        char saved = buffer.s[i];
+        buffer.s[i] = 0;
         // A drive root ("C:") is not a directory anyone creates.
-        bool root = i == 2 && buffer[1] == ':';
-        if (!root && !CreateDirectoryW(Wide(Str(buffer, i)), nullptr) &&
+        bool root = i == 2 && buffer.s[1] == ':';
+        if (!root && !CreateDirectoryW(Wide(Str(buffer.s, i)), nullptr) &&
             GetLastError() != ERROR_ALREADY_EXISTS) {
-            buffer[i] = saved;
+            buffer.s[i] = saved;
             DependencyError(error, fmt("creating %s failed", path));
             return false;
         }
-        buffer[i] = saved;
+        buffer.s[i] = saved;
     }
     return true;
 }
@@ -63,11 +61,11 @@ static void RemoveTreeAt(Str path) {
             if (wcscmp(found.cFileName, L".") == 0 ||
                 wcscmp(found.cFileName, L"..") == 0)
                 continue;
-            char name[kMaxPath];
-            int n = WideCharToMultiByte(CP_UTF8, 0, found.cFileName, -1, name,
-                                        (int)sizeof(name), nullptr, nullptr);
+            TempStr name = AllocStrTemp(kMaxPath - 1);
+            int n = WideCharToMultiByte(CP_UTF8, 0, found.cFileName, -1, name.s,
+                                        name.len + 1, nullptr, nullptr);
             if (n <= 1) continue;
-            RemoveTreeAt(fmt("%s\\%s", path, Str(name, n - 1)));
+            RemoveTreeAt(fmt("%s\\%s", path, Str(name.s, n - 1)));
         } while (FindNextFileW(search, &found));
         FindClose(search);
     }

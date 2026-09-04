@@ -21,10 +21,7 @@ El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
                     ->FlexRow()
                     ->Gap(4);
     for (int i = 0; i < 6; i++) {
-        char ch[2] = {' ', 0};
-        if (i < app->otpLen) {
-            ch[0] = app->otp[i];
-        }
+        Str ch = i < app->otpLen ? Str(app->otp + i, 1) : StrL(" ");
         Rgba border = (i == active) ? ScInk() : ScBorder();
         cells->Child(Div(a)
                          ->W(28)
@@ -32,7 +29,7 @@ El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
                          ->ItemsCenter()
                          ->JustifyCenter()
                          ->Border(1, border)
-                         ->Child(ScTxt(cx, DupA(cx, ch), 12, ScInk())));
+                         ->Child(ScTxt(cx, StrDup(a, ch), 12, ScInk())));
     }
     return Div(a)
         ->FlexCol()

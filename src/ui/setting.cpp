@@ -130,13 +130,10 @@ static double SettingNumParse(Str s, double fallback) {
     if (!s.s || s.len <= 0) {
         return fallback;
     }
-    char buf[64];
-    int n = s.len < (int)sizeof(buf) - 1 ? s.len : (int)sizeof(buf) - 1;
-    memcpy(buf, s.s, (size_t)n);
-    buf[n] = 0;
+    TempStr buf = StrDupTemp(s);
     char* end = nullptr;
-    double v = strtod(buf, &end);
-    return end == buf ? fallback : v;
+    double v = strtod(buf.s, &end);
+    return end == buf.s ? fallback : v;
 }
 
 static SettingBinding* FieldAt(SettingsState* self, intptr_t ix) {

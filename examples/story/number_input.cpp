@@ -27,12 +27,12 @@ static void StepSlot(NumberInputStory* self, Ctx* cx, int slot,
     // gpui_base::step_value works on the text, so "1.50" steps to "2.50" and
     // the field keeps the precision the reader is looking at. It answers no
     // when the step would not move the value.
-    char next[64];
-    if (!NumberStepValue(Str(InputCStr(f)), action, step, false, 0, false, 0,
-                         next, (int)sizeof(next))) {
+    TempStr next = NumberStepValueTemp(Str(InputCStr(f)), action, step, false,
+                                       0, false, 0);
+    if (!next) {
         return;
     }
-    InputSetValue(f, Str(next));
+    InputSetValue(f, next);
     Notify(cx);
 }
 

@@ -191,11 +191,11 @@ static void TestMarkdownConstants() {
 
     // The names are sorted, which is what `DecodeNamed` binary searches.
     for (int32_t i = 1; i < 2125; i++) {
-        const char* prev =
-            kCharacterReferenceNames + kCharacterReferences[i - 1].nameOff;
-        const char* cur = kCharacterReferenceNames + kCharacterReferences[i]
-                                                         .nameOff;
-        utassert(strcmp(prev, cur) < 0);
+        Str prev =
+            Str(kCharacterReferenceNames + kCharacterReferences[i - 1].nameOff);
+        Str cur =
+            Str(kCharacterReferenceNames + kCharacterReferences[i].nameOff);
+        utassert(base::StrCmp(prev, cur) < 0);
     }
 }
 
@@ -489,7 +489,7 @@ static void TestMarkdownTable(Arena* a) {
     // The column count is varint-encoded, so 128 columns is where it stops
     // fitting in one byte. A table that wide is absurd and costs two.
     const int32_t wide = 130;
-    char src[2 * (4 * 130 + 2) + 1];
+    TempStr src = AllocStrTemp(2 * (4 * 130 + 2));
     int32_t at = 0;
     for (int32_t row = 0; row < 2; row++) {
         for (int32_t i = 0; i < wide; i++) {
@@ -503,14 +503,15 @@ static void TestMarkdownTable(Arena* a) {
             } else if (row == 1 && i % 4 == 3) {
                 cell = "| -:";
             }
-            memcpy(src + at, cell, 4);
+            memcpy(src.s + at, cell, 4);
             at += 4;
         }
-        src[at++] = '|';
-        src[at++] = '\n';
+        src.s[at++] = '|';
+        src.s[at++] = '\n';
     }
-    src[at] = 0;
-    Node* wideRoot = Parse(a, src);
+    src.s[at] = 0;
+    src.len = at;
+    Node* wideRoot = Parse(a, src.s);
     Node* wideTable = Child(wideRoot, 0);
     utassert(wideTable->kind == NodeKind::Table);
     utassert(ArenaAlignCount(gParsedInto,

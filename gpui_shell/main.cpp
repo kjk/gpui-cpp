@@ -57,42 +57,42 @@ static bool Parse(int argc, char** argv, Invocation* out, Str* error) {
     StrFree(*error);
     *error = {};
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+        Str argument = Str(argv[i]);
+        if (StrEq(argument, "--help") || StrEq(argument, "-h")) {
             out->kind = CommandKind::Help;
             return true;
         }
-        if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
+        if (StrEq(argument, "--version") || StrEq(argument, "-V")) {
             out->kind = CommandKind::Version;
             return true;
         }
     }
     bool command = false;
     for (int i = 1; i < argc; i++) {
-        const char* argument = argv[i];
-        if (!command && !out->directory && strcmp(argument, "check") == 0) {
+        Str argument = Str(argv[i]);
+        if (!command && !out->directory && StrEq(argument, "check")) {
             out->kind = CommandKind::Check;
             command = true;
-        } else if (!command && !out->directory &&
-                   strcmp(argument, "types") == 0) {
+        } else if (!command && !out->directory && StrEq(argument, "types")) {
             out->kind = CommandKind::Types;
             command = true;
-        } else if (strcmp(argument, "--watch") == 0) {
+        } else if (StrEq(argument, "--watch")) {
             out->watch = true;
-        } else if (strcmp(argument, "--dev") == 0) {
+        } else if (StrEq(argument, "--dev")) {
             out->development = true;
             out->watch = true;
-        } else if (strcmp(argument, "--print-spec") == 0) {
+        } else if (StrEq(argument, "--print-spec")) {
             out->printSpec = true;
-        } else if (argument[0] == '-') {
-            *error = StrDup(fmt("unknown flag `%s`", Str(argument)));
+        } else if (argument.s[0] == '-') {
+            *error = StrDup(fmt("unknown flag `%s`", argument));
             return false;
         } else if (!out->directory) {
-            out->directory = Str(argument);
+            out->directory = argument;
         } else {
             *error =
                 StrDup(fmt("unexpected argument `%s`; gpui-shell runs one "
                            "application directory",
-                           Str(argument)));
+                           argument));
             return false;
         }
     }
@@ -103,17 +103,13 @@ static bool Parse(int argc, char** argv, Invocation* out, Str* error) {
     return true;
 }
 
-static bool JoinPath(char* out, int cap, Str left, Str right) {
+static TempStr JoinPathTemp(Str left, Str right) {
     bool separator =
         left && left.s[left.len - 1] != '/' && left.s[left.len - 1] != '\\';
     int len = left.len + (separator ? 1 : 0) + right.len;
-    if (!left || !right || len >= cap) return false;
-    memcpy(out, left.s, (size_t)left.len);
-    int at = left.len;
-    if (separator) out[at++] = GPUI_OS_WINDOWS ? '\\' : '/';
-    memcpy(out + at, right.s, (size_t)right.len);
-    out[len] = 0;
-    return true;
+    if (!left || !right || len >= kMaxPath) return {};
+    if (!separator) return fmt("%s%s", left, right);
+    return fmt("%s%c%s", left, GPUI_OS_WINDOWS ? '\\' : '/', right);
 }
 
 static bool ResolveRoot(Str input, bool requireEntry, Str* root, Str* entry,
@@ -124,44 +120,39 @@ static bool ResolveRoot(Str input, bool requireEntry, Str* root, Str* entry,
         ShellErrorSet(error, StrL("application path is empty or too long"));
         return false;
     }
-    char candidate[kMaxPath];
-    memcpy(candidate, input.s, (size_t)input.len);
-    candidate[input.len] = 0;
-    if (PlatFileExists(candidate)) {
+    TempStr candidate = StrDupTemp(input);
+    if (PlatFileExists(candidate.s)) {
         int slash = input.len - 1;
-        while (slash >= 0 && candidate[slash] != '/' &&
-               candidate[slash] != '\\')
+        while (slash >= 0 && candidate.s[slash] != '/' &&
+               candidate.s[slash] != '\\')
             slash--;
         if (slash < 0)
-            strcpy(candidate, ".");
+            candidate = StrDupTemp(StrL("."));
         else if (slash == 0)
-            candidate[1] = 0;
+            candidate.s[1] = 0;
         else
-            candidate[slash] = 0;
+            candidate.s[slash] = 0;
     }
-    if (!PlatDirExists(candidate)) {
+    if (!PlatDirExists(candidate.s)) {
         ShellErrorSet(error, fmt("`%s` does not exist", input));
         return false;
     }
-    char canonical[kMaxPath];
-    if (!PlatCanonicalPath(candidate, canonical, kMaxPath)) {
-        ShellErrorSet(error, fmt("cannot read `%s`", Str(candidate)));
+    TempStr canonical = AllocStrTemp(kMaxPath - 1);
+    if (!PlatCanonicalPath(candidate.s, canonical.s, canonical.len + 1)) {
+        ShellErrorSet(error, fmt("cannot read `%s`", candidate));
         return false;
     }
-    Str resolved(canonical);
+    Str resolved(canonical.s);
     PluginManifest manifest;
-    char manifestPath[kMaxPath];
-    bool hasManifest =
-        JoinPath(manifestPath, kMaxPath, resolved, Str(kShellManifestFile)) &&
-        PlatFileExists(manifestPath);
+    TempStr manifestPath = JoinPathTemp(resolved, Str(kShellManifestFile));
+    bool hasManifest = manifestPath && PlatFileExists(manifestPath.s);
     Str selected = StrL("main.js");
     if (hasManifest && requireEntry) {
         if (!PluginManifestRead(resolved, &manifest, error)) return false;
         selected = manifest.entry;
     }
-    char entryPath[kMaxPath];
-    if (requireEntry && (!JoinPath(entryPath, kMaxPath, resolved, selected) ||
-                         !PlatFileExists(entryPath))) {
+    TempStr entryPath = JoinPathTemp(resolved, selected);
+    if (requireEntry && (!entryPath || !PlatFileExists(entryPath.s))) {
         ShellErrorSet(error,
                       fmt("no `%s` in %s\n\nAn application directory must "
                           "contain %s, which default-exports a view class.",
@@ -174,10 +165,8 @@ static bool ResolveRoot(Str input, bool requireEntry, Str* root, Str* entry,
 
 static Policy* LocalPolicy(Str root, ShellError* error) {
     PluginManifest manifest;
-    char manifestPath[kMaxPath];
-    bool hasManifest =
-        JoinPath(manifestPath, kMaxPath, root, Str(kShellManifestFile)) &&
-        PlatFileExists(manifestPath);
+    TempStr manifestPath = JoinPathTemp(root, Str(kShellManifestFile));
+    bool hasManifest = manifestPath && PlatFileExists(manifestPath.s);
     if (hasManifest && !PluginManifestRead(root, &manifest, error))
         return nullptr;
 
@@ -216,10 +205,10 @@ static Policy* LocalPolicy(Str root, ShellError* error) {
     // a name rather than a path, so they take the name from one place.
     PolicySetApplication(policy, id);
     if (capabilities.HasStorage()) {
-        char store[kMaxPath];
-        if (JoinPath(store, kMaxPath, data, StrL("store.json"))) {
+        TempStr store = JoinPathTemp(data, StrL("store.json"));
+        if (store) {
             Str storageError;
-            if (!PolicySetStoragePath(policy, Str(store), &storageError)) {
+            if (!PolicySetStoragePath(policy, store, &storageError)) {
                 fprintf(stderr, "gpui-shell: storage is unavailable: ");
                 Print(storageError, stderr);
                 fputc('\n', stderr);

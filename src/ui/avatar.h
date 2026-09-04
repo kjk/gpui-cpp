@@ -13,8 +13,9 @@ float AvatarSizePx(UiSize s);
 
 // avatar.rs extract_text_initials: the first letter of each of the first two
 // words, upper-cased; a single-word name gives its first two letters instead.
-// Writes at most 8 bytes plus a NUL into `out` and answers it.
-Str AvatarInitials(char* out, int cap, Str name);
+// Temp-arena backed; callers that keep the initials copy them into their
+// owning arena.
+TempStr AvatarInitialsTemp(Str name);
 
 struct Avatar {
     Arena* a = nullptr;

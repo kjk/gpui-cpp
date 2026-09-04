@@ -91,18 +91,20 @@ bool GpuAvailable() {
 
 // The engine type an instance name ends with — `3D`, `Copy`, `VideoDecode` —
 // or an empty Str when the name carries none.
-static Str EngineOf(const WCHAR* name, char* buf, int cap) {
+static TempStr EngineOfTemp(const WCHAR* name) {
+    int cap = (int)wcslen(name);
+    TempStr buf = AllocStrTemp(cap);
     int n = 0;
-    for (int i = 0; name[i] && n < cap - 1; i++) {
+    for (int i = 0; name[i] && n < cap; i++) {
         // Instance names are ASCII; anything else is not one of ours.
-        buf[n++] = (char)(name[i] < 128 ? name[i] : '?');
+        buf.s[n++] = (char)(name[i] < 128 ? name[i] : '?');
     }
-    buf[n] = 0;
-    Str whole = Str(buf, n);
+    buf.s[n] = 0;
+    buf.len = n;
     int typeLen = (int)strlen(kEngineType);
     for (int i = n - typeLen; i >= 0; i--) {
-        if (StrEq(Str(whole.s + i, typeLen), Str(kEngineType, typeLen))) {
-            return Str(whole.s + i + typeLen, n - i - typeLen);
+        if (StrEq(Str(buf.s + i, typeLen), Str(kEngineType, typeLen))) {
+            return Str(buf.s + i + typeLen, n - i - typeLen);
         }
     }
     return {};
@@ -144,8 +146,7 @@ static float GpuUsagePercentLocked() {
     // pass 100% while the adapter still has headroom. Within one type this
     // process' engines are summed, since it can be on several at once.
     static constexpr int kMaxTypes = 16;
-    static constexpr int kNameMax = 256;
-    char names[kMaxTypes][32] = {};
+    Str names[kMaxTypes] = {};
     double busy[kMaxTypes] = {};
     int nTypes = 0;
     bool any = false;
@@ -154,28 +155,25 @@ static float GpuUsagePercentLocked() {
         if (!instance) {
             continue;
         }
-        char nameBuf[kNameMax];
-        Str engine = EngineOf(instance, nameBuf, kNameMax);
+        TempStr whole = EngineOfTemp(instance);
+        Str engine = whole;
         if (engine.len == 0) {
             continue;
         }
-        if (strncmp(nameBuf, gProbe.owner, (size_t)gProbe.ownerLen) != 0) {
+        if (!StrStartsWith(whole, Str(gProbe.owner, gProbe.ownerLen))) {
             continue;
         }
         any = true;
         int slot = -1;
         for (int k = 0; k < nTypes; k++) {
-            if (strncmp(names[k], engine.s, (size_t)engine.len) == 0 &&
-                names[k][engine.len] == 0) {
+            if (StrEq(names[k], engine)) {
                 slot = k;
                 break;
             }
         }
         if (slot < 0 && nTypes < kMaxTypes) {
             slot = nTypes++;
-            int n = engine.len < 31 ? engine.len : 31;
-            memcpy(names[slot], engine.s, (size_t)n);
-            names[slot][n] = 0;
+            names[slot] = StrDupTemp(engine);
             busy[slot] = 0;
         }
         if (slot >= 0) {

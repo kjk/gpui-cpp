@@ -404,14 +404,14 @@ Rgba FpsRateColor(float fps, float budgetSecs, const FpsStyle& style) {
 // difference between idle and a busy timer; past ten the extra digit only
 // churns, and dropping it also keeps the reading inside the row's share of the
 // HUD on a machine with enough cores to reach four figures.
-TempStr FpsFormatCpu(float percent) {
+TempStr FpsFormatCpuTemp(float percent) {
     if (percent < 10.f) {
         return fmt("%.1f%%", percent);
     }
     return fmt("%.0f%%", percent);
 }
 
-TempStr FpsFormatBytes(uint64_t bytes) {
+TempStr FpsFormatBytesTemp(uint64_t bytes) {
     const double kMib = 1024. * 1024.;
     const double kGib = kMib * 1024.;
     double v = (double)bytes;
@@ -449,8 +449,8 @@ static void UpdateReadout(FpsMonitor* self) {
     self->readout.frameMillis = FrameSamplerMeanDraw(s) * 1000.f;
     self->readout.percentileMillis =
         FrameSamplerPercentileDraw(s, kFramePercentile) * 1000.f;
-    self->readout.droppedPercent =
-        FrameSamplerOverBudget(s, self->frameBudget) * 100.f;
+    self->readout
+        .droppedPercent = FrameSamplerOverBudget(s, self->frameBudget) * 100.f;
     self->readout.invalidations = FrameSamplerMeanInvalidations(s);
     self->readoutAt = now;
 }
@@ -680,22 +680,21 @@ static El* FpsHeadline(Ctx* cx, FpsMonitor* self, float fps, Rgba color,
         ->W(kFill)
         ->H(kHeadlineHeight)
         ->Child(trace)
-        ->Child(
-            Div(cx->a)
-                ->FlexRow()
-                ->SizeFull()
-                ->ItemsEnd()
-                ->JustifyCenter()
-                ->Gap(4)
-                // An empty box matching the unit on the right. Without it
-                // the unit's own width pushes the figure off center by
-                // half of it, which reads as misalignment.
-                ->Child(Div(cx->a)->W(kUnitWidth)->H(kTextSize))
-                ->Child(figure)
-                ->Child(
-                    Div(cx->a)
-                        ->W(kUnitWidth)
-                        ->Child(TextEl(cx->a, StrL("FPS"))->Fg(style.muted))));
+        ->Child(Div(cx->a)
+                    ->FlexRow()
+                    ->SizeFull()
+                    ->ItemsEnd()
+                    ->JustifyCenter()
+                    ->Gap(4)
+                    // An empty box matching the unit on the right. Without it
+                    // the unit's own width pushes the figure off center by
+                    // half of it, which reads as misalignment.
+                    ->Child(Div(cx->a)->W(kUnitWidth)->H(kTextSize))
+                    ->Child(figure)
+                    ->Child(Div(cx->a)
+                                ->W(kUnitWidth)
+                                ->Child(TextEl(cx->a, StrL("FPS"))
+                                            ->Fg(style.muted))));
 }
 
 void FpsMonitor::OnToggleCompact(FpsMonitor* self, Ctx* cx, const ClickEvent*) {
@@ -809,10 +808,10 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
         hud->Child(
             FpsRow(cx)
                 ->Child(FpsPair(cx, StrL("CPU"),
-                                FpsFormatCpu(self->resources.cpuPercent),
+                                FpsFormatCpuTemp(self->resources.cpuPercent),
                                 style.foreground, style))
                 ->Child(FpsPair(cx, StrL("MEM"),
-                                FpsFormatBytes(self->resources.memoryBytes),
+                                FpsFormatBytesTemp(self->resources.memoryBytes),
                                 style.foreground, style)));
     }
     return hud;

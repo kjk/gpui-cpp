@@ -185,7 +185,10 @@ struct ShowcaseApp {
 const char* CompSlug(int i);
 int CompFromSlug(const char* slug);
 Str DupA(Ctx* cx, const char* s);
-Str DupFmt(Ctx* cx, const char* fmt, ...);
+template <typename... TArgs>
+inline Str DupFmt(Ctx* cx, const char* format, const TArgs&... args) {
+    return StrDup(cx->a, fmt(format, args...));
+}
 
 El* ScTxt(Ctx* cx, Str s, float px, Rgba c);
 El* ScBtnGhost(Ctx* cx, int id, Listener onClick, Str label);

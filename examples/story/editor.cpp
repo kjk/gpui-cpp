@@ -155,18 +155,18 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
         // create_decorations_collection: the four runs, found in the text by
         // the words they cover, as Rust finds them.
         Str text = Str(kDecorationText);
-        static const char* const kWords[4] = {"Decoration styles", "Color",
-                                              "Italic", "Underline"};
+        static const Str kWords[4] = {StrL("Decoration styles"), StrL("Color"),
+                                      StrL("Italic"), StrL("Underline")};
         auto* runs = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * 4);
         int n = 0;
         for (int i = 0; i < 4; i++) {
-            const char* at = strstr(text.s, kWords[i]);
-            if (!at) {
+            int at = StrFind(text, kWords[i]);
+            if (at < 0) {
                 continue;
             }
             TextSpan& sp = runs[n];
-            sp.lo = (int)(at - text.s);
-            sp.hi = sp.lo + (int)strlen(kWords[i]);
+            sp.lo = at;
+            sp.hi = sp.lo + kWords[i].len;
             sp.bg = Rgba8(0, 0, 0, 0);
             sp.underline = false;
             switch (i) {

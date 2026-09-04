@@ -27,15 +27,14 @@ struct TableStory {
 };
 
 // status_tag(): an xsmall outline tag in the status color.
-static El* StatusTag(Ctx* cx, const char* status) {
-    component::Tag* tag = component::Tag::New(cx, Str(status))
-                              ->Outline()
-                              ->WithSize(UiSize::XSmall);
-    if (strcmp(status, "Paid") == 0) {
+static El* StatusTag(Ctx* cx, Str status) {
+    component::Tag* tag =
+        component::Tag::New(cx, status)->Outline()->WithSize(UiSize::XSmall);
+    if (StrEq(status, "Paid")) {
         tag->Success();
-    } else if (strcmp(status, "Pending") == 0) {
+    } else if (StrEq(status, "Pending")) {
         tag->Warning();
-    } else if (strcmp(status, "Unpaid") == 0) {
+    } else if (StrEq(status, "Unpaid")) {
         tag->Danger();
     }
     return tag->IntoEl();
@@ -43,14 +42,14 @@ static El* StatusTag(Ctx* cx, const char* status) {
 
 // A cell holding one line of text. A Table is `.text_sm()` throughout and
 // colour is not inherited here, so each run names its own.
-static component::TableCellEl* TextHead(Ctx* cx, const char* text) {
+static component::TableCellEl* TextHead(Ctx* cx, Str text) {
     return component::TableHead::New(cx)
-        ->Child(StoryTxt(cx, Str(text), 14, ThemeNow(cx->app).tableHeadFg));
+        ->Child(StoryTxt(cx, text, 14, ThemeNow(cx->app).tableHeadFg));
 }
 
-static component::TableCellEl* TextCell(Ctx* cx, const char* text) {
+static component::TableCellEl* TextCell(Ctx* cx, Str text) {
     return component::TableCell::New(cx)
-        ->Child(StoryTxt(cx, Str(text), 14, ThemeNow(cx->app).foreground));
+        ->Child(StoryTxt(cx, text, 14, ThemeNow(cx->app).foreground));
 }
 
 El* TableStory::Render(TableStory* self, Ctx* cx) {
@@ -65,12 +64,12 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
     StorySectionBody(def)->W(kFill);
     component::Table* table = component::Table::New(cx, StrL("invoices"))
                                   ->WithSize(size);
-    table->Child(component::TableHeader::New(cx)
-                     ->Child(component::TableRow::New(cx)
-                                 ->Child(TextHead(cx, "Invoice")->W(150))
-                                 ->Child(TextHead(cx, "Status")->ColSpan(2))
-                                 ->Child(TextHead(cx, "Amount")->TextRight())
-                                 ->Child(TextHead(cx, "Date")->TextRight())));
+    table->Child(component::TableHeader::New(cx)->Child(
+        component::TableRow::New(cx)
+            ->Child(TextHead(cx, StrL("Invoice"))->W(150))
+            ->Child(TextHead(cx, StrL("Status"))->ColSpan(2))
+            ->Child(TextHead(cx, StrL("Amount"))->TextRight())
+            ->Child(TextHead(cx, StrL("Date"))->TextRight())));
     component::TableGroup* body = component::TableBody::New(cx);
     for (int i = 0; i < nInvoices; i++) {
         const Invoice& inv = kInvoices[i];
@@ -84,12 +83,12 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
         }
         method->Child(methodCol);
         body->Child(component::TableRow::New(cx)
-                        ->Child(TextCell(cx, inv.id)->W(150))
+                        ->Child(TextCell(cx, Str(inv.id))->W(150))
                         ->Child(component::TableCell::New(cx)
-                                    ->Child(StatusTag(cx, inv.status)))
+                                    ->Child(StatusTag(cx, Str(inv.status))))
                         ->Child(method)
-                        ->Child(TextCell(cx, inv.amount)->TextRight())
-                        ->Child(TextCell(cx, inv.date)->TextRight()));
+                        ->Child(TextCell(cx, Str(inv.amount))->TextRight())
+                        ->Child(TextCell(cx, Str(inv.date))->TextRight()));
     }
     table->Child(body);
     table->Child(component::TableFooter::New(cx)->Child(
@@ -109,12 +108,12 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
     component::Table* box = component::Table::New(cx, StrL("invoices-bordered"))
                                 ->WithSize(size)
                                 ->Bordered();
-    box->Child(component::TableHeader::New(cx)
-                   ->Child(component::TableRow::New(cx)
-                               ->Child(TextHead(cx, "Invoice")->W(100))
-                               ->Child(TextHead(cx, "Method"))
-                               ->Child(TextHead(cx, "Amount")->TextRight())
-                               ->Child(TextHead(cx, "Date")->TextRight())));
+    box->Child(component::TableHeader::New(cx)->Child(
+        component::TableRow::New(cx)
+            ->Child(TextHead(cx, StrL("Invoice"))->W(100))
+            ->Child(TextHead(cx, StrL("Method")))
+            ->Child(TextHead(cx, StrL("Amount"))->TextRight())
+            ->Child(TextHead(cx, StrL("Date"))->TextRight())));
     component::TableGroup* bbody = component::TableBody::New(cx);
     for (int i = 0; i < 6; i++) {
         const Invoice& inv = kInvoices[i];
@@ -127,10 +126,10 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
         method->Child(methodCol);
         component::TableRow* row =
             component::TableRow::New(cx)
-                ->Child(TextCell(cx, inv.id)->W(100))
+                ->Child(TextCell(cx, Str(inv.id))->W(100))
                 ->Child(method)
-                ->Child(TextCell(cx, inv.amount)->TextRight())
-                ->Child(TextCell(cx, inv.date)->TextRight());
+                ->Child(TextCell(cx, Str(inv.amount))->TextRight())
+                ->Child(TextCell(cx, Str(inv.date))->TextRight());
         if (i % 2 != 0) {
             row->Bg(th.tokens.tableEven);
         }

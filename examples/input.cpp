@@ -10,8 +10,8 @@ struct Example {
     bool subscribed = false;
 
     static void OnChange(Example* self, Ctx* cx, const InputEvent*) {
-        snprintf(self->displayText, sizeof(self->displayText), "Hello, %s!",
-                 InputCStr(&self->inputState));
+        TempStr text = fmt("Hello, %s!", Str(InputCStr(&self->inputState)));
+        StrCopyZ(self->displayText, (int)sizeof(self->displayText), text.s);
         Notify(cx);
     }
 

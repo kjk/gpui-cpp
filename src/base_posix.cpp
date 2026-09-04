@@ -117,16 +117,15 @@ int PlatListDir(const char* dir, DirEntry* out, int max) {
     int n = 0;
     struct dirent* ent = nullptr;
     while (n < max && (ent = readdir(d)) != nullptr) {
-        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+        Str name = Str(ent->d_name);
+        if (StrEq(name, ".") || StrEq(name, "..")) {
             continue;
         }
         DirEntry& e = out[n];
         StrCopyZ(e.name, (int)sizeof(e.name), ent->d_name);
-        char full[kMaxPath];
-        int fullLen = snprintf(full, sizeof(full), "%s/%s", dir, ent->d_name);
+        TempStr full = fmt("%s/%s", Str(dir), name);
         struct stat st = {};
-        if (fullLen <= 0 || fullLen >= (int)sizeof(full) ||
-            lstat(full, &st) != 0) {
+        if (full.len >= kMaxPath || lstat(full.s, &st) != 0) {
             continue;
         }
         e.isSymlink = S_ISLNK(st.st_mode);

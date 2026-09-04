@@ -37,19 +37,21 @@ bool AppAssets::Resolve(Str path, Str* relative, Str* error) const {
         *error = {};
     }
     if (!path || path.len >= kMaxPath || path.s[0] == '/' ||
-        path.s[0] == '\\' ||
-        (path.len >= 2 && path.s[1] == ':')) {
-        if (error) *error = StrDup(fmt("asset `%s` is outside the application directory", path));
+        path.s[0] == '\\' || (path.len >= 2 && path.s[1] == ':')) {
+        if (error)
+            *error = StrDup(
+                fmt("asset `%s` is outside the application directory", path));
         return false;
     }
     int segment = 0;
     for (int i = 0; i <= path.len; i++) {
-        bool separator = i == path.len || path.s[i] == '/' ||
-                         path.s[i] == '\\';
+        bool separator = i == path.len || path.s[i] == '/' || path.s[i] == '\\';
         if (!separator) continue;
         int n = i - segment;
         if (n == 2 && path.s[segment] == '.' && path.s[segment + 1] == '.') {
-            if (error) *error = StrDup(fmt("asset `%s` is outside the application directory", path));
+            if (error)
+                *error = StrDup(fmt(
+                    "asset `%s` is outside the application directory", path));
             return false;
         }
         segment = i + 1;
@@ -61,10 +63,7 @@ bool AppAssets::Resolve(Str path, Str* relative, Str* error) const {
 static int CompareAssetNames(const void* a, const void* b) {
     const Str* left = (const Str*)a;
     const Str* right = (const Str*)b;
-    int count = left->len < right->len ? left->len : right->len;
-    int compared = count > 0 ? memcmp(left->s, right->s, (size_t)count) : 0;
-    if (compared != 0) return compared;
-    return left->len < right->len ? -1 : (left->len > right->len ? 1 : 0);
+    return StrCmp(*left, *right);
 }
 
 bool AppAssets::Load(Str path, Vec<uint8_t>* out, Str* error) {
@@ -87,18 +86,23 @@ bool AppAssets::Load(Str path, Vec<uint8_t>* out, Str* error) {
                 missing.len--;
             }
             VecAppend(missing, StrDup(path));
-            log(fmt("asset `%s` was not found under `%s`; asset paths resolve against the application directory", path, root));
+            log(
+                fmt("asset `%s` was not found under `%s`; asset paths resolve "
+                    "against the application directory",
+                    path, root));
         }
-        if (error) *error = failure;
-        else StrFree(failure);
+        if (error)
+            *error = failure;
+        else
+            StrFree(failure);
         result.Free();
         return false;
     }
     if (result.bytes.len > kShellMaxAssetBytes) {
         if (error)
-            *error = StrDup(fmt("asset `%s` is %d bytes, over the %d-byte limit",
-                                path, result.bytes.len,
-                                kShellMaxAssetBytes));
+            *error =
+                StrDup(fmt("asset `%s` is %d bytes, over the %d-byte limit",
+                           path, result.bytes.len, kShellMaxAssetBytes));
         result.Free();
         return false;
     }

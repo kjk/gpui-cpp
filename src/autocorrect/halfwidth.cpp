@@ -30,28 +30,27 @@ static bool IsWhitespaceCp(uint32_t cp) {
 
 static void AppendCp(StrBuilder* out, uint32_t cp) {
     char buf[4];
+    int n;
     if (cp < 0x80) {
-        out->AppendChar((char)cp);
-        return;
-    }
-    if (cp < 0x800) {
+        buf[0] = (char)cp;
+        n = 1;
+    } else if (cp < 0x800) {
         buf[0] = (char)(0xC0 | (cp >> 6));
         buf[1] = (char)(0x80 | (cp & 0x3F));
-        out->Append(Str(buf, 2));
-        return;
-    }
-    if (cp < 0x10000) {
+        n = 2;
+    } else if (cp < 0x10000) {
         buf[0] = (char)(0xE0 | (cp >> 12));
         buf[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
         buf[2] = (char)(0x80 | (cp & 0x3F));
-        out->Append(Str(buf, 3));
-        return;
+        n = 3;
+    } else {
+        buf[0] = (char)(0xF0 | (cp >> 18));
+        buf[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        buf[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        buf[3] = (char)(0x80 | (cp & 0x3F));
+        n = 4;
     }
-    buf[0] = (char)(0xF0 | (cp >> 18));
-    buf[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-    buf[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-    buf[3] = (char)(0x80 | (cp & 0x3F));
-    out->Append(Str(buf, 4));
+    out->Append(Str(buf, n));
 }
 
 // ─── halfwidth-word (format_word) ─────────────────────────────────────────
@@ -109,8 +108,16 @@ bool FormatHalfwidthWord(Arena* a, Str in, Str* out) {
 // ─── halfwidth-punctuation (format_punctuation) ───────────────────────────
 
 // PUNCTUATION_MAP.
-enum class ReplaceMode : uint8_t { Replace, PrefixSpace, SuffixSpace };
-enum class CharType : uint8_t { LeftQuote, RightQuote, Other };
+enum class ReplaceMode : uint8_t {
+    Replace,
+    PrefixSpace,
+    SuffixSpace
+};
+enum class CharType : uint8_t {
+    LeftQuote,
+    RightQuote,
+    Other
+};
 
 struct ReplaceRule {
     uint32_t from;
@@ -120,20 +127,20 @@ struct ReplaceRule {
 };
 
 static const ReplaceRule kPunctuationMap[] = {
-    {0xFF0C, ',', ReplaceMode::SuffixSpace, CharType::Other},      // ，
-    {0x3001, ',', ReplaceMode::SuffixSpace, CharType::Other},      // 、
-    {0x3002, '.', ReplaceMode::SuffixSpace, CharType::Other},      // 。
-    {0xFF1A, ':', ReplaceMode::SuffixSpace, CharType::Other},      // ：
-    {0xFF1B, '.', ReplaceMode::SuffixSpace, CharType::Other},      // ；
-    {0xFF01, '!', ReplaceMode::SuffixSpace, CharType::Other},      // ！
-    {0xFF1F, '?', ReplaceMode::SuffixSpace, CharType::Other},      // ？
-    {0xFF08, '(', ReplaceMode::PrefixSpace, CharType::LeftQuote},  // （
-    {0x3010, '[', ReplaceMode::PrefixSpace, CharType::LeftQuote},  // 【
-    {0x300C, '[', ReplaceMode::PrefixSpace, CharType::LeftQuote},  // 「
-    {0x300A, 0x201C, ReplaceMode::PrefixSpace, CharType::LeftQuote}, // 《→“
-    {0xFF09, ')', ReplaceMode::SuffixSpace, CharType::RightQuote}, // ）
-    {0x3011, ']', ReplaceMode::SuffixSpace, CharType::RightQuote}, // 】
-    {0x300D, ']', ReplaceMode::SuffixSpace, CharType::RightQuote}, // 」
+    {0xFF0C, ',', ReplaceMode::SuffixSpace, CharType::Other},         // ，
+    {0x3001, ',', ReplaceMode::SuffixSpace, CharType::Other},         // 、
+    {0x3002, '.', ReplaceMode::SuffixSpace, CharType::Other},         // 。
+    {0xFF1A, ':', ReplaceMode::SuffixSpace, CharType::Other},         // ：
+    {0xFF1B, '.', ReplaceMode::SuffixSpace, CharType::Other},         // ；
+    {0xFF01, '!', ReplaceMode::SuffixSpace, CharType::Other},         // ！
+    {0xFF1F, '?', ReplaceMode::SuffixSpace, CharType::Other},         // ？
+    {0xFF08, '(', ReplaceMode::PrefixSpace, CharType::LeftQuote},     // （
+    {0x3010, '[', ReplaceMode::PrefixSpace, CharType::LeftQuote},     // 【
+    {0x300C, '[', ReplaceMode::PrefixSpace, CharType::LeftQuote},     // 「
+    {0x300A, 0x201C, ReplaceMode::PrefixSpace, CharType::LeftQuote},  // 《→“
+    {0xFF09, ')', ReplaceMode::SuffixSpace, CharType::RightQuote},    // ）
+    {0x3011, ']', ReplaceMode::SuffixSpace, CharType::RightQuote},    // 】
+    {0x300D, ']', ReplaceMode::SuffixSpace, CharType::RightQuote},    // 」
     {0x300B, 0x201D, ReplaceMode::SuffixSpace, CharType::RightQuote}, // 》→”
 };
 

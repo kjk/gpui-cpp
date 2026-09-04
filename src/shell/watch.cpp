@@ -9,16 +9,13 @@ struct PendingDirectory {
     int depth = 0;
 };
 
-static bool IsSource(const char* name) {
-    if (!name) return false;
-    int len = (int)strlen(name);
-    return (len > 3 && strcmp(name + len - 3, ".js") == 0) ||
-           (len > 4 && strcmp(name + len - 4, ".mjs") == 0);
+static bool IsSource(Str name) {
+    return StrEndsWith(name, ".js") || StrEndsWith(name, ".mjs");
 }
 
-static bool SkipDirectory(const char* name) {
-    return !name || name[0] == '.' || strcmp(name, "node_modules") == 0 ||
-           strcmp(name, "target") == 0;
+static bool SkipDirectory(Str name) {
+    return !name || name.s[0] == '.' || StrEq(name, "node_modules") ||
+           StrEq(name, "target");
 }
 
 bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,
@@ -27,7 +24,8 @@ bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,
     if (stamp) *stamp = {};
     if (!directory.s || directory.len <= 0 || directory.len >= kMaxPath ||
         maxFiles < 0) {
-        ShellErrorSet(error, StrL("source watch directory is empty or too long"));
+        ShellErrorSet(error,
+                      StrL("source watch directory is empty or too long"));
         return false;
     }
 
@@ -54,9 +52,9 @@ bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,
         pending.len--;
         int count = PlatListDir(dir.path, entries, kMaxEntriesPerDirectory);
         if (count >= kMaxEntriesPerDirectory) {
-            ShellErrorSet(error,
-                          fmt("source watch for `%s` exceeds the %d-entry per-directory limit",
-                              directory, kSourceWatchMaxFiles));
+            ShellErrorSet(error, fmt("source watch for `%s` exceeds the "
+                                     "%d-entry per-directory limit",
+                                     directory, kSourceWatchMaxFiles));
             ok = false;
             break;
         }
@@ -65,40 +63,48 @@ bool ScanSourceTree(Str directory, SourceTreeStamp* stamp, ShellError* error,
             if (item.isSymlink || item.name[0] == '.') continue;
             if (item.isDir) {
                 if (dir.depth >= kSourceWatchMaxDepth ||
-                    SkipDirectory(item.name)) {
+                    SkipDirectory(Str(item.name))) {
                     continue;
                 }
                 if (pending.len >= kSourceWatchMaxFiles) {
-                    ShellErrorSet(error,
-                                  fmt("source watch for `%s` exceeds the %d-directory limit",
-                                      directory, kSourceWatchMaxFiles));
+                    ShellErrorSet(error, fmt("source watch for `%s` exceeds "
+                                             "the %d-directory limit",
+                                             directory, kSourceWatchMaxFiles));
                     ok = false;
                     break;
                 }
                 PendingDirectory child;
                 child.depth = dir.depth + 1;
-                int n = snprintf(child.path, sizeof(child.path), "%s/%s",
-                                 dir.path, item.name);
-                if (n <= 0 || n >= (int)sizeof(child.path) ||
-                    !VecAppend(pending, child)) {
-                    ShellErrorSet(error,
-                                  StrL("source path is too long or could not be recorded"));
+                TempStr childPath = fmt("%s/%s", Str(dir.path), Str(item.name));
+                if (!childPath || childPath.len >= (int)sizeof(child.path)) {
+                    ShellErrorSet(error, StrL("source path is too long or "
+                                              "could not be recorded"));
+                    ok = false;
+                    break;
+                }
+                memcpy(child.path, childPath.s, (size_t)childPath.len + 1);
+                if (!VecAppend(pending, child)) {
+                    ShellErrorSet(error, StrL("source path is too long or "
+                                              "could not be recorded"));
                     ok = false;
                     break;
                 }
                 continue;
             }
-            if (!item.isFile || !IsSource(item.name)) continue;
+            if (!item.isFile || !IsSource(Str(item.name))) continue;
             if (found.files >= (uint32_t)maxFiles) {
-                ShellErrorSet(error,
-                              fmt("source watch for `%s` exceeds the %d-file limit",
-                                  directory, maxFiles));
+                ShellErrorSet(
+                    error,
+                    fmt("source watch for `%s` exceeds the %d-file limit",
+                        directory, maxFiles));
                 ok = false;
                 break;
             }
             found.files++;
-            if (UINT64_MAX - found.bytes < item.size) found.bytes = UINT64_MAX;
-            else found.bytes += item.size;
+            if (UINT64_MAX - found.bytes < item.size)
+                found.bytes = UINT64_MAX;
+            else
+                found.bytes += item.size;
             if (found.newest < item.modified) found.newest = item.modified;
         }
     }
@@ -213,8 +219,8 @@ static void SourceScanDone(SourceScanJob* job) {
     watcher->source.Observe(job->stamp, TimeNow(), &changed);
     delete job;
     if (!changed) return;
-    ScriptView* view = (ScriptView*)EntityGet(watcher->window->app,
-                                              watcher->view);
+    ScriptView* view =
+        (ScriptView*)EntityGet(watcher->window->app, watcher->view);
     if (!view) {
         if (watcher->timer) {
             WindowCancelTimer(watcher->window, watcher->timer);
@@ -250,16 +256,15 @@ ShellWatcher::~ShellWatcher() {
 }
 
 Entity<ShellWatcher> ShellWatcher::Start(ShellRuntime* runtime,
-                                         Entity<ScriptView> view,
-                                         Str directory, Str entry,
-                                         Window* window, App* app,
+                                         Entity<ScriptView> view, Str directory,
+                                         Str entry, Window* window, App* app,
                                          ShellError* error) {
     ShellErrorClear(error);
     ScriptView* target = view.Get(app);
     if (!runtime || !target || target->runtime != runtime || !window ||
         window->app != app) {
-        ShellErrorSet(error,
-                      StrL("source watch needs a live ScriptView from this runtime and window"));
+        ShellErrorSet(error, StrL("source watch needs a live ScriptView from "
+                                  "this runtime and window"));
         return {};
     }
     Entity<ShellWatcher> entity = EntityNewState<ShellWatcher>(app);
@@ -279,8 +284,8 @@ Entity<ShellWatcher> ShellWatcher::Start(ShellRuntime* runtime,
         EntityDrop(app, entity.id);
         return {};
     }
-    watcher->timer = WindowSetInterval(
-        window, shell::kSourceWatchPollMs, ListenTo(entity, &ShellWatcher::OnPoll));
+    watcher->timer = WindowSetInterval(window, shell::kSourceWatchPollMs,
+                                       ListenTo(entity, &ShellWatcher::OnPoll));
     if (!watcher->timer) {
         ShellErrorSet(error, StrL("could not arm source watcher timer"));
         EntityDrop(app, entity.id);
@@ -302,8 +307,8 @@ void ShellWatcher::OnPoll(ShellWatcher* self, Ctx* cx, const TickEvent*) {
                       StrL("out of memory while scheduling source scan"));
         return;
     }
-    int task = ExecSpawn(MkFunc0(SourceScanWork, job),
-                         MkFunc0(SourceScanDone, job));
+    int task =
+        ExecSpawn(MkFunc0(SourceScanWork, job), MkFunc0(SourceScanDone, job));
     if (!task) {
         delete job;
         ShellErrorSet(&self->error,

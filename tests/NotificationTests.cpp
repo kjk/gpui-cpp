@@ -30,21 +30,18 @@ static void ADeliverySaysWhichHalvesRun() {
 }
 
 static void ATagIsNamespacedAndCarriesTheId() {
-    char buf[64];
-    Str tag = NotificationSystemTag(buf, (int)sizeof(buf), 7);
+    TempStr tag = NotificationSystemTagTemp(7);
     utassert(tag.len > 0);
     int id = 0;
     utassert(NotificationTagId(tag, &id) && id == 7);
 
     // The same id gives the same tag, which is what makes a second push
     // replace the first in the notification center.
-    char other[64];
-    Str again = NotificationSystemTag(other, (int)sizeof(other), 7);
+    TempStr again = NotificationSystemTagTemp(7);
     utassert(StrEq(again, tag));
 
     // Two ids never collide.
-    char third[64];
-    Str next = NotificationSystemTag(third, (int)sizeof(third), 8);
+    TempStr next = NotificationSystemTagTemp(8);
     utassert(!StrEq(next, tag));
 
     // A tag the application posted itself is not ours to answer.

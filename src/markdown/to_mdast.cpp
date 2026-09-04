@@ -36,8 +36,8 @@ struct TreeFrame {
     // not move, so the pointer stays good for as long as the tree does, and
     // the innermost node is one read off the end of this rather than a walk
     // that indexes `children` once per level.
-    ArenaVec<Node*> stack {};
-    ArenaVec<int32_t> eventStack {};
+    ArenaVec<Node*> stack{};
+    ArenaVec<int32_t> eventStack{};
 };
 
 struct CompileContext {
@@ -53,7 +53,6 @@ struct CompileContext {
     Vec<TreeFrame> trees;
     int32_t index = 0;
 };
-
 
 // `normalize_identifier(..).to_lowercase()`, which is what an identifier on
 // the tree is. ASCII only, as in util.h.
@@ -204,8 +203,7 @@ static void OnEnterGfmAutolinkLiteral(CompileContext* c) {
 
 static void OnEnterList(CompileContext* c) {
     Node* node = NodeNew(c->a, NodeKind::List);
-    node->Set(NodeOrdered,
-              (*c->events)[c->index].name == Name::ListOrdered);
+    node->Set(NodeOrdered, (*c->events)[c->index].name == Name::ListOrdered);
     node->Set(NodeSpread, ListLoose(*c->events, c->index, false));
     TailPush(c, node);
 }
@@ -282,9 +280,9 @@ static void Enter(CompileContext* c) {
             break;
         case Name::Frontmatter: {
             int32_t index = (*c->events)[c->index].point.index;
-            TailPush(c, NodeNew(c->a, c->bytes.s[index] == '+'
-                                          ? NodeKind::Toml
-                                          : NodeKind::Yaml));
+            TailPush(c,
+                     NodeNew(c->a, c->bytes.s[index] == '+' ? NodeKind::Toml
+                                                            : NodeKind::Yaml));
             Buffer(c);
             break;
         }
@@ -352,14 +350,14 @@ static void Enter(CompileContext* c) {
             TailPush(c, NodeNew(c->a, NodeKind::Paragraph));
             break;
         case Name::Reference:
-            c->mediaReferenceStack[c->mediaReferenceStack.len - 1].kind =
-                ReferenceKind::Collapsed;
-            c->mediaReferenceStack[c->mediaReferenceStack.len - 1].kindSome =
-                true;
+            c->mediaReferenceStack[c->mediaReferenceStack.len - 1]
+                .kind = ReferenceKind::Collapsed;
+            c->mediaReferenceStack[c->mediaReferenceStack.len - 1]
+                .kindSome = true;
             break;
         case Name::Resource:
-            c->mediaReferenceStack[c->mediaReferenceStack.len - 1].kindSome =
-                false;
+            c->mediaReferenceStack[c->mediaReferenceStack.len - 1]
+                .kindSome = false;
             break;
         case Name::Strong:
             TailPush(c, NodeNew(c->a, NodeKind::Strong));
@@ -406,12 +404,11 @@ static void OnExitAutolinkEmail(CompileContext* c) {
 }
 
 static void OnExitCharacterReferenceValue(CompileContext* c) {
-    // Decoded in place rather than into the arena: an allocation here would
-    // sit between the node's value and the text being appended to it, and the
-    // value would stop growing in place and start being copied.
-    char buf[4];
-    Str value = CharacterReferenceDecodeInto(buf, ExitSlice(c).bytes,
-                                             c->characterReferenceMarker);
+    // Decode into the temp arena rather than the node arena: an allocation in
+    // the latter would sit between the node's value and the text being
+    // appended to it, so the value would stop growing in place.
+    base::TempStr value = CharacterReferenceDecodeTemp(
+        ExitSlice(c).bytes, c->characterReferenceMarker);
     Node* node = TailMut(c);
     Grow(c, node, NodeStrKind::Value, value);
     c->characterReferenceMarker = 0;
@@ -505,8 +502,8 @@ static void OnExitGfmAutolinkLiteral(CompileContext* c) {
 }
 
 static void OnExitGfmTaskListItemValue(CompileContext* c) {
-    bool checked =
-        (*c->events)[c->index].name == Name::GfmTaskListItemValueChecked;
+    bool checked = (*c->events)[c->index]
+                       .name == Name::GfmTaskListItemValueChecked;
     Node* ancestor = TailPenultimateMut(c);
     ancestor->Set(NodeChecked, checked);
     ancestor->Set(NodeHasChecked, true);
@@ -572,8 +569,7 @@ static void OnExitHtml(CompileContext* c) {
 }
 
 static void OnExitMedia(CompileContext* c) {
-    Reference reference =
-        c->mediaReferenceStack[--c->mediaReferenceStack.len];
+    Reference reference = c->mediaReferenceStack[--c->mediaReferenceStack.len];
     OnExit(c);
     if (!reference.kindSome) {
         return;
@@ -607,8 +603,7 @@ static void OnExitListItem(CompileContext* c) {
         first->kind == NodeKind::Paragraph) {
         Node* paragraph = first;
         Node* firstInParagraph = NodeFirstChild(c->a, paragraph);
-        if (firstInParagraph &&
-            firstInParagraph->kind == NodeKind::Text) {
+        if (firstInParagraph && firstInParagraph->kind == NodeKind::Text) {
             Node* text = firstInParagraph;
             Str value = Get(c, text, NodeStrKind::Value);
             int32_t start = 0;
@@ -714,25 +709,21 @@ static void Exit(CompileContext* c) {
         case Name::CharacterReferenceValue:
             OnExitCharacterReferenceValue(c);
             break;
-        case Name::CodeFencedFenceInfo:
-            {
-                // Resume pops the stack TailMut reads, and which of two
-                // arguments is evaluated first is the compiler's to
-                // choose — so the pop is its own statement.
-                Str s = NodeToString(c->a, Resume(c));
-                Keep(c, TailMut(c), NodeStrKind::Lang, s);
-            }
-            break;
+        case Name::CodeFencedFenceInfo: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to
+            // choose — so the pop is its own statement.
+            Str s = NodeToString(c->a, Resume(c));
+            Keep(c, TailMut(c), NodeStrKind::Lang, s);
+        } break;
         case Name::CodeFencedFenceMeta:
-        case Name::MathFlowFenceMeta:
-            {
-                // Resume pops the stack TailMut reads, and which of two
-                // arguments is evaluated first is the compiler's to
-                // choose — so the pop is its own statement.
-                Str s = NodeToString(c->a, Resume(c));
-                Keep(c, TailMut(c), NodeStrKind::Meta, s);
-            }
-            break;
+        case Name::MathFlowFenceMeta: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to
+            // choose — so the pop is its own statement.
+            Str s = NodeToString(c->a, Resume(c));
+            Keep(c, TailMut(c), NodeStrKind::Meta, s);
+        } break;
         case Name::CodeFencedFence:
         case Name::MathFlowFence:
             OnExitRawFlowFence(c);
@@ -748,28 +739,24 @@ static void Exit(CompileContext* c) {
         case Name::MathText:
             OnExitRawText(c);
             break;
-        case Name::DefinitionDestinationString:
-            {
-                // Resume pops the stack TailMut reads, and which of two
-                // arguments is evaluated first is the compiler's to
-                // choose — so the pop is its own statement.
-                Str s = NodeToString(c->a, Resume(c));
-                Keep(c, TailMut(c), NodeStrKind::Url, s);
-            }
-            break;
+        case Name::DefinitionDestinationString: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to
+            // choose — so the pop is its own statement.
+            Str s = NodeToString(c->a, Resume(c));
+            Keep(c, TailMut(c), NodeStrKind::Url, s);
+        } break;
         case Name::DefinitionLabelString:
         case Name::GfmFootnoteDefinitionLabelString:
             OnExitDefinitionId(c);
             break;
-        case Name::DefinitionTitleString:
-            {
-                // Resume pops the stack TailMut reads, and which of two
-                // arguments is evaluated first is the compiler's to
-                // choose — so the pop is its own statement.
-                Str s = NodeToString(c->a, Resume(c));
-                Keep(c, TailMut(c), NodeStrKind::Title, s);
-            }
-            break;
+        case Name::DefinitionTitleString: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to
+            // choose — so the pop is its own statement.
+            Str s = NodeToString(c->a, Resume(c));
+            Keep(c, TailMut(c), NodeStrKind::Title, s);
+        } break;
         case Name::Frontmatter: {
             // Resume pops the stack TailMut reads, and which of two
             // arguments is evaluated first is the compiler's to choose —
@@ -836,24 +823,20 @@ static void Exit(CompileContext* c) {
         case Name::ReferenceString:
             OnExitReferenceString(c);
             break;
-        case Name::ResourceDestinationString:
-            {
-                // Resume pops the stack TailMut reads, and which of two
-                // arguments is evaluated first is the compiler's to
-                // choose — so the pop is its own statement.
-                Str s = NodeToString(c->a, Resume(c));
-                Keep(c, TailMut(c), NodeStrKind::Url, s);
-            }
-            break;
-        case Name::ResourceTitleString:
-            {
-                // Resume pops the stack TailMut reads, and which of two
-                // arguments is evaluated first is the compiler's to
-                // choose — so the pop is its own statement.
-                Str s = NodeToString(c->a, Resume(c));
-                Keep(c, TailMut(c), NodeStrKind::Title, s);
-            }
-            break;
+        case Name::ResourceDestinationString: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to
+            // choose — so the pop is its own statement.
+            Str s = NodeToString(c->a, Resume(c));
+            Keep(c, TailMut(c), NodeStrKind::Url, s);
+        } break;
+        case Name::ResourceTitleString: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to
+            // choose — so the pop is its own statement.
+            Str s = NodeToString(c->a, Resume(c));
+            Keep(c, TailMut(c), NodeStrKind::Title, s);
+        } break;
         default:
             break;
     }

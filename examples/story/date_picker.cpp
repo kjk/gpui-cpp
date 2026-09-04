@@ -37,13 +37,14 @@ void DatePickerStory::OnChange(DatePickerStory* self, Ctx* cx,
     if (!date.IsComplete()) {
         StrCopyZ(self->value, (int)sizeof(self->value), "None");
     } else if (date.kind == DateKind::Range) {
-        snprintf(self->value, sizeof(self->value),
-                 "Some(\"%d-%02d-%02d - %d-%02d-%02d\")", date.start.year,
-                 date.start.month, date.start.day, date.end.year,
-                 date.end.month, date.end.day);
+        TempStr value = fmt("Some(\"%d-%02d-%02d - %d-%02d-%02d\")",
+                            date.start.year, date.start.month, date.start.day,
+                            date.end.year, date.end.month, date.end.day);
+        StrCopyZ(self->value, (int)sizeof(self->value), value.s);
     } else {
-        snprintf(self->value, sizeof(self->value), "Some(\"%d-%02d-%02d\")",
-                 date.start.year, date.start.month, date.start.day);
+        TempStr value = fmt("Some(\"%d-%02d-%02d\")", date.start.year,
+                            date.start.month, date.start.day);
+        StrCopyZ(self->value, (int)sizeof(self->value), value.s);
     }
     Notify(cx);
 }

@@ -77,7 +77,7 @@ struct FpsApp {
     // so a change can be compared against a run from before it rather than
     // against a screenshot of the HUD.
     double benchSecs = 0;
-    const char* benchOut = "out/fps_bench.txt";
+    Str benchOut = StrL("out/fps_bench.txt");
     uint64_t benchCursor = 0;
     float benchDraws[4096];
     int nBenchDraws = 0;
@@ -381,7 +381,8 @@ static void BenchTick(FpsApp* app, Ctx* cx) {
     for (int i = 0; i < count; i++) {
         total += app->benchDraws[i];
     }
-    FILE* f = fopen(app->benchOut, "w");
+    TempStr benchOut = StrDupTemp(app->benchOut);
+    FILE* f = fopen(benchOut.s, "w");
     if (f && count > 0) {
         double secs = elapsed - 1.0;
         fprintf(f, "frames    %d over %.1fs (%.1f fps)\n", count, secs,
@@ -427,20 +428,24 @@ int GpuiMain(int argc, char** argv) {
     int winW = 800;
     int winH = 600;
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-bench") == 0 && i + 1 < argc) {
+        Str argument = Str(argv[i]);
+        if (StrEq(argument, "-bench") && i + 1 < argc) {
             self->benchSecs = StrToFloatUnchecked(Str(argv[++i]));
-        } else if (strcmp(argv[i], "-bench-out") == 0 && i + 1 < argc) {
-            self->benchOut = argv[++i];
-        } else if (strcmp(argv[i], "-curves") == 0 && i + 1 < argc) {
+        } else if (StrEq(argument, "-bench-out") && i + 1 < argc) {
+            self->benchOut = Str(argv[++i]);
+        } else if (StrEq(argument, "-curves") && i + 1 < argc) {
             self->curves = StrToIntUnchecked(Str(argv[++i]));
-        } else if (strcmp(argv[i], "-size") == 0 && i + 1 < argc) {
+        } else if (StrEq(argument, "-size") && i + 1 < argc) {
             // -size WxH: the load knob the curve count is not. Line drawing
             // costs what it covers, so a number measured at one window size
             // says nothing about another.
-            const char* s = argv[++i];
-            int w = StrToIntUnchecked(Str(s));
-            const char* x = strchr(s, 'x');
-            int h = x ? StrToIntUnchecked(Str(x + 1)) : 0;
+            Str size = Str(argv[++i]);
+            int w = StrToIntUnchecked(size);
+            int x = StrFind(size, "x");
+            int h =
+                x >= 0
+                    ? StrToIntUnchecked(Str(size.s + x + 1, size.len - x - 1))
+                    : 0;
             if (w > 0 && h > 0) {
                 winW = w;
                 winH = h;

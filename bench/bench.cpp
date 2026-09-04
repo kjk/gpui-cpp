@@ -16,7 +16,7 @@
 int gBenchSamples = 10;
 bool gBenchSmall = false;
 bool gBenchLarge = false;
-const char* gBenchFilter = nullptr;
+Str gBenchFilter = {};
 
 // The last group printed, so a group heading appears once above its rows.
 static const char* gLastGroup = nullptr;
@@ -27,8 +27,8 @@ void BenchKeep(const void* p) {
     gSink = p;
 }
 
-static bool Contains(const char* haystack, const char* needle) {
-    return haystack && needle && strstr(haystack, needle) != nullptr;
+static bool Contains(Str haystack, Str needle) {
+    return haystack && needle && StrFind(haystack, needle) >= 0;
 }
 
 void BenchMem(const char* group, const char* name, int64_t param,
@@ -51,7 +51,8 @@ bool BenchWanted(const char* group, const char* name) {
     if (!gBenchFilter) {
         return true;
     }
-    return Contains(group, gBenchFilter) || Contains(name, gBenchFilter);
+    return Contains(Str(group), gBenchFilter) ||
+           Contains(Str(name), gBenchFilter);
 }
 
 // Insertion sort: the sample count is ten, or whatever -n says, and this runs
@@ -69,15 +70,14 @@ static void SortTimes(double* v, int n) {
 }
 
 // Milliseconds, with enough digits to see a small change at either scale.
-static void FormatMs(double secs, char* buf, int bufSize) {
+static TempStr FormatMsTemp(double secs) {
     double ms = secs * 1000.0;
     if (ms < 1.0) {
-        snprintf(buf, (size_t)bufSize, "%.3f", ms);
+        return fmt("%.3f", ms);
     } else if (ms < 100.0) {
-        snprintf(buf, (size_t)bufSize, "%.2f", ms);
-    } else {
-        snprintf(buf, (size_t)bufSize, "%.1f", ms);
+        return fmt("%.2f", ms);
     }
+    return fmt("%.1f", ms);
 }
 
 void BenchCase(const char* group, const char* name, const char* unit,
@@ -108,15 +108,11 @@ void BenchCase(const char* group, const char* name, const char* unit,
                      ? times[times.len / 2]
                      : (times[times.len / 2 - 1] + times[times.len / 2]) / 2.0;
 
-    char medBuf[32];
-    char minBuf[32];
-    FormatMs(med, medBuf, sizeof(medBuf));
-    FormatMs(times[0], minBuf, sizeof(minBuf));
-
-    char paramBuf[64];
-    snprintf(paramBuf, sizeof(paramBuf), "%lld %s", (long long)param, unit);
-    printf("  %-34s %14s   med %8s ms   min %8s ms\n", name, paramBuf, medBuf,
-           minBuf);
+    TempStr medText = FormatMsTemp(med);
+    TempStr minText = FormatMsTemp(times[0]);
+    TempStr paramText = fmt("%lld %s", (long long)param, Str(unit));
+    printf("  %-34s %14s   med %8s ms   min %8s ms\n", name, paramText.s,
+           medText.s, minText.s);
     fflush(stdout);
 }
 
@@ -132,24 +128,25 @@ static const char* kUsage =
 
 int GpuiMain(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
-        const char* a = argv[i];
-        if (strcmp(a, "-small") == 0 || strcmp(a, "--small") == 0) {
+        Str argument = Str(argv[i]);
+        if (StrEq(argument, "-small") || StrEq(argument, "--small")) {
             gBenchSmall = true;
-        } else if (strcmp(a, "-large") == 0 || strcmp(a, "--large") == 0) {
+        } else if (StrEq(argument, "-large") || StrEq(argument, "--large")) {
             gBenchLarge = true;
-        } else if (strncmp(a, "-n=", 3) == 0) {
-            gBenchSamples = atoi(a + 3);
+        } else if (StrStartsWith(argument, "-n=")) {
+            gBenchSamples =
+                StrToIntUnchecked(Str(argument.s + 3, argument.len - 3));
             if (gBenchSamples < 1) {
                 gBenchSamples = 1;
             }
-        } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
+        } else if (StrEq(argument, "-h") || StrEq(argument, "--help")) {
             printf("%s", kUsage);
             return 0;
-        } else if (a[0] == '-') {
-            printf("Unknown flag: %s\n\n%s", a, kUsage);
+        } else if (argument.s[0] == '-') {
+            printf("Unknown flag: %s\n\n%s", argument.s, kUsage);
             return 1;
         } else {
-            gBenchFilter = a;
+            gBenchFilter = argument;
         }
     }
 
@@ -161,7 +158,7 @@ int GpuiMain(int argc, char** argv) {
         printf(", +large");
     }
     if (gBenchFilter) {
-        printf(", filter \"%s\"", gBenchFilter);
+        printf(", filter \"%s\"", gBenchFilter.s);
     }
     printf("\n");
 

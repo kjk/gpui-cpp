@@ -47,29 +47,16 @@ void SysStateFree(SysState* s) {
     VecReset(s->procs);
 }
 
-// Read a whole small /proc or /sys file. Those report st_size 0, so the size
-// has to come from reading to EOF.
-static int ReadSmallFile(const char* path, char* buf, int cap) {
-    FILE* f = fopen(path, "rb");
-    if (!f) {
-        return 0;
-    }
-    size_t n = fread(buf, 1, (size_t)cap - 1, f);
-    fclose(f);
-    buf[n] = 0;
-    return (int)n;
-}
-
 static void RefreshCpu(SysState* s) {
-    char buf[512];
-    if (ReadSmallFile("/proc/stat", buf, (int)sizeof(buf)) <= 0) {
+    TempStr buf = ReadBoundedFileTemp(StrL("/proc/stat"), 511);
+    if (!buf) {
         return;
     }
     // cpu  user nice system idle iowait irq softirq steal guest guest_nice
     unsigned long long v[10] = {};
-    int n = sscanf(buf, "cpu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-                   &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7],
-                   &v[8], &v[9]);
+    int n = sscanf(
+        buf.s, "cpu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu", &v[0],
+        &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8], &v[9]);
     if (n < 4) {
         return;
     }
@@ -97,32 +84,38 @@ static void RefreshCpu(SysState* s) {
 }
 
 // The value of a "Key:  1234 kB" line, in bytes.
-static uint64_t MeminfoKb(const char* text, const char* key) {
-    const char* p = strstr(text, key);
-    if (!p) {
+static uint64_t MeminfoKb(Str text, Str key) {
+    int at = StrFind(text, key);
+    if (at < 0) {
         return 0;
     }
-    p += strlen(key);
-    while (*p == ' ' || *p == ':' || *p == '\t') {
-        p++;
+    at += key.len;
+    while (at < text.len &&
+           (text.s[at] == ' ' || text.s[at] == ':' || text.s[at] == '\t')) {
+        at++;
     }
-    return strtoull(p, nullptr, 10) * 1024ull;
+    uint64_t value = 0;
+    while (at < text.len && text.s[at] >= '0' && text.s[at] <= '9') {
+        value = value * 10 + (uint64_t)(text.s[at++] - '0');
+    }
+    return value * 1024ull;
 }
 
 static void RefreshMemory(SysState* s) {
-    char buf[4096];
-    if (ReadSmallFile("/proc/meminfo", buf, (int)sizeof(buf)) <= 0) {
+    TempStr buf = ReadBoundedFileTemp(StrL("/proc/meminfo"), 4095);
+    if (!buf) {
         return;
     }
-    uint64_t total = MeminfoKb(buf, "MemTotal");
-    uint64_t avail = MeminfoKb(buf, "MemAvailable");
+    uint64_t total = MeminfoKb(buf, StrL("MemTotal"));
+    uint64_t avail = MeminfoKb(buf, StrL("MemAvailable"));
     if (total == 0) {
         return;
     }
     if (avail == 0) {
         // Pre-3.14 kernels: fall back to the free + reclaimable estimate.
-        avail = MeminfoKb(buf, "MemFree") + MeminfoKb(buf, "Cached") +
-                MeminfoKb(buf, "Buffers");
+        avail = MeminfoKb(buf, StrL("MemFree")) +
+                MeminfoKb(buf, StrL("Cached")) +
+                MeminfoKb(buf, StrL("Buffers"));
     }
     if (avail > total) {
         avail = total;
@@ -158,27 +151,25 @@ static void RefreshBattery(SysState* s) {
         if (ent->d_name[0] == '.') {
             continue;
         }
-        char path[512];
-        char buf[128];
-        snprintf(path, sizeof(path), "/sys/class/power_supply/%s/type",
-                 ent->d_name);
-        if (ReadSmallFile(path, buf, (int)sizeof(buf)) <= 0) {
+        TempStr path = fmt("/sys/class/power_supply/%s/type", Str(ent->d_name));
+        TempStr buf = ReadBoundedFileTemp(path, 127);
+        if (!buf) {
             continue;
         }
-        if (!base::StrStartsWithI(Str(buf), "Battery")) {
+        if (!base::StrStartsWithI(Str(buf.s), "Battery")) {
             continue;
         }
-        snprintf(path, sizeof(path), "/sys/class/power_supply/%s/capacity",
-                 ent->d_name);
-        if (ReadSmallFile(path, buf, (int)sizeof(buf)) <= 0) {
+        path = fmt("/sys/class/power_supply/%s/capacity", Str(ent->d_name));
+        buf = ReadBoundedFileTemp(path, 127);
+        if (!buf) {
             continue;
         }
         s->battery.present = true;
-        s->battery.pct = (float)StrToIntUnchecked(Str(buf));
-        snprintf(path, sizeof(path), "/sys/class/power_supply/%s/status",
-                 ent->d_name);
-        if (ReadSmallFile(path, buf, (int)sizeof(buf)) > 0) {
-            s->battery.charging = base::StrStartsWithI(Str(buf), "Charging");
+        s->battery.pct = (float)StrToIntUnchecked(Str(buf.s));
+        path = fmt("/sys/class/power_supply/%s/status", Str(ent->d_name));
+        buf = ReadBoundedFileTemp(path, 127);
+        if (buf) {
+            s->battery.charging = base::StrStartsWithI(Str(buf.s), "Charging");
         }
         break;
     }
@@ -270,16 +261,15 @@ static void RefreshProcesses(SysState* s) {
         if (pid == 0) {
             continue;
         }
-        char path[64];
-        char buf[2048];
-        snprintf(path, sizeof(path), "/proc/%u/stat", pid);
-        if (ReadSmallFile(path, buf, (int)sizeof(buf)) <= 0) {
+        TempStr path = fmt("/proc/%u/stat", pid);
+        TempStr buf = ReadBoundedFileTemp(path, 2047);
+        if (!buf) {
             continue;
         }
         ProcessInfo pi;
         pi.pid = pid;
         uint64_t cpu = 0;
-        if (!ReadProcStat(buf, &pi, &cpu)) {
+        if (!ReadProcStat(buf.s, &pi, &cpu)) {
             continue;
         }
         uint64_t prev = FindPrevCpu(s->prevProcs, pid);
@@ -323,31 +313,33 @@ void SysRefresh(SysState* s) {
 // value in kibibytes, and every counter in the file is in that unit, so it is
 // parsed as a fixed `kB` rather than read back.
 bool SysSelfPrivateMemory(uint64_t* bytes) {
-    char buf[8192];
-    if (ReadSmallFile("/proc/self/status", buf, sizeof(buf)) <= 0) {
+    TempStr buf = ReadBoundedFileTemp(StrL("/proc/self/status"), 8191);
+    if (!buf) {
         return false;
     }
-    const char* key = "RssAnon:";
-    size_t keyLen = strlen(key);
-    const char* line = buf;
-    while (line && *line) {
-        if (strncmp(line, key, keyLen) == 0) {
-            const char* p = line + keyLen;
-            while (*p == ' ' || *p == '\t') {
-                p++;
+    Str key = StrL("RssAnon:");
+    for (int line = 0; line < buf.len;) {
+        Str remaining = Str(buf.s + line, buf.len - line);
+        if (StrStartsWith(remaining, key)) {
+            int at = line + key.len;
+            while (at < buf.len && (buf.s[at] == ' ' || buf.s[at] == '\t')) {
+                at++;
             }
-            if (*p < '0' || *p > '9') {
+            if (at >= buf.len || buf.s[at] < '0' || buf.s[at] > '9') {
                 return false;
             }
+            uint64_t value = 0;
+            while (at < buf.len && buf.s[at] >= '0' && buf.s[at] <= '9') {
+                value = value * 10 + (uint64_t)(buf.s[at++] - '0');
+            }
             if (bytes) {
-                *bytes = strtoull(p, nullptr, 10) * 1024ull;
+                *bytes = value * 1024ull;
             }
             return true;
         }
-        line = strchr(line, '\n');
-        if (line) {
-            line++;
-        }
+        int newline = StrFind(remaining, "\n");
+        if (newline < 0) break;
+        line += newline + 1;
     }
     return false;
 }

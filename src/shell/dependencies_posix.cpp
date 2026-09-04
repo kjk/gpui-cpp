@@ -24,19 +24,17 @@ bool DependencyMakeDirectories(Str path, Str* error) {
                         StrL("dependency cache path is empty or too long"));
         return false;
     }
-    char buffer[kMaxPath];
-    memcpy(buffer, path.s, (size_t)path.len);
-    buffer[path.len] = 0;
+    TempStr buffer = StrDupTemp(path);
     for (int i = 1; i <= path.len; i++) {
-        if (i < path.len && buffer[i] != '/') continue;
-        char saved = buffer[i];
-        buffer[i] = 0;
-        if (mkdir(buffer, 0700) != 0 && errno != EEXIST) {
-            buffer[i] = saved;
+        if (i < path.len && buffer.s[i] != '/') continue;
+        char saved = buffer.s[i];
+        buffer.s[i] = 0;
+        if (mkdir(buffer.s, 0700) != 0 && errno != EEXIST) {
+            buffer.s[i] = saved;
             DependencyError(error, fmt("creating %s failed", path));
             return false;
         }
-        buffer[i] = saved;
+        buffer.s[i] = saved;
     }
     return true;
 }
@@ -51,13 +49,10 @@ static void RemoveTreeAt(const char* path) {
     DIR* dir = opendir(path);
     if (dir) {
         for (struct dirent* entry = readdir(dir); entry; entry = readdir(dir)) {
-            if (strcmp(entry->d_name, ".") == 0 ||
-                strcmp(entry->d_name, "..") == 0)
-                continue;
-            char child[kMaxPath];
-            int n =
-                snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
-            if (n > 0 && n < (int)sizeof(child)) RemoveTreeAt(child);
+            Str name = Str(entry->d_name);
+            if (StrEq(name, ".") || StrEq(name, "..")) continue;
+            TempStr child = fmt("%s/%s", Str(path), name);
+            if (child.len < kMaxPath) RemoveTreeAt(child.s);
         }
         closedir(dir);
     }
@@ -66,10 +61,8 @@ static void RemoveTreeAt(const char* path) {
 
 void DependencyRemoveTree(Str path) {
     if (!path || path.len >= kMaxPath) return;
-    char buffer[kMaxPath];
-    memcpy(buffer, path.s, (size_t)path.len);
-    buffer[path.len] = 0;
-    RemoveTreeAt(buffer);
+    TempStr buffer = StrDupTemp(path);
+    RemoveTreeAt(buffer.s);
 }
 
 bool DependencyRenameDirectory(Str from, Str to) {
@@ -130,11 +123,11 @@ bool DependencyRemoveDirectoryLink(Str link) {
 bool DependencyReadDirectoryLink(Str link, Str* target) {
     if (target) *target = {};
     if (!link) return false;
-    char buffer[kMaxPath];
-    ssize_t n = readlink(link.s, buffer, sizeof(buffer) - 1);
+    TempStr buffer = AllocStrTemp(kMaxPath - 1);
+    ssize_t n = readlink(link.s, buffer.s, (size_t)buffer.len);
     if (n <= 0) return false;
-    buffer[n] = 0;
-    if (target) *target = StrDup(Str(buffer, (int)n));
+    buffer.s[n] = 0;
+    if (target) *target = StrDup(Str(buffer.s, (int)n));
     return true;
 }
 

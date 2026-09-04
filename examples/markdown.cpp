@@ -278,15 +278,10 @@ static bool HtmlTagIs(Str raw, const char* name) {
 }
 
 static bool HtmlAttr(Str raw, const char* name, Str* out) {
-    char pattern[64];
-    int n = 0;
-    for (const char* p = name; *p && n < 60; p++) {
-        pattern[n++] = *p;
-    }
-    pattern[n++] = '=';
-    pattern[n++] = '"';
+    TempStr pattern = fmt("%s=\"", Str(name));
+    int n = pattern.len;
     for (int i = 0; i + n <= raw.len; i++) {
-        if (!StrEq(Str(raw.s + i, n), Str(pattern, n))) {
+        if (!StrEq(Str(raw.s + i, n), pattern)) {
             continue;
         }
         int start = i + n;
@@ -816,13 +811,13 @@ static void OnLink(MarkdownApp* self, Ctx* cx, const ClickEvent*,
 // `on_action_open` does — the desktop's own dialog, and what it answers is
 // read into the editor.
 static void OpenDocument(MarkdownApp* self, Ctx* cx) {
-    char path[1024] = {};
     PathPrompt prompt;
     prompt.title = StrL("Select a Markdown file");
-    if (!PromptForPath(cx->win, prompt, path, (int)sizeof(path))) {
+    TempStr path = PromptForPathTemp(cx->win, prompt);
+    if (!path) {
         return;
     }
-    FILE* f = fopen(path, "rb");
+    FILE* f = fopen(path.s, "rb");
     if (!f) {
         return;
     }

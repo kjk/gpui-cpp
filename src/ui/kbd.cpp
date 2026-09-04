@@ -133,9 +133,9 @@ int KbdFormat(Keystroke stroke, char* out, int cap) {
 }
 
 Str KbdFormatStr(Ctx* cx, Keystroke stroke) {
-    char buf[64];
-    int n = KbdFormat(stroke, buf, (int)sizeof(buf));
-    return StrDup(cx->a, Str(buf, n));
+    TempStr buf = AllocStrTemp(63);
+    int n = KbdFormat(stroke, buf.s, buf.len + 1);
+    return StrDup(cx->a, Str(buf.s, n));
 }
 
 Kbd* Kbd::New(Ctx* cx, Str stroke) {

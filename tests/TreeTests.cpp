@@ -174,11 +174,11 @@ static void TheStateOwnsTheStringsItIsGiven() {
     // as handed in; nothing freed them. The state now copies, so a stack
     // buffer is enough and overwriting it must not change the row.
     TreeState s;
-    char id[16] = "root";
-    char label[16] = "Root";
-    utassert(TreeAddItem(&s, Str(id), Str(label), -1) == 0);
-    id[0] = 'X';
-    label[0] = 'Y';
+    TempStr id = StrDupTemp(StrL("root"));
+    TempStr label = StrDupTemp(StrL("Root"));
+    utassert(TreeAddItem(&s, id, label, -1) == 0);
+    id.s[0] = 'X';
+    label.s[0] = 'Y';
     utassert(base::StrEq(s.items[0].id, "root"));
     utassert(base::StrEq(s.items[0].label, "Root"));
 

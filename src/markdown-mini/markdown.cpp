@@ -322,27 +322,31 @@ static bool MiniLink(MiniParser* p, Node* parent, Str text, int32_t at,
     return true;
 }
 
-static int32_t MiniUtf8(char out[4], uint32_t cp) {
+static base::TempStr MiniUtf8Temp(uint32_t cp) {
+    base::TempStr out = base::AllocStrTemp(4);
     if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
+        out.s[0] = (char)cp;
+        out.len = 1;
+        return out;
     }
     if (cp < 0x800) {
-        out[0] = (char)(0xc0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3f));
-        return 2;
+        out.s[0] = (char)(0xc0 | (cp >> 6));
+        out.s[1] = (char)(0x80 | (cp & 0x3f));
+        out.len = 2;
+        return out;
     }
     if (cp < 0x10000) {
-        out[0] = (char)(0xe0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3f));
-        out[2] = (char)(0x80 | (cp & 0x3f));
-        return 3;
+        out.s[0] = (char)(0xe0 | (cp >> 12));
+        out.s[1] = (char)(0x80 | ((cp >> 6) & 0x3f));
+        out.s[2] = (char)(0x80 | (cp & 0x3f));
+        out.len = 3;
+        return out;
     }
-    out[0] = (char)(0xf0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 0x3f));
-    out[2] = (char)(0x80 | ((cp >> 6) & 0x3f));
-    out[3] = (char)(0x80 | (cp & 0x3f));
-    return 4;
+    out.s[0] = (char)(0xf0 | (cp >> 18));
+    out.s[1] = (char)(0x80 | ((cp >> 12) & 0x3f));
+    out.s[2] = (char)(0x80 | ((cp >> 6) & 0x3f));
+    out.s[3] = (char)(0x80 | (cp & 0x3f));
+    return out;
 }
 
 static bool MiniEntity(MiniParser* p, Str text, int32_t at, int32_t* after,
@@ -1102,8 +1106,7 @@ Str DecodeNumeric(Arena* a, Str value, int radix) {
     if (bad) {
         cp = 0xfffd;
     }
-    char bytes[4];
-    return MiniOwn(a, Str(bytes, MiniUtf8(bytes, cp)));
+    return MiniOwn(a, MiniUtf8Temp(cp));
 }
 
 } // namespace markdown

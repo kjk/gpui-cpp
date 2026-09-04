@@ -276,9 +276,9 @@ void FpsMonitorSetContinuous(FpsMonitor* self, bool continuous);
 // as meeting it.
 Rgba FpsRateColor(float fps, float budgetSecs, const FpsStyle& style);
 // format_cpu: a tenth below ten, whole percent above.
-TempStr FpsFormatCpu(float percent);
+TempStr FpsFormatCpuTemp(float percent);
 // format_bytes: whole MB, or GB to two places from a gigabyte up.
-TempStr FpsFormatBytes(uint64_t bytes);
+TempStr FpsFormatBytesTemp(uint64_t bytes);
 
 // Where in the parent the HUD sits.
 enum class FpsAnchor : uint8_t {

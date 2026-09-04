@@ -70,11 +70,10 @@ static LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT msg, WPARAM wp,
     if (ev == NIN_BALLOONUSERCLICK) {
         // Copied out first: the handler is free to post another notification,
         // which writes `gNotify.tag`.
-        char tag[kTagCap];
-        StrCopyZ(tag, kTagCap, gNotify.tag);
+        TempStr tag = StrDupTemp(Str(gNotify.tag));
         gNotify.tag[0] = 0;
-        if (gNotify.onResponse.IsValid() && tag[0]) {
-            gNotify.onResponse.Call(Str(tag));
+        if (gNotify.onResponse.IsValid() && tag) {
+            gNotify.onResponse.Call(tag);
         }
     } else if (ev == NIN_BALLOONTIMEOUT || ev == NIN_BALLOONHIDE) {
         // Timed out into the Action Center, or taken off the screen. Either
@@ -180,8 +179,7 @@ void SysNotifyDismiss(Str tag) {
     if (!gNotify.iconAdded || !gNotify.tag[0]) {
         return;
     }
-    if (!tag.s || (int)strlen(gNotify.tag) != tag.len ||
-        strncmp(gNotify.tag, tag.s, (size_t)tag.len) != 0) {
+    if (!StrEq(Str(gNotify.tag), tag)) {
         // Somebody else's balloon is on screen; the tag this asks about has
         // already gone, or is one the Action Center has kept, which cannot be
         // retracted from here.

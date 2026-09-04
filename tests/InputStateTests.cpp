@@ -951,12 +951,11 @@ static void OnlyTheVisibleTokensAreResolved() {
 
 static void TheWindowIsBinarySearched() {
     // A hundred lines of "foo bar\n", one token over "foo" on each.
-    char buf[801];
+    TempStr buf = AllocStrTemp(800);
     for (int i = 0; i < 100; i++) {
-        memcpy(buf + i * 8, "foo bar\n", 8);
+        memcpy(buf.s + i * 8, "foo bar\n", 8);
     }
-    buf[800] = 0;
-    Str text(buf, 800);
+    Str text(buf.s, 800);
     SemanticSpan toks[100] = {};
     for (int i = 0; i < 100; i++) {
         toks[i] = {i, 0, 3, StrL("keyword")};

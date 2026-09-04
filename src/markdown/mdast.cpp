@@ -88,8 +88,8 @@ static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
         }
         return at;
     }
-    Str value = NodeHasOwnValue(node) ? NodeGetStr(a, node, NodeStrKind::Value)
-                                      : Str{};
+    Str value =
+        NodeHasOwnValue(node) ? NodeGetStr(a, node, NodeStrKind::Value) : Str{};
     if (value.len > 0) {
         memcpy(out + at, value.s, (size_t)value.len);
         at += value.len;
@@ -315,9 +315,9 @@ uint32_t NodePerKind(Arena* a, const Node* n) {
 }
 
 void NodeSetPerKind(Arena* a, Node* n, uint32_t word) {
-    char buf[8];
-    int len = base::VarintPut(buf, word);
-    NodeSetStr(a, n, NodeStrKind::PerKind, Str(buf, len));
+    base::TempStr buf = base::AllocStrTemp(8);
+    buf.len = base::VarintPut(buf.s, word);
+    NodeSetStr(a, n, NodeStrKind::PerKind, buf);
 }
 
 // ─── a Table's alignments ────────────────────────────────────────────────

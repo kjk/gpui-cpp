@@ -103,8 +103,9 @@ static void TypedRemovalAndForwardingMethodsUseWindowState() {
     utassert(!WindowHasFocusedInput(&cx));
     utassert(window->input == nullptr && !input.focused);
 
-    char selected[8] = {};
-    utassert(WindowSelectedText(&cx, selected, (int)sizeof(selected)) == 0);
+    TempStr selected = AllocStrTemp(7);
+    selected.s[0] = 0;
+    utassert(WindowSelectedText(&cx, selected.s, selected.len + 1) == 0);
     utassert(!WindowHasTextSelection(&cx));
     WindowClearTextSelection(&cx);
     WindowEndTextSelection(&cx);

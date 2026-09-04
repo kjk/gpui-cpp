@@ -1456,8 +1456,8 @@ static NSImage* MenuIconImage(Window* win, const char* path) {
 // keys that have no character of their own is the private-use code point
 // AppKit reserves for it. A key with neither is a row with no shortcut —
 // which is what a key nothing here names would be on the keyboard anyway.
-static NSString* KeyEquivalent(const char* key) {
-    if (!key || !key[0]) {
+static NSString* KeyEquivalent(Str key) {
+    if (!key) {
         return @"";
     }
     struct Named {
@@ -1482,17 +1482,18 @@ static NSString* KeyEquivalent(const char* key) {
         {"pagedown", NSPageDownFunctionKey},
     };
     for (size_t i = 0; i < sizeof(kNamed) / sizeof(kNamed[0]); i++) {
-        if (strcmp(kNamed[i].name, key) == 0) {
+        if (StrEq(key, kNamed[i].name)) {
             unichar ch = kNamed[i].ch;
             return [NSString stringWithCharacters:&ch length:1];
         }
     }
     // f1..f12, which AppKit also names with a code point of its own.
-    if ((key[0] == 'f' || key[0] == 'F') && key[1] >= '0' && key[1] <= '9') {
-        int n = key[1] - '0';
-        if (key[2] >= '0' && key[2] <= '9' && key[3] == 0) {
-            n = n * 10 + (key[2] - '0');
-        } else if (key[2] != 0) {
+    if ((key.s[0] == 'f' || key.s[0] == 'F') && key.len >= 2 &&
+        key.s[1] >= '0' && key.s[1] <= '9') {
+        int n = key.s[1] - '0';
+        if (key.len == 3 && key.s[2] >= '0' && key.s[2] <= '9') {
+            n = n * 10 + (key.s[2] - '0');
+        } else if (key.len != 2) {
             n = 0;
         }
         if (n >= 1 && n <= 12) {
@@ -1504,8 +1505,9 @@ static NSString* KeyEquivalent(const char* key) {
     // A letter, a digit or a punctuation key is its own equivalent, and a
     // binding already spells it lowercase — which is what AppKit wants, with
     // the shift in the modifier mask rather than in the character.
-    if (key[1] == 0) {
-        return [NSString stringWithUTF8String:key];
+    if (key.len == 1) {
+        TempStr keyZ = StrDupTemp(key);
+        return [NSString stringWithUTF8String:keyZ.s];
     }
     return @"";
 }
@@ -1564,7 +1566,7 @@ static NSMenu* BuildMenu(Window* win, const PlatMenuItem* items, int n,
             [item setTag:it.id];
             [item setState:(it.checked ? NSControlStateValueOn
                                        : NSControlStateValueOff)];
-            NSString* equivalent = KeyEquivalent(it.key);
+            NSString* equivalent = KeyEquivalent(Str(it.key));
             if ([equivalent length] > 0) {
                 [item setKeyEquivalent:equivalent];
                 [item
@@ -1709,7 +1711,7 @@ void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
         // the Minimize / Zoom / Bring All to Front rows and one row per open
         // window, which is what makes a Mac application's Window menu behave
         // the way every other one does.
-        if (strcmp(it.label ? it.label : "", "Window") == 0) {
+        if (StrEq(Str(it.label), "Window")) {
             [NSApp setWindowsMenu:sub];
         }
     }
@@ -1742,12 +1744,8 @@ void OpenUrl(Str url) {
 
 // cx.prompt_for_paths. NSOpenPanel, run modally: it takes over the loop until
 // the user is done, which is what the other two platforms' dialogs do too.
-bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+TempStr PromptForPathTemp(Window* win, const PathPrompt& opts) {
     (void)win;
-    if (!out || cap <= 0) {
-        return false;
-    }
-    out[0] = 0;
     NSOpenPanel* panel = [NSOpenPanel openPanel];
     [panel setCanChooseFiles:opts.files ? YES : NO];
     [panel setCanChooseDirectories:opts.directories ? YES : NO];
@@ -1761,15 +1759,14 @@ bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
         }
     }
     if ([panel runModal] != NSModalResponseOK) {
-        return false;
+        return {};
     }
     NSURL* url = [[panel URLs] firstObject];
     const char* path = url ? [[url path] UTF8String] : nullptr;
     if (!path) {
-        return false;
+        return {};
     }
-    StrCopyZ(out, cap, path);
-    return out[0] != 0;
+    return StrDupTemp(Str(path));
 }
 
 void ClipboardSetText(Window* win, Str text) {

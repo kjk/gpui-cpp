@@ -1,8 +1,5 @@
 #include "Showcase.h"
 
-#include <stdarg.h>
-#include <stdio.h>
-
 static ShowcaseRenderFn gRender[CompCount] = {};
 
 void ShowcaseRegister(int comp, ShowcaseRenderFn render) {
@@ -59,16 +56,6 @@ int CompFromSlug(const char* slug) {
 Str DupA(Ctx* cx, const char* s) {
     Arena* a = cx->a;
     return StrDup(a, Str(s));
-}
-
-Str DupFmt(Ctx* cx, const char* f, ...) {
-    Arena* a = cx->a;
-    char buf[512];
-    va_list args;
-    va_start(args, f);
-    vsnprintf(buf, sizeof(buf), f, args);
-    va_end(args);
-    return StrDup(a, Str(buf));
 }
 
 El* ScTxt(Ctx* cx, Str s, float px, Rgba c) {
@@ -408,12 +395,8 @@ static void OnMouseMove(ShowcaseApp* app, Ctx* cx, const MouseMoveEvent* ev) {
 }
 
 // The page to open, if one was named on the command line.
-static void ParseSlug(int argc, char** argv, char* out, int cap) {
-    out[0] = 0;
-    if (argc < 2 || !argv[1]) {
-        return;
-    }
-    StrCopyZ(out, cap, argv[1]);
+static Str ParseSlug(int argc, char** argv) {
+    return argc >= 2 && argv[1] ? Str(argv[1]) : Str{};
 }
 
 int GpuiMain(int argc, char** argv) {
@@ -423,9 +406,8 @@ int GpuiMain(int argc, char** argv) {
 
     Entity<ShowcaseApp> view = EntityNew<ShowcaseApp>(app);
     ShowcaseApp* self = view.Get(app);
-    char slug[64] = {};
-    ParseSlug(argc, argv, slug, 64);
-    self->component = CompFromSlug(slug);
+    Str slug = ParseSlug(argc, argv);
+    self->component = CompFromSlug(slug.s);
     // 0..100 with the thumb where the page has always shown it.
     SliderSetValue(&self->slider, SliderSingle(64.f));
     self->navigationEnabled = (self->component == CompOverview);

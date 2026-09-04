@@ -1,8 +1,6 @@
 #include "Showcase.h"
 #include "gpui.h"
 
-#include <stdio.h>
-
 using namespace gpui;
 
 // crates/base/examples/showcase/components/tree.rs. The page is the base
@@ -33,12 +31,11 @@ static Entity<TreeState> ShowcaseTreeState(ShowcaseApp* app, Ctx* cx) {
     }
     // A row is 32 here, not the ListItem's 34: the page draws its own.
     s->rowH = 32;
-    // TreeAddItem copies the strings it is given, so a stack buffer per row
-    // would do; static keeps the ids stable for a debugger's benefit.
-    static char ids[kTreeCount][16];
+    // TreeAddItem copies the strings it is given, so each temporary id may be
+    // discarded as soon as its row is added.
     for (int i = 0; i < kTreeCount; i++) {
-        snprintf(ids[i], sizeof(ids[i]), "sc-tree-%d", i);
-        TreeAddItem(s, Str(ids[i]), Str(kTree[i].label), kTree[i].parent);
+        TempStr id = fmt("sc-tree-%d", i);
+        TreeAddItem(s, id, Str(kTree[i].label), kTree[i].parent);
     }
     for (int i = 0; i < s->items.len; i++) {
         s->items[i].expanded = i == 0 || i == 1;

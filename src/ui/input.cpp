@@ -1107,8 +1107,8 @@ El* OtpInput::IntoEl() {
             if (masked) {
                 box->Child(IconEl(a, IconName::Asterisk, text)->Fg(fg));
             } else {
-                char ch[2] = {value[i], 0};
-                box->Child(TextEl(a, StrDup(a, Str(ch)))
+                Str ch(value + i, 1);
+                box->Child(TextEl(a, StrDup(a, ch))
                                ->Font(text)
                                ->LineHeight(1.f)
                                ->Fg(fg));

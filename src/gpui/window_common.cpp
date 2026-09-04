@@ -1520,8 +1520,8 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     // frame's, measured where the symbol was painted.
     for (int i = 0; i < win->paint.inputs.len; i++) {
         InputState* f = win->paint.inputs[i];
-        if (f->hoverDef.locations.len > 0 &&
-            f->hoverDef.bounds.Contains({x, y})) {
+        if (f->hoverDef.locations.len > 0 && f->hoverDef.bounds
+                                                 .Contains({x, y})) {
             if (win->cursor != CursorKind::Pointer) {
                 win->cursor = CursorKind::Pointer;
                 PlatSetCursor(win, CursorKind::Pointer);
@@ -2569,12 +2569,14 @@ int WindowTimerMs(Window* win) {
     // if nothing does.
     double now = TimeNow();
     double soonest = -1;
-    if (win->anim || win->opts.anim || win->animFrame || win->pendingInvalidate) {
+    if (win->anim || win->opts.anim || win->animFrame ||
+        win->pendingInvalidate) {
         // WindowOptions::inactive_frame_interval. A window nobody is looking
         // at animates at 2 FPS rather than at the display's rate, which is
         // what the story app asks GPUI for; an active window keeps the 16 ms.
         double interval = win->active ? 0.016 : kInactiveFrameInterval;
-        double target = (win->lastDrawTime > 0) ? (win->lastDrawTime + interval) : now;
+        double target =
+            (win->lastDrawTime > 0) ? (win->lastDrawTime + interval) : now;
         if (target < now) {
             target = now;
         }
@@ -2825,24 +2827,25 @@ static int gGeom[4] = {0, 0, 0, 0};
 
 // "12,-3,960,921" -> four ints. Anything else leaves the request unset rather
 // than opening a window somewhere surprising.
-static bool ParseGeom(const char* s, int out[4]) {
+static bool ParseGeom(Str value, int out[4]) {
+    int at = 0;
     for (int i = 0; i < 4; i++) {
         if (i > 0) {
-            if (*s != ',') {
+            if (at >= value.len || value.s[at] != ',') {
                 return false;
             }
-            s++;
+            at++;
         }
         bool neg = false;
-        if (*s == '-') {
+        if (at < value.len && value.s[at] == '-') {
             neg = true;
-            s++;
+            at++;
         }
         int digits = 0;
         int v = 0;
-        while (*s >= '0' && *s <= '9') {
-            v = v * 10 + (*s - '0');
-            s++;
+        while (at < value.len && value.s[at] >= '0' && value.s[at] <= '9') {
+            v = v * 10 + (value.s[at] - '0');
+            at++;
             digits++;
             if (digits > 6) {
                 return false;
@@ -2853,7 +2856,7 @@ static bool ParseGeom(const char* s, int out[4]) {
         }
         out[i] = neg ? -v : v;
     }
-    return *s == 0 && out[2] > 0 && out[3] > 0;
+    return at == value.len && out[2] > 0 && out[3] > 0;
 }
 
 bool WindowGeomRequested(int* x, int* y, int* w, int* h) {
@@ -2873,26 +2876,27 @@ bool WindowGeomRequested(int* x, int* y, int* w, int* h) {
 static bool gInspectorAsked = false;
 
 int GpuiTakeRuntimeArgs(int argc, char** argv) {
-    const char* kGeom = "-gpui-window=";
+    Str geomPrefix = StrL("-gpui-window=");
     int keep = 0;
     for (int i = 0; i < argc; i++) {
-        const char* a = argv[i];
-        size_t kGeomLen = strlen(kGeom);
+        Str argument = Str(argv[i]);
 #if GPUI_OS_WINDOWS
-        if (i > 0 && a && WinPaintOptionsTakeArg(Str(a))) {
+        if (i > 0 && argument && WinPaintOptionsTakeArg(argument)) {
             continue;
         }
 #endif
-        if (i > 0 && a && LayoutReuseTakeArg(Str(a))) {
+        if (i > 0 && argument && LayoutReuseTakeArg(argument)) {
             continue;
         }
-        if (i > 0 && a && strcmp(a, "-gpui-inspector") == 0) {
+        if (i > 0 && StrEq(argument, "-gpui-inspector")) {
             gInspectorAsked = true;
             continue;
         }
-        if (i > 0 && a && strncmp(a, kGeom, kGeomLen) == 0) {
+        if (i > 0 && StrStartsWith(argument, geomPrefix)) {
             int g[4];
-            if (ParseGeom(a + kGeomLen, g)) {
+            if (ParseGeom(Str(argument.s + geomPrefix.len,
+                              argument.len - geomPrefix.len),
+                          g)) {
                 gGeomAsked = true;
                 for (int k = 0; k < 4; k++) {
                     gGeom[k] = g[k];

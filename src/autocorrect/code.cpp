@@ -64,10 +64,9 @@ static Str TrimStart(Str s, int* leadingBytes) {
 
 static Str TrimEnd(Str s) {
     int end = s.len;
-    while (end > 0 &&
-           (s.s[end - 1] == ' ' || s.s[end - 1] == '\t' ||
-            s.s[end - 1] == '\r' || s.s[end - 1] == '\n' ||
-            s.s[end - 1] == '\f')) {
+    while (end > 0 && (s.s[end - 1] == ' ' || s.s[end - 1] == '\t' ||
+                       s.s[end - 1] == '\r' || s.s[end - 1] == '\n' ||
+                       s.s[end - 1] == '\f')) {
         end--;
     }
     return Str(s.s, end);
@@ -78,13 +77,13 @@ static Str Trim(Str s) {
     return TrimEnd(TrimStart(s, &leading));
 }
 
-void EmitText(Results* res, const char* rule, Str part) {
+void EmitText(Results* res, Str rule, Str part) {
     int line0 = res->line;
     int col0 = res->col;
     // An enable/disable marker in a comment flips the toggle from here on —
     // including for this very comment, which is why the toggle is read
     // before is_enabled below.
-    if (strcmp(rule, "comment") == 0 || strcmp(rule, "COMMENT") == 0) {
+    if (StrEq(rule, "comment") || StrEq(rule, "COMMENT")) {
         Toggle t = ToggleParse(part);
         if (t.kind != ToggleKind::None) {
             res->toggle = t;
@@ -197,7 +196,7 @@ static void EmitSub(Results* res, Str part, Str lang, Str code,
         // block, fences kept.
         int at = 0;
         while (at + code.len <= part.len) {
-            if (memcmp(part.s + at, code.s, (size_t)code.len) == 0) {
+            if (StrEq(Str(part.s + at, code.len), code)) {
                 res->out.Append(sub.out);
                 at += code.len;
                 continue;
@@ -214,8 +213,8 @@ void EmitCodeblock(Results* res, Str part, Str lang, Str code) {
     EmitSub(res, part, lang, code, true);
 }
 
-void EmitInlineScript(Results* res, const char* rule, Str part) {
-    Str lang = strcmp(rule, "inline_style") == 0 ? StrL("css") : StrL("js");
+void EmitInlineScript(Results* res, Str rule, Str part) {
+    Str lang = StrEq(rule, "inline_style") ? StrL("css") : StrL("js");
     EmitSub(res, part, lang, part, false);
 }
 
@@ -259,18 +258,18 @@ static bool ScanForType(Str type, Results* res, Str raw) {
         void (*scan)(Results*, Str);
     };
     static const Entry kTable[] = {
-        {"html", ScanHtml},         {"yaml", ScanYaml},
-        {"sql", ScanSql},           {"rust", ScanRust},
-        {"ruby", ScanRuby},         {"elixir", ScanElixir},
-        {"go", ScanGo},             {"javascript", ScanJavascript},
-        {"css", ScanCss},           {"json", ScanJson},
-        {"python", ScanPython},     {"objective_c", ScanObjectiveC},
-        {"csharp", ScanCsharp},     {"swift", ScanSwift},
-        {"java", ScanJava},         {"scala", ScanScala},
-        {"kotlin", ScanKotlin},     {"php", ScanPhp},
-        {"dart", ScanDart},         {"markdown", ScanMarkdown},
-        {"conf", ScanConf},         {"c", ScanC},
-        {"zig", ScanRust},          {"text", ScanMarkdown},
+        {"html", ScanHtml},     {"yaml", ScanYaml},
+        {"sql", ScanSql},       {"rust", ScanRust},
+        {"ruby", ScanRuby},     {"elixir", ScanElixir},
+        {"go", ScanGo},         {"javascript", ScanJavascript},
+        {"css", ScanCss},       {"json", ScanJson},
+        {"python", ScanPython}, {"objective_c", ScanObjectiveC},
+        {"csharp", ScanCsharp}, {"swift", ScanSwift},
+        {"java", ScanJava},     {"scala", ScanScala},
+        {"kotlin", ScanKotlin}, {"php", ScanPhp},
+        {"dart", ScanDart},     {"markdown", ScanMarkdown},
+        {"conf", ScanConf},     {"c", ScanC},
+        {"zig", ScanRust},      {"text", ScanMarkdown},
     };
     for (const Entry& e : kTable) {
         if (base::StrEq(type, Str(e.type))) {

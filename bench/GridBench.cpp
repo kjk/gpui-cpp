@@ -59,7 +59,8 @@ static Slice<GridTemplateComponent> RandomTracks(Arena* arena, BenchRng* rng,
 }
 
 // Rust's `random_nxn_grid_style`.
-static taffy::Style RandomNxNGridStyle(Arena* arena, BenchRng* rng, int trackCount) {
+static taffy::Style RandomNxNGridStyle(Arena* arena, BenchRng* rng,
+                                       int trackCount) {
     taffy::Style s;
     s.display = taffy::Display::Grid;
     s.gridTemplateColumns = RandomTracks(arena, rng, trackCount);
@@ -123,8 +124,7 @@ static void BuildDeepGridTree(GridCase* c, int levels,
         Vec<taffy::NodeId> children;
         BuildDeepGridTree(c, levels - 1, &children);
         taffy::Style s = RandomNxNGridStyle(c->arena, &c->rng, c->trackCount);
-        VecAppend(*out,
-                  c->tree.NewWithChildren(s, children.els, children.len));
+        VecAppend(*out, c->tree.NewWithChildren(s, children.els, children.len));
     }
 }
 
@@ -132,7 +132,8 @@ static void DeepSetup(GridCase* c) {
     c->Reset();
     Vec<taffy::NodeId> children;
     BuildDeepGridTree(c, c->levels, &children);
-    c->root = c->tree.NewWithChildren(taffy::Style{}, children.els, children.len);
+    c->root = c->tree
+                  .NewWithChildren(taffy::Style{}, children.els, children.len);
 }
 
 static void GridRun(GridCase* c) {
@@ -160,16 +161,14 @@ static int64_t IPow(int64_t base, int exp) {
 }
 
 void BenchGrid() {
-    char name[32];
-
     // grid/wide: one n×n grid with a leaf in every cell.
     int wideTracks[3] = {31, 100, 316};
     for (int i = 0; i < 3; i++) {
         GridCase c;
         c.trackCount = wideTracks[i];
         c.avail = SizeAvail::Definite(SizeF{12000.0f, 12000.0f});
-        snprintf(name, sizeof(name), "%dx%d", wideTracks[i], wideTracks[i]);
-        RunGridCase("grid/wide", name, (int64_t)wideTracks[i] * wideTracks[i],
+        TempStr name = fmt("%dx%d", wideTracks[i], wideTracks[i]);
+        RunGridCase("grid/wide", name.s, (int64_t)wideTracks[i] * wideTracks[i],
                     "cells", FlatSetup, &c);
     }
 
@@ -182,10 +181,10 @@ void BenchGrid() {
         c.trackCount = deepTracks[i];
         c.levels = deepLevels[i];
         c.avail = SizeAvail::Definite(SizeF{12000.0f, 12000.0f});
-        snprintf(name, sizeof(name), "%dx%d", deepTracks[i], deepTracks[i]);
+        TempStr name = fmt("%dx%d", deepTracks[i], deepTracks[i]);
         int64_t leaves =
             IPow((int64_t)deepTracks[i] * deepTracks[i], deepLevels[i]);
-        RunGridCase("grid/deep", name, leaves, "leaves", DeepSetup, &c);
+        RunGridCase("grid/deep", name.s, leaves, "leaves", DeepSetup, &c);
     }
 
     // grid/superdeep: a 1×1 grid nested into itself, sized by its content.

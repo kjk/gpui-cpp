@@ -1041,14 +1041,12 @@ static int ParseUint(const char* s, int len) {
 }
 
 static float ParseFloatOr(const char* s, int len, float fallback) {
-    char buf[32];
-    if (len <= 0 || len >= (int)sizeof(buf)) {
+    if (len <= 0 || len >= 32) {
         return fallback;
     }
-    memcpy(buf, s, (size_t)len);
-    buf[len] = 0;
+    TempStr buf = StrDupTemp(Str(s, len));
     char* end = nullptr;
-    float v = (float)strtod(buf, &end);
+    float v = (float)strtod(buf.s, &end);
     if (!end || *end) {
         return fallback;
     }
@@ -1473,7 +1471,7 @@ static const JsonValue* FindColor(const JsonValue* colors, const char* key) {
     if (!v) {
         for (size_t i = 0; i < sizeof(kKeyAliases) / sizeof(kKeyAliases[0]);
              i++) {
-            if (strcmp(kKeyAliases[i][0], key) == 0) {
+            if (StrEq(Str(kKeyAliases[i][0]), key)) {
                 v = JsonGet(colors, kKeyAliases[i][1]);
                 break;
             }
@@ -2417,20 +2415,18 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
     if (!state || !state->arena) {
         return 0;
     }
-    char path[kMaxPath];
     int n = dir.len < kMaxPath - 1 ? dir.len : kMaxPath - 1;
-    memcpy(path, dir.s ? dir.s : "", (size_t)n);
-    path[n] = 0;
-    char resolved[kMaxPath];
-    if (!PlatDirExists(path)) {
-        if (!AssetsFindDir(dir, resolved, kMaxPath)) {
+    TempStr path = StrDupTemp(Str(dir.s ? dir.s : "", n));
+    if (!PlatDirExists(path.s)) {
+        TempStr resolved = AllocStrTemp(kMaxPath - 1);
+        if (!AssetsFindDir(dir, resolved.s, resolved.len + 1)) {
             return 0;
         }
-        StrCopyZ(path, kMaxPath, resolved);
+        path = Str(resolved.s);
     }
     // Already read once. A theme is never dropped, so a second pass over the
     // same directory can only find what is in the registry already.
-    Str dirKey = Str(path);
+    Str dirKey = path;
     for (int i = 0; i < state->loadedDirs.len; i++) {
         if (base::StrEq(state->loadedDirs[i], dirKey)) {
             return 0;
@@ -2444,7 +2440,7 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
     if (!entries) {
         return 0;
     }
-    int count = PlatListDir(path, entries, kMaxEntries);
+    int count = PlatListDir(path.s, entries, kMaxEntries);
     int added = 0;
     for (int i = 0; i < count; i++) {
         if (entries[i].isDir) {
@@ -2455,14 +2451,8 @@ int ThemeRegistryLoadDir(App* app, Str dir) {
         if (len < 6 || !base::StrEqI(Str(name + len - 5), ".json")) {
             continue;
         }
-        char file[kMaxPath];
-        StrCopyZ(file, kMaxPath, path);
-        int at = (int)strlen(file);
-        if (at + 1 < kMaxPath) {
-            file[at++] = kSep;
-            StrCopyZ(file + at, kMaxPath - at, name);
-        }
-        Str text = ReadTextFile(file);
+        TempStr file = fmt("%s%c%s", path, kSep, Str(name));
+        Str text = file.len < kMaxPath ? ReadTextFile(file.s) : Str{};
         if (text.s) {
             // An unparseable file is skipped rather than fatal, the way
             // Rust's `reload()` logs and carries on.

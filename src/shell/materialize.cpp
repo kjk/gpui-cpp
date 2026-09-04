@@ -429,11 +429,10 @@ static void ResolveBehavior(const shell::SpecNode* node,
 
 static bool ParseNumber(Str text, float* out) {
     if (!text || text.len <= 0 || text.len >= 64) return false;
-    char value[64] = {};
-    memcpy(value, text.s, (size_t)text.len);
+    TempStr value = StrDupTemp(text);
     char* end = nullptr;
-    double number = strtod(value, &end);
-    if (!end || end == value || !isfinite(number)) return false;
+    double number = strtod(value.s, &end);
+    if (!end || end == value.s || !isfinite(number)) return false;
     while (*end == ' ' || *end == '\t') end++;
     if (*end) return false;
     *out = (float)number;
@@ -510,12 +509,12 @@ static float PresetNumber(Str name, Str prefix, bool* found) {
     *found = false;
     if (!StrStartsWith(name, prefix) || name.len <= prefix.len) return 0;
     Str suffix(name.s + prefix.len, name.len - prefix.len);
-    char text[32] = {};
-    if (suffix.len >= (int)sizeof(text)) return 0;
+    if (suffix.len >= 32) return 0;
+    TempStr text = StrDupTemp(suffix);
     for (int i = 0; i < suffix.len; i++)
-        text[i] = suffix.s[i] == 'p' ? '.' : suffix.s[i];
+        text.s[i] = suffix.s[i] == 'p' ? '.' : suffix.s[i];
     float value = 0;
-    if (!ParseNumber(Str(text), &value)) return 0;
+    if (!ParseNumber(text, &value)) return 0;
     *found = true;
     return value;
 }
@@ -906,7 +905,7 @@ static bool ApplyStyleNode(Arena* arena, const shell::SpecNode* node,
 
 static const shell::SpecNode* StateNode(const shell::SpecArena* specs,
                                         const shell::SpecNode* owner,
-                                        const char* name) {
+                                        Str name) {
     if (!specs || !owner) return nullptr;
     for (const shell::SpecOp& op : owner->ops) {
         if (op.kind == shell::SpecOpKind::StateStyle && StrEq(op.name, name))
@@ -916,7 +915,7 @@ static const shell::SpecNode* StateNode(const shell::SpecArena* specs,
 }
 
 static void ApplyStateNode(Ctx* cx, const shell::SpecNode* state, El* target,
-                           const char* kind, ShellError* error) {
+                           Str kind, ShellError* error) {
     if (!state || !target) return;
     El* resolved = Div(cx->a);
     uint32_t fields = 0;
@@ -924,23 +923,23 @@ static void ApplyStateNode(Ctx* cx, const shell::SpecNode* state, El* target,
     StateStyle style;
     style.style = resolved->style;
     style.set = fields;
-    if (strcmp(kind, "hover") == 0)
+    if (StrEq(kind, "hover"))
         target->Hover(style);
-    else if (strcmp(kind, "active") == 0)
+    else if (StrEq(kind, "active"))
         target->Active(style);
-    else if (strcmp(kind, "focus") == 0)
+    else if (StrEq(kind, "focus"))
         target->Focus(style);
 }
 
 static void ApplyStateStyles(Ctx* cx, const shell::SpecArena* specs,
                              const shell::SpecNode* owner, El* target,
                              ShellError* error) {
-    ApplyStateNode(cx, StateNode(specs, owner, "hover"), target, "hover",
-                   error);
-    ApplyStateNode(cx, StateNode(specs, owner, "active"), target, "active",
-                   error);
-    ApplyStateNode(cx, StateNode(specs, owner, "focus"), target, "focus",
-                   error);
+    ApplyStateNode(cx, StateNode(specs, owner, StrL("hover")), target,
+                   StrL("hover"), error);
+    ApplyStateNode(cx, StateNode(specs, owner, StrL("active")), target,
+                   StrL("active"), error);
+    ApplyStateNode(cx, StateNode(specs, owner, StrL("focus")), target,
+                   StrL("focus"), error);
 }
 
 struct MaterialPath {
@@ -1146,7 +1145,7 @@ static void PaintMaterialPath(PaintCtx* ctx, El* element, void* user) {
 }
 
 static const shell::SpecOp* MotionFor(const shell::SpecNode* node,
-                                      const char* property) {
+                                      Str property) {
     const shell::SpecOp* found = nullptr;
     if (!node) return nullptr;
     for (const shell::SpecOp& op : node->ops) {
@@ -1158,34 +1157,34 @@ static const shell::SpecOp* MotionFor(const shell::SpecNode* node,
     return found;
 }
 
-static bool MotionTarget(const shell::SpecNode* node, const char* property,
+static bool MotionTarget(const shell::SpecNode* node, Str property,
                          const Style& style, float* target) {
     bool declared = false;
     for (const shell::SpecOp& op : node->ops) {
-        if ((strcmp(property, "opacity") == 0 && StrEq(op.name, "opacity")) ||
-            (strcmp(property, "width") == 0 &&
+        if ((StrEq(property, "opacity") && StrEq(op.name, "opacity")) ||
+            (StrEq(property, "width") &&
              (StrEq(op.name, "w") || StrEq(op.name, "size"))) ||
-            (strcmp(property, "height") == 0 &&
+            (StrEq(property, "height") &&
              (StrEq(op.name, "h") || StrEq(op.name, "size"))) ||
-            (strcmp(property, "left") == 0 && StrEq(op.name, "left")) ||
-            (strcmp(property, "top") == 0 && StrEq(op.name, "top")))
+            (StrEq(property, "left") && StrEq(op.name, "left")) ||
+            (StrEq(property, "top") && StrEq(op.name, "top")))
             declared = true;
     }
     if (!declared) return false;
-    if (strcmp(property, "opacity") == 0)
+    if (StrEq(property, "opacity"))
         *target = style.opacity;
-    else if (strcmp(property, "width") == 0) {
+    else if (StrEq(property, "width")) {
         if (style.width == kAuto || style.width == kFill ||
             style.widthFrac != 0)
             return false;
         *target = style.width;
-    } else if (strcmp(property, "height") == 0) {
+    } else if (StrEq(property, "height")) {
         if (style.height == kAuto || style.height == kFill) return false;
         *target = style.height;
-    } else if (strcmp(property, "left") == 0) {
+    } else if (StrEq(property, "left")) {
         if (style.absLeft == kAuto || style.absLeftRel != 0) return false;
         *target = style.absLeft;
-    } else if (strcmp(property, "top") == 0) {
+    } else if (StrEq(property, "top")) {
         if (style.absTop == kAuto || style.absTopRel != 0) return false;
         *target = style.absTop;
     } else {
@@ -1264,15 +1263,15 @@ static Str MotionIdentity(Ctx* cx, const shell::SpecNode* node,
 static void ApplyMotions(Ctx* cx, const shell::SpecNode* node,
                          shell::SpecId specId, const MaterialBehavior& behavior,
                          El* element) {
-    static const char* properties[] = {"opacity", "width", "height", "left",
-                                       "top"};
+    static const Str properties[] = {StrL("opacity"), StrL("width"),
+                                     StrL("height"), StrL("left"), StrL("top")};
     Str identity = MotionIdentity(cx, node, specId, behavior);
-    for (const char* property : properties) {
+    for (Str property : properties) {
         const shell::SpecOp* op = MotionFor(node, property);
         float target = 0;
         if (!op || !MotionTarget(node, property, element->style, &target))
             continue;
-        uint32_t key = MotionId(identity, Str(property));
+        uint32_t key = MotionId(identity, property);
         float sampled = target;
         if (StrEq(op->name, "spring")) {
             Spring spring = SpringNew(AsNumber(*op, 1, 250));
@@ -1292,13 +1291,13 @@ static void ApplyMotions(Ctx* cx, const shell::SpecNode* node,
                 policy.easing = Easing::Custom(EaseInOutCubic);
             sampled = MotionValue(cx, key, target, policy);
         }
-        if (strcmp(property, "opacity") == 0)
+        if (StrEq(property, "opacity"))
             element->style.opacity = sampled;
-        else if (strcmp(property, "width") == 0)
+        else if (StrEq(property, "width"))
             element->style.width = sampled;
-        else if (strcmp(property, "height") == 0)
+        else if (StrEq(property, "height"))
             element->style.height = sampled;
-        else if (strcmp(property, "left") == 0)
+        else if (StrEq(property, "left"))
             element->style.absLeft = sampled;
         else
             element->style.absTop = sampled;
@@ -1925,11 +1924,12 @@ static El* MaterializeNode(Ctx* cx, ShellRuntime* runtime,
                                  (intptr_t)(uint32_t)retained->id);
         Str nativeId = StrDup(cx->a, fmt("gpui-shell-otp-%u", retained->id));
         element = OtpInput::New(cx, nativeId, retained->otp);
-        const shell::SpecNode* cellStyle = StateNode(specs, node, "cell_style");
+        const shell::SpecNode* cellStyle =
+            StateNode(specs, node, StrL("cell_style"));
         const shell::SpecNode* activeStyle =
-            StateNode(specs, node, "cell_active_style");
+            StateNode(specs, node, StrL("cell_active_style"));
         const shell::SpecNode* caretStyle =
-            StateNode(specs, node, "caret_style");
+            StateNode(specs, node, StrL("caret_style"));
         bool focused =
             !behavior.disabled && FocusHandleIsFocused(cx->win, state->focus);
         int active = focused
@@ -2242,7 +2242,8 @@ static El* MaterializeNode(Ctx* cx, ShellRuntime* runtime,
             retained && retained->kind == shell::RetainedKind::Slider
                 ? retained->slider
                 : nullptr;
-        const shell::SpecNode* range = StateNode(specs, node, "range_style");
+        const shell::SpecNode* range =
+            StateNode(specs, node, StrL("range_style"));
         if (state && range) {
             El* fill = Div(cx->a)->Absolute();
             uint32_t ignored = 0;

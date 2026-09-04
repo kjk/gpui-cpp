@@ -1296,15 +1296,12 @@ static Str Bullet(int depth) {
 
 // text/utils.rs list_item_prefix: 1. at depth 0, A. at depth 1, a. below.
 static Str OrderedMarker(Arena* a, int n, int depth) {
-    char buf[24];
     if (depth == 0) {
-        snprintf(buf, sizeof(buf), "%d. ", n);
-        return StrDup(a, Str(buf));
+        return StrDup(a, fmt("%d. ", n));
     }
     // `0.` is a legal CommonMark start, so index from 0 rather than n - 1.
     int ix = n > 0 ? (n - 1) % 26 : 0;
-    snprintf(buf, sizeof(buf), "%c. ", (depth == 1 ? 'A' : 'a') + ix);
-    return StrDup(a, Str(buf));
+    return StrDup(a, fmt("%c. ", (depth == 1 ? 'A' : 'a') + ix));
 }
 
 // âââ SelectionFormat::Source âââ
@@ -1364,13 +1361,8 @@ static Str SrcIndent(Arena* a, Str s) {
 // The nesting is that function's: code innermost, then italic, bold,
 // strikethrough, underline, highlight, and the link outermost.
 static Str SrcMarkPre(Arena* a, uint8_t marks) {
-    char buf[24];
-    int n = 0;
-    auto put = [&](const char* t) {
-        for (const char* p = t; *p && n < (int)sizeof(buf); p++) {
-            buf[n++] = *p;
-        }
-    };
+    StrBuilder out;
+    auto put = [&](const char* text) { StrBuilderAppend(a, out, Str(text)); };
     if (marks & MdLink) {
         put("[");
     }
@@ -1392,17 +1384,12 @@ static Str SrcMarkPre(Arena* a, uint8_t marks) {
     if (marks & MdCode) {
         put("`");
     }
-    return n > 0 ? StrDup(a, Str(buf, n)) : Str{};
+    return StrBuilderTakeStr(a, out);
 }
 
 static Str SrcMarkPost(Arena* a, uint8_t marks, Str href) {
-    char buf[24];
-    int n = 0;
-    auto put = [&](const char* t) {
-        for (const char* p = t; *p && n < (int)sizeof(buf); p++) {
-            buf[n++] = *p;
-        }
-    };
+    StrBuilder out;
+    auto put = [&](const char* text) { StrBuilderAppend(a, out, Str(text)); };
     if (marks & MdCode) {
         put("`");
     }
@@ -1421,7 +1408,7 @@ static Str SrcMarkPost(Arena* a, uint8_t marks, Str href) {
     if (marks & MdHighlight) {
         put("==");
     }
-    Str tail = n > 0 ? StrDup(a, Str(buf, n)) : Str{};
+    Str tail = StrBuilderTakeStr(a, out);
     if (marks & MdLink) {
         // Rust writes the title too when the link carries one; MdRun keeps
         // only the url, which is what the parse fold kept.

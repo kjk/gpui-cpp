@@ -12,7 +12,8 @@ Avatar* Avatar::New(Ctx* cx) {
     return v;
 }
 
-Str AvatarInitials(char* out, int cap, Str name) {
+TempStr AvatarInitialsTemp(Str name) {
+    TempStr out = AllocStrTemp(2);
     // The first letter of each of the first two words.
     int n = 0;
     bool atWord = true;
@@ -23,7 +24,7 @@ Str AvatarInitials(char* out, int cap, Str name) {
             continue;
         }
         if (atWord) {
-            out[n++] = c;
+            out.s[n++] = c;
             atWord = false;
         }
     }
@@ -31,25 +32,21 @@ Str AvatarInitials(char* out, int cap, Str name) {
     if (n == 1) {
         n = 0;
         for (int i = 0; i < name.len && n < 2; i++) {
-            out[n++] = name.s[i];
+            out.s[n++] = name.s[i];
         }
-    }
-    if (n > cap - 1) {
-        n = cap - 1;
     }
     for (int i = 0; i < n; i++) {
-        if (out[i] >= 'a' && out[i] <= 'z') {
-            out[i] = (char)(out[i] - 'a' + 'A');
+        if (out.s[i] >= 'a' && out.s[i] <= 'z') {
+            out.s[i] = (char)(out.s[i] - 'a' + 'A');
         }
     }
-    out[n] = 0;
-    return Str{out, n};
+    out.s[n] = 0;
+    out.len = n;
+    return out;
 }
 
 Avatar* Avatar::Name(Str s) {
-    char buf[8];
-    Str sh = AvatarInitials(buf, (int)sizeof(buf), s);
-    initials = StrDup(a, sh);
+    initials = StrDup(a, AvatarInitialsTemp(s));
     return this;
 }
 

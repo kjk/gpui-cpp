@@ -58,9 +58,9 @@ static int OpenRoot(Str root, bool create, Str* error) {
     return -1;
 }
 
-static bool ValidComponent(const char* value) {
-    return value[0] && strcmp(value, ".") != 0 && strcmp(value, "..") != 0 &&
-           strchr(value, '\\') == nullptr;
+static bool ValidComponent(Str value) {
+    return value && !StrEq(value, ".") && !StrEq(value, "..") &&
+           StrFind(value, "\\") < 0;
 }
 
 static int OpenDirectoryAt(int parent, const char* name) {
@@ -68,37 +68,40 @@ static int OpenDirectoryAt(int parent, const char* name) {
                   O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
 }
 
-static bool OpenParent(int root, Str relative, int* parent, char leaf[256],
+static bool OpenParent(int root, Str relative, int* parent, TempStr* leaf,
                        Str rootName, Str* error) {
     *parent = -1;
-    leaf[0] = 0;
+    *leaf = {};
     if (StrEq(relative, ".")) {
         int copy = dup(root);
-        if (copy < 0) SyscallError(error, "open", rootName, relative);
+        if (copy < 0)
+            SyscallError(error, "open", rootName, relative);
         else {
             *parent = copy;
-            strcpy(leaf, ".");
+            *leaf = StrDupTemp(StrL("."));
         }
         return copy >= 0;
     }
-    char* path = StrDup(relative).s;
-    if (!path) {
+    TempStr path = StrDupTemp(relative);
+    if (!path.s) {
         FsError(error, StrL("allocating a filesystem path failed"));
         return false;
     }
     int current = dup(root);
     bool ok = current >= 0;
-    char* at = path;
+    char* at = path.s;
     while (ok) {
         char* slash = strchr(at, '/');
         if (slash) *slash = 0;
-        if (!ValidComponent(at) || strlen(at) >= 256) {
-            FsError(error, fmt("refusing invalid path component in `%s`", relative));
+        Str component = Str(at);
+        if (!ValidComponent(component) || component.len >= 256) {
+            FsError(error,
+                    fmt("refusing invalid path component in `%s`", relative));
             ok = false;
             break;
         }
         if (!slash) {
-            strcpy(leaf, at);
+            *leaf = StrDupTemp(Str(at));
             break;
         }
         int next = OpenDirectoryAt(current, at);
@@ -111,7 +114,6 @@ static bool OpenParent(int root, Str relative, int* parent, char leaf[256],
         current = next;
         at = slash + 1;
     }
-    Free(nullptr, path);
     if (!ok) {
         if (current >= 0) close(current);
         return false;
@@ -123,9 +125,9 @@ static bool OpenParent(int root, Str relative, int* parent, char leaf[256],
 static int OpenDirectory(int root, Str relative, Str rootName, Str* error) {
     if (StrEq(relative, ".")) return dup(root);
     int parent = -1;
-    char leaf[256];
-    if (!OpenParent(root, relative, &parent, leaf, rootName, error)) return -1;
-    int result = OpenDirectoryAt(parent, leaf);
+    TempStr leaf;
+    if (!OpenParent(root, relative, &parent, &leaf, rootName, error)) return -1;
+    int result = OpenDirectoryAt(parent, leaf.s);
     if (result < 0) SyscallError(error, "open directory", rootName, relative);
     close(parent);
     return result;
@@ -134,9 +136,10 @@ static int OpenDirectory(int root, Str relative, Str rootName, Str* error) {
 static bool ReadFile(int root, Str rootName, Str relative, FsResult* result,
                      Str* error) {
     int parent = -1;
-    char leaf[256];
-    if (!OpenParent(root, relative, &parent, leaf, rootName, error)) return false;
-    int file = openat(parent, leaf, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    TempStr leaf;
+    if (!OpenParent(root, relative, &parent, &leaf, rootName, error))
+        return false;
+    int file = openat(parent, leaf.s, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     close(parent);
     if (file < 0) {
         SyscallError(error, "read", rootName, relative);
@@ -149,8 +152,10 @@ static bool ReadFile(int root, Str rootName, Str relative, FsResult* result,
         return false;
     }
     if (info.st_size > kFsMaxReadBytes) {
-        FsError(error, fmt("`%s/%s` is %lld bytes, over the %d-byte limit for fs.readFile", rootName,
-                           relative, (int64_t)info.st_size, kFsMaxReadBytes));
+        FsError(
+            error,
+            fmt("`%s/%s` is %lld bytes, over the %d-byte limit for fs.readFile",
+                rootName, relative, (int64_t)info.st_size, kFsMaxReadBytes));
         close(file);
         return false;
     }
@@ -161,14 +166,16 @@ static bool ReadFile(int root, Str rootName, Str relative, FsResult* result,
         ssize_t count = read(file, bytes, sizeof(bytes));
         if (count > 0) {
             if (output.len > kFsMaxReadBytes - (int)count) {
-                FsError(error, fmt("`%s/%s` grew over the %d-byte limit for fs.readFile",
-                                   rootName, relative, kFsMaxReadBytes));
+                FsError(
+                    error,
+                    fmt("`%s/%s` grew over the %d-byte limit for fs.readFile",
+                        rootName, relative, kFsMaxReadBytes));
                 ok = false;
                 break;
             }
             output.Append(Str(bytes, (int)count));
-        }
-        else if (count == 0) break;
+        } else if (count == 0)
+            break;
         else if (errno != EINTR) {
             SyscallError(error, "read", rootName, relative);
             ok = false;
@@ -183,11 +190,12 @@ static bool ReadFile(int root, Str rootName, Str relative, FsResult* result,
 static bool WriteFile(int root, Str rootName, Str relative, Str input,
                       Str* error) {
     int parent = -1;
-    char leaf[256];
-    if (!OpenParent(root, relative, &parent, leaf, rootName, error)) return false;
-    int file = openat(parent, leaf,
-                      O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC,
-                      0666);
+    TempStr leaf;
+    if (!OpenParent(root, relative, &parent, &leaf, rootName, error))
+        return false;
+    int file =
+        openat(parent, leaf.s,
+               O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0666);
     close(parent);
     if (file < 0) {
         SyscallError(error, "write", rootName, relative);
@@ -195,10 +203,12 @@ static bool WriteFile(int root, Str rootName, Str relative, Str input,
     }
     int written = 0;
     while (written < input.len) {
-        ssize_t count = write(file, input.s + written,
-                              (size_t)(input.len - written));
-        if (count > 0) written += (int)count;
-        else if (count < 0 && errno == EINTR) continue;
+        ssize_t count =
+            write(file, input.s + written, (size_t)(input.len - written));
+        if (count > 0)
+            written += (int)count;
+        else if (count < 0 && errno == EINTR)
+            continue;
         else {
             SyscallError(error, "write", rootName, relative);
             close(file);
@@ -215,9 +225,7 @@ static bool WriteFile(int root, Str rootName, Str relative, Str input,
 static int CompareEntry(const void* left, const void* right) {
     const FsEntry* a = (const FsEntry*)left;
     const FsEntry* b = (const FsEntry*)right;
-    int count = a->name.len < b->name.len ? a->name.len : b->name.len;
-    int compared = memcmp(a->name.s, b->name.s, (size_t)count);
-    return compared ? compared : a->name.len - b->name.len;
+    return StrCmp(a->name, b->name);
 }
 
 static bool ReadDirectory(int root, Str rootName, Str relative,
@@ -242,21 +250,23 @@ static bool ReadDirectory(int root, Str rootName, Str relative,
             }
             break;
         }
-        if (strcmp(entry->d_name, ".") == 0 ||
-            strcmp(entry->d_name, "..") == 0) continue;
-        int nameLen = (int)strlen(entry->d_name);
+        Str name = Str(entry->d_name);
+        if (StrEq(name, ".") || StrEq(name, "..")) continue;
+        int nameLen = name.len;
         nameBytes += nameLen;
         if (result->entries.len >= kFsMaxDirectoryEntries ||
             nameBytes > kFsMaxDirectoryNameBytes) {
-            FsError(error, fmt("directory exceeded the %d-entry or %d-name-byte fs.readdir limit",
-                               kFsMaxDirectoryEntries, kFsMaxDirectoryNameBytes));
+            FsError(error,
+                    fmt("directory exceeded the %d-entry or %d-name-byte "
+                        "fs.readdir limit",
+                        kFsMaxDirectoryEntries, kFsMaxDirectoryNameBytes));
             ok = false;
             break;
         }
         struct stat info = {};
-        bool directoryEntry =
-            fstatat(dirfd(directory), entry->d_name, &info,
-                    AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(info.st_mode);
+        bool directoryEntry = fstatat(dirfd(directory), entry->d_name, &info,
+                                      AT_SYMLINK_NOFOLLOW) == 0 &&
+                              S_ISDIR(info.st_mode);
         FsEntry value = {StrDup(Str(entry->d_name, nameLen)), directoryEntry};
         if (!value.name.s || !VecAppend(result->entries, value)) {
             StrFree(value.name);
@@ -267,8 +277,8 @@ static bool ReadDirectory(int root, Str rootName, Str relative,
     }
     closedir(directory);
     if (ok && result->entries.len > 1) {
-        qsort(result->entries.els, (size_t)result->entries.len,
-              sizeof(FsEntry), CompareEntry);
+        qsort(result->entries.els, (size_t)result->entries.len, sizeof(FsEntry),
+              CompareEntry);
     }
     return ok;
 }
@@ -284,8 +294,10 @@ static bool MakeDirectoryRecursive(int root, Str rootName, Str relative,
     while (ok && *at) {
         char* slash = strchr(at, '/');
         if (slash) *slash = 0;
-        if (!ValidComponent(at) || strlen(at) >= 256) {
-            FsError(error, fmt("refusing invalid path component in `%s`", relative));
+        Str component = Str(at);
+        if (!ValidComponent(component) || component.len >= 256) {
+            FsError(error,
+                    fmt("refusing invalid path component in `%s`", relative));
             ok = false;
             break;
         }
@@ -334,11 +346,12 @@ bool FsRun(FsOperation operation, Str rootName, Str relative, Str input,
         ok = ReadDirectory(root, rootName, relative, result, error);
     } else if (operation == FsOperation::Exists) {
         int parent = -1;
-        char leaf[256];
-        ok = OpenParent(root, relative, &parent, leaf, rootName, error);
+        TempStr leaf;
+        ok = OpenParent(root, relative, &parent, &leaf, rootName, error);
         if (ok) {
             struct stat info = {};
-            result->exists = fstatat(parent, leaf, &info, AT_SYMLINK_NOFOLLOW) == 0;
+            result->exists =
+                fstatat(parent, leaf.s, &info, AT_SYMLINK_NOFOLLOW) == 0;
             if (!result->exists && errno != ENOENT && errno != ENOTDIR) {
                 SyscallError(error, "inspect", rootName, relative);
                 ok = false;
@@ -349,15 +362,17 @@ bool FsRun(FsOperation operation, Str rootName, Str relative, Str input,
         ok = MakeDirectoryRecursive(root, rootName, relative, error);
     } else {
         int parent = -1;
-        char leaf[256];
-        ok = OpenParent(root, relative, &parent, leaf, rootName, error);
+        TempStr leaf;
+        ok = OpenParent(root, relative, &parent, &leaf, rootName, error);
         if (ok) {
             int status = -1;
             const char* verb = "remove";
-            if (operation == FsOperation::RemoveFile) status = unlinkat(parent, leaf, 0);
-            else if (operation == FsOperation::RemoveDirectory) status = unlinkat(parent, leaf, AT_REMOVEDIR);
+            if (operation == FsOperation::RemoveFile)
+                status = unlinkat(parent, leaf.s, 0);
+            else if (operation == FsOperation::RemoveDirectory)
+                status = unlinkat(parent, leaf.s, AT_REMOVEDIR);
             else if (operation == FsOperation::MakeDirectory) {
-                status = mkdirat(parent, leaf, 0777);
+                status = mkdirat(parent, leaf.s, 0777);
                 verb = "create";
             }
             ok = status == 0;
@@ -376,7 +391,10 @@ bool FsRun(FsOperation operation, Str rootName, Str relative, Str input,
 namespace gpui::shell {
 bool FsRun(FsOperation, Str root, Str relative, Str, bool, FsResult*,
            Str* error) {
-    if (error) *error = StrDup(fmt("filesystem mutation `%s/%s` is unavailable in a browser", root, relative));
+    if (error)
+        *error = StrDup(
+            fmt("filesystem mutation `%s/%s` is unavailable in a browser", root,
+                relative));
     return false;
 }
 } // namespace gpui::shell

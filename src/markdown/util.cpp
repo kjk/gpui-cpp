@@ -301,7 +301,7 @@ static void AddImpl(EditMap& map, int32_t at, int32_t remove, const Event* add,
         EditMap::Entry& e = map.map[map.buckets[bucket] - 1];
         e.remove += remove;
         if (before) {
-            ArenaVec<Event> merged {};
+            ArenaVec<Event> merged{};
             merged.Reserve(map.a, addLen + e.add.len);
             merged.AppendMany(map.a, add, addLen);
             for (const Event& ev : e.add) {
@@ -456,8 +456,8 @@ static int32_t SkipOptImpl(const Vec<Event>& events, int32_t index,
     Kind open = forward ? Kind::Enter : Kind::Exit;
     while (index < events.len) {
         Name current = events[index].name;
-        if (!NamesContain(names, namesLen, current) ||
-            events[index].kind != open) {
+        if (!NamesContain(names, namesLen, current) || events[index]
+                                                               .kind != open) {
             break;
         }
         index = forward ? index + 1 : index - 1;
@@ -614,8 +614,8 @@ bool ListItemLoose(const Vec<Event>& events, int32_t index) {
 
 // One walk of the delimiter row, writing when there is somewhere to write
 // and counting either way. `out` is none on the counting pass.
-static int32_t ScanTableAlign(const Vec<Event>& events, int32_t index,
-                              Arena* a, ArenaAlign out) {
+static int32_t ScanTableAlign(const Vec<Event>& events, int32_t index, Arena* a,
+                              ArenaAlign out) {
     bool inDelimiterRow = false;
     int32_t count = 0;
     while (index < events.len) {
@@ -624,10 +624,10 @@ static int32_t ScanTableAlign(const Vec<Event>& events, int32_t index,
             if (event.kind == Kind::Enter) {
                 if (event.name == Name::GfmTableDelimiterCellValue) {
                     // A marker before the cell's text is a colon on the left.
-                    AlignKind kind = events[index + 1].name ==
-                                             Name::GfmTableDelimiterMarker
-                                         ? AlignKind::Left
-                                         : AlignKind::None;
+                    AlignKind kind =
+                        events[index + 1].name == Name::GfmTableDelimiterMarker
+                            ? AlignKind::Left
+                            : AlignKind::None;
                     if (out != kArenaAlignNone) {
                         ArenaAlignSet(a, out, count, kind);
                     }
@@ -636,8 +636,8 @@ static int32_t ScanTableAlign(const Vec<Event>& events, int32_t index,
             } else if (event.name == Name::GfmTableDelimiterCellValue) {
                 // And one after it is a colon on the right, which either
                 // centres what the left colon started or stands alone.
-                if (count > 0 && events[index - 1].name ==
-                                     Name::GfmTableDelimiterMarker) {
+                if (count > 0 &&
+                    events[index - 1].name == Name::GfmTableDelimiterMarker) {
                     if (out != kArenaAlignNone) {
                         AlignKind was = ArenaAlignAt(a, out, count - 1);
                         ArenaAlignSet(a, out, count - 1,
@@ -702,19 +702,14 @@ static const char* NamedValue(Str name) {
         int32_t mid = (lo + hi) / 2;
         const char* candidate =
             kCharacterReferenceNames + kCharacterReferences[mid].nameOff;
-        int32_t n = (int32_t)strlen(candidate);
-        int32_t common = n < name.len ? n : name.len;
-        int cmp = common == 0 ? 0 : memcmp(candidate, name.s, (size_t)common);
-        if (cmp == 0) {
-            cmp = n < name.len ? -1 : (n > name.len ? 1 : 0);
-        }
+        int cmp = StrCmp(Str(candidate), name);
         if (cmp < 0) {
             lo = mid + 1;
         } else if (cmp > 0) {
             hi = mid - 1;
         } else {
-            return kCharacterReferenceValues +
-                   kCharacterReferences[mid].valueOff;
+            return kCharacterReferenceValues + kCharacterReferences[mid]
+                                                   .valueOff;
         }
     }
     return nullptr;
@@ -755,17 +750,19 @@ static uint32_t DecodeNumericCp(Str value, int radix) {
 }
 
 Str DecodeNumeric(Arena* a, Str value, int radix) {
-    char buf[4];
-    int32_t n = Utf8Encode(buf, DecodeNumericCp(value, radix));
-    return StrOwn(a, buf, n);
+    char* out = (char*)a->Push(4, 1, false);
+    int32_t n = Utf8Encode(out, DecodeNumericCp(value, radix));
+    return Str(out, n);
 }
 
 // The two decoders without the copy: `DecodeNamed` finds a NUL-terminated
 // run in the static table, and `DecodeNumeric` encodes one codepoint.
-Str CharacterReferenceDecodeInto(char buf[4], Str value, uint8_t marker) {
+base::TempStr CharacterReferenceDecodeTemp(Str value, uint8_t marker) {
     if (marker == '#' || marker == 'x') {
+        base::TempStr out = base::AllocStrTemp(4);
         uint32_t cp = DecodeNumericCp(value, marker == '#' ? 10 : 16);
-        return Str(buf, Utf8Encode(buf, cp));
+        out.len = Utf8Encode(out.s, cp);
+        return out;
     }
     const char* found = NamedValue(value);
     return found ? Str((char*)found, (int32_t)strlen(found)) : Str{};

@@ -405,13 +405,11 @@ static void AppendDateNumeric(Arena* a, StrBuilder* out, int value, int digits,
         AppendDateNumber(a, out, value, 1);
         return;
     }
-    char buf[32];
-    int len = pad == '0' ? snprintf(buf, sizeof(buf), "%0*d", digits, value)
-                         : snprintf(buf, sizeof(buf), "%*d", digits, value);
-    if (len > 0) {
-        StrBuilderAppend(a, *out,
-                         Str(buf, std::min(len, (int)sizeof(buf) - 1)));
-    }
+    // fmt() takes a literal width, while this date pattern supplies it at
+    // runtime, so build the concrete format before rendering the value.
+    // Keep output padding.
+    TempStr format = pad == '0' ? fmt("%%0%dd", digits) : fmt("%%%dd", digits);
+    StrBuilderAppend(a, *out, fmt(format.s, value));
 }
 
 static int DateYearDay(LocalDate date) {

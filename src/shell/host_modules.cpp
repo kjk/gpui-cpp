@@ -9,9 +9,7 @@
 namespace gpui {
 
 static bool HostStrLess(Str a, Str b) {
-    int n = a.len < b.len ? a.len : b.len;
-    int cmp = n > 0 ? memcmp(a.s, b.s, (size_t)n) : 0;
-    return cmp < 0 || (cmp == 0 && a.len < b.len);
+    return StrCmp(a, b) < 0;
 }
 
 static HostValue* CopyValue(const HostValue& value) {
@@ -61,7 +59,8 @@ bool HostValue::CopyFrom(const HostValue& other) {
         }
     }
     for (int i = 0; i < other.array.len; i++) {
-        HostValue* value = other.array[i] ? CopyValue(*other.array[i]) : nullptr;
+        HostValue* value =
+            other.array[i] ? CopyValue(*other.array[i]) : nullptr;
         if (!value || !VecAppend(array, value)) {
             if (value) {
                 value->Free();
@@ -74,9 +73,8 @@ bool HostValue::CopyFrom(const HostValue& other) {
     for (int i = 0; i < other.object.len; i++) {
         HostField field;
         field.name = StrDup(other.object[i].name);
-        field.value = other.object[i].value
-                          ? CopyValue(*other.object[i].value)
-                          : nullptr;
+        field.value =
+            other.object[i].value ? CopyValue(*other.object[i].value) : nullptr;
         if ((!field.name.s && other.object[i].name.len > 0) || !field.value ||
             !VecAppend(object, field)) {
             StrFree(field.name);
@@ -91,7 +89,9 @@ bool HostValue::CopyFrom(const HostValue& other) {
     return true;
 }
 
-void HostValue::SetNull() { Free(); }
+void HostValue::SetNull() {
+    Free();
+}
 
 void HostValue::SetBool(bool value) {
     Free();
@@ -171,12 +171,18 @@ const HostValue* HostValue::Get(Str fieldName) const {
 
 const char* HostValue::Describe() const {
     switch (kind) {
-        case HostValueKind::Null: return "null";
-        case HostValueKind::Bool: return "a boolean";
-        case HostValueKind::Number: return "a number";
-        case HostValueKind::String: return "a string";
-        case HostValueKind::Array: return "an array";
-        case HostValueKind::Object: return "an object";
+        case HostValueKind::Null:
+            return "null";
+        case HostValueKind::Bool:
+            return "a boolean";
+        case HostValueKind::Number:
+            return "a number";
+        case HostValueKind::String:
+            return "a string";
+        case HostValueKind::Array:
+            return "an array";
+        case HostValueKind::Object:
+            return "an object";
     }
     return "a value";
 }
@@ -212,15 +218,17 @@ bool HostArguments::Value(int index, const HostValue** value,
         if (value) *value = found;
         return true;
     }
-    if (error) error->Set(fmt("argument %d is missing; %d were passed",
-                              index + 1, values.len));
+    if (error)
+        error->Set(fmt("argument %d is missing; %d were passed", index + 1,
+                       values.len));
     return false;
 }
 
 static bool Mistyped(int index, const char* expected, const HostValue* got,
                      HostError* error) {
-    if (error) error->Set(fmt("argument %d must be %s, got %s", index + 1,
-                              Str(expected), Str(got ? got->Describe() : "nothing")));
+    if (error)
+        error->Set(fmt("argument %d must be %s, got %s", index + 1,
+                       Str(expected), Str(got ? got->Describe() : "nothing")));
     return false;
 }
 
@@ -247,7 +255,8 @@ bool HostArguments::Integer(int index, int64_t* value, HostError* error) const {
     if (!Number(index, &number, error)) return false;
     if (!isfinite(number) || floor(number) != number ||
         number < (double)INT64_MIN || number > (double)INT64_MAX) {
-        if (error) error->Set(fmt("argument %d must be a whole number", index + 1));
+        if (error)
+            error->Set(fmt("argument %d must be a whole number", index + 1));
         return false;
     }
     if (value) *value = (int64_t)number;
@@ -284,7 +293,9 @@ HostModule::~HostModule() {
     VecReset(functions);
 }
 
-HostModule* HostModule::New(Str name) { return new HostModule(name); }
+HostModule* HostModule::New(Str name) {
+    return new HostModule(name);
+}
 
 HostModule* HostModule::Retain() {
     refs++;
@@ -342,8 +353,9 @@ HostModule* HostModule::AsyncFunction(Str function, Func1<HostCall*> work,
     return SetFunction(function, true, work, {}, release);
 }
 
-HostModule* HostModule::AsyncFunction(
-    Str function, Func1<HostAsyncRequest*> begin, Func0 release) {
+HostModule* HostModule::AsyncFunction(Str function,
+                                      Func1<HostAsyncRequest*> begin,
+                                      Func0 release) {
     return SetFunction(function, true, {}, begin, release);
 }
 
@@ -357,7 +369,9 @@ Str HostModule::FunctionName(int index) const {
     return index >= 0 && index < functions.len ? functions[index]->name : Str{};
 }
 
-bool HostModule::Has(Str function) const { return Find(function) != nullptr; }
+bool HostModule::Has(Str function) const {
+    return Find(function) != nullptr;
+}
 
 bool HostModule::IsAsync(Str function) const {
     FunctionEntry* entry = Find(function);
@@ -365,9 +379,9 @@ bool HostModule::IsAsync(Str function) const {
 }
 
 static const char* const kReserved[] = {
-    "gpui", "gpui-base", "gpui-shell", "gpui-fps", "buffer", "console",
-    "crypto", "fs/promises", "net", "os", "path", "process", "url",
-    "websocket", "zlib",
+    "gpui",    "gpui-base", "gpui-shell",  "gpui-fps",  "buffer",
+    "console", "crypto",    "fs/promises", "net",       "os",
+    "path",    "process",   "url",         "websocket", "zlib",
 };
 
 bool HostIsReservedSpecifier(Str value) {
@@ -380,8 +394,8 @@ bool HostIsReservedSpecifier(Str value) {
 bool HostIsIdentifier(Str value) {
     if (!value.s || value.len == 0) return false;
     char first = value.s[0];
-    if (!((first >= 'a' && first <= 'z') ||
-          (first >= 'A' && first <= 'Z') || first == '_' || first == '$'))
+    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') ||
+          first == '_' || first == '$'))
         return false;
     for (int i = 1; i < value.len; i++) {
         char c = value.s[i];
@@ -412,8 +426,11 @@ bool HostModule::Validate(HostError* error) const {
         return false;
     }
     if (HostIsReservedSpecifier(name)) {
-        if (error) error->Set(fmt("`%s` is one of the runtime's own module names and cannot be registered",
-                                  name));
+        if (error)
+            error
+                ->Set(fmt("`%s` is one of the runtime's own module names and "
+                          "cannot be registered",
+                          name));
         return false;
     }
     if (!declarations.s) return true;
@@ -425,14 +442,14 @@ bool HostModule::Validate(HostError* error) const {
         const char* lineEnd = (const char*)memchr(at, '\n', (size_t)(end - at));
         if (!lineEnd) lineEnd = end;
         while (at < lineEnd && (*at == ' ' || *at == '\t')) at++;
-        static const char* prefixes[] = {"export function ",
-                                         "export declare function ",
-                                         "export const "};
+        static const char* prefixes[] = {
+            "export function ", "export declare function ", "export const "};
         const char* rest = nullptr;
         for (int i = 0; i < 3; i++) {
-            int n = (int)strlen(prefixes[i]);
-            if (lineEnd - at >= n && memcmp(at, prefixes[i], (size_t)n) == 0) {
-                rest = at + n;
+            Str prefix = Str(prefixes[i]);
+            if (lineEnd - at >= prefix.len &&
+                StrEq(Str(at, prefix.len), prefix)) {
+                rest = at + prefix.len;
                 break;
             }
         }
@@ -440,8 +457,7 @@ bool HostModule::Validate(HostError* error) const {
             const char* stop = rest;
             while (stop < lineEnd) {
                 char c = *stop;
-                if (!((c >= 'a' && c <= 'z') ||
-                      (c >= 'A' && c <= 'Z') ||
+                if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
                       (c >= '0' && c <= '9') || c == '_' || c == '$'))
                     break;
                 stop++;
@@ -464,8 +480,10 @@ bool HostModule::Validate(HostError* error) const {
     }
     if (missing.len == 0 && extra.len == 0) return true;
     StrBuilder message;
-    message.Append(fmt("HostModule `%s` declares a different set of functions than it registers",
-                       name));
+    message
+        .Append(fmt("HostModule `%s` declares a different set of functions "
+                    "than it registers",
+                    name));
     if (missing.len) {
         message.Append(StrL("; registered but not declared: "));
         AppendNames(&message, nullptr, &missing);
@@ -483,8 +501,10 @@ bool HostModule::Validate(HostError* error) const {
 bool HostModule::Call(Str function, HostCall* call) const {
     FunctionEntry* entry = Find(function);
     if (!entry || entry->async || !entry->body.IsValid()) {
-        if (call) call->error.Set(fmt("HostModule `%s` has no synchronous function `%s`",
-                                      name, function));
+        if (call)
+            call->error
+                .Set(fmt("HostModule `%s` has no synchronous function `%s`",
+                         name, function));
         return false;
     }
     entry->body.Call(call);
@@ -494,12 +514,16 @@ bool HostModule::Call(Str function, HostCall* call) const {
 bool HostModule::Begin(Str function, HostAsyncRequest* request) const {
     FunctionEntry* entry = Find(function);
     if (!entry || !entry->async) {
-        if (request) request->error.Set(fmt("HostModule `%s` has no asynchronous function `%s`",
-                                            name, function));
+        if (request)
+            request->error
+                .Set(fmt("HostModule `%s` has no asynchronous function `%s`",
+                         name, function));
         return false;
     }
-    if (entry->begin.IsValid()) entry->begin.Call(request);
-    else request->work = entry->body;
+    if (entry->begin.IsValid())
+        entry->begin.Call(request);
+    else
+        request->work = entry->body;
     if (!request->work.IsValid() && !request->error.IsSet()) {
         request->error.Set(StrL("asynchronous host function returned no work"));
     }
@@ -570,7 +594,8 @@ HostModule* HostModulesAt(const HostModules* modules, int index) {
 HostModule* HostModulesGet(const HostModules* modules, Str name) {
     if (!modules) return nullptr;
     for (int i = 0; i < modules->modules.len; i++) {
-        if (StrEq(modules->modules[i]->Name(), name)) return modules->modules[i];
+        if (StrEq(modules->modules[i]->Name(), name))
+            return modules->modules[i];
     }
     return nullptr;
 }
@@ -586,8 +611,8 @@ bool HostModulesInsert(HostModules* modules, HostModule* module) {
     }
     if (!VecAppend(modules->modules, module->Retain())) return false;
     for (int i = modules->modules.len - 1; i > 0; i--) {
-        if (HostStrLess(modules->modules[i - 1]->Name(),
-                        modules->modules[i]->Name()))
+        if (HostStrLess(modules->modules[i - 1]->Name(), modules->modules[i]
+                                                             ->Name()))
             break;
         HostModule* swap = modules->modules[i - 1];
         modules->modules[i - 1] = modules->modules[i];
@@ -639,8 +664,9 @@ static void MissingModule(Str module, HostError* error,
                           const HostModules* modules) {
     if (!error) return;
     if (HostModulesCount(modules) == 0) {
-        error->Set(fmt("HostModule `%s` is not available: this Host registered none",
-                       module));
+        error->Set(
+            fmt("HostModule `%s` is not available: this Host registered none",
+                module));
         return;
     }
     StrBuilder out;
@@ -657,8 +683,10 @@ static void MissingModule(Str module, HostError* error,
 bool HostDispatch(Str module, Str function, HostCall* call) {
     if (!call) return false;
     if (gInHostCall) {
-        call->error.Set(fmt("`%s.%s` was reached from inside another host call: a host function may not call back into the script engine",
-                            module, function));
+        call->error
+            .Set(fmt("`%s.%s` was reached from inside another host call: a "
+                     "host function may not call back into the script engine",
+                     module, function));
         return false;
     }
     HostModules* modules = CurrentModules();
@@ -673,8 +701,10 @@ bool HostDispatch(Str module, Str function, HostCall* call) {
 bool HostDispatchBegin(Str module, Str function, HostAsyncRequest* request) {
     if (!request) return false;
     if (gInHostCall) {
-        request->error.Set(fmt("`%s.%s` was reached from inside another host call: a host function may not call back into the script engine",
-                               module, function));
+        request->error
+            .Set(fmt("`%s.%s` was reached from inside another host call: a "
+                     "host function may not call back into the script engine",
+                     module, function));
         return false;
     }
     HostModules* modules = CurrentModules();
@@ -682,8 +712,10 @@ bool HostDispatchBegin(Str module, Str function, HostAsyncRequest* request) {
     if (!found) MissingModule(module, &request->error, modules);
     HostCallGuard guard;
     bool ok = found && found->Begin(function, request);
-    if (ok) request->registry = modules;
-    else HostModulesRelease(modules);
+    if (ok)
+        request->registry = modules;
+    else
+        HostModulesRelease(modules);
     return ok;
 }
 

@@ -3,9 +3,7 @@
 
 using namespace gpui;
 
-#include <stdarg.h>
 #include <stdlib.h>
-#include <stdio.h>
 
 #include <math.h>
 
@@ -233,22 +231,6 @@ int StoryFromSlug(const char* slug) {
 Str StoryDup(Ctx* cx, const char* s) {
     Arena* a = cx->a;
     return StrDup(a, Str(s));
-}
-
-const char* StoryArg(Ctx* cx, Str s) {
-    // A Str need not be null-terminated, so printf gets a copy that is.
-    const char* z = StrDup(cx->a, s).s;
-    return z ? z : "";
-}
-
-Str StoryFmtV(Ctx* cx, const char* f, ...) {
-    Arena* a = cx->a;
-    char buf[512];
-    va_list args;
-    va_start(args, f);
-    vsnprintf(buf, sizeof(buf), f, args);
-    va_end(args);
-    return StrDup(a, Str(buf));
 }
 
 El* StoryTxt(Ctx* cx, Str s, float px, Rgba c) {
@@ -1211,7 +1193,8 @@ static void OnOpenAction(StoryApp*, Ctx*, const ActionEvent*) {
     // there and the handler is empty, because a component gallery has nothing
     // to open a file into. What a real one does with the same action is
     // `on_action_open` in the markdown example — this tree has the dialog for
-    // it (PromptForPath), and it is that example that wants it, not this menu.
+    // it (PromptForPathTemp), and it is that example that wants it, not this
+    // menu.
 }
 
 // `cx.on_action(|_: &Quit, cx| cx.quit())`: every window, not the one the row
@@ -1831,12 +1814,8 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
 }
 
 // The story to open, if one was named on the command line.
-static void ParseSlug(int argc, char** argv, char* out, int cap) {
-    out[0] = 0;
-    if (argc < 2 || !argv[1]) {
-        return;
-    }
-    StrCopyZ(out, cap, argv[1]);
+static Str ParseSlug(int argc, char** argv) {
+    return argc >= 2 && argv[1] ? Str(argv[1]) : Str{};
 }
 
 int GpuiMain(int argc, char** argv) {
@@ -1863,16 +1842,15 @@ int GpuiMain(int argc, char** argv) {
         }
     }
 
-    char slug[64] = {};
-    ParseSlug(argc, argv, slug, 64);
-    Window* win = StoryOpenWindow(app, StoryFromSlug(slug));
+    Str slug = ParseSlug(argc, argv);
+    Window* win = StoryOpenWindow(app, StoryFromSlug(slug.s));
     if (!win) {
         AppFree(app);
         return 1;
     }
     // Rust Gallery::set_active_story puts the launch name in the sidebar
     // search box so the list filters to matching titles.
-    if (slug[0]) {
+    if (slug) {
         Entity<StoryApp> view;
         view.id = win->root;
         StoryApp* self = view.Get(app);

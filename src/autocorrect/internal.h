@@ -40,7 +40,11 @@ enum {
 };
 
 // config/severity.rs SeverityMode; the values .autocorrectrc writes.
-enum class SeverityMode : uint8_t { Off = 0, Error = 1, Warning = 2 };
+enum class SeverityMode : uint8_t {
+    Off = 0,
+    Error = 1,
+    Warning = 2
+};
 
 // The default config's `rules:` map. There is no .autocorrectrc loading
 // here — the editor runs the crate's built-in defaults, which the crate
@@ -56,7 +60,11 @@ int RuleIdByName(Str name);
 // The crate stores rule-name sets; the known names fit a bit mask, and one
 // flag remembers that some unknown name was in the set, which is all
 // `match_rule("")` (emptiness) needs.
-enum class ToggleKind : uint8_t { None, Enable, Disable };
+enum class ToggleKind : uint8_t {
+    None,
+    Enable,
+    Disable
+};
 
 struct Toggle {
     ToggleKind kind = ToggleKind::Enable;
@@ -161,14 +169,14 @@ void EmitIgnore(Results* res, Str part);
 // A correctable region. `rule` is the grammar rule name; "comment" and
 // "COMMENT" also parse the enable/disable toggle, exactly like
 // code.rs format_or_lint.
-void EmitText(Results* res, const char* rule, Str part);
+void EmitText(Results* res, Str rule, Str part);
 // A fenced code block (markdown): lint/format the code as `lang` through
 // LintFor/FormatFor, offset line numbers — code.rs
 // format_or_lint_for_inline_scripts. `part` is the whole block including
 // fences; `code` and `lang` point inside it.
 void EmitCodeblock(Results* res, Str part, Str lang, Str code);
 // The <style> / <script> bodies in HTML: same shape, fixed language.
-void EmitInlineScript(Results* res, const char* rule, Str part);
+void EmitInlineScript(Results* res, Str rule, Str part);
 // A parse error: lint keeps what it has, format reverts to raw.
 void EmitError(Results* res, Str raw, Str message);
 

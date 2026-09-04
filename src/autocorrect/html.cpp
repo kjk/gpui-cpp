@@ -128,7 +128,7 @@ void ScanHtml(Results* res, Str raw) {
                 i++;
             }
             flush(start);
-            EmitText(res, "text", Str(raw.s + start, i - start));
+            EmitText(res, StrL("text"), Str(raw.s + start, i - start));
             ignoreStart = i;
             continue;
         }
@@ -144,7 +144,7 @@ void ScanHtml(Results* res, Str raw) {
             }
             if (end > 0) {
                 flush(i);
-                EmitText(res, "comment", Str(raw.s + i, end - i));
+                EmitText(res, StrL("comment"), Str(raw.s + i, end - i));
                 ignoreStart = end;
                 i = end;
                 continue;
@@ -205,7 +205,7 @@ void ScanHtml(Results* res, Str raw) {
             }
             if (el.rule) {
                 flush(i + tag);
-                EmitInlineScript(res, el.rule,
+                EmitInlineScript(res, Str(el.rule),
                                  Str(raw.s + i + tag, close - (i + tag)));
                 ignoreStart = close;
             }

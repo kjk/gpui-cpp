@@ -112,7 +112,7 @@ struct EditMap {
     struct Entry {
         int32_t at = 0;
         int32_t remove = 0;
-        ArenaVec<Event> add {};
+        ArenaVec<Event> add{};
     };
 
     // The added events live here rather than in a Vec of Vecs: `Vec<T>` is
@@ -130,8 +130,8 @@ struct EditMap {
     Vec<int32_t> buckets;
 };
 
-void EditMapAdd(EditMap& map, int32_t index, int32_t remove,
-                const Event* add, int32_t addLen);
+void EditMapAdd(EditMap& map, int32_t index, int32_t remove, const Event* add,
+                int32_t addLen);
 void EditMapAddBefore(EditMap& map, int32_t index, int32_t remove,
                       const Event* add, int32_t addLen);
 inline bool EditMapEmpty(const EditMap& map) {
@@ -189,7 +189,7 @@ Str CharacterReferenceDecode(Arena* a, Str value, uint8_t marker);
 //
 // The answer points either into the static table or into `buf`, so it lives
 // as long as the caller's own frame.
-Str CharacterReferenceDecodeInto(char buf[4], Str value, uint8_t marker);
+base::TempStr CharacterReferenceDecodeTemp(Str value, uint8_t marker);
 
 } // namespace markdown
 

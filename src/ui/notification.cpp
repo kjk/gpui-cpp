@@ -113,23 +113,8 @@ bool NotificationDeliveryIncludesSystem(NotificationDelivery d) {
 // it, and is not ours to retract or dispatch.
 static const char kSystemTagPrefix[] = "gpui-component/notification/";
 
-Str NotificationSystemTag(char* buf, int cap, int id) {
-    if (!buf || cap <= 0) {
-        return {};
-    }
-    TempStr s = fmt("%d", id);
-    int prefixLen = (int)sizeof(kSystemTagPrefix) - 1;
-    int n = prefixLen + s.len;
-    if (n > cap - 1) {
-        n = cap - 1;
-    }
-    int take = n < prefixLen ? n : prefixLen;
-    memcpy(buf, kSystemTagPrefix, (size_t)take);
-    if (n > take) {
-        memcpy(buf + take, s.s, (size_t)(n - take));
-    }
-    buf[n] = 0;
-    return Str(buf, n);
+TempStr NotificationSystemTagTemp(int id) {
+    return fmt("%s%d", Str(kSystemTagPrefix), id);
 }
 
 bool NotificationTagId(Str tag, int* outId) {
@@ -253,8 +238,7 @@ int NotificationSystemCount(const App* app) {
 }
 
 static void SysDismissTag(int id) {
-    char buf[64];
-    SysNotifyDismiss(NotificationSystemTag(buf, (int)sizeof(buf), id));
+    SysNotifyDismiss(NotificationSystemTagTemp(id));
 }
 
 static bool SystemIdentityMatches(const NotificationSystemEntry& e,
@@ -500,8 +484,7 @@ static void NotificationPushSystem(NotificationListState* s, Ctx* cx,
         body = Str{};
     }
     NotificationInitSystem(cx->app);
-    char buf[64];
-    Str tag = NotificationSystemTag(buf, (int)sizeof(buf), item.id);
+    TempStr tag = NotificationSystemTagTemp(item.id);
     // Rust registers and then posts; the order is the other way here because
     // a platform that cannot post — every one but Windows so far — would
     // otherwise leave an entry waiting for a response that cannot come.

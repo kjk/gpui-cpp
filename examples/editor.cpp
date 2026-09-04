@@ -52,15 +52,14 @@ using namespace gpui;
 // top of it — build_file_items in the Rust example. A leading dot is not
 // itself a reason to skip: `.github` and `.cache` stay unless an ignore file
 // names them.
-static bool SkipEntry(const autocorrect::Ignorer* ig, const char* relPath,
-                      const char* name) {
-    if (!name[0]) {
+static bool SkipEntry(const autocorrect::Ignorer* ig, Str relPath, Str name) {
+    if (name.len == 0) {
         return true;
     }
-    if (strcmp(name, ".git") == 0) {
+    if (StrEq(name, ".git")) {
         return true;
     }
-    return autocorrect::IgnorerIsIgnored(ig, Str(relPath));
+    return autocorrect::IgnorerIsIgnored(ig, relPath);
 }
 
 static const int kMaxDiagnostics = 512;
@@ -100,9 +99,9 @@ struct EditorApp {
 
     // The file the editor holds, and what the tree said last.
     char openPath[1024] = {};
-    // The extension `LanguageFor` copied out of the path. Must be owned: a
-    // `Str` into the stack buffer `OpenFile` is given is gone next frame,
-    // and `Highlighter::Language` then sees garbage instead of "md".
+    // The extension `LanguageFor` copied out of the path. Must be owned: the
+    // path handed to `OpenFile` need not survive this call, and
+    // `Highlighter::Language` must keep seeing "md" next frame.
     char language[32] = {};
 
     // The autocorrect lint's diagnostics, rebuilt when the document
@@ -134,7 +133,7 @@ static void SortDir(DirEntry* e, int n) {
         while (j >= 0) {
             bool after = e[j].isDir != key.isDir
                              ? (!e[j].isDir && key.isDir)
-                             : strcmp(e[j].name, key.name) > 0;
+                             : StrCmp(Str(e[j].name), Str(key.name)) > 0;
             if (!after) {
                 break;
             }
@@ -145,8 +144,8 @@ static void SortDir(DirEntry* e, int n) {
     }
 }
 
-static void LoadDir(TreeState* s, const autocorrect::Ignorer* ig,
-                    const char* path, int parent, int depth) {
+static void LoadDir(TreeState* s, const autocorrect::Ignorer* ig, Str path,
+                    int parent, int depth) {
     // One listing per level, on the heap: a static array here would be the
     // same array the level above is still walking.
     const int kMaxEntries = 512;
@@ -154,22 +153,21 @@ static void LoadDir(TreeState* s, const autocorrect::Ignorer* ig,
     if (!found) {
         return;
     }
-    int got = PlatListDir(path, found, kMaxEntries);
+    TempStr pathZ = StrDupTemp(path);
+    int got = PlatListDir(pathZ.s, found, kMaxEntries);
     SortDir(found, got);
     for (int i = 0; i < got; i++) {
-        char child[1024];
-        int wrote = snprintf(child, sizeof(child), "%.*s/%.*s", 500, path,
-                             (int)sizeof(found[i].name), found[i].name);
-        if (wrote <= 0) {
+        TempStr child = fmt("%s/%s", path, Str(found[i].name));
+        if (child.len >= 1024) {
             continue;
         }
         // The ignorer is asked with the path relative to the walked root,
         // which is what `child` is: the walk starts at ".".
-        if (SkipEntry(ig, child, found[i].name)) {
+        if (SkipEntry(ig, child, Str(found[i].name))) {
             continue;
         }
         // TreeAddItem copies both strings; the state owns and frees them.
-        int ix = TreeAddItem(s, Str(child), Str(found[i].name), parent);
+        int ix = TreeAddItem(s, child, Str(found[i].name), parent);
         if (ix < 0) {
             break;
         }
@@ -183,7 +181,7 @@ static void LoadDir(TreeState* s, const autocorrect::Ignorer* ig,
 
 // The language a file's extension names, which is what the editor scans it as.
 // Writes the last extension (after `/` or `\`) into `out`.
-static void LanguageFor(const char* path, char* out, int cap) {
+static void LanguageFor(Str path, char* out, int cap) {
     if (!out || cap <= 0) {
         return;
     }
@@ -191,16 +189,18 @@ static void LanguageFor(const char* path, char* out, int cap) {
     if (!path) {
         return;
     }
-    const char* dot = nullptr;
-    for (const char* p = path; *p; p++) {
-        if (*p == '.') {
-            dot = p + 1;
-        } else if (*p == '/' || *p == '\\') {
-            dot = nullptr;
+    int dot = -1;
+    for (int i = 0; i < path.len; i++) {
+        if (path.s[i] == '.') {
+            dot = i + 1;
+        } else if (path.s[i] == '/' || path.s[i] == '\\') {
+            dot = -1;
         }
     }
-    if (dot) {
-        StrCopyZ(out, cap, dot);
+    if (dot >= 0) {
+        int n = std::min(path.len - dot, cap - 1);
+        memcpy(out, path.s + dot, (size_t)n);
+        out[n] = 0;
     }
 }
 
@@ -322,8 +322,12 @@ static int AutocorrectQuickfixes(void* data, Arena* a, Str, Selection sel,
     return n;
 }
 
-static void OpenFile(EditorApp* self, const char* path) {
-    FILE* f = fopen(path, "rb");
+static void OpenFile(EditorApp* self, Str path) {
+    if (!path) {
+        return;
+    }
+    TempStr pathZ = StrDupTemp(path);
+    FILE* f = fopen(pathZ.s, "rb");
     if (!f) {
         return;
     }
@@ -347,7 +351,9 @@ static void OpenFile(EditorApp* self, const char* path) {
     buf[got] = 0;
     InputSetValue(&self->editor, Str(buf, (int)got));
     Free(nullptr, buf);
-    StrCopyZ(self->openPath, (int)sizeof(self->openPath), path);
+    int pathLen = std::min(path.len, (int)sizeof(self->openPath) - 1);
+    memcpy(self->openPath, path.s, (size_t)pathLen);
+    self->openPath[pathLen] = 0;
     LanguageFor(path, self->language, (int)sizeof(self->language));
     Lint(self);
 }
@@ -1087,12 +1093,12 @@ static void OnAboutAction(EditorApp*, Ctx* cx, const ActionEvent*) {
 // `on_action_open`: the desktop's own dialog, and what it answers is read
 // into the editor.
 static void OnOpenAction(EditorApp* self, Ctx* cx, const ActionEvent*) {
-    char path[1024] = {};
     PathPrompt prompt;
     prompt.files = true;
     prompt.directories = true;
     prompt.title = StrL("Select a source file");
-    if (!PromptForPath(cx->win, prompt, path, (int)sizeof(path))) {
+    TempStr path = PromptForPathTemp(cx->win, prompt);
+    if (!path) {
         return;
     }
     OpenFile(self, path);
@@ -1566,7 +1572,7 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
             // .gitignore and .autocorrectignore from the working directory.
             autocorrect::Ignorer ig;
             autocorrect::IgnorerInit(&ig, StrL("."));
-            LoadDir(s, &ig, ".", -1, 2);
+            LoadDir(s, &ig, StrL("."), -1, 2);
             autocorrect::IgnorerFree(&ig);
             TreeRebuild(s);
             self->treeSub = Subscribe(cx, self->tree, &OnTreeEvent);
@@ -1611,9 +1617,7 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
             self->lastSelected = s->selected;
             const TreeItem* item = TreeEntryItem(s, s->selected);
             if (item && !item->folder && item->id.s) {
-                char path[1024];
-                StrCopyZ(path, (int)sizeof(path), item->id.s);
-                OpenFile(self, path);
+                OpenFile(self, item->id);
             }
         }
     }

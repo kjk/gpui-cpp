@@ -344,8 +344,8 @@ static void AShapeKeepsTheColourItIsStrokedWith() {
 // assets/icons has a <text>, so a run of glyphs had no way through the
 // converter at all and a badge came out as an empty plate.
 static bool FirstText(const uint8_t* p, int len, float* x, float* y,
-                      float* size, float* textLen, uint32_t* flags,
-                      char* out, int outN) {
+                      float* size, float* textLen, uint32_t* flags, char* out,
+                      int outN) {
     const uint8_t* end = p + len;
     while (p + 2 <= end) {
         uint16_t op;
@@ -392,10 +392,11 @@ static void ATextRunIsReadAndPlaced() {
         &b));
     float x = 0, y = 0, size = 0, tlen = 0;
     uint32_t flags = 0;
-    char text[64] = {};
+    TempStr text = AllocStrTemp(63);
+    text.s[0] = 0;
     utassert(FirstText(b.data.els, b.data.len, &x, &y, &size, &tlen, &flags,
-                       text, 64));
-    utassert(strcmp(text, "crates.io") == 0);
+                       text.s, text.len + 1));
+    utassert(StrEq(Str(text.s), "crates.io"));
     utassertnear(x, 29.5f);
     utassertnear(y, 14.f);
     utassertnear(size, 11.f);
@@ -412,8 +413,8 @@ static void ATextRunIsReadAndPlaced() {
                                "</text></g></svg>"),
                           &nested));
     utassert(FirstText(nested.data.els, nested.data.len, &x, &y, &size, &tlen,
-                       &flags, text, 64));
-    utassert(strcmp(text, "CI") == 0);
+                       &flags, text.s, text.len + 1));
+    utassert(StrEq(Str(text.s), "CI"));
     utassertnear(x, 22.f);
     utassertnear(y, 14.f);
     utassertnear(size, 11.f);
@@ -439,9 +440,9 @@ static void ATextRunIsReadAndPlaced() {
                                "<tspan x=\"5\" y=\"6\">CI</tspan>\n"
                                "</text></g></svg>"),
                           &wrapper));
-    utassert(FirstText(wrapper.data.els, wrapper.data.len, &x, &y, &size,
-                       &tlen, &flags, text, 64));
-    utassert(strcmp(text, "CI") == 0);
+    utassert(FirstText(wrapper.data.els, wrapper.data.len, &x, &y, &size, &tlen,
+                       &flags, text.s, text.len + 1));
+    utassert(StrEq(Str(text.s), "CI"));
     utassertnear(x, 5.f);
     utassertnear(y, 6.f);
 }
@@ -467,7 +468,7 @@ static void GeneratedTableMatchesReader() {
         utassert(name.len > 0);
         // Name order, which is what makes the generated file's diff readable.
         if (i > 0) {
-            utassert(strcmp(prev.s, name.s) < 0);
+            utassert(StrCmp(prev, name) < 0);
         }
         prev = name;
         utassert(e.offset >= 0 && e.len > 0 &&
@@ -477,9 +478,8 @@ static void GeneratedTableMatchesReader() {
         utassert(AssetIconFind(name, &found) == kAssetIconsData + e.offset);
         utassert(found == e.len);
 
-        char path[128];
-        snprintf(path, sizeof(path), "icons/%s.svg", name.s);
-        TempStr xml = AssetsLoadTextTemp(Str(path));
+        TempStr path = fmt("icons/%s.svg", name);
+        TempStr xml = AssetsLoadTextTemp(path);
         if (!xml.s) {
             continue;
         }

@@ -5050,7 +5050,8 @@ struct Window {
     // throttling (GPUI's inactive_frame_interval).
     double lastDrawTime = 0;
     // Set when an invalidation arrived while inactive before the inactive
-    // frame interval had elapsed, so the frame is deferred until the timer fires.
+    // frame interval had elapsed, so the frame is deferred until the timer
+    // fires.
     bool pendingInvalidate = false;
     bool mouseDown = false;
     // cx.stop_propagation(): set by a handler, read by the chain it is in.
@@ -5744,15 +5745,15 @@ struct PathPrompt {
     Str title = {};
 };
 
-// cx.prompt_for_paths, with one path and no task: what the user chose is
-// written to `out` as a NUL-terminated path, and false comes back when they
-// cancelled, when the platform has no dialog of its own (wasm), or when the
-// desktop has none to offer (a Linux session with neither zenity nor
-// kdialog). Rust answers a `Task<Result<Option<Vec<PathBuf>>>>` and can be
-// asked for several paths at once; every caller here wants one and wants it
-// where it asked, which is what the platform dialogs do anyway — they run
-// their own loop until the user is done.
-bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap);
+// cx.prompt_for_paths, with one path and no task: the chosen path is returned
+// in the temp arena, or empty when the user cancelled, when the platform has
+// no dialog of its own (wasm), or when the desktop has none to offer (a Linux
+// session with neither zenity nor kdialog). Rust answers a
+// `Task<Result<Option<Vec<PathBuf>>>>` and can be asked for several paths at
+// once; every caller here wants one and wants it where it asked, which is what
+// the platform dialogs do anyway — they run their own loop until the user is
+// done.
+TempStr PromptForPathTemp(Window* win, const PathPrompt& opts);
 
 int AppRun(App* app);
 Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);

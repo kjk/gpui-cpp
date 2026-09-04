@@ -71,16 +71,16 @@ static void TheLengthRidesAlongInOneByte() {
     // 127 is the last length that fits in one byte, 128 the first that needs
     // two. Both read back as themselves, which is the boundary the decode
     // gets wrong if the continuation bit is.
-    char buf[300];
-    for (int i = 0; i < (int)sizeof(buf); i++) {
-        buf[i] = (char)('a' + (i % 26));
+    TempStr buf = AllocStrTemp(300);
+    for (int i = 0; i < buf.len; i++) {
+        buf.s[i] = (char)('a' + (i % 26));
     }
     for (int len = 126; len <= 130; len++) {
         Arena* b = ArenaNew();
         uint64_t was = ArenaUsed(b);
-        ArenaStr big = ArenaStrDup(b, Str(buf, len));
+        ArenaStr big = ArenaStrDup(b, Str(buf.s, len));
         utassert(ArenaStrLen(b, big) == (uint32_t)len);
-        utassert(base::StrEq(ArenaStrGet(b, big), Str(buf, len)));
+        utassert(base::StrEq(ArenaStrGet(b, big), Str(buf.s, len)));
         int want = len < 128 ? 1 : 2;
         utassert(ArenaUsed(b) == was + (uint64_t)want + len + 1);
         ArenaDelete(b);
@@ -92,20 +92,20 @@ static void TheLengthRidesAlongInOneByte() {
 // the characters shift over to make room. The string it names does not move.
 static void GrowingPastTheOneByteLength() {
     Arena* a = ArenaNew();
-    char buf[200];
-    for (int i = 0; i < (int)sizeof(buf); i++) {
-        buf[i] = (char)('a' + (i % 26));
+    TempStr buf = AllocStrTemp(200);
+    for (int i = 0; i < buf.len; i++) {
+        buf.s[i] = (char)('a' + (i % 26));
     }
-    ArenaStr s = ArenaStrDup(a, Str(buf, 120));
+    ArenaStr s = ArenaStrDup(a, Str(buf.s, 120));
     ArenaStr was = s;
     uint64_t after = ArenaUsed(a);
 
     // 120 -> 130: one byte for the ten characters' worth of prefix growth,
     // ten for the characters.
-    s = ArenaStrAppend(a, s, Str(buf + 120, 10));
+    s = ArenaStrAppend(a, s, Str(buf.s + 120, 10));
     utassert(s == was);
     utassert(ArenaStrLen(a, s) == 130);
-    utassert(base::StrEq(ArenaStrGet(a, s), Str(buf, 130)));
+    utassert(base::StrEq(ArenaStrGet(a, s), Str(buf.s, 130)));
     utassert(ArenaUsed(a) == after + 1 + 10);
 
     Str got = ArenaStrGet(a, s);

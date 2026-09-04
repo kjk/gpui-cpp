@@ -37,7 +37,7 @@ extern int gBenchSamples;
 extern bool gBenchSmall;
 extern bool gBenchLarge;
 // Only benchmarks whose group or name contains this run. Null means all.
-extern const char* gBenchFilter;
+extern Str gBenchFilter;
 
 /* Runs one benchmark and prints its row.
 

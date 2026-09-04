@@ -9,13 +9,7 @@
 #include "Test.h"
 
 static Str Stepped(const char* value, StepAction action, double step) {
-    static char out[64];
-    out[0] = 0;
-    if (!NumberStepValue(Str(value), action, step, false, 0, false, 0, out,
-                         (int)sizeof(out))) {
-        return {};
-    }
-    return Str(out);
+    return NumberStepValueTemp(Str(value), action, step, false, 0, false, 0);
 }
 
 static void AStepKeepsTheTextsPrecision() {
@@ -39,44 +33,43 @@ static void TextThatIsNotANumberStepsFromZero() {
 }
 
 static void TheRangeClampsAndWidens() {
-    char out[64];
-    utassert(NumberStepValue(StrL("9"), StepAction::Increment, 5, false, 0,
-                             true, 10.5, out, (int)sizeof(out)));
+    TempStr out = NumberStepValueTemp(StrL("9"), StepAction::Increment, 5,
+                                      false, 0, true, 10.5);
+    utassert(out);
     // Clamped to the max, whose own precision widens the result.
-    utassert(StrEqI(Str(out), "10.5"));
+    utassert(StrEqI(out, "10.5"));
 
-    utassert(NumberStepValue(StrL("1"), StepAction::Decrement, 5, true, 0.25,
-                             false, 0, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), "0.25"));
+    out = NumberStepValueTemp(StrL("1"), StepAction::Decrement, 5, true, 0.25,
+                              false, 0);
+    utassert(out && StrEqI(out, "0.25"));
 
     // With no current value the range is entered immediately, in either
     // direction. A value already outside the range may only move in the
     // pressed direction — clamping it across itself is not a decrement.
-    utassert(NumberStepValue(Str{}, StepAction::Increment, 1, true, 10,
-                             false, 0, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), "10"));
-    utassert(NumberStepValue(Str{}, StepAction::Decrement, 1, true, 10,
-                             false, 0, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), "10"));
-    utassert(!NumberStepValue(StrL("5"), StepAction::Decrement, 1, true, 10,
-                              false, 0, out, (int)sizeof(out)));
-    utassert(!NumberStepValue(StrL("1000"), StepAction::Increment, 1, false,
-                              0, true, 100, out, (int)sizeof(out)));
-    utassert(NumberStepValue(StrL("1000"), StepAction::Decrement, 1, false,
-                             0, true, 100, out, (int)sizeof(out)));
-    utassert(StrEqI(Str(out), "100"));
+    out = NumberStepValueTemp(Str{}, StepAction::Increment, 1, true, 10, false,
+                              0);
+    utassert(out && StrEqI(out, "10"));
+    out = NumberStepValueTemp(Str{}, StepAction::Decrement, 1, true, 10, false,
+                              0);
+    utassert(out && StrEqI(out, "10"));
+    utassert(!NumberStepValueTemp(StrL("5"), StepAction::Decrement, 1, true, 10,
+                                  false, 0));
+    utassert(!NumberStepValueTemp(StrL("1000"), StepAction::Increment, 1, false,
+                                  0, true, 100));
+    out = NumberStepValueTemp(StrL("1000"), StepAction::Decrement, 1, false, 0,
+                              true, 100);
+    utassert(out && StrEqI(out, "100"));
 }
 
 static void AStepThatDoesNotMoveIsNoStep() {
-    char out[64];
     // Already at the max: the clamp puts it back where it started.
-    utassert(!NumberStepValue(StrL("10"), StepAction::Increment, 1, false, 0,
-                              true, 10, out, (int)sizeof(out)));
-    utassert(!NumberStepValue(StrL("0"), StepAction::Decrement, 1, true, 0,
-                              false, 0, out, (int)sizeof(out)));
+    utassert(!NumberStepValueTemp(StrL("10"), StepAction::Increment, 1, false,
+                                  0, true, 10));
+    utassert(!NumberStepValueTemp(StrL("0"), StepAction::Decrement, 1, true, 0,
+                                  false, 0));
     // A zero step moves nothing in either direction.
-    utassert(!NumberStepValue(StrL("3"), StepAction::Increment, 0, false, 0,
-                              false, 0, out, (int)sizeof(out)));
+    utassert(!NumberStepValueTemp(StrL("3"), StepAction::Increment, 0, false, 0,
+                                  false, 0));
 }
 
 static double BoundaryStep(double current, StepAction action, App*,
@@ -126,26 +119,23 @@ static void ApplyStepValidatesAndFallsBackToTheStepEvent() {
     Listener onStep = ListenTo(sink, &NumberEventSink::OnStep);
 
     state.validate = &RejectFour;
-    utassert(NumberInputApplyStep(&state, &app, nullptr,
-                                  StepAction::Increment, &one, false, 0,
-                                  false, 0, false, onStep));
+    utassert(NumberInputApplyStep(&state, &app, nullptr, StepAction::Increment,
+                                  &one, false, 0, false, 0, false, onStep));
     utassert(StrEqI(InputValue(&state), "3"));
     utassert(sink.Get(&app)->count == 1);
     utassert(sink.Get(&app)->last == StepAction::Increment);
 
     state.validate = nullptr;
-    utassert(NumberInputApplyStep(&state, &app, nullptr,
-                                  StepAction::Decrement, &one, true, 0,
-                                  false, 0, false, onStep));
+    utassert(NumberInputApplyStep(&state, &app, nullptr, StepAction::Decrement,
+                                  &one, true, 0, false, 0, false, onStep));
     utassert(StrEqI(InputValue(&state), "2"));
     utassert(sink.Get(&app)->count == 1);
     utassert(state.maskPattern.kind == MaskKind::Number);
     utassert(!state.maskPatternSet);
 
     state.disabled = true;
-    utassert(!NumberInputApplyStep(&state, &app, nullptr,
-                                   StepAction::Increment, &one, false, 0,
-                                   false, 0, false, onStep));
+    utassert(!NumberInputApplyStep(&state, &app, nullptr, StepAction::Increment,
+                                   &one, false, 0, false, 0, false, onStep));
     utassert(StrEqI(InputValue(&state), "2"));
     EntityDropAll(&app);
 }
@@ -187,8 +177,7 @@ static void ThemedDefaultUsesOneSharedSemanticStep() {
     El* semantic = root->first;
     utassert(inc && inc->onClick.IsValid());
     utassert(dec && dec->onClick.IsValid());
-    utassert(semantic &&
-             semantic->accessibilityIncrementDirect.IsValid());
+    utassert(semantic && semantic->accessibilityIncrementDirect.IsValid());
     utassert(semantic->accessibilityDecrementDirect.IsValid());
 
     inc->onClick.Call();
@@ -225,9 +214,9 @@ static void ThemedDefaultUsesOneSharedSemanticStep() {
     El* rightDec = Div(a);
     El* rightInput = Div(a);
     El* rightInc = Div(a);
-    El* stacked = gpui::NumberInput::Compose(
-        &cx, StrL("stacked"), &state, false, rightDec, rightInput, rightInc,
-        true);
+    El* stacked =
+        gpui::NumberInput::Compose(&cx, StrL("stacked"), &state, false,
+                                   rightDec, rightInput, rightInc, true);
     utassert(stacked->first && stacked->first->first == rightInput);
     El* controls = stacked->first->next;
     utassert(controls && controls->first == rightInc);

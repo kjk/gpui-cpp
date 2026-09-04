@@ -27,24 +27,23 @@ static void FullMatchesAreCaseInsensitiveAndOverlap() {
     utassert(n == 1);
     utassert(ranges[0].start == 6 && ranges[0].end == 11);
 
-    Label* repeated =
-        Label::New(&cx, StrL("Hello Hello Hello"))->Highlights(StrL("Hello"));
+    Label* repeated = Label::New(&cx, StrL("Hello Hello Hello"))
+                          ->Highlights(StrL("Hello"));
     n = repeated->HighlightRanges(17, ranges, 16);
     utassert(n == 3);
     utassert(ranges[0].start == 0 && ranges[0].end == 5);
     utassert(ranges[1].start == 6 && ranges[1].end == 11);
     utassert(ranges[2].start == 12 && ranges[2].end == 17);
 
-    Label* overlapping =
-        Label::New(&cx, StrL("aaaa"))->Highlights(StrL("aa"));
+    Label* overlapping = Label::New(&cx, StrL("aaaa"))->Highlights(StrL("aa"));
     n = overlapping->HighlightRanges(4, ranges, 16);
     utassert(n == 3);
     utassert(ranges[0].start == 0 && ranges[0].end == 2);
     utassert(ranges[1].start == 1 && ranges[1].end == 3);
     utassert(ranges[2].start == 2 && ranges[2].end == 4);
 
-    Label* unicode =
-        Label::New(&cx, StrL("你好世界，Hello World"))->Highlights(StrL("世界"));
+    Label* unicode = Label::New(&cx, StrL("你好世界，Hello World"))
+                         ->Highlights(StrL("世界"));
     n = unicode->HighlightRanges(unicode->text.len, ranges, 16);
     utassert(n == 1);
     utassert(ranges[0].start == 6 && ranges[0].end == 12);
@@ -113,10 +112,8 @@ static void RenderUsesOneStyledRunAndRealBullets() {
         utassert(LabelColorEq(styled->spans[1].color, th.mutedFg));
     }
 
-    El* overlap = Label::New(&cx, StrL("aaaa"))
-                      ->Highlights(StrL("aa"))
-                      ->IntoEl()
-                      ->first;
+    El* overlap =
+        Label::New(&cx, StrL("aaaa"))->Highlights(StrL("aa"))->IntoEl()->first;
     utassert(overlap && overlap->nSpans == 1);
     utassert(overlap && overlap->spans[0].lo == 0);
     utassert(overlap && overlap->spans[0].hi == 4);
@@ -126,15 +123,11 @@ static void RenderUsesOneStyledRunAndRealBullets() {
     utassert(masked && masked->text.len == 6);
     utassert(masked && base::StrEq(masked->text, "••"));
 
-    char longText[81];
+    TempStr longText = AllocStrTemp(80);
     for (int i = 0; i < 80; i++) {
-        longText[i] = 'x';
+        longText.s[i] = 'x';
     }
-    longText[80] = 0;
-    El* longMasked = Label::New(&cx, Str(longText, 80))
-                         ->Masked(true)
-                         ->IntoEl()
-                         ->first;
+    El* longMasked = Label::New(&cx, longText)->Masked(true)->IntoEl()->first;
     utassert(longMasked && longMasked->text.len == 240);
 
     AppGlobalClear(&app);

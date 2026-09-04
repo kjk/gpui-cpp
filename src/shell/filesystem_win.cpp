@@ -12,9 +12,10 @@ namespace gpui::shell {
 #define FILE_OPEN_REPARSE_POINT 0x00200000
 #endif
 
-using NtCreateFileProc = NTSTATUS(NTAPI*)(
-    PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PIO_STATUS_BLOCK,
-    PLARGE_INTEGER, ULONG, ULONG, ULONG, ULONG, PVOID, ULONG);
+using NtCreateFileProc = NTSTATUS(NTAPI*)(PHANDLE, ACCESS_MASK,
+                                          POBJECT_ATTRIBUTES, PIO_STATUS_BLOCK,
+                                          PLARGE_INTEGER, ULONG, ULONG, ULONG,
+                                          ULONG, PVOID, ULONG);
 
 static void FsError(Str* error, Str message) {
     if (!error) return;
@@ -34,9 +35,8 @@ static WCHAR* WideDup(Str value) {
     if (value.len > 0 && count <= 0) return nullptr;
     WCHAR* result = AllocArray<WCHAR>(count + 1);
     if (!result) return nullptr;
-    if (count > 0 &&
-        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.s, value.len,
-                            result, count) != count) {
+    if (count > 0 && MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.s,
+                                         value.len, result, count) != count) {
         Free(nullptr, result);
         return nullptr;
     }
@@ -67,8 +67,7 @@ static bool NtSuccess(NTSTATUS status) {
 }
 
 static bool NtMissing(NTSTATUS status) {
-    return status == (NTSTATUS)0xC0000034L ||
-           status == (NTSTATUS)0xC000003AL ||
+    return status == (NTSTATUS)0xC0000034L || status == (NTSTATUS)0xC000003AL ||
            status == (NTSTATUS)0xC000000FL;
 }
 
@@ -124,8 +123,9 @@ static bool EnsureAmbientRoot(Str root, Str* error) {
         path[i] = 0;
         if (path[0] && !CreateDirectoryW(path, nullptr) &&
             GetLastError() != ERROR_ALREADY_EXISTS) {
-            FsError(error, fmt("cannot create granted root `%s`: Windows error %u",
-                               root, GetLastError()));
+            FsError(error,
+                    fmt("cannot create granted root `%s`: Windows error %u",
+                        root, GetLastError()));
             Free(nullptr, path);
             return false;
         }
@@ -148,8 +148,9 @@ static HANDLE OpenRoot(Str root, bool create, Str* error) {
         return nullptr;
     }
     HANDLE result = CreateFileW(
-        path, FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
-                  SYNCHRONIZE,
+        path,
+        FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
+            SYNCHRONIZE,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
         OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     DWORD firstError = result == INVALID_HANDLE_VALUE ? GetLastError() : 0;
@@ -158,8 +159,9 @@ static HANDLE OpenRoot(Str root, bool create, Str* error) {
          firstError == ERROR_FILE_NOT_FOUND) &&
         EnsureAmbientRoot(root, error)) {
         result = CreateFileW(
-            path, FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
-                      SYNCHRONIZE,
+            path,
+            FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
+                SYNCHRONIZE,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
             OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     }
@@ -191,15 +193,15 @@ static HANDLE OpenDirectoryAt(HANDLE parent, const WCHAR* name,
     return result;
 }
 
-static bool OpenParent(HANDLE root, Str rootName, Str relative,
-                       HANDLE* parent, WCHAR leaf[256], Str* error) {
+static bool OpenParent(HANDLE root, Str rootName, Str relative, HANDLE* parent,
+                       WCHAR leaf[256], Str* error) {
     *parent = nullptr;
     leaf[0] = 0;
     if (StrEq(relative, ".")) {
         if (!DuplicateHandle(GetCurrentProcess(), root, GetCurrentProcess(),
                              parent, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
-            FsError(error, fmt("cannot open `%s/%s`: Windows error %u", rootName,
-                               relative, GetLastError()));
+            FsError(error, fmt("cannot open `%s/%s`: Windows error %u",
+                               rootName, relative, GetLastError()));
             return false;
         }
         wcscpy(leaf, L".");
@@ -218,7 +220,8 @@ static bool OpenParent(HANDLE root, Str rootName, Str relative,
         WCHAR* slash = wcschr(at, L'/');
         if (slash) *slash = 0;
         if (!ValidComponent(at) || wcslen(at) >= 256) {
-            FsError(error, fmt("refusing invalid path component in `%s`", relative));
+            FsError(error,
+                    fmt("refusing invalid path component in `%s`", relative));
             ok = false;
             break;
         }
@@ -256,7 +259,8 @@ static HANDLE OpenDirectory(HANDLE root, Str rootName, Str relative,
     }
     HANDLE parent = nullptr;
     WCHAR leaf[256];
-    if (!OpenParent(root, rootName, relative, &parent, leaf, error)) return nullptr;
+    if (!OpenParent(root, rootName, relative, &parent, leaf, error))
+        return nullptr;
     NTSTATUS status = 0;
     HANDLE result = OpenDirectoryAt(parent, leaf, &status);
     if (!result) NtError(error, "open directory", rootName, relative, status);
@@ -268,7 +272,8 @@ static bool ReadGrantedFile(HANDLE root, Str rootName, Str relative,
                             FsResult* result, Str* error) {
     HANDLE parent = nullptr;
     WCHAR leaf[256];
-    if (!OpenParent(root, rootName, relative, &parent, leaf, error)) return false;
+    if (!OpenParent(root, rootName, relative, &parent, leaf, error))
+        return false;
     NTSTATUS status = 0;
     HANDLE file = OpenAt(parent, leaf, GENERIC_READ | SYNCHRONIZE, FILE_OPEN,
                          FILE_NON_DIRECTORY_FILE, &status);
@@ -287,8 +292,10 @@ static bool ReadGrantedFile(HANDLE root, Str rootName, Str relative,
         return false;
     }
     if (size.QuadPart > kFsMaxReadBytes) {
-        FsError(error, fmt("`%s/%s` is %lld bytes, over the %d-byte limit for fs.readFile",
-                           rootName, relative, size.QuadPart, kFsMaxReadBytes));
+        FsError(
+            error,
+            fmt("`%s/%s` is %lld bytes, over the %d-byte limit for fs.readFile",
+                rootName, relative, size.QuadPart, kFsMaxReadBytes));
         CloseHandle(file);
         return false;
     }
@@ -298,15 +305,16 @@ static bool ReadGrantedFile(HANDLE root, Str rootName, Str relative,
         char bytes[8192];
         DWORD count = 0;
         if (!::ReadFile(file, bytes, sizeof(bytes), &count, nullptr)) {
-            FsError(error, fmt("cannot read `%s/%s`: Windows error %u", rootName,
-                               relative, GetLastError()));
+            FsError(error, fmt("cannot read `%s/%s`: Windows error %u",
+                               rootName, relative, GetLastError()));
             ok = false;
             break;
         }
         if (count == 0) break;
         if (output.len > kFsMaxReadBytes - (int)count) {
-            FsError(error, fmt("`%s/%s` grew over the %d-byte limit for fs.readFile",
-                               rootName, relative, kFsMaxReadBytes));
+            FsError(error,
+                    fmt("`%s/%s` grew over the %d-byte limit for fs.readFile",
+                        rootName, relative, kFsMaxReadBytes));
             ok = false;
             break;
         }
@@ -317,11 +325,12 @@ static bool ReadGrantedFile(HANDLE root, Str rootName, Str relative,
     return ok;
 }
 
-static bool WriteGrantedFile(HANDLE root, Str rootName, Str relative,
-                             Str input, Str* error) {
+static bool WriteGrantedFile(HANDLE root, Str rootName, Str relative, Str input,
+                             Str* error) {
     HANDLE parent = nullptr;
     WCHAR leaf[256];
-    if (!OpenParent(root, rootName, relative, &parent, leaf, error)) return false;
+    if (!OpenParent(root, rootName, relative, &parent, leaf, error))
+        return false;
     NTSTATUS status = 0;
     HANDLE file = OpenAt(parent, leaf, GENERIC_WRITE | SYNCHRONIZE,
                          FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &status);
@@ -338,8 +347,8 @@ static bool WriteGrantedFile(HANDLE root, Str rootName, Str relative,
         DWORD wanted = (DWORD)(input.len - written);
         if (!::WriteFile(file, input.s + written, wanted, &count, nullptr) ||
             count == 0) {
-            FsError(error, fmt("cannot write `%s/%s`: Windows error %u", rootName,
-                               relative, GetLastError()));
+            FsError(error, fmt("cannot write `%s/%s`: Windows error %u",
+                               rootName, relative, GetLastError()));
             CloseHandle(file);
             return false;
         }
@@ -358,9 +367,7 @@ static bool WriteGrantedFile(HANDLE root, Str rootName, Str relative,
 static int CompareEntry(const void* left, const void* right) {
     const FsEntry* a = (const FsEntry*)left;
     const FsEntry* b = (const FsEntry*)right;
-    int count = a->name.len < b->name.len ? a->name.len : b->name.len;
-    int compared = memcmp(a->name.s, b->name.s, (size_t)count);
-    return compared ? compared : a->name.len - b->name.len;
+    return StrCmp(a->name, b->name);
 }
 
 static bool ReadDirectory(HANDLE root, Str rootName, Str relative,
@@ -376,8 +383,8 @@ static bool ReadDirectory(HANDLE root, Str rootName, Str relative,
                                           sizeof(buffer))) {
             DWORD code = GetLastError();
             if (code == ERROR_NO_MORE_FILES) break;
-            FsError(error, fmt("cannot list `%s/%s`: Windows error %u", rootName,
-                               relative, code));
+            FsError(error, fmt("cannot list `%s/%s`: Windows error %u",
+                               rootName, relative, code));
             ok = false;
             break;
         }
@@ -394,33 +401,35 @@ static bool ReadDirectory(HANDLE root, Str rootName, Str relative,
                 if (!name.s || result->entries.len >= kFsMaxDirectoryEntries ||
                     nameBytes > kFsMaxDirectoryNameBytes) {
                     StrFree(name);
-                    FsError(error, fmt("directory exceeded the %d-entry or %d-name-byte fs.readdir limit",
+                    FsError(error, fmt("directory exceeded the %d-entry or "
+                                       "%d-name-byte fs.readdir limit",
                                        kFsMaxDirectoryEntries,
                                        kFsMaxDirectoryNameBytes));
                     ok = false;
                     break;
                 }
-                FsEntry value = {
-                    name,
-                    (entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
-                        (entry->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0};
+                FsEntry value = {name, (entry->FileAttributes &
+                                        FILE_ATTRIBUTE_DIRECTORY) != 0 &&
+                                           (entry->FileAttributes &
+                                            FILE_ATTRIBUTE_REPARSE_POINT) == 0};
                 if (!VecAppend(result->entries, value)) {
                     StrFree(name);
-                    FsError(error, StrL("allocating an fs.readdir result failed"));
+                    FsError(error,
+                            StrL("allocating an fs.readdir result failed"));
                     ok = false;
                     break;
                 }
             }
             if (entry->NextEntryOffset == 0) break;
-            entry = (FILE_ID_BOTH_DIR_INFO*)((char*)entry +
-                                             entry->NextEntryOffset);
+            entry =
+                (FILE_ID_BOTH_DIR_INFO*)((char*)entry + entry->NextEntryOffset);
         }
         if (!ok) break;
     }
     CloseHandle(directory);
     if (ok && result->entries.len > 1) {
-        qsort(result->entries.els, (size_t)result->entries.len,
-              sizeof(FsEntry), CompareEntry);
+        qsort(result->entries.els, (size_t)result->entries.len, sizeof(FsEntry),
+              CompareEntry);
     }
     return ok;
 }
@@ -438,16 +447,16 @@ static bool MakeDirectoryRecursive(HANDLE root, Str rootName, Str relative,
         WCHAR* slash = wcschr(at, L'/');
         if (slash) *slash = 0;
         if (!ValidComponent(at) || wcslen(at) >= 256) {
-            FsError(error, fmt("refusing invalid path component in `%s`", relative));
+            FsError(error,
+                    fmt("refusing invalid path component in `%s`", relative));
             ok = false;
             break;
         }
         NTSTATUS status = 0;
-        HANDLE next = OpenAt(
-            current, at,
-            FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
-                SYNCHRONIZE,
-            FILE_OPEN_IF, FILE_DIRECTORY_FILE, &status);
+        HANDLE next = OpenAt(current, at,
+                             FILE_LIST_DIRECTORY | FILE_TRAVERSE |
+                                 FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                             FILE_OPEN_IF, FILE_DIRECTORY_FILE, &status);
         if (!next || IsReparse(next)) {
             if (next) CloseHandle(next);
             NtError(error, "create", rootName, relative,
@@ -468,7 +477,8 @@ static bool MakeDirectoryRecursive(HANDLE root, Str rootName, Str relative,
 static bool DeleteHandle(HANDLE handle, Str root, Str relative, Str* error) {
     FILE_DISPOSITION_INFO disposition = {TRUE};
     if (SetFileInformationByHandle(handle, FileDispositionInfo, &disposition,
-                                   sizeof(disposition))) return true;
+                                   sizeof(disposition)))
+        return true;
     FsError(error, fmt("cannot remove `%s/%s`: Windows error %u", root,
                        relative, GetLastError()));
     return false;
@@ -505,21 +515,22 @@ bool FsRun(FsOperation operation, Str rootName, Str relative, Str input,
         if (ok) {
             NTSTATUS status = 0;
             if (operation == FsOperation::Exists) {
-                HANDLE target = OpenAt(parent, leaf,
-                                       FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                                       FILE_OPEN, 0, &status);
+                HANDLE target =
+                    OpenAt(parent, leaf, FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                           FILE_OPEN, 0, &status);
                 result->exists = target != nullptr;
-                if (target) CloseHandle(target);
+                if (target)
+                    CloseHandle(target);
                 else if (!NtMissing(status)) {
                     NtError(error, "inspect", rootName, relative, status);
                     ok = false;
                 }
             } else if (operation == FsOperation::MakeDirectory) {
-                HANDLE target = OpenAt(
-                    parent, leaf,
-                    FILE_LIST_DIRECTORY | FILE_TRAVERSE |
-                        FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                    FILE_CREATE, FILE_DIRECTORY_FILE, &status);
+                HANDLE target =
+                    OpenAt(parent, leaf,
+                           FILE_LIST_DIRECTORY | FILE_TRAVERSE |
+                               FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                           FILE_CREATE, FILE_DIRECTORY_FILE, &status);
                 ok = target != nullptr && !IsReparse(target);
                 if (target) CloseHandle(target);
                 if (!ok) NtError(error, "create", rootName, relative, status);
@@ -527,10 +538,9 @@ bool FsRun(FsOperation operation, Str rootName, Str relative, Str input,
                 ULONG options = operation == FsOperation::RemoveDirectory
                                     ? FILE_DIRECTORY_FILE
                                     : FILE_NON_DIRECTORY_FILE;
-                HANDLE target = OpenAt(parent, leaf,
-                                       DELETE | FILE_READ_ATTRIBUTES |
-                                           SYNCHRONIZE,
-                                       FILE_OPEN, options, &status);
+                HANDLE target = OpenAt(
+                    parent, leaf, DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_OPEN, options, &status);
                 ok = target != nullptr;
                 if (target) {
                     ok = DeleteHandle(target, rootName, relative, error);

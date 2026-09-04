@@ -18,18 +18,8 @@ float StrToFloatUnchecked(Str s) {
     if (!s.s || s.len <= 0) {
         return 0;
     }
-    char local[128];
-    char* buf = local;
-    if (s.len >= (int)sizeof(local)) {
-        Str temp = AllocStrTemp(s.len);
-        if (!temp.s) {
-            return 0;
-        }
-        buf = temp.s;
-    }
-    memcpy(buf, s.s, (size_t)s.len);
-    buf[s.len] = 0;
-    return strtof(buf, nullptr);
+    TempStr text = StrDupTemp(s);
+    return text.s ? strtof(text.s, nullptr) : 0;
 }
 
 int StrToIntUnchecked(Str s) {
@@ -635,7 +625,7 @@ void DestroyTempArena() {
 }
 
 // allocate null-terminated string
-Str AllocStrTemp(int size) {
+TempStr AllocStrTemp(int size) {
     if (size == 0) {
         return {};
     }
@@ -643,6 +633,31 @@ Str AllocStrTemp(int size) {
     char* res = (char*)arena->Push((uint64_t)size + 1, 1, false);
     res[size] = 0;
     return Str(res, size);
+}
+
+TempStr StrDupTemp(Str s) {
+    return StrDup(GetTempArena(), s);
+}
+
+TempStr ReadBoundedFileTemp(Str path, int limit) {
+    if (!path || limit <= 0) {
+        return {};
+    }
+    TempStr pathZ = StrDupTemp(path);
+    FILE* file = fopen(pathZ.s, "rb");
+    if (!file) {
+        return {};
+    }
+    TempStr result = AllocStrTemp(limit);
+    size_t n = fread(result.s, 1, (size_t)limit + 1, file);
+    bool ok = !ferror(file) && n <= (size_t)limit;
+    fclose(file);
+    if (!ok) {
+        return {};
+    }
+    result.s[n] = 0;
+    result.len = (int)n;
+    return result;
 }
 
 // Grow/shrink vec storage to newCap elements, plus one trailing zero-pad
@@ -1109,6 +1124,15 @@ GPUI_NOINLINE bool StrEqRest(Str s1, Str s2) {
 
 bool StrEq(Str s1, const char* s2) {
     return StrEq(s1, Str(s2));
+}
+
+int StrCmp(Str s1, Str s2) {
+    int common = std::min(s1.len, s2.len);
+    int cmp = common > 0 ? memcmp(s1.s, s2.s, (size_t)common) : 0;
+    if (cmp != 0) {
+        return cmp;
+    }
+    return s1.len < s2.len ? -1 : s1.len > s2.len ? 1 : 0;
 }
 
 GPUI_NOINLINE bool StrEqIRest(Str s1, Str s2) {

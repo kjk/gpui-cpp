@@ -15,82 +15,35 @@ struct TypesDirectory {
     int depth = 0;
 };
 
-static bool JoinPath(char* out, int cap, Str directory, Str name) {
-    if (!out || cap <= 0 || !directory || !name) return false;
+static TempStr JoinPathTemp(Str directory, Str name) {
+    if (!directory || !name) return {};
     bool separator = directory.s[directory.len - 1] != '/' &&
                      directory.s[directory.len - 1] != '\\';
     int len = directory.len + (separator ? 1 : 0) + name.len;
-    if (len >= cap) return false;
-    memcpy(out, directory.s, (size_t)directory.len);
-    int at = directory.len;
-    if (separator) out[at++] = GPUI_OS_WINDOWS ? '\\' : '/';
-    memcpy(out + at, name.s, (size_t)name.len);
-    out[len] = 0;
-    return true;
-}
-
-static bool ReadBounded(Str path, int limit, Str* out) {
-    *out = {};
-    if (!path || path.len >= kMaxPath) return false;
-    char name[kMaxPath];
-    memcpy(name, path.s, (size_t)path.len);
-    name[path.len] = 0;
-    FILE* file = fopen(name, "rb");
-    if (!file) return false;
-    Vec<char> bytes;
-    char block[16384];
-    bool ok = true;
-    for (;;) {
-        size_t count = fread(block, 1, sizeof(block), file);
-        if (count > 0) {
-            char* destination = VecAppendBlanks(bytes, (int)count);
-            if (bytes.len > limit || !destination) {
-                ok = false;
-                break;
-            }
-            memcpy(destination, block, count);
-        }
-        if (count != sizeof(block)) {
-            if (ferror(file)) ok = false;
-            break;
-        }
-    }
-    fclose(file);
-    if (!ok) {
-        VecReset(bytes);
-        return false;
-    }
-    int len = bytes.len;
-    char* data = bytes.els;
-    bytes.els = nullptr;
-    bytes.len = bytes.cap = 0;
-    *out = Str(data, len);
-    return true;
+    if (len >= kMaxPath) return {};
+    if (!separator) return fmt("%s%s", directory, name);
+    return fmt("%s%c%s", directory, GPUI_OS_WINDOWS ? '\\' : '/', name);
 }
 
 static bool SourceImportsBuiltins(Str source) {
     static const char* specifiers[] = {"gpui", "gpui-base", "gpui-shell",
                                        "gpui-fps"};
-    char quoted[32];
     for (int i = 0; i < 4; i++) {
-        snprintf(quoted, sizeof(quoted), "\"%s\"", specifiers[i]);
-        if (StrContains(source, Str(quoted))) return true;
-        snprintf(quoted, sizeof(quoted), "'%s'", specifiers[i]);
-        if (StrContains(source, Str(quoted))) return true;
+        TempStr quoted = fmt("\"%s\"", Str(specifiers[i]));
+        if (StrContains(source, quoted)) return true;
+        quoted = fmt("'%s'", Str(specifiers[i]));
+        if (StrContains(source, quoted)) return true;
     }
     return false;
 }
 
-static bool IsScript(const char* name) {
-    if (!name) return false;
-    int len = (int)strlen(name);
-    return (len > 3 && strcmp(name + len - 3, ".js") == 0) ||
-           (len > 4 && strcmp(name + len - 4, ".mjs") == 0);
+static bool IsScript(Str name) {
+    return StrEndsWith(name, ".js") || StrEndsWith(name, ".mjs");
 }
 
-static bool SkipDirectory(const char* name) {
-    return !name || name[0] == '.' || strcmp(name, "node_modules") == 0 ||
-           strcmp(name, "target") == 0;
+static bool SkipDirectory(Str name) {
+    return !name || name.s[0] == '.' || StrEq(name, "node_modules") ||
+           StrEq(name, "target");
 }
 
 static bool AppendDirectory(Vec<TypesDirectory>* directories, Str path,
@@ -131,9 +84,8 @@ static void AppendReindented(StrBuilder* out, Str declarations) {
         while (lineEnd < declarations.len && declarations.s[lineEnd] != '\n')
             lineEnd++;
         int end = lineEnd;
-        while (end > at &&
-               (declarations.s[end - 1] == ' ' ||
-                declarations.s[end - 1] == '\t'))
+        while (end > at && (declarations.s[end - 1] == ' ' ||
+                            declarations.s[end - 1] == '\t'))
             end--;
         if (end == at) {
             out->AppendChar('\n');
@@ -228,26 +180,24 @@ static const char* const kEditorConfig =
 // author's own settings alone.
 static bool WriteEditorConfig(Str directory, bool* wrote, ShellError* error) {
     if (wrote) *wrote = false;
-    char path[kMaxPath];
-    char existing[kMaxPath];
-    if (!JoinPath(path, sizeof(path), directory, Str(kShellConfigFile)) ||
-        !JoinPath(existing, sizeof(existing), directory,
-                  Str(kShellTypeScriptConfigFile))) {
+    TempStr path = JoinPathTemp(directory, Str(kShellConfigFile));
+    TempStr existing = JoinPathTemp(directory, Str(kShellTypeScriptConfigFile));
+    if (!path || !existing) {
         ShellErrorSet(error, StrL("editor configuration path is too long"));
         return false;
     }
-    if (PlatFileExists(path) || PlatDirExists(path) ||
-        PlatFileExists(existing) || PlatDirExists(existing))
+    if (PlatFileExists(path.s) || PlatDirExists(path.s) ||
+        PlatFileExists(existing.s) || PlatDirExists(existing.s))
         return true;
     Str contents(kEditorConfig);
-    FILE* file = fopen(path, "wb");
+    FILE* file = fopen(path.s, "wb");
     if (!file) {
-        ShellErrorSet(error, fmt("cannot write `%s`", Str(path)));
+        ShellErrorSet(error, fmt("cannot write `%s`", path));
         return false;
     }
     size_t count = fwrite(contents.s, 1, (size_t)contents.len, file);
     if (count != (size_t)contents.len || fclose(file) != 0) {
-        ShellErrorSet(error, fmt("cannot write `%s`", Str(path)));
+        ShellErrorSet(error, fmt("cannot write `%s`", path));
         return false;
     }
     if (wrote) *wrote = true;
@@ -264,11 +214,10 @@ static bool HasSymlinkDeclaration(Str directory, DirEntry* entries,
         return true;
     }
     for (int i = 0; i < count; i++) {
-        if (strcmp(entries[i].name, kShellTypesFile) == 0 &&
-            entries[i].isSymlink) {
-            ShellErrorSet(error,
-                          fmt("refusing to replace symlink `%s/%s`", directory,
-                              Str(kShellTypesFile)));
+        if (StrEq(Str(entries[i].name), kShellTypesFile) && entries[i]
+                                                                .isSymlink) {
+            ShellErrorSet(error, fmt("refusing to replace symlink `%s/%s`",
+                                     directory, Str(kShellTypesFile)));
             return true;
         }
     }
@@ -279,27 +228,24 @@ static bool RefreshTypes(Str directory, Str declarations, DirEntry* entries,
                          bool* changed, ShellError* error) {
     if (changed) *changed = false;
     if (HasSymlinkDeclaration(directory, entries, error)) return false;
-    char path[kMaxPath];
-    if (!JoinPath(path, sizeof(path), directory, Str(kShellTypesFile))) {
+    TempStr path = JoinPathTemp(directory, Str(kShellTypesFile));
+    if (!path) {
         ShellErrorSet(error, StrL("type declaration path is too long"));
         return false;
     }
-    Str current;
-    if (ReadBounded(Str(path), kTypesMaxDeclarationBytes, &current) &&
-        StrEq(current, declarations)) {
-        StrFree(current);
+    TempStr current = ReadBoundedFileTemp(path, kTypesMaxDeclarationBytes);
+    if (current.s && StrEq(current, declarations)) {
         return true;
     }
-    StrFree(current);
-    FILE* file = fopen(path, "wb");
+    FILE* file = fopen(path.s, "wb");
     if (!file) {
-        ShellErrorSet(error, fmt("cannot write `%s`", Str(path)));
+        ShellErrorSet(error, fmt("cannot write `%s`", path));
         return false;
     }
     size_t count = fwrite(declarations.s, 1, (size_t)declarations.len, file);
     bool ok = count == (size_t)declarations.len && fclose(file) == 0;
     if (!ok) {
-        ShellErrorSet(error, fmt("cannot write `%s`", Str(path)));
+        ShellErrorSet(error, fmt("cannot write `%s`", path));
         return false;
     }
     if (changed) *changed = true;
@@ -311,15 +257,16 @@ bool ShellWriteTypeDeclarations(Str root, const HostModules* modules,
     ShellErrorClear(error);
     if (written) *written = 0;
     if (!root || root.len >= kMaxPath) {
-        ShellErrorSet(error, StrL("application directory is empty or too long"));
+        ShellErrorSet(error,
+                      StrL("application directory is empty or too long"));
         return false;
     }
     TypesDirectory rootDirectory;
     memcpy(rootDirectory.path, root.s, (size_t)root.len);
     rootDirectory.path[root.len] = 0;
     if (!PlatDirExists(rootDirectory.path)) {
-        ShellErrorSet(error, fmt("application directory `%s` does not exist",
-                                 root));
+        ShellErrorSet(error,
+                      fmt("application directory `%s` does not exist", root));
         return false;
     }
 
@@ -360,33 +307,32 @@ bool ShellWriteTypeDeclarations(Str root, const HostModules* modules,
             if (item.isSymlink || item.name[0] == '.') continue;
             if (item.isDir) {
                 if (directory.depth >= kShellTypesMaxDepth ||
-                    SkipDirectory(item.name))
+                    SkipDirectory(Str(item.name)))
                     continue;
-                char child[kMaxPath];
-                if (!JoinPath(child, sizeof(child), Str(directory.path),
-                              Str(item.name)) ||
-                    !AppendDirectory(&pending, Str(child),
-                                     directory.depth + 1)) {
+                TempStr child =
+                    JoinPathTemp(Str(directory.path), Str(item.name));
+                if (!child ||
+                    !AppendDirectory(&pending, child, directory.depth + 1)) {
                     ok = false;
                     break;
                 }
             } else if (item.isFile) {
                 files++;
-                if (imports || !IsScript(item.name)) continue;
-                char sourcePath[kMaxPath];
-                Str source;
-                if (JoinPath(sourcePath, sizeof(sourcePath),
-                             Str(directory.path), Str(item.name)) &&
-                    ReadBounded(Str(sourcePath), kTypesMaxSourceBytes,
-                                &source)) {
+                if (imports || !IsScript(Str(item.name))) continue;
+                TempStr sourcePath =
+                    JoinPathTemp(Str(directory.path), Str(item.name));
+                TempStr source =
+                    sourcePath
+                        ? ReadBoundedFileTemp(sourcePath, kTypesMaxSourceBytes)
+                        : TempStr{};
+                if (source.s) {
                     imports = SourceImportsBuiltins(source);
                 }
-                StrFree(source);
             }
         }
         if (imports && !StrEq(Str(directory.path), root))
-            ok = AppendDirectory(&targets, Str(directory.path),
-                                 directory.depth);
+            ok =
+                AppendDirectory(&targets, Str(directory.path), directory.depth);
     }
 
     for (int i = 0; ok && i < targets.len; i++) {

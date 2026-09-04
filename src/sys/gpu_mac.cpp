@@ -178,12 +178,8 @@ static bool ProbeOpenLocked() {
     if (!HasAccelerators()) {
         return false;
     }
-    char buf[32];
-    int n = snprintf(buf, sizeof(buf), "pid %d,", (int)getpid());
-    if (n <= 0 || n >= (int)sizeof(buf)) {
-        return false;
-    }
-    gProbe.creator = CFStringCreateWithCString(kCFAllocatorDefault, buf,
+    TempStr creator = fmt("pid %d,", (int)getpid());
+    gProbe.creator = CFStringCreateWithCString(kCFAllocatorDefault, creator.s,
                                                kCFStringEncodingUTF8);
     if (!gProbe.creator) {
         return false;

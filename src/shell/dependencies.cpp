@@ -38,7 +38,8 @@ static bool PathEq(Str a, Str b) {
         char ca = a.s[i];
         char cb = b.s[i];
         if (IsSeparator(ca) && IsSeparator(cb)) continue;
-        if (tolower((unsigned char)ca) != tolower((unsigned char)cb)) return false;
+        if (tolower((unsigned char)ca) != tolower((unsigned char)cb))
+            return false;
     }
     return true;
 #else
@@ -54,22 +55,21 @@ static bool WithinPath(Str root, Str path) {
         char a = root.s[i];
         char b = path.s[i];
         if (IsSeparator(a) && IsSeparator(b)) continue;
-        if (tolower((unsigned char)a) != tolower((unsigned char)b)) return false;
+        if (tolower((unsigned char)a) != tolower((unsigned char)b))
+            return false;
     }
 #else
-    if (memcmp(root.s, path.s, (size_t)root.len) != 0) return false;
+    if (!StrEq(root, Str(path.s, root.len))) return false;
 #endif
     return path.len == root.len || IsSeparator(path.s[root.len]);
 }
 
 static Str Canonical(Str path) {
     if (!path || path.len >= kMaxPath) return {};
-    char input[kMaxPath];
-    char output[kMaxPath];
-    memcpy(input, path.s, (size_t)path.len);
-    input[path.len] = 0;
-    if (!PlatCanonicalPath(input, output, kMaxPath)) return {};
-    return StrDup(Str(output));
+    TempStr input = StrDupTemp(path);
+    TempStr output = AllocStrTemp(kMaxPath - 1);
+    if (!PlatCanonicalPath(input.s, output.s, output.len + 1)) return {};
+    return StrDup(Str(output.s));
 }
 
 static Str TrimAscii(Str value) {
@@ -80,43 +80,10 @@ static Str TrimAscii(Str value) {
     return Str(value.s + start, end - start);
 }
 
-static bool ReadBounded(Str path, int limit, Str* out) {
-    *out = {};
-    if (!path || path.len >= kMaxPath) return false;
-    char name[kMaxPath];
-    memcpy(name, path.s, (size_t)path.len);
-    name[path.len] = 0;
-    FILE* file = fopen(name, "rb");
-    if (!file) return false;
-    Vec<char> bytes;
-    char block[16384];
-    bool ok = true;
-    for (;;) {
-        size_t read = fread(block, 1, sizeof(block), file);
-        if (read > 0) {
-            if (bytes.len > limit - (int)read) {
-                ok = false;
-                break;
-            }
-            memcpy(VecAppendBlanks(bytes, (int)read), block, read);
-        }
-        if (read != sizeof(block)) {
-            if (ferror(file)) ok = false;
-            break;
-        }
-    }
-    fclose(file);
-    if (ok) *out = StrDup(Str(bytes.els, bytes.len));
-    VecReset(bytes);
-    return ok;
-}
-
 static bool WriteWhole(Str path, Str contents) {
     if (!path || path.len >= kMaxPath) return false;
-    char name[kMaxPath];
-    memcpy(name, path.s, (size_t)path.len);
-    name[path.len] = 0;
-    FILE* file = fopen(name, "wb");
+    TempStr name = StrDupTemp(path);
+    FILE* file = fopen(name.s, "wb");
     if (!file) return false;
     bool ok = contents.len == 0 || fwrite(contents.s, 1, (size_t)contents.len,
                                           file) == (size_t)contents.len;
@@ -187,14 +154,13 @@ Str GitDependencyRemoteKey(Str git) {
     uint8_t digest[32];
     Sha256(Str((const char*)input.els, input.len), digest);
     VecReset(input);
-    char hex[65];
+    TempStr hex = AllocStrTemp(64);
     static const char* digits = "0123456789abcdef";
     for (int i = 0; i < 32; i++) {
-        hex[i * 2] = digits[digest[i] >> 4];
-        hex[i * 2 + 1] = digits[digest[i] & 15];
+        hex.s[i * 2] = digits[digest[i] >> 4];
+        hex.s[i * 2 + 1] = digits[digest[i] & 15];
     }
-    hex[64] = 0;
-    return StrDup(Str(hex, 64));
+    return StrDup(hex);
 }
 
 static Mutex gTemporaryMutex;
@@ -309,8 +275,8 @@ static Str DependencyEntryName(Str name, const GitDependency& dependency,
         return {};
     }
     StrFree(manifestPath);
-    Str source = {};
-    if (!ReadBounded(canonical, kShellMaxManifestBytes, &source)) {
+    TempStr source = ReadBoundedFileTemp(canonical, kShellMaxManifestBytes);
+    if (!source.s) {
         DepError(
             error,
             fmt("reading package.json for Git dependency `%s` failed", name));
@@ -320,7 +286,6 @@ static Str DependencyEntryName(Str name, const GitDependency& dependency,
     StrFree(canonical);
     Arena* arena = ArenaNew();
     JsonValue* value = JsonParse(arena, source);
-    StrFree(source);
     if (!value) {
         DepError(error, fmt("Git dependency `%s` package.json must contain "
                             "valid JSON",
@@ -788,9 +753,9 @@ void GitDependencyStore::Prune(Str modules, const Vec<Str>& declared) {
                             : 0;
         for (int i = 0; i < count && i < kEditorPruneMaxEntries; i++) {
             const DirEntry& item = entries[i];
-            if (strcmp(item.name, ".") == 0 || strcmp(item.name, "..") == 0)
-                continue;
-            Str path = JoinPath(directory.path, Str(item.name));
+            Str name = Str(item.name);
+            if (StrEq(name, ".") || StrEq(name, "..")) continue;
+            Str path = JoinPath(directory.path, name);
             bool isDeclared = false;
             for (int d = 0; d < declared.len; d++)
                 if (PathEq(declared[d], path)) isDeclared = true;

@@ -73,11 +73,7 @@ struct Doc {
 
     void Add(const char* s) { Add(Str(s)); }
 
-    void AddInt(int v) {
-        char tmp[16];
-        snprintf(tmp, sizeof(tmp), "%d", v);
-        Add(Str(tmp));
-    }
+    void AddInt(int v) { Add(fmt("%d", v)); }
 
     bool Full(int32_t target) const { return len >= target; }
     Str AsStr() const { return Str(buf, len); }

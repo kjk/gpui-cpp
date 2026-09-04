@@ -94,9 +94,8 @@ int MatchNewline(Str s, int i) {
 }
 
 bool IsIdentifierCh(char c) {
-    return c == '_' || c == '-' || c == '.' ||
-           (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9');
+    return c == '_' || c == '-' || c == '.' || (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
 bool MdIsAsciiAlnumCh(char c) {
@@ -110,8 +109,7 @@ MdNode* ParseInline(MdParser* p, int* pos);
 // string and mark_string. The nodes an attempt builds are arena garbage.
 bool InlineStartsAt(MdParser* p, int i) {
     char c = i < p->s.len ? p->s.s[i] : 0;
-    if (c != '[' && c != '!' && c != '`' && c != '*' && c != '~' &&
-        c != '"') {
+    if (c != '[' && c != '!' && c != '`' && c != '*' && c != '~' && c != '"') {
         return false;
     }
     int at = i;
@@ -169,8 +167,7 @@ int MatchParen(Str s, int i) {
     }
     auto inner = [&s](int from) {
         int j = from;
-        while (j < s.len && s.s[j] != '\n' && s.s[j] != '(' &&
-               s.s[j] != ')' &&
+        while (j < s.len && s.s[j] != '\n' && s.s[j] != '(' && s.s[j] != ')' &&
                !(s.s[j] == '\r' && j + 1 < s.len && s.s[j + 1] == '\n')) {
             j++;
         }
@@ -293,8 +290,8 @@ MdNode* ParseMark(MdParser* p, int* pos) {
             int stringStart = at;
             while (at < s.len && !AtLit(s, at, open)) {
                 char c = s.s[at];
-                if ((c == '[' || c == '!' || c == '`' || c == '*' ||
-                     c == '~' || c == '"')) {
+                if ((c == '[' || c == '!' || c == '`' || c == '*' || c == '~' ||
+                     c == '"')) {
                     p->depth++;
                     bool isInline = InlineStartsAt(p, at);
                     p->depth--;
@@ -1008,22 +1005,22 @@ void WalkNode(Results* res, Str raw, const MdNode* n) {
     Str span(raw.s + n->start, n->end - n->start);
     switch (n->rule) {
         case MdRule::Text:
-            EmitText(res, "text", span);
+            EmitText(res, StrL("text"), span);
             return;
         case MdRule::String:
-            EmitText(res, "string", span);
+            EmitText(res, StrL("string"), span);
             return;
         case MdRule::LinkString:
-            EmitText(res, "link_string", span);
+            EmitText(res, StrL("link_string"), span);
             return;
         case MdRule::MarkString:
-            EmitText(res, "mark_string", span);
+            EmitText(res, StrL("mark_string"), span);
             return;
         case MdRule::InnerText:
-            EmitText(res, "inner_text", span);
+            EmitText(res, StrL("inner_text"), span);
             return;
         case MdRule::Comment:
-            EmitText(res, "comment", span);
+            EmitText(res, StrL("comment"), span);
             return;
         case MdRule::Codeblock: {
             Str lang(raw.s + n->langStart, n->langEnd - n->langStart);

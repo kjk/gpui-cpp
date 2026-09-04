@@ -729,25 +729,17 @@ static void PrintNode(TaffyTree* tree, NodeId node, bool hasSibling,
                   (unsigned long long)node.raw));
 
     // The dump indents with a box-drawing prefix per level. Beyond this depth
-    // the prefix stops growing rather than overflowing the buffer; Rust
-    // builds a String and has no bound.
+    // the prefix stops growing; Rust builds a String and has no bound.
     constexpr int kMaxDepth = 32;
     if (depth >= kMaxDepth) {
         return;
     }
-    char lines[kMaxDepth * 4 + 8];
-    int n = (int)strlen(linesString);
-    if (n > (int)sizeof(lines) - 8) {
-        n = (int)sizeof(lines) - 8;
-    }
-    memcpy(lines, linesString, (size_t)n);
     const char* bar = hasSibling ? "│   " : "    ";
-    memcpy(lines + n, bar, strlen(bar));
-    lines[n + (int)strlen(bar)] = 0;
+    base::TempStr lines = base::fmt("%s%s", Str(linesString), Str(bar));
 
     int count = tree->ChildCount(node);
     for (int i = 0; i < count; i++) {
-        PrintNode(tree, tree->GetChildId(node, i), i < count - 1, lines,
+        PrintNode(tree, tree->GetChildId(node, i), i < count - 1, lines.s,
                   depth + 1);
     }
 }

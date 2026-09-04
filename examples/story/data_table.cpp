@@ -164,8 +164,8 @@ static void SortRows(DataTableStory* self, int col, ColumnSort dir) {
         while (j >= 0) {
             bool swap;
             if (col == 3) {
-                int c =
-                    strcmp(kStocks[self->order[j]].symbol, kStocks[v].symbol);
+                int c = StrCmp(Str(kStocks[self->order[j]].symbol),
+                               Str(kStocks[v].symbol));
                 swap = asc ? c > 0 : c < 0;
             } else {
                 float a = StockKey(kStocks[self->order[j]], col);
@@ -602,7 +602,7 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
             // render_td's market arm: US in blue and every other exchange
             // in magenta.
             return StoryTxt(cx, Str(s.market), 16,
-                            strcmp(s.market, "US") == 0 ? th.blue : th.magenta)
+                            StrEq(Str(s.market), "US") ? th.blue : th.magenta)
                 ->LineHeight(1.f);
         case 2:
             // The table clips the cell to its column, so a long name is cut

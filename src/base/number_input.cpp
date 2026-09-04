@@ -1,7 +1,6 @@
 #include "base/number_input.h"
 
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 namespace gpui {
@@ -44,9 +43,7 @@ static int FractionDigits(Str s) {
 // which print a float without trailing zeros. "%g" is the same shape, and it
 // is only ever asked about the small, exact numbers a step and a bound are.
 static int FractionDigitsOf(double v) {
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%g", v);
-    return FractionDigits(Str(buf));
+    return FractionDigits(fmt("%g", v));
 }
 
 // The leading number in the text, or false if there is not one. Rust is
@@ -56,13 +53,10 @@ bool NumberParseValue(Str value, double* out) {
     if (!value.s || value.len <= 0) {
         return false;
     }
-    char buf[128];
-    int n = value.len < (int)sizeof(buf) - 1 ? value.len : (int)sizeof(buf) - 1;
-    memcpy(buf, value.s, (size_t)n);
-    buf[n] = 0;
+    TempStr buf = StrDupTemp(value.len < 127 ? value : Str(value.s, 127));
     char* end = nullptr;
-    double v = strtod(buf, &end);
-    if (end == buf) {
+    double v = strtod(buf.s, &end);
+    if (end == buf.s) {
         return false;
     }
     while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n' ||
@@ -76,12 +70,8 @@ bool NumberParseValue(Str value, double* out) {
     return true;
 }
 
-bool NumberStepValue(Str value, StepAction action, double step, bool hasMin,
-                     double min, bool hasMax, double max, char* out,
-                     int outCap) {
-    if (!out || outCap <= 0) {
-        return false;
-    }
+TempStr NumberStepValueTemp(Str value, StepAction action, double step,
+                            bool hasMin, double min, bool hasMax, double max) {
     double current = 0;
     bool haveCurrent = NumberParseValue(value, &current);
     double next = action == StepAction::Increment
@@ -112,11 +102,11 @@ bool NumberStepValue(Str value, StepAction action, double step, bool hasMin,
         bool moved =
             action == StepAction::Increment ? next > current : next < current;
         if (!moved) {
-            return false;
+            return {};
         }
     }
-    snprintf(out, (size_t)outCap, "%.*f", digits, next);
-    return true;
+    TempStr format = fmt("%%.%df", digits);
+    return fmt(format.s, next);
 }
 
 bool NumberStepForKey(int key, StepAction* out) {
@@ -165,12 +155,12 @@ bool NumberInputApplyStep(InputState* state, App* app, Window* win,
         double current = 0;
         NumberParseValue(value, &current);
         double amount = step->Value(current, action, app);
-        char next[128];
-        if (!NumberStepValue(value, action, amount, hasMin, min, hasMax, max,
-                             next, (int)sizeof(next))) {
+        TempStr next = NumberStepValueTemp(value, action, amount, hasMin, min,
+                                           hasMax, max);
+        if (!next) {
             return false;
         }
-        Str candidate(next);
+        Str candidate = next;
         if (NumberInputCandidateValid(state, candidate)) {
             // replace_text_in_range_silent: a step is not typing and does not
             // emit the ordinary InputEvent::Change.

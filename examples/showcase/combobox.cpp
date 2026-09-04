@@ -5,17 +5,8 @@ using namespace gpui;
 
 static const char* kFwCombo[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
-static bool Matches(const char* label, const char* q) {
-    if (!q || !q[0]) {
-        return true;
-    }
-    char a[32] = {};
-    char b[32] = {};
-    StrCopyZ(a, (int)sizeof(a), label);
-    StrCopyZ(b, (int)sizeof(b), q);
-    StrLowerAscii(a);
-    StrLowerAscii(b);
-    return strstr(a, b) != nullptr;
+static bool Matches(Str label, Str query) {
+    return !query || StrContainsI(label, query);
 }
 
 static void ToggleCombo(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
@@ -77,7 +68,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                        ->Child(Input::New(cx, &app->comboQuery)));
         El* list = Div(a)->FlexCol()->W(kFill)->PadT(4);
         for (int i = 0; i < 4; i++) {
-            if (!Matches(kFwCombo[i], InputCStr(&app->comboQuery))) {
+            if (!Matches(Str(kFwCombo[i]), Str(InputCStr(&app->comboQuery)))) {
                 continue;
             }
             list->Child(Div(a)

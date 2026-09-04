@@ -113,10 +113,8 @@ static void PutHeaderString(DbusWriter* fields, uint8_t code,
     PutByte(fields, code);
     PutSignature(fields, signature);
     if (signature[0] == 'g') {
-        char copy[256] = {};
-        int n = std::min(value.len, (int)sizeof(copy) - 1);
-        memcpy(copy, value.s, (size_t)n);
-        PutSignature(fields, copy);
+        TempStr copy = StrDupTemp(Str(value.s, std::min(value.len, 255)));
+        PutSignature(fields, copy.s);
     } else {
         PutString(fields, value);
     }
@@ -301,44 +299,42 @@ static bool ParseUnixAddress(Str address, sockaddr_un* out, socklen_t* outLen) {
     if (!address.s || !out || !outLen) {
         return false;
     }
-    char copy[512] = {};
-    int copyLen = std::min(address.len, (int)sizeof(copy) - 1);
-    memcpy(copy, address.s, (size_t)copyLen);
-    const char* key = strstr(copy, "unix:path=");
+    int copyLen = std::min(address.len, 511);
+    TempStr copy = StrDupTemp(Str(address.s, copyLen));
+    int key = StrFind(copy, "unix:path=");
     bool abstract = false;
-    if (!key) {
-        key = strstr(copy, "unix:abstract=");
+    if (key < 0) {
+        key = StrFind(copy, "unix:abstract=");
         abstract = true;
     }
-    if (!key) {
+    if (key < 0) {
         return false;
     }
     key += abstract ? 14 : 10;
-    const char* end = key;
-    while (end < copy + copyLen && *end != ',' && *end != ';') {
+    int end = key;
+    while (end < copyLen && copy.s[end] != ',' && copy.s[end] != ';') {
         end++;
     }
     memset(out, 0, sizeof(*out));
     out->sun_family = AF_UNIX;
     int at = abstract ? 1 : 0;
-    for (const char* p = key; p < end && at < (int)sizeof(out->sun_path) - 1;
-         p++) {
-        if (*p == '%' && p + 2 < end) {
+    for (int p = key; p < end && at < (int)sizeof(out->sun_path) - 1; p++) {
+        if (copy.s[p] == '%' && p + 2 < end) {
             auto hex = [](char ch) -> int {
                 if (ch >= '0' && ch <= '9') return ch - '0';
                 if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
                 if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
                 return -1;
             };
-            int hi = hex(p[1]);
-            int lo = hex(p[2]);
+            int hi = hex(copy.s[p + 1]);
+            int lo = hex(copy.s[p + 2]);
             if (hi >= 0 && lo >= 0) {
                 out->sun_path[at++] = (char)((hi << 4) | lo);
                 p += 2;
                 continue;
             }
         }
-        out->sun_path[at++] = *p;
+        out->sun_path[at++] = copy.s[p];
     }
     *outLen =
         (socklen_t)(offsetof(sockaddr_un, sun_path) + at + (abstract ? 0 : 1));
@@ -346,37 +342,39 @@ static bool ParseUnixAddress(Str address, sockaddr_un* out, socklen_t* outLen) {
 }
 
 static bool Authenticate() {
-    char uid[32] = {};
-    snprintf(uid, sizeof(uid), "%u", (unsigned)getuid());
-    char auth[160] = {};
+    TempStr uid = fmt("%u", (unsigned)getuid());
+    TempStr auth = AllocStrTemp(159);
+    memset(auth.s, 0, (size_t)auth.len);
     int at = 0;
-    auth[at++] = 0;
-    memcpy(auth + at, "AUTH EXTERNAL ", 14);
+    auth.s[at++] = 0;
+    memcpy(auth.s + at, "AUTH EXTERNAL ", 14);
     at += 14;
-    for (const char* p = uid; *p && at + 4 < (int)sizeof(auth); p++) {
+    for (const char* p = uid.s; *p && at + 4 < auth.len; p++) {
         static const char hex[] = "0123456789abcdef";
-        auth[at++] = hex[((uint8_t)*p) >> 4];
-        auth[at++] = hex[((uint8_t)*p) & 15];
+        auth.s[at++] = hex[((uint8_t)*p) >> 4];
+        auth.s[at++] = hex[((uint8_t)*p) & 15];
     }
-    auth[at++] = '\r';
-    auth[at++] = '\n';
-    if (!SendAll((const uint8_t*)auth, at)) {
+    auth.s[at++] = '\r';
+    auth.s[at++] = '\n';
+    if (!SendAll((const uint8_t*)auth.s, at)) {
         return false;
     }
-    char reply[256] = {};
+    TempStr reply = AllocStrTemp(255);
+    reply.s[0] = 0;
     int n = 0;
-    while (n < (int)sizeof(reply) - 1) {
-        ssize_t got = recv(gA11y.fd, reply + n, sizeof(reply) - 1 - n, 0);
+    while (n < reply.len) {
+        ssize_t got = recv(gA11y.fd, reply.s + n, (size_t)(reply.len - n), 0);
         if (got <= 0) {
             return false;
         }
         n += (int)got;
-        reply[n] = 0;
-        if (strstr(reply, "\r\n")) {
+        reply.s[n] = 0;
+        Str received = Str(reply.s, n);
+        if (StrContains(received, StrL("\r\n"))) {
             break;
         }
     }
-    if (strncmp(reply, "OK ", 3) != 0) {
+    if (!StrStartsWith(Str(reply.s, n), "OK ")) {
         return false;
     }
     return SendAll((const uint8_t*)"BEGIN\r\n", 7);
@@ -395,14 +393,10 @@ static LinuxAccessible AccessibleForPath(Str path) {
         result.root = true;
         return result;
     }
-    char value[128] = {};
-    int n = std::min(path.len, (int)sizeof(value) - 1);
-    if (n > 0) {
-        memcpy(value, path.s, (size_t)n);
-    }
+    TempStr value = StrDupTemp(Str(path.s, std::min(path.len, 127)));
     int windowIndex = -1;
     unsigned nodeId = 0;
-    if (sscanf(value, "/org/a11y/atspi/accessible/w%d/n%u", &windowIndex,
+    if (sscanf(value.s, "/org/a11y/atspi/accessible/w%d/n%u", &windowIndex,
                &nodeId) != 2 ||
         !gA11y.app || windowIndex < 0 ||
         windowIndex >= gA11y.app->windows.len) {
@@ -423,7 +417,7 @@ static LinuxAccessible AccessibleForPath(Str path) {
     return result;
 }
 
-static TempStr PathFor(int windowIndex, uint32_t nodeId) {
+static TempStr PathForTemp(int windowIndex, uint32_t nodeId) {
     return fmt("/org/a11y/atspi/accessible/w%d/n%u", windowIndex, nodeId);
 }
 
@@ -932,8 +926,9 @@ static void PutParent(DbusWriter* body, const LinuxAccessible& object) {
     if (node.parent < 0) {
         PutObjectRef(body, Str(kRootPath));
     } else {
-        PutObjectRef(body, PathFor(object.windowIndex,
-                                   object.win->accessibility[node.parent].id));
+        PutObjectRef(body,
+                     PathForTemp(object.windowIndex,
+                                 object.win->accessibility[node.parent].id));
     }
 }
 
@@ -1218,7 +1213,7 @@ static bool HandleAccessible(const Incoming& in,
         if (ChildAt(object, wanted, &wi, &ni)) {
             PutObjectRef(
                 &body,
-                PathFor(wi, gA11y.app->windows[wi]->accessibility[ni].id));
+                PathForTemp(wi, gA11y.app->windows[wi]->accessibility[ni].id));
         } else {
             PutNullObjectRef(&body);
         }
@@ -1231,9 +1226,9 @@ static bool HandleAccessible(const Incoming& in,
             int wi = -1;
             int ni = -1;
             if (ChildAt(object, i, &wi, &ni)) {
-                PutObjectRef(
-                    &body,
-                    PathFor(wi, gA11y.app->windows[wi]->accessibility[ni].id));
+                PutObjectRef(&body, PathForTemp(wi, gA11y.app->windows[wi]
+                                                        ->accessibility[ni]
+                                                        .id));
             }
         }
         ArrayEnd(&body, lengthAt, contentsAt);
@@ -1386,8 +1381,9 @@ static bool HandleComponent(const Incoming& in, const LinuxAccessible& object) {
         int found = NodeAtPoint(object.win, object.nodeIndex, (int)point.x,
                                 (int)point.y);
         if (found >= 0) {
-            PutObjectRef(&body, PathFor(object.windowIndex,
-                                        object.win->accessibility[found].id));
+            PutObjectRef(&body,
+                         PathForTemp(object.windowIndex,
+                                     object.win->accessibility[found].id));
         } else {
             PutNullObjectRef(&body);
         }
@@ -1910,8 +1906,8 @@ static bool HandleSelection(const Incoming& in, const LinuxAccessible& object) {
             SelectedAt(object, (int)ReadU32(in.body, in.bodyLen, &at));
         if (selected >= 0) {
             PutObjectRef(&body,
-                         PathFor(object.windowIndex,
-                                 object.win->accessibility[selected].id));
+                         PathForTemp(object.windowIndex,
+                                     object.win->accessibility[selected].id));
         } else {
             PutNullObjectRef(&body);
         }
@@ -2102,7 +2098,7 @@ static void SendEvent(Window* win, uint32_t nodeId, const char* member,
         }
     }
     if (wi < 0) return;
-    Str path = nodeId ? (Str)PathFor(wi, nodeId) : Str(kRootPath);
+    Str path = nodeId ? (Str)PathForTemp(wi, nodeId) : Str(kRootPath);
     DbusWriter fields;
     DbusWriter body;
     PutHeaderString(&fields, 1, "o", path);

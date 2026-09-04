@@ -457,9 +457,9 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Listener toggleGroup = Listen(cx, &ToggleColorGroup);
     int groupIx = 0;
     for (int i = 0; i < nRows;) {
-        const char* name = shown[i]->group;
+        Str name = Str(shown[i]->group);
         int end = i;
-        while (end < nRows && strcmp(shown[end]->group, name) == 0) {
+        while (end < nRows && StrEq(Str(shown[end]->group), name)) {
             end++;
         }
         bool open = self->expandAll || self->openGroup == groupIx;
@@ -472,7 +472,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                        ->JustifyBetween()
                        ->Radius(th.radius)
                        ->HoverBg(th.tokens.muted);
-        head->Child(StoryTxt(cx, Str(name), 16, th.foreground));
+        head->Child(StoryTxt(cx, name, 16, th.foreground));
         head->Child(
             IconEl(a, open ? IconName::ChevronDown : IconName::ChevronRight, 16)
                 ->Fg(th.mutedFg));
@@ -533,20 +533,20 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                      ->Child(inner)
                      ->IntoEl());
     for (int i = 0; i < nRows;) {
-        const char* name = shown[i]->group;
+        Str name = Str(shown[i]->group);
         int end = i;
-        while (end < nRows && strcmp(shown[end]->group, name) == 0) {
+        while (end < nRows && StrEq(Str(shown[end]->group), name)) {
             end++;
         }
         // v_flex().w_full().gap_3().pt_4()
         El* cat = Div(a)->FlexCol()->W(kFill)->Gap(12)->PadT(16);
         // text_base().font_semibold().pb_2().border_b_1()
-        cat->Child(Div(a)
-                       ->W(kFill)
-                       ->PadB(8)
-                       ->BorderB(1, th.border)
-                       ->Child(StoryTxt(cx, Str(name), 16, th.foreground)
-                                   ->Semibold()));
+        cat->Child(
+            Div(a)
+                ->W(kFill)
+                ->PadB(8)
+                ->BorderB(1, th.border)
+                ->Child(StoryTxt(cx, name, 16, th.foreground)->Semibold()));
         // div().flex().flex_wrap().gap_4(), one w(px(220.)) cell per colour.
         El* wrap = Div(a)->FlexRow()->FlexWrap()->W(kFill)->Gap(16);
         for (int r = i; r < end; r++) {

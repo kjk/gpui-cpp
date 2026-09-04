@@ -43,10 +43,10 @@ void TreeStory::OnRevealRandom(TreeStory* self, Ctx* cx, const ClickEvent*) {
 }
 
 // Rust filters with the repo gitignore; ours skips the same few by name.
-static bool TreeSkip(const char* name) {
+static bool TreeSkip(Str name) {
     static const char* kSkip[] = {".git", "out", "node_modules", ".work"};
     for (size_t i = 0; i < sizeof(kSkip) / sizeof(kSkip[0]); i++) {
-        if (strcmp(name, kSkip[i]) == 0) {
+        if (StrEq(name, kSkip[i])) {
             return true;
         }
     }
@@ -61,7 +61,7 @@ static void SortDir(DirEntry* e, int n) {
         while (j >= 0) {
             bool after = e[j].isDir != key.isDir
                              ? (!e[j].isDir && key.isDir)
-                             : strcmp(e[j].name, key.name) > 0;
+                             : StrCmp(Str(e[j].name), Str(key.name)) > 0;
             if (!after) {
                 break;
             }
@@ -72,7 +72,7 @@ static void SortDir(DirEntry* e, int n) {
     }
 }
 
-static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
+static void LoadDir(TreeState* s, Str path, int parent, int depth) {
     // One listing per level, on the heap: a static array here would be the
     // same array the level above is still walking.
     const int kMaxEntries = 512;
@@ -80,24 +80,23 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
     if (!found) {
         return;
     }
-    int got = PlatListDir(path, found, kMaxEntries);
+    TempStr pathZ = StrDupTemp(path);
+    int got = PlatListDir(pathZ.s, found, kMaxEntries);
     SortDir(found, got);
     for (int i = 0; i < got; i++) {
-        if (TreeSkip(found[i].name)) {
+        if (TreeSkip(Str(found[i].name))) {
             continue;
         }
         // The path this row stands for. A name is at most 260 bytes and the
         // walk is two deep, so the buffer is the sum rather than a guess —
         // which is also what keeps the compiler from calling it a truncation.
-        char child[1024];
-        int wrote = snprintf(child, sizeof(child), "%.*s/%.*s", 500, path,
-                             (int)sizeof(found[i].name), found[i].name);
-        if (wrote <= 0) {
+        TempStr child = fmt("%s/%s", path, Str(found[i].name));
+        if (child.len >= 1024) {
             continue;
         }
         // The id has to be unique and stable, so it is the path; the label is
         // the name. TreeAddItem copies both; the state owns and frees them.
-        int ix = TreeAddItem(s, Str(child), Str(found[i].name), parent);
+        int ix = TreeAddItem(s, child, Str(found[i].name), parent);
         if (ix < 0) {
             break;
         }
@@ -121,7 +120,7 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
         if (s) {
             // Two levels are read in so a folder opens without a pause;
             // nothing starts open, which is where Rust's tree starts.
-            LoadDir(s, ".", -1, 2);
+            LoadDir(s, StrL("."), -1, 2);
             TreeRebuild(s);
             // cx.subscribe(&tree, ..) rather than the state's own listener:
             // the same handler, hung off the entity, so anything else on the

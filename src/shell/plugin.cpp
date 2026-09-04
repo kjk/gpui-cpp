@@ -23,53 +23,21 @@ static Str Join(Arena* arena, Str left, Str right) {
     return StrBuilderTakeStr(arena, path);
 }
 
-static bool ReadBoundedFile(Str path, int limit, Str* out) {
-    *out = {};
-    if (!path || path.len >= kMaxPath) return false;
-    char name[kMaxPath];
-    memcpy(name, path.s, (size_t)path.len);
-    name[path.len] = 0;
-    FILE* file = fopen(name, "rb");
-    if (!file) return false;
-    Vec<char> bytes;
-    char block[16384];
-    bool ok = true;
-    for (;;) {
-        size_t read = fread(block, 1, sizeof(block), file);
-        if (read > 0) {
-            if (bytes.len > limit - (int)read) {
-                ok = false;
-                break;
-            }
-            memcpy(VecAppendBlanks(bytes, (int)read), block, read);
-        }
-        if (read != sizeof(block)) {
-            if (ferror(file)) ok = false;
-            break;
-        }
-    }
-    fclose(file);
-    if (ok) {
-        int size = bytes.len;
-        char* data = bytes.els;
-        bytes.els = nullptr;
-        bytes.len = 0;
-        bytes.cap = 0;
-        *out = Str(data, size);
-    }
-    VecReset(bytes);
-    return ok;
-}
-
 static const char* JsonTypeName(const JsonValue* value) {
     if (!value) return "missing";
     switch (value->kind) {
-        case JsonKind::Null: return "null";
-        case JsonKind::Bool: return "a boolean";
-        case JsonKind::Number: return "a number";
-        case JsonKind::String: return "a string";
-        case JsonKind::Array: return "an array";
-        case JsonKind::Object: return "an object";
+        case JsonKind::Null:
+            return "null";
+        case JsonKind::Bool:
+            return "a boolean";
+        case JsonKind::Number:
+            return "a number";
+        case JsonKind::String:
+            return "a string";
+        case JsonKind::Array:
+            return "an array";
+        case JsonKind::Object:
+            return "an object";
     }
     return "a value";
 }
@@ -86,25 +54,23 @@ static bool HasOnly(const JsonValue* object, const char* const* names,
         for (int i = 0; i < count; i++)
             if (StrEq(field->key, names[i])) known = true;
         if (!known) {
-            SetError(error,
-                     fmt("unknown field `%s` in %s", field->key, where));
+            SetError(error, fmt("unknown field `%s` in %s", field->key, where));
             return false;
         }
     }
     return true;
 }
 
-static bool RequiredString(const JsonValue* object, const char* field,
-                           Str* out, ShellError* error) {
+static bool RequiredString(const JsonValue* object, const char* field, Str* out,
+                           ShellError* error) {
     const JsonValue* value = JsonGet(object, field);
     if (!value || value->kind == JsonKind::Null) {
         SetError(error, fmt("missing field `%s`", Str(field)));
         return false;
     }
     if (value->kind != JsonKind::String) {
-        SetError(error,
-                 fmt("field `%s` must be a string, found %s", Str(field),
-                     Str(JsonTypeName(value))));
+        SetError(error, fmt("field `%s` must be a string, found %s", Str(field),
+                            Str(JsonTypeName(value))));
         return false;
     }
     if (value->str.len == 0) {
@@ -139,8 +105,7 @@ static bool ParseSemver(Str value, int* major, int* minor, int* patch) {
         if (value.s[at] != '-' && value.s[at] != '+') return false;
         for (; at < value.len; at++) {
             char ch = value.s[at];
-            if (!((ch >= 'a' && ch <= 'z') ||
-                  (ch >= 'A' && ch <= 'Z') ||
+            if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
                   (ch >= '0' && ch <= '9') || ch == '-' || ch == '.' ||
                   ch == '+'))
                 return false;
@@ -156,9 +121,8 @@ static bool ValidId(Str id) {
     if (!id) return false;
     for (int i = 0; i < id.len; i++) {
         char ch = id.s[i];
-        if (!((ch >= 'a' && ch <= 'z') ||
-              (ch >= '0' && ch <= '9') || ch == '.' || ch == '-' ||
-              ch == '_'))
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+              ch == '.' || ch == '-' || ch == '_'))
             return false;
     }
     char first = id.s[0];
@@ -175,8 +139,7 @@ static bool ValidEntry(Str entry) {
         return false;
     int start = 0;
     for (int i = 0; i <= entry.len; i++) {
-        if (i < entry.len && entry.s[i] != '/' && entry.s[i] != '\\')
-            continue;
+        if (i < entry.len && entry.s[i] != '/' && entry.s[i] != '\\') continue;
         if (i - start == 2 && entry.s[start] == '.' &&
             entry.s[start + 1] == '.')
             return false;
@@ -221,8 +184,8 @@ static bool ValidatePlaceholders(const Vec<Str>& paths, Str field,
             Str placeholder(value.s + i, end - i + 1);
             if (!StrEq(placeholder, "${pluginDir}") &&
                 !StrEq(placeholder, "${dataDir}")) {
-                SetError(error, fmt("unknown placeholder `%s` in %s", placeholder,
-                                    field));
+                SetError(error, fmt("unknown placeholder `%s` in %s",
+                                    placeholder, field));
                 return false;
             }
             i = end;
@@ -321,10 +284,10 @@ static bool ParseGitDependencyString(Arena* arena, Str source, Str* git,
             return false;
         }
         if (!ValidGitRefName(fragment)) {
-            *detail = StrDup(arena,
-                             fmt("string dependency selector `%s` is not a "
-                                 "valid Git ref",
-                                 fragment));
+            *detail =
+                StrDup(arena, fmt("string dependency selector `%s` is not a "
+                                  "valid Git ref",
+                                  fragment));
             return false;
         }
     }
@@ -350,8 +313,10 @@ static bool ParseGitDependencyString(Arena* arena, Str source, Str* git,
     for (int i = 0; i <= remote.len; i++) {
         if (i < remote.len && remote.s[i] != '/') continue;
         Str component(remote.s + start, i - start);
-        if (components == 0) owner = component;
-        else if (components == 1) repository = component;
+        if (components == 0)
+            owner = component;
+        else if (components == 1)
+            repository = component;
         components++;
         start = i + 1;
     }
@@ -434,9 +399,9 @@ static bool ValidateDependency(const GitDependency& dependency,
     }
     Str reference = hasBranch ? dependency.branch : dependency.tag;
     if (!ValidGitRefName(reference)) {
-        SetDependencyError(error,
-                           fmt("`%s` selector `%s` is not a valid Git ref name",
-                               name, reference));
+        SetDependencyError(
+            error, fmt("`%s` selector `%s` is not a valid Git ref name", name,
+                       reference));
         return false;
     }
     if (!ValidEntry(dependency.entry)) {
@@ -523,9 +488,8 @@ static bool ParseDependencies(const JsonValue* value, PluginManifest* out,
                                    ? StrDup(out->arena, entry->str)
                                    : Str(kGitDependencyDefaultEntry);
         } else {
-            SetDependencyError(
-                error,
-                fmt("`%s` must be a string or an object", dependency.name));
+            SetDependencyError(error, fmt("`%s` must be a string or an object",
+                                          dependency.name));
             return false;
         }
         if (!ValidateDependency(dependency, error)) return false;
@@ -560,15 +524,14 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
     if (fs && fs->kind != JsonKind::Null) {
         static const char* fsFields[] = {"read", "write", "execute"};
         if (!HasOnly(fs, fsFields, 3, StrL("capabilities.fs"), error) ||
-            !ParseStringArray(out->arena, JsonGet(fs, "read"),
-                              &out->readRoots,
+            !ParseStringArray(out->arena, JsonGet(fs, "read"), &out->readRoots,
                               StrL("capabilities.fs.read"), error) ||
             !ParseStringArray(out->arena, JsonGet(fs, "write"),
-                              &out->writeRoots,
-                              StrL("capabilities.fs.write"), error))
+                              &out->writeRoots, StrL("capabilities.fs.write"),
+                              error))
             return false;
-        if (!ValidatePlaceholders(out->readRoots,
-                                  StrL("capabilities.fs.read"), error) ||
+        if (!ValidatePlaceholders(out->readRoots, StrL("capabilities.fs.read"),
+                                  error) ||
             !ValidatePlaceholders(out->writeRoots,
                                   StrL("capabilities.fs.write"), error))
             return false;
@@ -585,8 +548,8 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
     const JsonValue* network = JsonGet(value, "network");
     if (network && network->kind != JsonKind::Null) {
         static const char* networkFields[] = {"hosts", "http"};
-        if (!HasOnly(network, networkFields, 2,
-                     StrL("capabilities.network"), error) ||
+        if (!HasOnly(network, networkFields, 2, StrL("capabilities.network"),
+                     error) ||
             !ParseStringArray(out->arena, JsonGet(network, "hosts"),
                               &out->networkHosts,
                               StrL("capabilities.network.hosts"), error))
@@ -595,7 +558,9 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
             Str host = out->networkHosts[i];
             if (!host || StrFind(host, StrL("://")) >= 0 ||
                 StrFind(host, StrL("/")) >= 0) {
-                SetError(error, fmt("network host `%s` must be a hostname without a scheme or path", host));
+                SetError(error, fmt("network host `%s` must be a hostname "
+                                    "without a scheme or path",
+                                    host));
                 return false;
             }
         }
@@ -607,17 +572,16 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
         for (const JsonValue* rule = http ? http->first : nullptr; rule;
              rule = rule->next) {
             static const char* httpFields[] = {
-                "scheme", "host", "port", "methods", "paths",
-                "path_prefixes"};
+                "scheme", "host", "port", "methods", "paths", "path_prefixes"};
             if (!HasOnly(rule, httpFields, 6,
                          StrL("capabilities.network.http entry"), error))
                 return false;
             auto* parsed = ArenaNew<PluginHttpGrant>(out->arena);
             const JsonValue* scheme = JsonGet(rule, "scheme");
-            parsed->scheme = StrDup(out->arena,
-                                    scheme && scheme->kind == JsonKind::String
-                                        ? scheme->str
-                                        : StrL("https"));
+            parsed->scheme =
+                StrDup(out->arena, scheme && scheme->kind == JsonKind::String
+                                       ? scheme->str
+                                       : StrL("https"));
             Str host;
             if (!RequiredString(rule, "host", &host, error)) return false;
             parsed->host = StrDup(out->arena, host);
@@ -625,36 +589,41 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
                  !StrEq(parsed->scheme, "https")) ||
                 StrFind(host, StrL("://")) >= 0 ||
                 StrFind(host, StrL("/")) >= 0) {
-                SetError(error, StrL("invalid capabilities.network.http scheme or host"));
+                SetError(
+                    error,
+                    StrL("invalid capabilities.network.http scheme or host"));
                 return false;
             }
             const JsonValue* port = JsonGet(rule, "port");
             if (port) {
                 if (port->kind != JsonKind::Number || port->num < 1 ||
                     port->num > 65535 || port->num != (int)port->num) {
-                    SetError(error, StrL("capabilities.network.http port must be 1..65535"));
+                    SetError(
+                        error,
+                        StrL(
+                            "capabilities.network.http port must be 1..65535"));
                     return false;
                 }
                 parsed->hasPort = true;
                 parsed->port = (uint16_t)port->num;
             }
-            if (!ParseStringArray(out->arena, JsonGet(rule, "methods"),
-                                  &parsed->methods,
-                                  StrL("capabilities.network.http.methods"),
-                                  error, true) ||
+            if (!ParseStringArray(
+                    out->arena, JsonGet(rule, "methods"), &parsed->methods,
+                    StrL("capabilities.network.http.methods"), error, true) ||
                 parsed->methods.len == 0 ||
-                !ParseStringArray(out->arena, JsonGet(rule, "paths"),
-                                  &parsed->paths,
-                                  StrL("capabilities.network.http.paths"), error) ||
-                !ParseStringArray(out->arena,
-                                  JsonGet(rule, "path_prefixes"),
-                                  &parsed->pathPrefixes,
-                                  StrL("capabilities.network.http.path_prefixes"), error))
+                !ParseStringArray(
+                    out->arena, JsonGet(rule, "paths"), &parsed->paths,
+                    StrL("capabilities.network.http.paths"), error) ||
+                !ParseStringArray(
+                    out->arena, JsonGet(rule, "path_prefixes"),
+                    &parsed->pathPrefixes,
+                    StrL("capabilities.network.http.path_prefixes"), error))
                 return false;
             for (int i = 0; i < parsed->methods.len; i++) {
                 if (!StrEq(parsed->methods[i], "GET") &&
                     !StrEq(parsed->methods[i], "POST")) {
-                    SetError(error, fmt("invalid HTTP method `%s`", parsed->methods[i]));
+                    SetError(error, fmt("invalid HTTP method `%s`",
+                                        parsed->methods[i]));
                     return false;
                 }
             }
@@ -662,7 +631,8 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
                 Vec<Str>& paths = pass ? parsed->pathPrefixes : parsed->paths;
                 for (int i = 0; i < paths.len; i++) {
                     if (!paths[i] || paths[i].s[0] != '/') {
-                        SetError(error, StrL("HTTP grant paths must start with `/`"));
+                        SetError(error,
+                                 StrL("HTTP grant paths must start with `/`"));
                         return false;
                     }
                 }
@@ -689,12 +659,13 @@ static bool ParseCapabilities(const JsonValue* value, PluginManifest* out,
     const JsonValue* process = JsonGet(value, "process");
     if (process && process->kind != JsonKind::Null) {
         static const char* processFields[] = {"exit"};
-        if (!HasOnly(process, processFields, 1,
-                     StrL("capabilities.process"), error))
+        if (!HasOnly(process, processFields, 1, StrL("capabilities.process"),
+                     error))
             return false;
         const JsonValue* exit = JsonGet(process, "exit");
         if (exit && exit->kind != JsonKind::Bool) {
-            SetError(error, StrL("capabilities.process.exit must be a boolean"));
+            SetError(error,
+                     StrL("capabilities.process.exit must be a boolean"));
             return false;
         }
         out->exit = exit && exit->b;
@@ -730,9 +701,9 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
         SetError(error, StrL("the manifest is not valid JSON"));
         return false;
     }
-    static const char* fields[] = {"id",    "name",         "version",
-                                   "shell-version", "entry", "dependencies",
-                                   "capabilities"};
+    static const char* fields[] = {
+        "id",    "name",         "version",     "shell-version",
+        "entry", "dependencies", "capabilities"};
     if (!HasOnly(root, fields, 7, StrL("the manifest"), error)) return false;
     Str id, name, entry;
     if (!RequiredString(root, "id", &id, error) ||
@@ -740,11 +711,16 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
         !RequiredString(root, "entry", &entry, error))
         return false;
     if (!ValidId(id)) {
-        SetError(error, fmt("invalid `id` `%s`: use lowercase letters, digits, `.`, `-` and `_`, beginning and ending with a letter or digit", id));
+        SetError(error,
+                 fmt("invalid `id` `%s`: use lowercase letters, digits, `.`, "
+                     "`-` and `_`, beginning and ending with a letter or digit",
+                     id));
         return false;
     }
     if (!ValidEntry(entry)) {
-        SetError(error, fmt("invalid `entry` `%s`: expected a path inside the plugin directory", entry));
+        SetError(error, fmt("invalid `entry` `%s`: expected a path inside the "
+                            "plugin directory",
+                            entry));
         return false;
     }
     const JsonValue* version = JsonGet(root, "version");
@@ -754,7 +730,9 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
     if ((version && version->kind != JsonKind::Null && !versionText) ||
         (versionText && !StrEq(versionText, "unknown") &&
          !ParseSemver(versionText, nullptr, nullptr, nullptr))) {
-        SetError(error, fmt("invalid `version` `%s`: expected a semantic version", versionText));
+        SetError(error,
+                 fmt("invalid `version` `%s`: expected a semantic version",
+                     versionText));
         return false;
     }
     const JsonValue* shellVersion = JsonGet(root, "shell-version");
@@ -763,10 +741,12 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
                        : Str(kShellVersion);
     int requiredMajor = 0, requiredMinor = 0, requiredPatch = 0;
     int runtimeMajor = 0, runtimeMinor = 0, runtimePatch = 0;
-    if (!required ||
-        !ParseSemver(required, &requiredMajor, &requiredMinor,
-                     &requiredPatch)) {
-        SetError(error, fmt("invalid `shell-version` `%s`: expected a semantic version", required));
+    if (!required || !ParseSemver(required, &requiredMajor, &requiredMinor,
+                                  &requiredPatch)) {
+        SetError(
+            error,
+            fmt("invalid `shell-version` `%s`: expected a semantic version",
+                required));
         return false;
     }
     ParseSemver(Str(kShellVersion), &runtimeMajor, &runtimeMinor,
@@ -774,13 +754,15 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
     bool line = requiredMajor == 0
                     ? runtimeMajor == 0 && runtimeMinor == requiredMinor
                     : runtimeMajor == requiredMajor;
-    bool oldEnough = runtimeMajor > requiredMajor ||
-                     (runtimeMajor == requiredMajor &&
-                      (runtimeMinor > requiredMinor ||
-                       (runtimeMinor == requiredMinor &&
-                        runtimePatch >= requiredPatch)));
+    bool oldEnough =
+        runtimeMajor > requiredMajor ||
+        (runtimeMajor == requiredMajor &&
+         (runtimeMinor > requiredMinor ||
+          (runtimeMinor == requiredMinor && runtimePatch >= requiredPatch)));
     if (!line || !oldEnough) {
-        SetError(error, fmt("this application requires gpui-shell %s, but this runtime is %s and is not compatible", required, Str(kShellVersion)));
+        SetError(error, fmt("this application requires gpui-shell %s, but this "
+                            "runtime is %s and is not compatible",
+                            required, Str(kShellVersion)));
         return false;
     }
     out->id = StrDup(out->arena, id);
@@ -793,12 +775,11 @@ bool PluginManifestParse(Str source, PluginManifest* out, ShellError* error) {
     return ParseCapabilities(JsonGet(root, "capabilities"), out, error);
 }
 
-bool PluginManifestRead(Str directory, PluginManifest* out,
-                        ShellError* error) {
+bool PluginManifestRead(Str directory, PluginManifest* out, ShellError* error) {
     Arena* scratch = ArenaNew();
     Str path = Join(scratch, directory, Str(kShellManifestFile));
-    Str source;
-    if (!ReadBoundedFile(path, kShellMaxManifestBytes, &source)) {
+    TempStr source = ReadBoundedFileTemp(path, kShellMaxManifestBytes);
+    if (!source.s) {
         SetError(error, fmt("%s: cannot read the manifest", path));
         ArenaDelete(scratch);
         return false;
@@ -809,7 +790,6 @@ bool PluginManifestRead(Str directory, PluginManifest* out,
         error->message = StrDup(fmt("%s: %s", path, old));
         StrFree(old);
     }
-    StrFree(source);
     ArenaDelete(scratch);
     return ok;
 }
@@ -818,10 +798,14 @@ void PluginManifestSchema(StrBuilder* out) {
     out->Append(StrL(
         "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
         "\"title\":\"gpui-shell application manifest\",\"type\":\"object\","
-        "\"additionalProperties\":false,\"required\":[\"id\",\"name\",\"entry\"],"
-        "\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},"
-        "\"version\":{\"type\":\"string\"},\"shell-version\":{\"type\":\"string\"},"
-        "\"entry\":{\"type\":\"string\"},\"dependencies\":{\"type\":\"object\"},"
+        "\"additionalProperties\":false,\"required\":[\"id\",\"name\","
+        "\"entry\"],"
+        "\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"type\":"
+        "\"string\"},"
+        "\"version\":{\"type\":\"string\"},\"shell-version\":{\"type\":"
+        "\"string\"},"
+        "\"entry\":{\"type\":\"string\"},\"dependencies\":{\"type\":\"object\"}"
+        ","
         "\"capabilities\":{\"type\":\"object\"}}}"));
 }
 
@@ -835,8 +819,7 @@ static bool AbsolutePath(Str path) {
 static Str ExpandPath(Str raw, Str plugin, Str data) {
     StrBuilder out;
     for (int i = 0; i < raw.len;) {
-        if (i + 12 <= raw.len &&
-            StrEq(Str(raw.s + i, 12), "${pluginDir}")) {
+        if (i + 12 <= raw.len && StrEq(Str(raw.s + i, 12), "${pluginDir}")) {
             out.Append(plugin);
             i += 12;
         } else if (i + 10 <= raw.len &&
@@ -887,8 +870,7 @@ Capabilities PluginManifest::Grant(Str pluginDirectory,
         if (file->hasPort) grant.Port(file->port);
         for (int j = 0; j < file->methods.len; j++)
             grant.AddMethod(file->methods[j]);
-        for (int j = 0; j < file->paths.len; j++)
-            grant.AddPath(file->paths[j]);
+        for (int j = 0; j < file->paths.len; j++) grant.AddPath(file->paths[j]);
         for (int j = 0; j < file->pathPrefixes.len; j++)
             grant.AddPathPrefix(file->pathPrefixes[j]);
         result.AddHttpRequest(grant);
@@ -902,9 +884,7 @@ Capabilities PluginManifest::Grant(Str pluginDirectory,
 static int ComparePaths(const void* left, const void* right) {
     const Str* a = (const Str*)left;
     const Str* b = (const Str*)right;
-    int n = a->len < b->len ? a->len : b->len;
-    int compared = n ? memcmp(a->s, b->s, (size_t)n) : 0;
-    return compared ? compared : a->len - b->len;
+    return StrCmp(*a, *b);
 }
 
 Str ShellDataHome() {
@@ -915,10 +895,12 @@ Str ShellDataHome() {
     if (appData && *appData) return StrDup(Str(appData));
 #endif
     const char* user = getenv(GPUI_OS_WINDOWS ? "USERPROFILE" : "HOME");
-    char cwd[kMaxPath] = {};
+    TempStr cwd;
     if (!user || !*user) {
-        PlatGetCwd(cwd, kMaxPath);
-        user = cwd;
+        cwd = AllocStrTemp(kMaxPath - 1);
+        cwd.s[0] = 0;
+        PlatGetCwd(cwd.s, cwd.len + 1);
+        user = cwd.s;
     }
     StrBuilder path;
     path.Append(Str(user));
@@ -939,8 +921,7 @@ Str ShellBundleIdForPath(Str root) {
         hash *= 0x100000001b3ull;
     }
     int start = root.len;
-    while (start > 0 && root.s[start - 1] != '/' &&
-           root.s[start - 1] != '\\')
+    while (start > 0 && root.s[start - 1] != '/' && root.s[start - 1] != '\\')
         start--;
     Str name(root.s + start, root.len - start);
     StrBuilder safe;
@@ -948,16 +929,15 @@ Str ShellBundleIdForPath(Str root) {
     for (int i = 0; i < name.len; i++) {
         char ch = name.s[i];
         if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + ('a' - 'A'));
-        bool allowed = (ch >= 'a' && ch <= 'z') ||
-                       (ch >= '0' && ch <= '9') || ch == '.' || ch == '-' ||
-                       ch == '_';
+        bool allowed = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+                       ch == '.' || ch == '-' || ch == '_';
         if (!allowed) ch = '-';
         if (ch == '.' && previousDot) ch = '-';
         safe.AppendChar(ch);
         previousDot = ch == '.';
     }
-    while (safe.len > 0 && (safe.els[0] == '.' || safe.els[0] == '-' ||
-                            safe.els[0] == '_')) {
+    while (safe.len > 0 &&
+           (safe.els[0] == '.' || safe.els[0] == '-' || safe.els[0] == '_')) {
         memmove(safe.els, safe.els + 1, (size_t)--safe.len);
     }
     while (safe.len > 0 &&
@@ -965,10 +945,7 @@ Str ShellBundleIdForPath(Str root) {
             safe.els[safe.len - 1] == '_'))
         safe.len--;
     if (safe.len == 0) safe.Append(StrL("app"));
-    char digest[24];
-    snprintf(digest, sizeof(digest), "-%016llx",
-             (unsigned long long)hash);
-    safe.Append(Str(digest));
+    safe.Append(fmt("-%016llx", (unsigned long long)hash));
     return safe.TakeStr();
 }
 
@@ -1008,8 +985,7 @@ static void FreePlugin(Plugin* plugin, App* app) {
 }
 
 PluginManager::~PluginManager() {
-    for (int i = 0; i < loaded.len; i++)
-        FreePlugin(loaded[i], loaded[i]->app);
+    for (int i = 0; i < loaded.len; i++) FreePlugin(loaded[i], loaded[i]->app);
     VecReset(loaded);
     ClearCatalog();
     for (int i = 0; i < directories.len; i++) StrFree(directories[i]);
@@ -1042,10 +1018,8 @@ static bool ManifestAt(Str root) {
     Str manifest = Join(arena, root, Str(kShellManifestFile));
     bool found = false;
     if (manifest.len < kMaxPath) {
-        char path[kMaxPath];
-        memcpy(path, manifest.s, (size_t)manifest.len);
-        path[manifest.len] = 0;
-        found = PlatFileExists(path);
+        TempStr path = StrDupTemp(manifest);
+        found = PlatFileExists(path.s);
     }
     ArenaDelete(arena);
     return found;
@@ -1061,11 +1035,9 @@ const Vec<PluginDiscovery>& PluginManager::Discover() {
             continue;
         }
         if (directories[d].len >= kMaxPath) continue;
-        char directory[kMaxPath];
-        memcpy(directory, directories[d].s, (size_t)directories[d].len);
-        directory[directories[d].len] = 0;
+        TempStr directory = StrDupTemp(directories[d]);
         DirEntry* entries = AllocArray<DirEntry>(4096);
-        int count = entries ? PlatListDir(directory, entries, 4096) : 0;
+        int count = entries ? PlatListDir(directory.s, entries, 4096) : 0;
         Vec<Str> directoryRoots;
         for (int i = 0; i < count; i++) {
             if (!entries[i].isDir || entries[i].isSymlink) continue;
@@ -1098,7 +1070,8 @@ const Vec<PluginDiscovery>& PluginManager::Discover() {
             for (int j = 0; j < catalog.len; j++) {
                 if (catalog[j].manifest &&
                     StrEq(catalog[j].manifest->id, manifest->id)) {
-                    found.error = StrDup(fmt("`%s` is already provided by %s", manifest->id, catalog[j].root));
+                    found.error = StrDup(fmt("`%s` is already provided by %s",
+                                             manifest->id, catalog[j].root));
                     delete manifest;
                     manifest = nullptr;
                     break;
@@ -1124,7 +1097,8 @@ bool PluginManager::Load(ShellRuntime* runtime, Str id,
                          Window* window, App* app, ShellError* error) {
     ShellErrorClear(error);
     if (!discovered) {
-        SetError(error, StrL("plugin discovery has not run; call Discover first"));
+        SetError(error,
+                 StrL("plugin discovery has not run; call Discover first"));
         return false;
     }
     if (Loaded(id)) {
@@ -1140,7 +1114,8 @@ bool PluginManager::Load(ShellRuntime* runtime, Str id,
         return false;
     }
     if (authorize && !authorize(selected->manifest, authorizeData)) {
-        SetError(error, fmt("capabilities for plugin `%s` were not approved", id));
+        SetError(error,
+                 fmt("capabilities for plugin `%s` were not approved", id));
         return false;
     }
     Arena* scratch = ArenaNew();
@@ -1164,13 +1139,12 @@ bool PluginManager::Load(ShellRuntime* runtime, Str id,
     if (capabilities.HasStorage()) {
         Str storageError;
         if (!PolicySetStoragePath(policy, store, &storageError)) {
-            log(fmt("storage is unavailable for `%s`: %s", id,
-                    storageError));
+            log(fmt("storage is unavailable for `%s`: %s", id, storageError));
             StrFree(storageError);
         }
     }
-    ViewType* type = runtime->LoadApp(selected->root,
-                                      selected->manifest->entry, policy, error);
+    ViewType* type = runtime->LoadApp(selected->root, selected->manifest->entry,
+                                      policy, error);
     if (!type) {
         PolicyRelease(policy);
         ArenaDelete(scratch);
@@ -1179,8 +1153,8 @@ bool PluginManager::Load(ShellRuntime* runtime, Str id,
     Entity<ScriptView> view = ScriptView::New(app, runtime, type, policy);
     ViewTypeRelease(type);
     ScriptView* state = view.Get(app);
-    state->object = runtime->Instantiate(state->type, window, app, policy,
-                                         error, view.id);
+    state->object =
+        runtime->Instantiate(state->type, window, app, policy, error, view.id);
     if (!state->object) {
         EntityDrop(app, view.id);
         PolicyRelease(policy);
@@ -1224,9 +1198,8 @@ const Plugin* PluginManager::Loaded(Str id) const {
 }
 
 Entity<ShellRoot> ShellLoadApplication(ShellRuntime* runtime, Str directory,
-                                       Window* window, App* app,
-                                       Policy* policy, ShellError* error,
-                                       Str* resolvedEntry) {
+                                       Window* window, App* app, Policy* policy,
+                                       ShellError* error, Str* resolvedEntry) {
     ShellErrorClear(error);
     Str entry = StrL("main.js");
     PluginManifest manifest;
@@ -1257,8 +1230,8 @@ Entity<ShellRoot> ShellLoadApplication(ShellRuntime* runtime, Str directory,
 Str ShellCheckApplication(Arena* arena, ShellRuntime* runtime, Str directory,
                           Window* window, App* app, Policy* policy,
                           ShellError* error) {
-    Entity<ShellRoot> root = ShellLoadApplication(runtime, directory, window,
-                                                   app, policy, error);
+    Entity<ShellRoot> root =
+        ShellLoadApplication(runtime, directory, window, app, policy, error);
     if (!root.IsValid()) return {};
     ShellRoot* shellRoot = root.Get(app);
     ScriptView* view = shellRoot && shellRoot->content.IsValid()

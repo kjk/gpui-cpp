@@ -561,9 +561,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             sk->Link(link.source, link.target, link.value);
         }
         sankeyRow->Child(ChartCard(
-            cx,
-            StoryArg(cx,
-                     StoryFmt(cx, "Sankey Chart - TSLA %s", kTslaPeriods[st])),
+            cx, StoryFmt(cx, "Sankey Chart - TSLA %s", kTslaPeriods[st]).s,
             sk->IntoEl()->W(kFill)->H(kFill), false));
     }
     page->Child(sankeyRow);
