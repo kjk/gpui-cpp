@@ -125,6 +125,13 @@ jobs:
         if: matrix.name == 'linux-clang-mini'
         run: bash cmd/ubuntu-install-deps.sh --build-only
 
+      # windows-latest carries clang 20.1.8, which miscompiles the shell's
+      # suspend_never coroutines at /O2 and strands their task registry slots.
+      - name: Install clang-cl 22
+        if: matrix.name == 'windows-clang-mini-all-backends'
+        shell: powershell
+        run: choco upgrade llvm --version=22.1.7 --yes --no-progress
+
       # Compile every Windows backend into the examples. The suite does not
       # paint, so tests stay on the default backend — same as the MSVC job.
       - name: Build and test (clang-cl)
