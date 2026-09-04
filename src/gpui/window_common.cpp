@@ -331,8 +331,12 @@ static uint64_t AccessibilityHashStr(uint64_t hash, Str value) {
 static uint64_t AccessibilityTreeHash(const Vec<AccessibilityNode>& nodes) {
     uint64_t hash = 0xcbf29ce484222325ull;
     hash = AccessibilityHashBytes(hash, &nodes.len, (int)sizeof(nodes.len));
-#define GPUI_A11Y_HASH(value) \
-    hash = AccessibilityHashBytes(hash, &(value), (int)sizeof(value))
+#define GPUI_A11Y_HASH(value)                                                 \
+    do {                                                                      \
+        const auto hashValue = (value);                                       \
+        hash =                                                                \
+            AccessibilityHashBytes(hash, &hashValue, (int)sizeof(hashValue)); \
+    } while (false)
     for (int i = 0; i < nodes.len; i++) {
         const AccessibilityNode& node = nodes[i];
         const AccessibilityInfo& info = node.info;

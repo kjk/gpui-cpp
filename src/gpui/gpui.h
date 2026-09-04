@@ -1808,24 +1808,28 @@ struct AccessibilityInfo {
     int rowIndex = 0;
     int columnIndex = 0;
     int level = 0;
-    bool hasNumericValue = false;
-    bool hasMinNumericValue = false;
-    bool hasMaxNumericValue = false;
-    bool hasNumericValueStep = false;
-    bool hasPositionInSet = false;
-    bool hasSizeOfSet = false;
-    bool hasRowCount = false;
-    bool hasColumnCount = false;
-    bool hasRowIndex = false;
-    bool hasColumnIndex = false;
-    bool hasLevel = false;
-    bool selected = false;
-    bool hasSelected = false;
-    bool expanded = false;
-    bool hasExpanded = false;
-    bool activeDescendant = false;
-    bool disabled = false;
+    // These one-bit fields occupy one unsigned int allocation unit.
+    unsigned int hasNumericValue : 1 = false;
+    unsigned int hasMinNumericValue : 1 = false;
+    unsigned int hasMaxNumericValue : 1 = false;
+    unsigned int hasNumericValueStep : 1 = false;
+    unsigned int hasPositionInSet : 1 = false;
+    unsigned int hasSizeOfSet : 1 = false;
+    unsigned int hasRowCount : 1 = false;
+    unsigned int hasColumnCount : 1 = false;
+    unsigned int hasRowIndex : 1 = false;
+    unsigned int hasColumnIndex : 1 = false;
+    unsigned int hasLevel : 1 = false;
+    unsigned int selected : 1 = false;
+    unsigned int hasSelected : 1 = false;
+    unsigned int expanded : 1 = false;
+    unsigned int hasExpanded : 1 = false;
+    unsigned int activeDescendant : 1 = false;
+    unsigned int disabled : 1 = false;
 };
+
+static_assert(sizeof(AccessibilityInfo) <= 128,
+              "keep AccessibilityInfo boolean state packed");
 
 // Interactive refinements are absent from most elements. Keeping five full
 // Styles inline cost 2,320 bytes on every El, including plain Markdown text

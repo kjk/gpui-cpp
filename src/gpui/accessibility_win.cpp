@@ -2320,7 +2320,7 @@ bool AccessibilityWinSmokeTest(Window* win, uint32_t nodeId) {
         {UIA_ValuePatternId, AccessibilityTextRole(expected->info.role)},
         {UIA_RangeValuePatternId, expected->slider && expected->info
                                                           .hasNumericValue},
-        {UIA_ExpandCollapsePatternId, expected->info.hasExpanded},
+        {UIA_ExpandCollapsePatternId, expected->info.hasExpanded != 0},
         {UIA_SelectionPatternId,
          AccessibilitySelectionContainerRole(expected->info.role)},
         {UIA_SelectionItemPatternId,
