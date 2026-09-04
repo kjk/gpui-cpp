@@ -182,14 +182,6 @@ static void RenderFrame(Window* win) {
     if (!hwnd || IsIconic(hwnd)) {
         return;
     }
-    if (!win->active && win->lastDrawTime > 0) {
-        double now = TimeNow();
-        if (now - win->lastDrawTime < kInactiveFrameInterval - 0.020) {
-            win->pendingInvalidate = true;
-            PlatSetTimer(win, WindowTimerMs(win));
-            return;
-        }
-    }
     RECT rc = {};
     GetClientRect(hwnd, &rc);
     // The render target is created at 96 dpi, so a DIP is a pixel.
@@ -723,14 +715,6 @@ void AppQuit(Window* win) {
 void AppInvalidate(Window* win) {
     if (win) {
         win->invalidations++;
-        if (!win->active && win->lastDrawTime > 0) {
-            double now = TimeNow();
-            if (now - win->lastDrawTime < kInactiveFrameInterval - 0.020) {
-                win->pendingInvalidate = true;
-                PlatSetTimer(win, WindowTimerMs(win));
-                return;
-            }
-        }
     }
     HWND hwnd = Hwnd(win);
     if (hwnd) {

@@ -637,7 +637,6 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     timing.presentAt = presented ? drawEnd : -1;
     win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
     win->lastDrawTime = drawEnd;
-    win->pendingInvalidate = false;
     InteractionBenchRecord(win, timing);
     win->frameSeq++;
     FrameBenchTick(win, timing.drawSecs);
@@ -2555,8 +2554,7 @@ void WindowTimerTick(Window* win) {
     }
     win->timers.len = keep;
 
-    if (win->anim || win->animFrame || win->pendingInvalidate || repaint) {
-        win->pendingInvalidate = false;
+    if (win->anim || win->animFrame || repaint) {
         AppInvalidate(win);
     }
     PlatSetTimer(win, WindowTimerMs(win));
@@ -2582,11 +2580,13 @@ int WindowTimerMs(Window* win) {
     // if nothing does.
     double now = TimeNow();
     double soonest = -1;
-    if (win->anim || win->opts.anim || win->animFrame ||
-        win->pendingInvalidate) {
+    if (win->anim || win->opts.anim || win->animFrame) {
         // WindowOptions::inactive_frame_interval. A window nobody is looking
         // at animates at 2 FPS rather than at the display's rate, which is
         // what the story app asks GPUI for; an active window keeps the 16 ms.
+        // This only paces continuing animation frames. A demand-driven frame
+        // from input or Notify is invalidated immediately, as upstream does;
+        // Windows can send wheel input to an inactive hovered window.
         double interval = win->active ? 0.016 : kInactiveFrameInterval;
         double target =
             (win->lastDrawTime > 0) ? (win->lastDrawTime + interval) : now;
