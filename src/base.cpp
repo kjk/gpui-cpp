@@ -444,6 +444,12 @@ ArenaStr ArenaStrDup(Arena* a, Str src) {
     VarintPut(dst, len);
     memcpy(dst + vlen, src.s, (size_t)len);
     dst[vlen + len] = 0;
+    if (at > UINT32_MAX) {
+        // The handle is four bytes, and past four gigabytes of arena it
+        // would name a different place. Say there is no string rather than
+        // hand out one that reads back as someone else.
+        return kArenaStrNone;
+    }
     return (ArenaStr)at;
 }
 
@@ -522,6 +528,11 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
     }
     memcpy(dst + nvlen + len, more.s, (size_t)more.len);
     dst[nvlen + nlen] = 0;
+    if (at > UINT32_MAX) {
+        // Four bytes of handle, as in ArenaStrDup: past that the copy is
+        // there but cannot be named.
+        return s;
+    }
     return (ArenaStr)at;
 }
 
@@ -548,7 +559,13 @@ uint32_t ArenaOffsetOf(Arena* a, const void* p) {
         if (at < lo || at >= lo + node->pos) {
             continue;
         }
-        return (uint32_t)(node->basePos + (uint64_t)(at - lo));
+        uint64_t off = node->basePos + (uint64_t)(at - lo);
+        if (off > UINT32_MAX) {
+            // Four bytes of offset: past four gigabytes of arena the answer
+            // would name a different object, so there is no answer.
+            return kArenaPtrNone;
+        }
+        return (uint32_t)off;
     }
     return kArenaPtrNone;
 }
