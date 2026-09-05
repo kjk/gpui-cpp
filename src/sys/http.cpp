@@ -148,11 +148,22 @@ bool HttpSendAsync(const HttpReq& req, Func1<HttpAsyncResult> done) {
 // no more. A slot the worker still owns is never reused; everything else is
 // fair game, oldest first, and evicting one drops the bytes it held.
 
+struct FetchJob {
+    int slot = 0;
+    Func0 done = {};
+#if !GPUI_OS_WASM
+    Str url = {};
+#endif
+};
+
 struct FetchSlot {
     Str url = {}; // owned; stable for as long as the slot is Pending
     FetchState state = FetchState::None;
     uint8_t* body = nullptr; // owned
     int len = 0;
+    FetchJob* job = nullptr;
+    TaskId task = 0;
+    bool discard = false;
 };
 
 constexpr int kFetchSlots = 24;
@@ -193,13 +204,6 @@ int HttpFetchPending() {
     return n;
 }
 
-struct FetchJob {
-    int slot = 0;
-#if !GPUI_OS_WASM
-    Str url = {};
-#endif
-};
-
 static void SlotDrop(FetchSlot* s) {
     if (s->body) {
         Free(nullptr, s->body);
@@ -210,6 +214,9 @@ static void SlotDrop(FetchSlot* s) {
         StrFree(s->url);
         s->url = {};
     }
+    s->job = nullptr;
+    s->task = 0;
+    s->discard = false;
     s->state = FetchState::None;
 }
 
@@ -223,7 +230,10 @@ static void FetchDone(FetchJob* job, HttpAsyncResult result) {
 
     gFetchLock.Lock();
     FetchSlot* s = &gFetch[job->slot];
-    if (got) {
+    bool discard = s->discard;
+    if (discard) {
+        SlotDrop(s);
+    } else if (got) {
         // The body moves rather than copies: Vec's assignment is a deep copy
         // and this is the one place that would rather not pay for it.
         s->body = response->body.els;
@@ -235,11 +245,16 @@ static void FetchDone(FetchJob* job, HttpAsyncResult result) {
     } else {
         s->state = FetchState::Failed;
     }
+    s->job = nullptr;
+    s->task = 0;
     gFetchPending--;
     gFetchLock.Unlock();
 
+    Func0 done = job->done;
     Free(nullptr, job);
-    gOnFetchDone.Call();
+    if (!discard) {
+        done.Call();
+    }
 }
 #else
 // Hosted clients block, so their established image path owns and updates the
@@ -254,7 +269,10 @@ static void FetchWorker(FetchJob* job) {
 
     gFetchLock.Lock();
     FetchSlot* s = &gFetch[job->slot];
-    if (got) {
+    bool discard = s->discard;
+    if (discard) {
+        SlotDrop(s);
+    } else if (got) {
         s->body = response.body.els;
         s->len = response.body.len;
         response.body.els = nullptr;
@@ -264,12 +282,18 @@ static void FetchWorker(FetchJob* job) {
     } else {
         s->state = FetchState::Failed;
     }
+    s->job = nullptr;
+    s->task = 0;
     gFetchPending--;
     gFetchLock.Unlock();
 
+    Func0 done = job->done;
     HttpRspFree(&response);
     StrFree(job->url);
     Free(nullptr, job);
+    if (!discard) {
+        ExecPost(done);
+    }
 }
 #endif
 
@@ -336,7 +360,9 @@ FetchState HttpFetch(Str url, const uint8_t** bytes, int* len) {
     }
     s->url = StrDup(url);
     s->state = FetchState::Pending;
+    s->job = job;
     job->slot = (int)(s - gFetch);
+    job->done = gOnFetchDone;
 #if !GPUI_OS_WASM
     job->url = StrDup(url);
 #endif
@@ -346,10 +372,12 @@ FetchState HttpFetch(Str url, const uint8_t** bytes, int* len) {
 #if GPUI_OS_WASM
     HttpReq req;
     req.url = url;
-    if (!HttpSendAsync(req, MkFunc1(FetchDone, job))) {
+    bool started = HttpSendAsync(req, MkFunc1(FetchDone, job));
 #else
-    if (!job->url.s || !ExecSpawn(MkFunc0(FetchWorker, job), gOnFetchDone)) {
+    TaskId task = job->url.s ? ExecSpawn(MkFunc0(FetchWorker, job)) : 0;
+    bool started = task != 0;
 #endif
+    if (!started) {
         gFetchLock.Lock();
         gFetchPending--;
         SlotDrop(s);
@@ -360,34 +388,45 @@ FetchState HttpFetch(Str url, const uint8_t** bytes, int* len) {
         Free(nullptr, job);
         return FetchState::None;
     }
+#if !GPUI_OS_WASM
+    gFetchLock.Lock();
+    // A very small response may have completed before ExecSpawn returned.
+    if (s->state == FetchState::Pending && s->job == job) {
+        s->task = task;
+    }
+    gFetchLock.Unlock();
+#endif
     return FetchState::Pending;
 }
 
 void HttpFetchClear() {
-    // AppFree calls this, so it must not hold a quit open: a transfer waiting
-    // on a name that will not resolve has fifteen seconds of its own to run
-    // out, and nobody is closing a window to watch that. Wait a moment for
-    // one that is nearly there and then stop.
-    //
-    // Stopping early costs nothing. A worker writes into its slot, so a slot
-    // that is still Pending is not this function's to free — it keeps its
-    // body until the process ends, which is the next thing that happens. The
-    // slots themselves are static and outlive every thread.
-    const int kWaitMs = 500;
-    for (int waited = 0; waited < kWaitMs; waited += 10) {
-        if (HttpFetchPending() == 0) {
-            break;
-        }
-        PlatSleepMs(10);
-    }
+    FetchJob* cancelled[kFetchSlots] = {};
+    int cancelledN = 0;
     gFetchLock.Lock();
     for (int i = 0; i < kFetchSlots; i++) {
-        if (gFetch[i].state != FetchState::Pending) {
-            SlotDrop(&gFetch[i]);
+        FetchSlot* s = &gFetch[i];
+        if (s->state != FetchState::Pending) {
+            SlotDrop(s);
+            continue;
         }
+        s->discard = true;
+#if !GPUI_OS_WASM
+        if (s->task && ExecCancel(s->task)) {
+            cancelled[cancelledN++] = s->job;
+            gFetchPending--;
+            SlotDrop(s);
+        }
+#endif
     }
     gFetchNext = 0;
     gFetchLock.Unlock();
+    for (int i = 0; i < cancelledN; i++) {
+        FetchJob* job = cancelled[i];
+#if !GPUI_OS_WASM
+        StrFree(job->url);
+#endif
+        Free(nullptr, job);
+    }
 }
 
 void HttpFetchDrop(Str url) {

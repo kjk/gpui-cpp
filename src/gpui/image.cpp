@@ -316,6 +316,7 @@ void ImageCacheClear() {
     }
     gImageCacheNext = 0;
     AssetResolveClear();
+    SvgCacheClear();
     HttpFetchClear();
 }
 

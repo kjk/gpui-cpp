@@ -1412,6 +1412,16 @@ struct OpsCache {
 static OpsCache gCache[kMaxCache];
 static int gCacheN = 0;
 
+void SvgCacheClear() {
+    for (int i = 0; i < kMaxCache; i++) {
+        if (gCache[i].owned) {
+            Free(nullptr, (void*)gCache[i].data);
+        }
+        gCache[i] = {};
+    }
+    gCacheN = 0;
+}
+
 // The slot `assetPath` will live in, emptied and named. The caller has
 // already bounded the path, so this always has one to give.
 static OpsCache* CacheSlotFor(Str assetPath) {

@@ -2756,10 +2756,10 @@ void AppFree(App* app) {
     if (!app) {
         return;
     }
-    // First, and before anything an outstanding task might touch is freed. It
-    // gives a job that is nearly done a moment to land and runs the
-    // completions that arrive; whatever is still running after that has its
-    // result dropped rather than delivered into a half-freed App.
+    // Cancel queued image fetches and tell running ones to discard their
+    // results while their App callback is still valid. Then stop the executor;
+    // a request still inside the OS client owns only its job and static slot.
+    ImageCacheClear();
     ExecShutdown();
     EntityDropAll(app);
     for (int i = 0; i < app->windows.len; i++) {
@@ -2778,9 +2778,6 @@ void AppFree(App* app) {
         delete w;
     }
     VecReset(app->windows);
-    // The decoded images outlive a window but not the backend that made
-    // them, so they go before it does.
-    ImageCacheClear();
     LayoutScratchFree();
     ScrollFadeClear();
     StyleOverrideClearAll();

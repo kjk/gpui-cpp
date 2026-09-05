@@ -48,6 +48,10 @@ bool SvgToDrawOps(Str xml, DrawOpsBuilder* out);
 // otherwise the file, read and converted once and then kept. Null if there is
 // no such asset. The bytes belong to the cache — copy them to keep them.
 const uint8_t* SvgDrawOpsFor(Str assetPath, int* lenOut);
+// Drop draw operations built from application assets. Compiled-in icon data
+// is borrowed and is simply forgotten. AppFree calls this through the image
+// cache teardown.
+void SvgCacheClear();
 
 // IconName -> "icons/<kebab>.svg" (same mapping as gpui-kit's
 // icon_named!).

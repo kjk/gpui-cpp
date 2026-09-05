@@ -135,9 +135,9 @@ int HttpFetchPending();
 // still answers Done — nothing would think to look.
 void HttpSetOnFetchDone(Func0 f);
 
-// Forget every fetched body. On hosted targets this waits briefly for worker
-// requests; a still-pending request owns its slot through process teardown.
-// AppFree calls it. The wasm main loop does not return to AppFree.
+// Forget every fetched body. Queued requests are canceled; a request already
+// inside the OS client discards and frees its result when it returns. AppFree
+// calls this before stopping the executor.
 void HttpFetchClear();
 
 // Release the downloaded body for a specific URL once it has been decoded.
