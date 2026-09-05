@@ -1480,6 +1480,7 @@ void RenderImageRelease(RenderImage* img) {
     if (!img || --img->refs != 0) {
         return;
     }
+    gpuw::RenderImageFree(img->generation);
     for (int i = 0; i < img->frames.len; i++) {
         WinImageFrame& frame = img->frames[i];
         Rel(&frame.bmp);

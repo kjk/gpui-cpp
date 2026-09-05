@@ -398,6 +398,11 @@ struct D12ImageSlot {
     ID3D12Resource* tex = nullptr;
     int descriptor = -1;
     uint64_t usedInCommands = 0;
+    // A final image release can happen while this texture is referenced by
+    // the open command list. Zero the lookup identity immediately, then drop
+    // the resource after the fence assigned at submission completes.
+    UINT64 retireFence = 0;
+    bool retireOnSubmit = false;
 };
 
 struct D12Gpu {
@@ -1111,6 +1116,19 @@ static void D12Wait(UINT64 value) {
     }
 }
 
+static void D12CollectImageEvictions() {
+    UINT64 completed = gD12.fence ? gD12.fence->GetCompletedValue() : 0;
+    for (int i = 0; i < kD12ImageSlots; i++) {
+        D12ImageSlot* slot = &gD12.images[i];
+        if (slot->retireFence && completed >= slot->retireFence) {
+            Rel(&slot->tex);
+            slot->retireFence = 0;
+            slot->usedInCommands = 0;
+            slot->frameIndex = 0;
+        }
+    }
+}
+
 static void D12WaitTarget(D12Target* t) {
     if (!t) {
         return;
@@ -1321,6 +1339,7 @@ static bool D12MakeOffscreenSurfaces(D12Target* t) {
 }
 
 static bool D12BeginCommands(D12Target* t, bool continuing = false) {
+    D12CollectImageEvictions();
     gD12.commandGeneration++;
     if (gD12.commandGeneration == 0) {
         gD12.commandGeneration++;
@@ -1415,9 +1434,17 @@ static bool D12FinishCommands(D12Target* t, bool wait) {
         return false;
     }
     f->fenceValue = value;
+    for (int i = 0; i < kD12ImageSlots; i++) {
+        D12ImageSlot* slot = &gD12.images[i];
+        if (slot->retireOnSubmit) {
+            slot->retireOnSubmit = false;
+            slot->retireFence = value;
+        }
+    }
     if (wait) {
         D12Wait(value);
         f->fenceValue = 0;
+        D12CollectImageEvictions();
     }
     return true;
 }
@@ -2940,6 +2967,8 @@ static int D12ImageDescriptor(const RenderImage* img, int frameIndex) {
     }
     slot->imageGeneration = 0;
     slot->frameIndex = 0;
+    slot->retireFence = 0;
+    slot->retireOnSubmit = false;
     slot->descriptor = 1 + slotIx;
     D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
     D3D12_RESOURCE_DESC td = D12Texture(w, h, DXGI_FORMAT_B8G8R8A8_UNORM, 1,
@@ -2967,6 +2996,53 @@ static int D12ImageDescriptor(const RenderImage* img, int frameIndex) {
         ->CreateShaderResourceView(slot->tex, &sv, D12SrvCpu(slot->descriptor));
     gD12.imageNext = (slotIx + 1) % kD12ImageSlots;
     return slot->descriptor;
+}
+
+void RenderImageFree(uint64_t imageGeneration) {
+    if (!imageGeneration) {
+        return;
+    }
+    for (int i = 0; i < kImageSlots; i++) {
+        ImageSlot* slot = &gImages[i];
+        if (slot->imageGeneration == imageGeneration) {
+            if (gB.image == slot->srv) {
+                FlushQuads();
+                gB.image = nullptr;
+            }
+            Rel(&slot->srv);
+            slot->imageGeneration = 0;
+            slot->frameIndex = 0;
+        }
+    }
+    for (int i = 0; i < kD12ImageSlots; i++) {
+        D12ImageSlot* slot = &gD12.images[i];
+        if (slot->imageGeneration != imageGeneration) {
+            continue;
+        }
+        slot->imageGeneration = 0;
+        if (gB.target && slot->usedInCommands == gD12.commandGeneration) {
+            slot->retireOnSubmit = true;
+        } else {
+            slot->retireFence = gD12.nextFence > 1 ? gD12.nextFence - 1 : 0;
+            if (!slot->retireFence) {
+                Rel(&slot->tex);
+                slot->usedInCommands = 0;
+                slot->frameIndex = 0;
+            }
+        }
+    }
+    D12CollectImageEvictions();
+}
+
+int RenderImageCacheCountForTest(uint64_t imageGeneration) {
+    int count = 0;
+    for (int i = 0; i < kImageSlots; i++) {
+        count += gImages[i].imageGeneration == imageGeneration ? 1 : 0;
+    }
+    for (int i = 0; i < kD12ImageSlots; i++) {
+        count += gD12.images[i].imageGeneration == imageGeneration ? 1 : 0;
+    }
+    return count;
 }
 
 static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img,
@@ -3459,6 +3535,10 @@ void PathStroke(PaintCtx*, Path*, float, Rgba, bool, float, float) {}
 void PathRealize(PaintCtx*, Path*) {}
 void RenderImageDraw(PaintCtx*, RenderImage*, Bounds, Bounds, int, float,
                      bool) {}
+void RenderImageFree(uint64_t) {}
+int RenderImageCacheCountForTest(uint64_t) {
+    return 0;
+}
 void TextLayoutDraw(PaintCtx*, TextLayout*, float, float, Rgba, bool, float) {}
 static FrameStats gEmptyStats;
 const FrameStats& LastFrameStats() {

@@ -132,6 +132,9 @@ void PathRealize(PaintCtx* ctx, Path* p);
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
                      Bounds imageBounds, int frameIndex, float radius,
                      bool grayscale);
+// The final RenderImageRelease invalidates textures keyed by this identity.
+void RenderImageFree(uint64_t imageGeneration);
+int RenderImageCacheCountForTest(uint64_t imageGeneration);
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip, float clipW);
 
