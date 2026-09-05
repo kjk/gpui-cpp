@@ -598,6 +598,10 @@ uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
 }
 
+RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
+    return img ? RenderImageStatus::Ready : RenderImageStatus::Failed;
+}
+
 Size RenderImageSizePx(const RenderImage* img) {
     if (!img) {
         return {};

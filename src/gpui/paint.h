@@ -276,6 +276,16 @@ void PathRealize(PaintCtx* ctx, Path* p);
 
 struct RenderImage;
 
+// Hosted decoders return only after decoding, while the browser must return a
+// handle before its Image element finishes. Keep that platform difference
+// explicit so the image cache can show fallback content until the pixels are
+// ready and remember a terminal decode failure.
+enum class RenderImageStatus : uint8_t {
+    Loading,
+    Ready,
+    Failed,
+};
+
 // Decode `bytes`. Null when the format is not one this platform reads, which
 // the caller shows as the image's alt text.
 RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len);
@@ -287,6 +297,7 @@ void RenderImageRelease(RenderImage* img);
 // this is never reused while the process runs, so retained-frame hashes do
 // not confuse a new allocation with the object that previously occupied it.
 uint64_t RenderImageGeneration(const RenderImage* img);
+RenderImageStatus RenderImageStatusGet(const RenderImage* img);
 // The image's own size in pixels.
 Size RenderImageSizePx(const RenderImage* img);
 // Draw it scaled into `b`. The caller has already picked the box, so this is

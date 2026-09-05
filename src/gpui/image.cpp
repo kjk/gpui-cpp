@@ -362,7 +362,16 @@ RenderImage* ImageForSrc(PaintApp* pa, Str src) {
         return nullptr;
     }
     ImageCacheSlot* s = ImageSlotFor(pa, src);
-    return s ? s->img : nullptr;
+    if (!s || !s->img) {
+        return nullptr;
+    }
+    RenderImageStatus status = RenderImageStatusGet(s->img);
+    if (status == RenderImageStatus::Failed) {
+        RenderImageRelease(s->img);
+        s->img = nullptr;
+        return nullptr;
+    }
+    return status == RenderImageStatus::Ready ? s->img : nullptr;
 }
 
 const uint8_t* ImageVectorForSrc(Str src, int* lenOut) {

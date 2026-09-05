@@ -28,9 +28,10 @@ namespace gpui {
 struct RenderImage;
 
 // The decoded image for `src`, or null when there is nothing to draw yet: a
-// fetch still running, a missing asset, a vector picture (see below), or a
-// format this platform does not decode. The result is owned by the cache; do
-// not release it. Retain it explicitly if it must survive cache eviction.
+// fetch or platform decode still running, a missing asset, a vector picture
+// (see below), or a format this platform does not decode. The result is owned
+// by the cache; do not release it. Retain it explicitly if it must survive
+// cache eviction.
 RenderImage* ImageForSrc(PaintApp* pa, Str src);
 
 // The draw-ops for a src that is a vector picture rather than a bitmap — a

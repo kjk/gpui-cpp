@@ -198,6 +198,7 @@ static void WindowsDecodePreservesSourceDimensions() {
         ImageForSrc(app, fmt("data:image/png;base64,%s", Str(png)));
     utassert(image);
     if (image) {
+        utassert(RenderImageStatusGet(image) == RenderImageStatus::Ready);
         Size size = RenderImageSizePx(image);
         utassert(size.w == 1921 && size.h == 1);
     }

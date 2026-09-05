@@ -13,11 +13,11 @@
    platform underneath is asynchronous where Paint.h is not:
 
    - `RenderImageDecode` answers before the picture has been decoded. The
-   browser will not decode one synchronously, so the Image comes back with a
-   size of zero and fills itself in later; the load calls back into the window,
-     which repaints. gpui/image.h caches the Image itself, not its size, so
-     the second frame is correct. SVG never goes through here — src/gpui/svg.h
-     turns it into draw ops, which is most of what this tree draws.
+     browser will not decode one synchronously, so the RenderImage is loading
+     until its DOM Image fires load or error; either result wakes the window.
+     gpui/image.h keeps the handle but returns it to layout and paint only once
+     it is ready. SVG never goes through here — src/gpui/svg.h turns it into
+     draw ops, which is most of what this tree draws.
    - Text is shaped by `measureText`, so wrapping is the greedy word-then-
      character break done here rather than a real line breaker. It agrees with
      Pango and DirectWrite on everything Latin. */
@@ -540,10 +540,11 @@ EM_JS(int, GpJsImageDecode, (const uint8_t* bytes, int len), {
     // the heap grows, and the decode outlives this call.
     const copy = new Uint8Array(HEAPU8.subarray(bytes, bytes + len));
     const url = URL.createObjectURL(new Blob([copy]));
-    const rec = {img: new RenderImage(), w: 0, h: 0, url: url};
+    const rec = {img: new Image(), w: 0, h: 0, status: 0, url: url};
     rec.img.onload = function() {
         rec.w = rec.img.naturalWidth;
         rec.h = rec.img.naturalHeight;
+        rec.status = 1;
         URL.revokeObjectURL(url);
         rec.url = null;
         // The frame that asked for this measured it at nothing. Draw another.
@@ -552,8 +553,13 @@ EM_JS(int, GpJsImageDecode, (const uint8_t* bytes, int len), {
         }
     };
     rec.img.onerror = function() {
+        rec.status = 2;
+        rec.img = null;
         URL.revokeObjectURL(url);
         rec.url = null;
+        if (typeof _gpui_wasm_wake === "function") {
+            _gpui_wasm_wake();
+        }
     };
     rec.img.src = url;
     return G.alloc(G.images, G.imageFree, rec);
@@ -567,6 +573,11 @@ EM_JS(int, GpJsImageW, (int id), {
 EM_JS(int, GpJsImageH, (int id), {
     const e = globalThis.__gpui.images[id];
     return e ? e.h : 0;
+});
+
+EM_JS(int, GpJsImageStatus, (int id), {
+    const e = globalThis.__gpui.images[id];
+    return e ? e.status : 2;
 });
 
 EM_JS(void, GpJsImageDraw,
@@ -599,6 +610,10 @@ EM_JS(void, GpJsImageDraw,
 EM_JS(void, GpJsImageFree, (int id), {
     const G = globalThis.__gpui;
     const e = G.images[id];
+    if (e && e.img) {
+        e.img.onload = null;
+        e.img.onerror = null;
+    }
     if (e && e.url) {
         URL.revokeObjectURL(e.url);
     }
@@ -1201,6 +1216,16 @@ void RenderImageRelease(RenderImage* img) {
 
 uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
+}
+
+RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
+    if (!img || !img->js) {
+        return RenderImageStatus::Failed;
+    }
+    int status = GpJsImageStatus(img->js);
+    return status == 0   ? RenderImageStatus::Loading
+           : status == 1 ? RenderImageStatus::Ready
+                         : RenderImageStatus::Failed;
 }
 
 // Zero until the browser has decoded it. The caller lays the picture out at

@@ -1443,6 +1443,10 @@ uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
 }
 
+RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
+    return img ? RenderImageStatus::Ready : RenderImageStatus::Failed;
+}
+
 // The GPU backend makes its own texture out of the same pixels rather than a
 // second D2D bitmap.
 bool PaintImagePixels(const RenderImage* img, const uint8_t** bgra, int* w,
