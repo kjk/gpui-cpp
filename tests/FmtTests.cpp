@@ -100,6 +100,29 @@ static void AFormatThatDoesNotHoldUpAnswersNothing() {
     utassert(fmt("%{0", 1).len == 0);
     utassert(fmt("%{$0}", 1).len == 0);
 
+    // More directives than Fmt holds instructions for. Thirty-two is the
+    // whole array, and an escape flushes the literal before it, so this
+    // needs no arguments to ask for more than there is room for.
+    utassert(fmt("a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%"
+                 "a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%a%%")
+                 .len == 0);
+    // Within the array it still works, escapes and all.
+    utassert(base::StrEq(fmt("a%%b%%c"), StrL("a%b%c")));
+
+    // The same past the array with % specs, which parse down a different
+    // path than the literals do: thirty-four directives, all of them fed.
+    utassert(fmt("%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%"
+                 "d%d%d%d",
+                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+                 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34)
+                 .len == 0);
+    // And thirty-two of them, which is the most that fits, still formats.
+    utassert(
+        fmt("%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d",
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+            20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32)
+            .len > 0);
+
     // An integer directive takes anything integer-like, which is printf's
     // own leniency rather than an accident.
     utassert(base::StrEq(fmt("%c", 122), StrL("z")));
