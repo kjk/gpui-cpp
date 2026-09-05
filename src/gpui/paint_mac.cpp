@@ -548,13 +548,18 @@ static int U16OffToUtf8(Str s, int u16off) {
 // framework the build does not already link. ImageIO would do the same job
 // one layer down.
 
-struct RenderImage {
-    int refs = 1;
-    uint64_t generation = 0;
+struct MacImageFrame {
     CGImageRef image = nullptr;
     CGImageRef grayImage = nullptr;
     int w = 0;
     int h = 0;
+    int durationMs = 100;
+};
+
+struct RenderImage {
+    int refs = 1;
+    uint64_t generation = 0;
+    Vec<MacImageFrame> frames;
 };
 
 RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
@@ -567,15 +572,35 @@ RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     if (!rep) {
         return nullptr;
     }
-    CGImageRef cg = [rep CGImage];
-    if (!cg) {
-        return nullptr;
-    }
     auto* img = new RenderImage();
     img->generation = PaintResourceGenerationNew();
-    img->image = CGImageRetain(cg);
-    img->w = (int)CGImageGetWidth(cg);
-    img->h = (int)CGImageGetHeight(cg);
+    NSInteger count = [[rep valueForProperty:NSImageFrameCount] integerValue];
+    if (count < 1) {
+        count = 1;
+    }
+    for (NSInteger i = 0; i < count; i++) {
+        if (count > 1) {
+            [rep setProperty:NSImageCurrentFrame
+                   withValue:[NSNumber numberWithInteger:i]];
+        }
+        CGImageRef cg = [rep CGImage];
+        if (!cg) {
+            continue;
+        }
+        MacImageFrame frame = {};
+        frame.image = CGImageRetain(cg);
+        frame.w = (int)CGImageGetWidth(cg);
+        frame.h = (int)CGImageGetHeight(cg);
+        NSNumber* duration = [rep valueForProperty:NSImageCurrentFrameDuration];
+        if (duration && [duration doubleValue] > 0) {
+            frame.durationMs = (int)([duration doubleValue] * 1000.0);
+        }
+        VecAppend(img->frames, frame);
+    }
+    if (img->frames.len == 0) {
+        delete img;
+        return nullptr;
+    }
     return img;
 }
 
@@ -589,12 +614,16 @@ void RenderImageRelease(RenderImage* img) {
     if (!img || --img->refs != 0) {
         return;
     }
-    if (img->image) {
-        CGImageRelease(img->image);
+    for (int i = 0; i < img->frames.len; i++) {
+        MacImageFrame& frame = img->frames[i];
+        if (frame.image) {
+            CGImageRelease(frame.image);
+        }
+        if (frame.grayImage) {
+            CGImageRelease(frame.grayImage);
+        }
     }
-    if (img->grayImage) {
-        CGImageRelease(img->grayImage);
-    }
+    VecReset(img->frames);
     delete img;
 }
 
@@ -606,47 +635,69 @@ RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
     return img ? RenderImageStatus::Ready : RenderImageStatus::Failed;
 }
 
-Size RenderImageSizePx(const RenderImage* img) {
-    if (!img) {
+Size RenderImageSizePx(const RenderImage* img, int frameIndex) {
+    if (!img || img->frames.len <= 0) {
         return {};
     }
-    return {(float)img->w, (float)img->h};
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
+    return {(float)img->frames[frameIndex].w, (float)img->frames[frameIndex].h};
 }
 
-static CGImageRef ImageForDraw(RenderImage* img, bool grayscale) {
-    if (!grayscale || img->grayImage) {
-        return grayscale ? img->grayImage : img->image;
+int RenderImageFrameCount(const RenderImage* img) {
+    return img ? img->frames.len : 0;
+}
+
+int RenderImageFrameDurationMs(const RenderImage* img, int frameIndex) {
+    if (!img || img->frames.len <= 0) {
+        return 0;
     }
-    size_t bytesPerRow = (size_t)img->w * 2;
-    size_t bytes = bytesPerRow * (size_t)img->h;
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
+    return img->frames[frameIndex].durationMs;
+}
+
+static CGImageRef ImageForDraw(MacImageFrame* frame, bool grayscale) {
+    if (!grayscale || frame->grayImage) {
+        return grayscale ? frame->grayImage : frame->image;
+    }
+    size_t bytesPerRow = (size_t)frame->w * 2;
+    size_t bytes = bytesPerRow * (size_t)frame->h;
     uint8_t* pixels = AllocArray<uint8_t>(bytes);
     CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
     CGContextRef cg =
         pixels && space
-            ? CGBitmapContextCreate(pixels, (size_t)img->w, (size_t)img->h, 8,
-                                    bytesPerRow, space,
+            ? CGBitmapContextCreate(pixels, (size_t)frame->w, (size_t)frame->h,
+                                    8, bytesPerRow, space,
                                     kCGImageAlphaPremultipliedLast)
             : nullptr;
     if (cg) {
-        CGContextDrawImage(cg, CGRectMake(0, 0, img->w, img->h), img->image);
-        img->grayImage = CGBitmapContextCreateImage(cg);
+        CGContextDrawImage(cg, CGRectMake(0, 0, frame->w, frame->h),
+                           frame->image);
+        frame->grayImage = CGBitmapContextCreateImage(cg);
         CGContextRelease(cg);
     }
     if (space) {
         CGColorSpaceRelease(space);
     }
     Free(nullptr, pixels);
-    return img->grayImage;
+    return frame->grayImage;
 }
 
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius, bool grayscale) {
+                     Bounds imageBounds, int frameIndex, float radius,
+                     bool grayscale) {
     CGContextRef cg = Cg(ctx);
-    if (!cg || !img || !img->image || bounds.w <= 0 || bounds.h <= 0 ||
+    if (!cg || !img || img->frames.len <= 0 || bounds.w <= 0 || bounds.h <= 0 ||
         imageBounds.w <= 0 || imageBounds.h <= 0) {
         return;
     }
-    CGImageRef image = ImageForDraw(img, grayscale);
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
+    CGImageRef image = ImageForDraw(&img->frames[frameIndex], grayscale);
     if (!image) {
         return;
     }

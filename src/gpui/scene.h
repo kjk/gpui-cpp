@@ -151,10 +151,11 @@ void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
                    bool roundCaps);
 
 void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                  Bounds imageBounds, float radius, bool grayscale);
+                  Bounds imageBounds, int frameIndex, float radius,
+                  bool grayscale);
 inline void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
                          float radius) {
-    RecImageDraw(ctx, img, bounds, bounds, radius, false);
+    RecImageDraw(ctx, img, bounds, bounds, 0, radius, false);
 }
 void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                  bool clip, float clipW);

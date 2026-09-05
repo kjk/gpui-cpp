@@ -251,6 +251,8 @@ struct ImageCacheSlot {
     uint8_t* ops = nullptr;
     int opsLen = 0;
     double loadingAt = 0;
+    double lastFrameAt = 0;
+    int frameIndex = 0;
     bool pending = false;
     bool tried = false;
 };
@@ -272,6 +274,8 @@ static void ImageSlotFree(ImageCacheSlot* s) {
     }
     s->opsLen = 0;
     s->loadingAt = 0;
+    s->lastFrameAt = 0;
+    s->frameIndex = 0;
     s->pending = false;
     if (s->src.s) {
         StrFree(s->src);
@@ -412,6 +416,48 @@ ImageLoadState ImageSrcState(PaintApp* pa, Str src, double* loadingSeconds) {
     }
     s->loadingAt = 0;
     return ImageLoadState::Ready;
+}
+
+int ImageFrameIndex(Str src, RenderImage* image, bool reducedMotion,
+                    bool* wantsAnimation) {
+    if (wantsAnimation) {
+        *wantsAnimation = false;
+    }
+    int count = RenderImageFrameCount(image);
+    if (count <= 1) {
+        return 0;
+    }
+    ImageCacheSlot* slot = ImageSlotFind(src);
+    if (!slot || slot->img != image) {
+        return 0;
+    }
+    if (slot->frameIndex < 0 || slot->frameIndex >= count) {
+        slot->frameIndex = 0;
+    }
+    if (reducedMotion) {
+        slot->lastFrameAt = 0;
+        return slot->frameIndex;
+    }
+    if (wantsAnimation) {
+        *wantsAnimation = true;
+    }
+    double now = TimeNow();
+    if (slot->lastFrameAt <= 0) {
+        slot->lastFrameAt = now;
+        return slot->frameIndex;
+    }
+    double elapsed = now - slot->lastFrameAt;
+    for (int advances = 0; advances < count * 2; advances++) {
+        int delay = RenderImageFrameDurationMs(image, slot->frameIndex);
+        double seconds = (delay > 0 ? delay : 100) / 1000.0;
+        if (elapsed < seconds) {
+            break;
+        }
+        elapsed -= seconds;
+        slot->lastFrameAt += seconds;
+        slot->frameIndex = (slot->frameIndex + 1) % count;
+    }
+    return slot->frameIndex;
 }
 
 RenderImage* ImageForSrc(PaintApp* pa, Str src) {

@@ -691,7 +691,8 @@ void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
 }
 
 void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                  Bounds imageBounds, float radius, bool grayscale) {
+                  Bounds imageBounds, int frameIndex, float radius,
+                  bool grayscale) {
     Prim* p = Emit(ctx, kPImage, bounds);
     p->g0 = bounds.x;
     p->g1 = bounds.y;
@@ -699,6 +700,7 @@ void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
     p->g3 = bounds.h;
     p->e0 = radius;
     p->e1 = grayscale ? 1.f : 0.f;
+    p->e2 = (float)frameIndex;
     p->imageBounds = imageBounds;
     RenderImageRetain(img);
     p->ref = img;
@@ -1255,7 +1257,7 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
             case kPImage:
                 RenderImageDraw(ctx, (RenderImage*)p.ref,
                                 Bounds{p.g0, p.g1, p.g2, p.g3}, p.imageBounds,
-                                p.e0, p.e1 != 0);
+                                (int)p.e2, p.e0, p.e1 != 0);
                 break;
             case kPText:
                 TextLayoutDraw(ctx, (TextLayout*)p.ref, p.g0, p.g1, p.color,

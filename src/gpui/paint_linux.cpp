@@ -629,11 +629,22 @@ RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
     return img ? RenderImageStatus::Ready : RenderImageStatus::Failed;
 }
 
-Size RenderImageSizePx(const RenderImage* img) {
+Size RenderImageSizePx(const RenderImage* img, int frameIndex) {
+    (void)frameIndex;
     if (!img) {
         return {};
     }
     return {(float)img->w, (float)img->h};
+}
+
+int RenderImageFrameCount(const RenderImage* img) {
+    return img ? 1 : 0;
+}
+
+int RenderImageFrameDurationMs(const RenderImage* img, int frameIndex) {
+    (void)img;
+    (void)frameIndex;
+    return 0;
 }
 
 static cairo_surface_t* ImageSurface(RenderImage* img, bool grayscale) {
@@ -670,7 +681,9 @@ static cairo_surface_t* ImageSurface(RenderImage* img, bool grayscale) {
 }
 
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius, bool grayscale) {
+                     Bounds imageBounds, int frameIndex, float radius,
+                     bool grayscale) {
+    (void)frameIndex;
     cairo_t* cr = Cr(ctx);
     if (!cr || !img || !img->surface || img->w <= 0 || img->h <= 0 ||
         bounds.w <= 0 || bounds.h <= 0 || imageBounds.w <= 0 ||

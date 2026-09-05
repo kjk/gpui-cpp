@@ -224,7 +224,7 @@ static void Direct2dImagesSurviveTargetRecreation() {
         uint8_t gray[4] = {};
         utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
         RenderImageDraw(&paint, image, Bounds{0, 0, 1, 1}, Bounds{0, 0, 1, 1},
-                        0, true);
+                        0, 0, true);
         utassert(PaintTargetEndOffscreen(&paint, gray));
         utassert(gray[0] == gray[1] && gray[1] == gray[2] && gray[3] > 0);
     }
@@ -253,6 +253,47 @@ static void WindowsDecodePreservesSourceDimensions() {
         utassert(RenderImageStatusGet(image) == RenderImageStatus::Ready);
         Size size = RenderImageSizePx(image);
         utassert(size.w == 1921 && size.h == 1);
+    }
+    AppFree(owner);
+#endif
+}
+
+static void WindowsDecodesAnimatedGifFrames() {
+#if GPUI_OS_WINDOWS
+    TestSuite("Windows animated GIF decode");
+    App* owner = AppNew();
+    PaintApp* app = owner ? owner->paint : nullptr;
+    utassert(app);
+    if (!app) {
+        return;
+    }
+    // Two 2x1 full frames, red for 100 ms and blue for 200 ms.
+    const char* gif =
+        "R0lGODlhAgABAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQA"
+        "CgAAACwAAAAAAgABAAAIBQABAAgIACH5BAEUAAEALAAAAAACAAEAgQAA/wAAAAAA"
+        "AAAAAAgFAAEACAgAOw==";
+    RenderImage* image =
+        ImageForSrc(app, fmt("data:image/gif;base64,%s", Str(gif)));
+    utassert(image);
+    if (image) {
+        utassert(RenderImageFrameCount(image) == 2);
+        utassert(RenderImageFrameDurationMs(image, 0) == 100);
+        utassert(RenderImageFrameDurationMs(image, 1) == 200);
+        uint8_t red[8] = {};
+        uint8_t blue[8] = {};
+        PaintCtx paint = {};
+        paint.pa = app;
+        paint.opacity = 1;
+        utassert(PaintTargetBeginOffscreen(&paint, 2, 1));
+        RenderImageDraw(&paint, image, Bounds{0, 0, 2, 1}, Bounds{0, 0, 2, 1},
+                        0, 0, false);
+        utassert(PaintTargetEndOffscreen(&paint, red));
+        utassert(PaintTargetBeginOffscreen(&paint, 2, 1));
+        RenderImageDraw(&paint, image, Bounds{0, 0, 2, 1}, Bounds{0, 0, 2, 1},
+                        1, 0, false);
+        utassert(PaintTargetEndOffscreen(&paint, blue));
+        utassert(red[2] > red[0]);
+        utassert(blue[0] > blue[2]);
     }
     AppFree(owner);
 #endif
@@ -318,6 +359,7 @@ void TestScene() {
     RecordedImagesSurviveCacheEviction();
     Direct2dImagesSurviveTargetRecreation();
     WindowsDecodePreservesSourceDimensions();
+    WindowsDecodesAnimatedGifFrames();
     D3d12ImageDescriptorsAreReusable();
     FrameComparisonBelongsToOnePaintContext();
     TextLayoutsHaveStableGenerations();

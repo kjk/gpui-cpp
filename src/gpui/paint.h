@@ -299,7 +299,9 @@ void RenderImageRelease(RenderImage* img);
 uint64_t RenderImageGeneration(const RenderImage* img);
 RenderImageStatus RenderImageStatusGet(const RenderImage* img);
 // The image's own size in pixels.
-Size RenderImageSizePx(const RenderImage* img);
+Size RenderImageSizePx(const RenderImage* img, int frameIndex = 0);
+int RenderImageFrameCount(const RenderImage* img);
+int RenderImageFrameDurationMs(const RenderImage* img, int frameIndex);
 // Draw it scaled into `b`. The caller has already picked the box, so this is
 // a straight stretch — object_fit is decided above.
 // `radius` rounds the corners the picture is drawn into, which is what an
@@ -310,11 +312,11 @@ Size RenderImageSizePx(const RenderImage* img);
 // `bounds` is the element's content mask; `imageBounds` is ObjectFit's
 // placement of the intrinsic image inside it.
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius = 0,
+                     Bounds imageBounds, int frameIndex, float radius = 0,
                      bool grayscale = false);
 inline void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
                             float radius = 0) {
-    RenderImageDraw(ctx, img, bounds, bounds, radius, false);
+    RenderImageDraw(ctx, img, bounds, bounds, 0, radius, false);
 }
 
 // ─── shaped text ──────────────────────────────────────────────────────────

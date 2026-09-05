@@ -394,6 +394,7 @@ struct D12Pipelines {
 
 struct D12ImageSlot {
     uint64_t imageGeneration = 0;
+    int frameIndex = 0;
     ID3D12Resource* tex = nullptr;
     int descriptor = -1;
     uint64_t usedInCommands = 0;
@@ -2735,6 +2736,7 @@ constexpr int kImageSlots = 32;
 
 struct ImageSlot {
     uint64_t imageGeneration = 0;
+    int frameIndex = 0;
     ID3D11ShaderResourceView* srv = nullptr;
 };
 
@@ -2750,6 +2752,7 @@ static void FreeD3d11Gpu(bool removed) {
     for (int i = 0; i < kImageSlots; i++) {
         Rel(&gImages[i].srv);
         gImages[i].imageGeneration = 0;
+        gImages[i].frameIndex = 0;
     }
     gImageNext = 0;
     Rel(&g->white);
@@ -2878,17 +2881,19 @@ static void RecoverDevice(PaintCtx* ctx, bool removed) {
     }
 }
 
-static int D12ImageDescriptor(const RenderImage* img) {
+static int D12ImageDescriptor(const RenderImage* img, int frameIndex) {
     uint64_t generation = RenderImageGeneration(img);
     for (int i = 0; i < kD12ImageSlots; i++) {
-        if (gD12.images[i].imageGeneration == generation) {
+        if (gD12.images[i].imageGeneration == generation &&
+            gD12.images[i].frameIndex == frameIndex) {
             gD12.images[i].usedInCommands = gD12.commandGeneration;
             return gD12.images[i].descriptor;
         }
     }
     const uint8_t* bgra = nullptr;
     int w = 0, h = 0;
-    if (!PaintImagePixels(img, &bgra, &w, &h) || !bgra || w <= 0 || h <= 0) {
+    if (!PaintImagePixels(img, &bgra, &w, &h, frameIndex) || !bgra || w <= 0 ||
+        h <= 0) {
         return -1;
     }
     D12ImageSlot* slot = nullptr;
@@ -2934,6 +2939,7 @@ static int D12ImageDescriptor(const RenderImage* img) {
         Rel(&slot->tex);
     }
     slot->imageGeneration = 0;
+    slot->frameIndex = 0;
     slot->descriptor = 1 + slotIx;
     D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
     D3D12_RESOURCE_DESC td = D12Texture(w, h, DXGI_FORMAT_B8G8R8A8_UNORM, 1,
@@ -2950,6 +2956,7 @@ static int D12ImageDescriptor(const RenderImage* img) {
         return -1;
     }
     slot->imageGeneration = generation;
+    slot->frameIndex = frameIndex;
     slot->usedInCommands = gD12.commandGeneration;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -2962,16 +2969,19 @@ static int D12ImageDescriptor(const RenderImage* img) {
     return slot->descriptor;
 }
 
-static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img) {
+static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img,
+                                          int frameIndex) {
     uint64_t generation = RenderImageGeneration(img);
     for (int i = 0; i < kImageSlots; i++) {
-        if (gImages[i].imageGeneration == generation) {
+        if (gImages[i].imageGeneration == generation &&
+            gImages[i].frameIndex == frameIndex) {
             return gImages[i].srv;
         }
     }
     const uint8_t* bgra = nullptr;
     int w = 0, h = 0;
-    if (!PaintImagePixels(img, &bgra, &w, &h) || !bgra || w <= 0 || h <= 0) {
+    if (!PaintImagePixels(img, &bgra, &w, &h, frameIndex) || !bgra || w <= 0 ||
+        h <= 0) {
         return nullptr;
     }
     D3D11_TEXTURE2D_DESC td = {};
@@ -3000,12 +3010,14 @@ static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img) {
     gImageNext = (gImageNext + 1) % kImageSlots;
     Rel(&s->srv);
     s->imageGeneration = generation;
+    s->frameIndex = frameIndex;
     s->srv = srv;
     return srv;
 }
 
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius, bool grayscale) {
+                     Bounds imageBounds, int frameIndex, float radius,
+                     bool grayscale) {
     if (!gB.target || !img || bounds.w <= 0 || bounds.h <= 0 ||
         imageBounds.w <= 0 || imageBounds.h <= 0) {
         return;
@@ -3023,7 +3035,7 @@ void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
     }
     EnsureQuadPhase();
     if (PaintD3d12On()) {
-        int descriptor = D12ImageDescriptor(img);
+        int descriptor = D12ImageDescriptor(img, frameIndex);
         if (descriptor < 0) {
             return;
         }
@@ -3032,7 +3044,7 @@ void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
             gB.image12 = descriptor;
         }
     } else {
-        ID3D11ShaderResourceView* srv = ImageSrv(img);
+        ID3D11ShaderResourceView* srv = ImageSrv(img, frameIndex);
         if (!srv) {
             return;
         }
@@ -3445,7 +3457,8 @@ void PathFillGradient(PaintCtx*, Path*, float, float, float, float, Rgba, Rgba,
                       float, float) {}
 void PathStroke(PaintCtx*, Path*, float, Rgba, bool, float, float) {}
 void PathRealize(PaintCtx*, Path*) {}
-void RenderImageDraw(PaintCtx*, RenderImage*, Bounds, Bounds, float, bool) {}
+void RenderImageDraw(PaintCtx*, RenderImage*, Bounds, Bounds, int, float,
+                     bool) {}
 void TextLayoutDraw(PaintCtx*, TextLayout*, float, float, Rgba, bool, float) {}
 static FrameStats gEmptyStats;
 const FrameStats& LastFrameStats() {

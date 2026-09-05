@@ -76,7 +76,7 @@ void* PaintSharedDwrite(PaintApp* pa);
 // The premultiplied BGRA WIC decoded, which is what RenderImageDecode keeps.
 // False when the image never decoded.
 bool PaintImagePixels(const RenderImage* img, const uint8_t** bgra, int* w,
-                      int* h);
+                      int* h, int frameIndex);
 // IDWriteTextLayout*. TextLayout is wrapped so its stable scene generation
 // can live beside the native object.
 void* PaintTextLayoutNative(TextLayout* tl);
@@ -130,7 +130,8 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
 void PathRealize(PaintCtx* ctx, Path* p);
 
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius, bool grayscale);
+                     Bounds imageBounds, int frameIndex, float radius,
+                     bool grayscale);
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip, float clipW);
 

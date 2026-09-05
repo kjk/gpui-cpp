@@ -1385,7 +1385,7 @@ El* El::Grayscale(bool grayscale) {
     return this;
 }
 
-El* El::ObjectFit(gpui::ObjectFit fit) {
+El* El::ObjectFitMode(gpui::ObjectFit fit) {
     objectFit = fit;
     return this;
 }
@@ -6028,9 +6028,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         PaintCaret(ctx, e, font);
     } else if (e->kind == ElKind::Image && !e->imageReplacement) {
         // image.h resolves the src: the asset an application shipped, the
-        // data: URI, or the body a worker thread fetched. A fetch still
-        // running answers nothing, and the alt text below stands in until it
-        // lands.
+        // data: URI, or the body a worker thread fetched. PrepareEl has
+        // already selected a delayed loading view or a failed-load fallback;
+        // only the ready image reaches this branch.
         RenderImage* img = ImageForSrc(ctx->pa, e->imgSrc);
         int opsLen = 0;
         const uint8_t* ops =
@@ -6038,10 +6038,16 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         Bounds bounds = e->Bounds();
         bool drewSvg = false;
         if (img) {
-            Bounds imageBounds =
-                ObjectFitBounds(e->objectFit, bounds, RenderImageSizePx(img));
-            RenderImageDraw(ctx, img, bounds, imageBounds, e->style.radius,
-                            e->imageGrayscale);
+            bool wantsAnimation = false;
+            int frameIndex = ImageFrameIndex(e->imgSrc, img, PlatReduceMotion(),
+                                             &wantsAnimation);
+            if (wantsAnimation) {
+                ctx->wantsAnimFrame = true;
+            }
+            Bounds imageBounds = ObjectFitBounds(
+                e->objectFit, bounds, RenderImageSizePx(img, frameIndex));
+            RenderImageDraw(ctx, img, bounds, imageBounds, frameIndex,
+                            e->style.radius, e->imageGrayscale);
         } else if (ops) {
             Size imageSize = {};
             if (DrawOpsViewBox(ops, opsLen, &imageSize)) {

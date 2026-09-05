@@ -1350,11 +1350,7 @@ static int WideOffToUtf8(Str s, int woff) {
 // a lost device, so the bitmap is rebuilt beside it when the target it was
 // made for is no longer the one being drawn into.
 
-struct RenderImage {
-    int refs = 1;
-    uint64_t generation = 0;
-    int w = 0;
-    int h = 0;
+struct WinImageFrame {
     uint8_t* bgra = nullptr;
     ID2D1Bitmap* bmp = nullptr;
     ID2D1Bitmap* grayBmp = nullptr;
@@ -1362,7 +1358,68 @@ struct RenderImage {
     // and do not survive it. Use its generation rather than its address: a
     // newly allocated target may occupy the same address as the old one.
     uint64_t bmpTargetGeneration = 0;
+    int w = 0;
+    int h = 0;
+    int durationMs = 100;
 };
+
+struct RenderImage {
+    int refs = 1;
+    uint64_t generation = 0;
+    Vec<WinImageFrame> frames;
+};
+
+static int WicFrameDurationMs(IWICBitmapFrameDecode* frame) {
+    IWICMetadataQueryReader* metadata = nullptr;
+    int duration = 100;
+    if (SUCCEEDED(frame->GetMetadataQueryReader(&metadata)) && metadata) {
+        PROPVARIANT value = {};
+        if (SUCCEEDED(metadata
+                          ->GetMetadataByName(L"/grctlext/Delay", &value)) &&
+            value.vt == VT_UI2 && value.uiVal > 0) {
+            duration = (int)value.uiVal * 10;
+        }
+        PropVariantClear(&value);
+        Rel(&metadata);
+    }
+    return duration;
+}
+
+static bool WicDecodeFrame(IWICImagingFactory* wic,
+                           IWICBitmapFrameDecode* frame, WinImageFrame* out) {
+    IWICFormatConverter* conv = nullptr;
+    HRESULT hr = wic->CreateFormatConverter(&conv);
+    if (SUCCEEDED(hr)) {
+        hr = conv->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
+                              WICBitmapDitherTypeNone, nullptr, 0.f,
+                              WICBitmapPaletteTypeMedianCut);
+    }
+    UINT w = 0, h = 0;
+    if (SUCCEEDED(hr)) {
+        hr = conv->GetSize(&w, &h);
+    }
+    uint8_t* px = nullptr;
+    if (SUCCEEDED(hr) && w > 0 && h > 0 && w <= UINT_MAX / 4 &&
+        h <= UINT_MAX / (w * 4)) {
+        UINT stride = w * 4;
+        UINT size = stride * h;
+        if (size <= 0x7fffffffu) {
+            px = (uint8_t*)Alloc(nullptr, (int)size);
+            if (!px || FAILED(conv->CopyPixels(nullptr, stride, size, px))) {
+                Free(nullptr, px);
+                px = nullptr;
+            }
+        }
+    }
+    if (px) {
+        out->bgra = px;
+        out->w = (int)w;
+        out->h = (int)h;
+        out->durationMs = WicFrameDurationMs(frame);
+    }
+    Rel(&conv);
+    return px != nullptr;
+}
 
 RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     (void)pa;
@@ -1377,8 +1434,6 @@ RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     }
     IWICStream* stream = nullptr;
     IWICBitmapDecoder* dec = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
-    IWICFormatConverter* conv = nullptr;
     RenderImage* img = nullptr;
     hr = wic->CreateStream(&stream);
     if (SUCCEEDED(hr)) {
@@ -1388,37 +1443,27 @@ RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         hr = wic->CreateDecoderFromStream(stream, nullptr,
                                           WICDecodeMetadataCacheOnLoad, &dec);
     }
+    UINT frameCount = 0;
     if (SUCCEEDED(hr)) {
-        hr = dec->GetFrame(0, &frame);
+        hr = dec->GetFrameCount(&frameCount);
     }
-    if (SUCCEEDED(hr)) {
-        hr = wic->CreateFormatConverter(&conv);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = conv->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
-                              WICBitmapDitherTypeNone, nullptr, 0.f,
-                              WICBitmapPaletteTypeMedianCut);
-    }
-    UINT w = 0, h = 0;
-    if (SUCCEEDED(hr)) {
-        hr = conv->GetSize(&w, &h);
-    }
-    if (SUCCEEDED(hr) && w > 0 && h > 0) {
-        UINT stride = w * 4;
-        UINT size = stride * h;
-        auto* px = (uint8_t*)Alloc(nullptr, (int)size);
-        if (px && SUCCEEDED(conv->CopyPixels(nullptr, stride, size, px))) {
-            img = new RenderImage();
-            img->generation = PaintResourceGenerationNew();
-            img->w = (int)w;
-            img->h = (int)h;
-            img->bgra = px;
-        } else {
-            Free(nullptr, px);
+    if (SUCCEEDED(hr) && frameCount > 0) {
+        img = new RenderImage();
+        img->generation = PaintResourceGenerationNew();
+        for (UINT i = 0; i < frameCount; i++) {
+            IWICBitmapFrameDecode* frame = nullptr;
+            WinImageFrame decoded = {};
+            if (SUCCEEDED(dec->GetFrame(i, &frame)) && frame &&
+                WicDecodeFrame(wic, frame, &decoded)) {
+                VecAppend(img->frames, decoded);
+            }
+            Rel(&frame);
+        }
+        if (img->frames.len == 0) {
+            delete img;
+            img = nullptr;
         }
     }
-    Rel(&conv);
-    Rel(&frame);
     Rel(&dec);
     Rel(&stream);
     Rel(&wic);
@@ -1435,9 +1480,13 @@ void RenderImageRelease(RenderImage* img) {
     if (!img || --img->refs != 0) {
         return;
     }
-    Rel(&img->bmp);
-    Rel(&img->grayBmp);
-    Free(nullptr, img->bgra);
+    for (int i = 0; i < img->frames.len; i++) {
+        WinImageFrame& frame = img->frames[i];
+        Rel(&frame.bmp);
+        Rel(&frame.grayBmp);
+        Free(nullptr, frame.bgra);
+    }
+    VecReset(img->frames);
     delete img;
 }
 
@@ -1452,44 +1501,68 @@ RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
 // The GPU backend makes its own texture out of the same pixels rather than a
 // second D2D bitmap.
 bool PaintImagePixels(const RenderImage* img, const uint8_t** bgra, int* w,
-                      int* h) {
-    if (!img || !img->bgra || img->w <= 0 || img->h <= 0) {
+                      int* h, int frameIndex) {
+    if (!img || img->frames.len <= 0) {
+        return false;
+    }
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
+    const WinImageFrame& frame = img->frames[frameIndex];
+    if (!frame.bgra || frame.w <= 0 || frame.h <= 0) {
         return false;
     }
     if (bgra) {
-        *bgra = img->bgra;
+        *bgra = frame.bgra;
     }
     if (w) {
-        *w = img->w;
+        *w = frame.w;
     }
     if (h) {
-        *h = img->h;
+        *h = frame.h;
     }
     return true;
 }
 
-Size RenderImageSizePx(const RenderImage* img) {
-    if (!img) {
+Size RenderImageSizePx(const RenderImage* img, int frameIndex) {
+    if (!img || img->frames.len <= 0) {
         return {};
     }
-    return {(float)img->w, (float)img->h};
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
+    return {(float)img->frames[frameIndex].w, (float)img->frames[frameIndex].h};
 }
 
-static ID2D1Bitmap* ImageBitmap(PaintCtx* ctx, RenderImage* img,
-                                bool grayscale) {
-    if (img->bmpTargetGeneration != ctx->rt->generation) {
-        Rel(&img->bmp);
-        Rel(&img->grayBmp);
-        img->bmpTargetGeneration = 0;
+int RenderImageFrameCount(const RenderImage* img) {
+    return img ? img->frames.len : 0;
+}
+
+int RenderImageFrameDurationMs(const RenderImage* img, int frameIndex) {
+    if (!img || img->frames.len <= 0) {
+        return 0;
     }
-    ID2D1Bitmap** out = grayscale ? &img->grayBmp : &img->bmp;
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
+    return img->frames[frameIndex].durationMs;
+}
+
+static ID2D1Bitmap* ImageBitmap(PaintCtx* ctx, WinImageFrame* frame,
+                                bool grayscale) {
+    if (frame->bmpTargetGeneration != ctx->rt->generation) {
+        Rel(&frame->bmp);
+        Rel(&frame->grayBmp);
+        frame->bmpTargetGeneration = 0;
+    }
+    ID2D1Bitmap** out = grayscale ? &frame->grayBmp : &frame->bmp;
     if (*out) {
         return *out;
     }
-    uint8_t* pixels = img->bgra;
+    uint8_t* pixels = frame->bgra;
     uint8_t* gray = nullptr;
     if (grayscale) {
-        size_t n = (size_t)img->w * (size_t)img->h * 4;
+        size_t n = (size_t)frame->w * (size_t)frame->h * 4;
         if (n > 0x7fffffffu) {
             return nullptr;
         }
@@ -1511,34 +1584,40 @@ static ID2D1Bitmap* ImageBitmap(PaintCtx* ctx, RenderImage* img,
     }
     D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(
         DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-    D2D1_SIZE_U size = D2D1::SizeU((UINT32)img->w, (UINT32)img->h);
-    UINT32 pitch = (UINT32)img->w * 4;
+    D2D1_SIZE_U size = D2D1::SizeU((UINT32)frame->w, (UINT32)frame->h);
+    UINT32 pitch = (UINT32)frame->w * 4;
     HRESULT hr = ctx->rt->rt->CreateBitmap(size, pixels, pitch, props, out);
     Free(nullptr, gray);
     if (FAILED(hr) || !*out) {
         return nullptr;
     }
-    img->bmpTargetGeneration = ctx->rt->generation;
+    frame->bmpTargetGeneration = ctx->rt->generation;
     return *out;
 }
 
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius, bool grayscale) {
+                     Bounds imageBounds, int frameIndex, float radius,
+                     bool grayscale) {
     if (scene::Recording()) {
-        scene::RecImageDraw(ctx, img, bounds, imageBounds, radius, grayscale);
+        scene::RecImageDraw(ctx, img, bounds, imageBounds, frameIndex, radius,
+                            grayscale);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::RenderImageDraw(ctx, img, bounds, imageBounds, radius, grayscale);
+        gpuw::RenderImageDraw(ctx, img, bounds, imageBounds, frameIndex, radius,
+                              grayscale);
         return;
     }
-    if (!ctx || !ctx->rt || !ctx->rt->rt || !img || (!img->bmp && !img->bgra) ||
+    if (!ctx || !ctx->rt || !ctx->rt->rt || !img || img->frames.len <= 0 ||
         bounds.w <= 0 || bounds.h <= 0 || imageBounds.w <= 0 ||
         imageBounds.h <= 0) {
         return;
     }
+    if (frameIndex < 0 || frameIndex >= img->frames.len) {
+        frameIndex = 0;
+    }
     ID2D1RenderTarget* rt = ctx->rt->rt;
-    ID2D1Bitmap* bitmap = ImageBitmap(ctx, img, grayscale);
+    ID2D1Bitmap* bitmap = ImageBitmap(ctx, &img->frames[frameIndex], grayscale);
     if (!bitmap) {
         return;
     }

@@ -540,7 +540,63 @@ EM_JS(int, GpJsImageDecode, (const uint8_t* bytes, int len), {
     // the heap grows, and the decode outlives this call.
     const copy = new Uint8Array(HEAPU8.subarray(bytes, bytes + len));
     const url = URL.createObjectURL(new Blob([copy]));
-    const rec = {img: new Image(), w: 0, h: 0, status: 0, url: url};
+    let animated = false;
+    if (len >= 13 && copy[0] == 71 && copy[1] == 73 && copy[2] == 70) {
+        let at = 13;
+        const packed = copy[10];
+        if (packed & 128) {
+            at += 3 * (1 << ((packed & 7) + 1));
+        }
+        let frames = 0;
+        while (at < len && frames < 2) {
+            const kind = copy[at++];
+            if (kind == 59) {
+                break;
+            }
+            if (kind == 33) {
+                at++;
+            } else if (kind == 44) {
+                frames++;
+                if (at + 9 > len) {
+                    break;
+                }
+                const imagePacked = copy[at + 8];
+                at += 9;
+                if (imagePacked & 128) {
+                    at += 3 * (1 << ((imagePacked & 7) + 1));
+                }
+                at++;
+            } else {
+                break;
+            }
+            while (at < len) {
+                const block = copy[at++];
+                if (!block) {
+                    break;
+                }
+                at += block;
+            }
+        }
+        animated = frames > 1;
+    }
+    if (!animated && len >= 16 && copy[0] == 82 && copy[1] == 73 &&
+        copy[2] == 70 && copy[3] == 70) {
+        for (let i = 12; i + 4 <= len; i++) {
+            if (copy[i] == 65 && copy[i + 1] == 78 && copy[i + 2] == 73 &&
+                copy[i + 3] == 77) {
+                animated = true;
+                break;
+            }
+        }
+    }
+    const rec = {
+        img: new Image(),
+        w: 0,
+        h: 0,
+        status: 0,
+        url: url,
+        animated: animated
+    };
     rec.img.onload = function() {
         rec.w = rec.img.naturalWidth;
         rec.h = rec.img.naturalHeight;
@@ -578,6 +634,11 @@ EM_JS(int, GpJsImageH, (int id), {
 EM_JS(int, GpJsImageStatus, (int id), {
     const e = globalThis.__gpui.images[id];
     return e ? e.status : 2;
+});
+
+EM_JS(int, GpJsImageFrameCount, (int id), {
+    const e = globalThis.__gpui.images[id];
+    return e && e.animated ? 2 : (e ? 1 : 0);
 });
 
 EM_JS(void, GpJsImageDraw,
@@ -1235,15 +1296,30 @@ RenderImageStatus RenderImageStatusGet(const RenderImage* img) {
 // Zero until the browser has decoded it. The caller lays the picture out at
 // nothing for a frame and draws again when GpJsImageDecode's onload wakes the
 // window.
-Size RenderImageSizePx(const RenderImage* img) {
+Size RenderImageSizePx(const RenderImage* img, int frameIndex) {
+    (void)frameIndex;
     if (!img || !img->js) {
         return {};
     }
     return {(float)GpJsImageW(img->js), (float)GpJsImageH(img->js)};
 }
 
+int RenderImageFrameCount(const RenderImage* img) {
+    return img && img->js ? GpJsImageFrameCount(img->js) : 0;
+}
+
+int RenderImageFrameDurationMs(const RenderImage* img, int frameIndex) {
+    (void)img;
+    (void)frameIndex;
+    // The browser advances the underlying HTMLImageElement from the file's
+    // own delays. This interval only keeps Canvas2D repainting while it does.
+    return 16;
+}
+
 void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
-                     Bounds imageBounds, float radius, bool grayscale) {
+                     Bounds imageBounds, int frameIndex, float radius,
+                     bool grayscale) {
+    (void)frameIndex;
     if (!ctx || !ctx->rt || !img || !img->js || bounds.w <= 0 ||
         bounds.h <= 0 || imageBounds.w <= 0 || imageBounds.h <= 0) {
         return;

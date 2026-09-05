@@ -2222,7 +2222,7 @@ struct El {
     // Nested opacities multiply, as GPUI's do.
     El* Opacity(float f);
     El* Grayscale(bool grayscale = true);
-    El* ObjectFit(gpui::ObjectFit fit);
+    El* ObjectFitMode(gpui::ObjectFit fit);
     El* WithLoading(El* loading);
     El* WithFallback(El* fallback);
     El* H(float v);

@@ -41,6 +41,11 @@ RenderImage* ImageForSrc(PaintApp* pa, Str src);
 ImageLoadState ImageSrcState(PaintApp* pa, Str src,
                              double* loadingSeconds = nullptr);
 
+// Advance the source's retained animation clock and return the frame to
+// paint. Animations of the same cached source intentionally stay in sync.
+int ImageFrameIndex(Str src, RenderImage* image, bool reducedMotion,
+                    bool* wantsAnimation);
+
 // The draw-ops for a src that is a vector picture rather than a bitmap — a
 // local or shipped `.svg`, or one fetched from the network. None of the three
 // backends decodes SVG, so this is the icon renderer's byte stream instead
