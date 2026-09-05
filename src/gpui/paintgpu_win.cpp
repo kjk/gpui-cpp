@@ -2812,6 +2812,34 @@ static void FreeD3d12Gpu(bool removed) {
     gGpu.clearTypeLevel = 1.f;
 }
 
+void PaintAppFree() {
+    // ALL builds may have initialized both backends while switching them in
+    // tests. D3D12 borrows gGpu's CPU glyph table and text parameters, so
+    // release D3D11 before D3D12 clears that shared state.
+    FreeD3d11Gpu(false);
+    FreeD3d12Gpu(false);
+    VecReset(gB.insts);
+    VecReset(gB.tris);
+    VecReset(gB.clipStack);
+    gB.image = nullptr;
+    gB.image12 = -1;
+    gB.target = nullptr;
+    gB.pxW = 0;
+    gB.pxH = 0;
+    gB.offscreen = false;
+    gB.clip[0] = 0;
+    gB.clip[1] = 0;
+    gB.clip[2] = 1e6f;
+    gB.clip[3] = 1e6f;
+    gB.stats = {};
+    gLastStats = {};
+    gPresentedFrames = 0;
+    gDeviceGeneration++;
+    if (gDeviceGeneration == 0) {
+        gDeviceGeneration++;
+    }
+}
+
 static void RecoverDevice(PaintCtx* ctx, bool removed) {
     if (ctx) {
         scene::Reset(ctx);
@@ -3335,6 +3363,7 @@ int PaintGpuSamples() {
 
 namespace gpuw {
 
+void PaintAppFree() {}
 bool PaintTargetBegin(PaintCtx*, void*, int, int) {
     return false;
 }

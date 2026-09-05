@@ -238,6 +238,10 @@ void PaintAppFree(PaintApp* pa) {
     if (!pa) {
         return;
     }
+    // AppFree has already destroyed every target. The custom renderers own
+    // their device-wide caches separately from PaintApp's shared D2D/D3D11
+    // device group, so release those caches first.
+    gpuw::PaintAppFree();
     Rel(&pa->ellipsis12);
     Rel(&pa->ellipsis14);
     Rel(&pa->ellipsis16);

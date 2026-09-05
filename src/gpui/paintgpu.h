@@ -91,6 +91,9 @@ void* PaintTextLayoutNative(TextLayout* tl);
 
 namespace gpuw {
 
+// Release the renderer-wide device resources after every target belonging to
+// the PaintApp has been freed.
+void PaintAppFree();
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH);
 bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH);
 bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra);
