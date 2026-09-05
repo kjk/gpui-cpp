@@ -221,6 +221,11 @@ static void D3d12ImageDescriptorsAreReusable() {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAA"
         "H/iZk9HQAAAABJRU5ErkJggg==";
     RenderImage* first = nullptr;
+    uint8_t pixels[140 * 4] = {};
+    PaintCtx paint = {};
+    paint.pa = app;
+    paint.opacity = 1;
+    utassert(PaintTargetBeginOffscreen(&paint, 140, 1));
     for (int i = 0; i < 140; i++) {
         RenderImage* image = ImageForSrc(
             app, fmt("data:image/png;descriptor=%d;base64,%s", i, Str(png)));
@@ -232,23 +237,20 @@ static void D3d12ImageDescriptorsAreReusable() {
             first = image;
             RenderImageRetain(first);
         }
-        uint8_t pixel[4] = {};
-        PaintCtx paint = {};
-        paint.pa = app;
-        paint.opacity = 1;
-        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
-        RenderImageDraw(&paint, image, Bounds{0, 0, 1, 1});
-        utassert(PaintTargetEndOffscreen(&paint, pixel));
-        utassert(pixel[2] > 0 && pixel[3] > 0);
+        RenderImageDraw(&paint, image, Bounds{(float)i, 0, 1, 1});
+    }
+    utassert(PaintTargetEndOffscreen(&paint, pixels));
+    for (int i = 0; i < 140; i++) {
+        utassert(pixels[i * 4 + 2] > 0 && pixels[i * 4 + 3] > 0);
     }
     if (first) {
         uint8_t pixel[4] = {};
-        PaintCtx paint = {};
-        paint.pa = app;
-        paint.opacity = 1;
-        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
-        RenderImageDraw(&paint, first, Bounds{0, 0, 1, 1});
-        utassert(PaintTargetEndOffscreen(&paint, pixel));
+        PaintCtx again = {};
+        again.pa = app;
+        again.opacity = 1;
+        utassert(PaintTargetBeginOffscreen(&again, 1, 1));
+        RenderImageDraw(&again, first, Bounds{0, 0, 1, 1});
+        utassert(PaintTargetEndOffscreen(&again, pixel));
         utassert(pixel[2] > 0 && pixel[3] > 0);
         RenderImageRelease(first);
     }

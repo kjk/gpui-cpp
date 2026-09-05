@@ -1319,7 +1319,7 @@ static bool D12MakeOffscreenSurfaces(D12Target* t) {
     return D12MakePipelines(1);
 }
 
-static bool D12BeginCommands(D12Target* t) {
+static bool D12BeginCommands(D12Target* t, bool continuing = false) {
     gD12.commandGeneration++;
     if (gD12.commandGeneration == 0) {
         gD12.commandGeneration++;
@@ -1367,7 +1367,7 @@ static bool D12BeginCommands(D12Target* t) {
     D3D12_CPU_DESCRIPTOR_HANDLE rtv =
         t->offscreen ? D12Rtv(t, 3)
                      : (t->msaa ? D12Rtv(t, 3) : D12Rtv(t, t->frameIx));
-    if (!t->offscreen && !t->msaa) {
+    if (!continuing && !t->offscreen && !t->msaa) {
         D12Barrier(gD12.list, t->back[t->frameIx], D3D12_RESOURCE_STATE_PRESENT,
                    D3D12_RESOURCE_STATE_RENDER_TARGET);
     }
@@ -1391,12 +1391,14 @@ static bool D12BeginCommands(D12Target* t) {
     gB.offscreen = t->offscreen;
     gB.insts.len = 0;
     gB.tris.len = 0;
-    gB.clipStack.len = 0;
-    gB.clip[0] = 0;
-    gB.clip[1] = 0;
-    gB.clip[2] = (float)t->pxW;
-    gB.clip[3] = (float)t->pxH;
-    gB.stats = FrameStats{};
+    if (!continuing) {
+        gB.clipStack.len = 0;
+        gB.clip[0] = 0;
+        gB.clip[1] = 0;
+        gB.clip[2] = (float)t->pxW;
+        gB.clip[3] = (float)t->pxH;
+        gB.stats = FrameStats{};
+    }
     return true;
 }
 
@@ -2902,9 +2904,28 @@ static int D12ImageDescriptor(const RenderImage* img) {
         }
     }
     // A descriptor referenced by the open command list cannot be rewritten.
-    // This only fails when one frame uses more distinct images than the heap.
+    // Submit that part of the frame before reusing the heap. Waiting is rare
+    // (only after 128 distinct images) and preserves both painter order and
+    // the already-rendered target while the command allocator is reset.
     if (!slot) {
-        return -1;
+        Flush();
+        D12Target* t = (D12Target*)gB.target;
+        if (!t || !D12FinishCommands(t, true) || !D12BeginCommands(t, true)) {
+            return -1;
+        }
+        for (int i = 0; i < kD12ImageSlots; i++) {
+            int ix = (gD12.imageNext + i) % kD12ImageSlots;
+            D12ImageSlot* candidate = &gD12.images[ix];
+            if (!candidate->tex ||
+                candidate->usedInCommands != gD12.commandGeneration) {
+                slot = candidate;
+                slotIx = ix;
+                break;
+            }
+        }
+        if (!slot) {
+            return -1;
+        }
     }
     if (slot->tex) {
         // Submitted lists share this shader-visible heap. Wait through the
