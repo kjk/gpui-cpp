@@ -112,6 +112,25 @@ static void ArenaRelease(Arena* arena) {
     PlatMemRelease(arena, arena->reserved);
 }
 
+// Whether a push of this size would land in a freshly chained block rather
+// than at the end of the current one. Callers that need the bytes to be
+// contiguous with what is already there have to ask before they push: the
+// answer decides how much to ask for, and asking afterwards is too late.
+// The lock must be held.
+static bool ArenaPushWouldChainLocked(Arena* arena, uint64_t size,
+                                      uint64_t align) {
+    if (!arena || (arena->flags & ArenaFlagNoChain)) {
+        // a no-chain arena fails the push instead of chaining
+        return false;
+    }
+    if (align == 0) {
+        align = 1;
+    }
+    Arena* current = arena->current;
+    uint64_t posPost = ArenaAlignPow2(current->pos, align) + size;
+    return current->reserved < posPost;
+}
+
 static void* ArenaPushLocked(Arena* arena, uint64_t size, uint64_t align,
                              bool zero) {
     if (!arena) {
@@ -460,8 +479,16 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
     // last byte pushed. A length that has outgrown its prefix asks for the
     // byte or two that costs as well. The next append finds the same
     // invariant either way.
-    uint64_t want = newest ? (uint64_t)(nvlen - vlen) + (uint64_t)more.len
-                           : (uint64_t)nvlen + nlen + 1;
+    uint64_t want = (uint64_t)nvlen + nlen + 1;
+    // A push that chains onto a new block is not contiguous after all, so the
+    // in-place path has to rule that out before it sizes the request: sizing
+    // for the append and then copying both halves writes past what was pushed.
+    if (newest && !ArenaPushWouldChainLocked(
+                      a, (uint64_t)(nvlen - vlen) + (uint64_t)more.len, 1)) {
+        want = (uint64_t)(nvlen - vlen) + (uint64_t)more.len;
+    } else {
+        newest = false;
+    }
     char* dst = (char*)ArenaPushLocked(a, want, 1, false);
     uint64_t at = 0;
     if (dst) {
@@ -473,9 +500,7 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
         return s;
     }
 
-    // A push that chained onto a new block is not contiguous after all, so
-    // the in-place path has to check rather than assume.
-    if (newest && at == used) {
+    if (newest) {
         if (nvlen != vlen) {
             memmove(p + nvlen, p + vlen, (size_t)len);
         }

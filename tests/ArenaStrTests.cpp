@@ -186,6 +186,63 @@ static void AppendingToAnOlderStringCopies() {
     ArenaDelete(a);
 }
 
+// An append to the newest string still has to fit somewhere, and when the
+// block it is in has no room left the arena chains onto a new one. That is
+// not contiguous with the characters already stored, so the append becomes a
+// copy of both halves — and has to have asked for room for both halves, not
+// just for the bytes appended. Getting that wrong hands out a string whose
+// tail is the next allocation.
+static void AppendingAtTheEndOfABlockAsksForBothHalves() {
+    Arena* a = ArenaNew();
+
+    // Walk to the end of a block. Nothing says how big one is, but the arena
+    // says when it chained: the position jumps to the new block's base, which
+    // is the block size, and blocks all reserve the same.
+    const int kStep = 4096;
+    uint64_t blockBase = 0;
+    for (int i = 0; i < 100000; i++) {
+        uint64_t before = ArenaUsed(a);
+        Alloc(a, kStep);
+        uint64_t after = ArenaUsed(a);
+        if (after > before + kStep + kArenaHeaderSize) {
+            blockBase = after - kStep - kArenaHeaderSize;
+            break;
+        }
+    }
+    utassert(blockBase > 0);
+    uint64_t blockEnd = blockBase * 2;
+
+    // Up to the end of this one, then to a hundred-odd bytes short of it.
+    while (ArenaUsed(a) + kStep + 64 < blockEnd) {
+        Alloc(a, kStep);
+    }
+    utassert(ArenaUsed(a) > blockBase && ArenaUsed(a) < blockEnd);
+    uint64_t left = blockEnd - ArenaUsed(a);
+    utassert(left > 200);
+    Alloc(a, (int)(left - 200));
+
+    // Two hundred bytes of block left, a string in the last of them, and an
+    // append too big to follow it there.
+    TempStr buf = AllocStrTemp(250);
+    for (int i = 0; i < buf.len; i++) {
+        buf.s[i] = (char)('a' + (i % 26));
+    }
+    ArenaStr was = ArenaStrDup(a, Str(buf.s, 5));
+    ArenaStr s = ArenaStrAppend(a, was, Str(buf.s + 5, 245));
+    // The append did chain — otherwise this test is not testing anything.
+    utassert(s != was);
+    utassert(base::StrEq(ArenaStrGet(a, s), Str(buf.s, 250)));
+
+    // And the string owns every byte it reads back, so what the arena hands
+    // out next starts after it rather than on top of its tail.
+    ArenaStr next = ArenaStrDup(a, StrL("0123456789"));
+    utassert(base::StrEq(ArenaStrGet(a, s), Str(buf.s, 250)));
+    utassert(base::StrEq(ArenaStrGet(a, next), StrL("0123456789")));
+    Str got = ArenaStrGet(a, s);
+    utassert(got.s[got.len] == 0);
+    ArenaDelete(a);
+}
+
 // ─── ArenaPtr ────────────────────────────────────────────────────────────
 
 struct PtrThing {
@@ -256,6 +313,7 @@ void TestArenaStr() {
     APointerSurvivesTheArenaChainingOn();
     AppendingToTheNewestCostsOnlyTheBytes();
     AppendingToAnOlderStringCopies();
+    AppendingAtTheEndOfABlockAsksForBothHalves();
     WhatGoesInComesOut();
     ItSurvivesTheArenaChainingOn();
     TheLengthRidesAlongInOneByte();
