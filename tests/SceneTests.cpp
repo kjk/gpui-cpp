@@ -14,6 +14,19 @@ static bool RecordClear(PaintCtx* paint, Rgba color) {
     return scene::FrameEnd(paint, &damage);
 }
 
+struct CustomImageSourceTest {
+    RenderImage* image = nullptr;
+    int calls = 0;
+};
+
+static ImageLoadState LoadCustomImage(PaintApp*, void* user,
+                                      RenderImage** image) {
+    auto* test = (CustomImageSourceTest*)user;
+    test->calls++;
+    *image = test->image;
+    return test->image ? ImageLoadState::Ready : ImageLoadState::Loading;
+}
+
 static void FrameComparisonBelongsToOnePaintContext() {
     TestSuite("scene window ownership");
     PaintCtx first = {};
@@ -192,6 +205,40 @@ static void FailedImagesLayOutTheirFallback() {
     AppFree(owner);
 }
 
+static void ImageSourceVariantsResolveWithoutCopyingOwners() {
+#if !GPUI_OS_WASM
+    TestSuite("image source variants");
+    static const uint8_t png[] = {
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+        0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+        0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
+    App* owner = AppNew();
+    PaintApp* app = owner ? owner->paint : nullptr;
+    utassert(app);
+    if (!app) {
+        return;
+    }
+    ImageSource encoded = ImageSource::FromImage(png, (int)sizeof(png));
+    RenderImage* decoded = ImageForSource(app, encoded);
+    utassert(decoded);
+    utassert(ImageForSource(app, encoded) == decoded);
+    utassert(ImageSourceState(app, encoded) == ImageLoadState::Ready);
+
+    ImageSource render = ImageSource::FromRender(decoded);
+    utassert(ImageForSource(app, render) == decoded);
+    CustomImageSourceTest loader{decoded, 0};
+    ImageSource custom =
+        ImageSource::FromCustom(LoadCustomImage, (void*)&loader);
+    utassert(ImageSourceState(app, custom) == ImageLoadState::Ready);
+    utassert(ImageForSource(app, custom) == decoded);
+    utassert(loader.calls == 2);
+    AppFree(owner);
+#endif
+}
+
 static void Direct2dImagesSurviveTargetRecreation() {
 #if GPUI_OS_WINDOWS
     TestSuite("Direct2D image target recreation");
@@ -356,6 +403,7 @@ static void D3d12ImageDescriptorsAreReusable() {
 void TestScene() {
     ObjectFitMatchesGpuiGeometry();
     FailedImagesLayOutTheirFallback();
+    ImageSourceVariantsResolveWithoutCopyingOwners();
     RecordedImagesSurviveCacheEviction();
     Direct2dImagesSurviveTargetRecreation();
     WindowsDecodePreservesSourceDimensions();

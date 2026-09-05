@@ -34,16 +34,19 @@ struct RenderImage;
 // by the cache; do not release it. Retain it explicitly if it must survive
 // cache eviction.
 RenderImage* ImageForSrc(PaintApp* pa, Str src);
+RenderImage* ImageForSource(PaintApp* pa, const ImageSource& source);
 
 // Rust's Option<Result<Arc<RenderImage>, _>> expressed as a state. The
 // loading duration starts with the first request for this source and lets an
 // Img delay its loading replacement by LOADING_DELAY.
 ImageLoadState ImageSrcState(PaintApp* pa, Str src,
                              double* loadingSeconds = nullptr);
+ImageLoadState ImageSourceState(PaintApp* pa, const ImageSource& source,
+                                double* loadingSeconds = nullptr);
 
 // Advance the source's retained animation clock and return the frame to
 // paint. Animations of the same cached source intentionally stay in sync.
-int ImageFrameIndex(Str src, RenderImage* image, bool reducedMotion,
+int ImageFrameIndex(RenderImage* image, bool reducedMotion,
                     bool* wantsAnimation);
 
 // The draw-ops for a src that is a vector picture rather than a bitmap — a
@@ -52,6 +55,8 @@ int ImageFrameIndex(Str src, RenderImage* image, bool reducedMotion,
 // and `SvgDrawOps` paints it. Null when the src is not one. The bytes belong
 // to the cache.
 const uint8_t* ImageVectorForSrc(Str src, int* lenOut);
+const uint8_t* ImageVectorForSource(PaintApp* pa, const ImageSource& source,
+                                    int* lenOut);
 
 // Whether `src` names something on this machine — an asset path or a data:
 // URI. An http(s) URL answers false.
