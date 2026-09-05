@@ -156,34 +156,31 @@ static void TestMarkdownConstants() {
     // one, and nothing else would notice.
     utassert(base::SeqStrCount(kCharacterReferenceNames) == 2125);
     utassert(base::SeqStrCount(kCharacterReferenceValues) == 2125);
-    int nameOff = 0;
-    int valueOff = 0;
+    Str name = base::SeqStrFirst(kCharacterReferenceNames);
+    Str value = base::SeqStrFirst(kCharacterReferenceValues);
     int32_t longestName = 0;
     for (int32_t i = 0; i < 2125; i++) {
-        utassert(kCharacterReferences[i].nameOff == nameOff);
-        utassert(kCharacterReferences[i].valueOff == valueOff);
-        Str name = base::SeqStrAt(kCharacterReferenceNames, nameOff);
+        utassert(kCharacterReferences[i]
+                     .nameOff == name.s - kCharacterReferenceNames);
+        utassert(kCharacterReferences[i]
+                     .valueOff == value.s - kCharacterReferenceValues);
         utassert(name.len > 0);
         if (name.len > longestName) {
             longestName = name.len;
         }
-        base::SeqStrAdvance(kCharacterReferenceNames, nameOff);
-        base::SeqStrAdvance(kCharacterReferenceValues, valueOff);
+        name = base::SeqStrNext(name);
+        value = base::SeqStrNext(value);
     }
     utassert(kCharacterReferenceNamedSizeMax == longestName);
 
     int32_t longestRaw = 0;
-    int rawOff = 0;
     int rawCount = 0;
-    while (kHtmlRawNames[rawOff]) {
-        Str raw = base::SeqStrAt(kHtmlRawNames, rawOff);
+    for (Str raw = base::SeqStrFirst(kHtmlRawNames); raw.len > 0;
+         raw = base::SeqStrNext(raw)) {
         if (raw.len > longestRaw) {
             longestRaw = raw.len;
         }
         rawCount++;
-        if (!base::SeqStrAdvance(kHtmlRawNames, rawOff)) {
-            break;
-        }
     }
     utassert(rawCount == 4);
     utassert(kHtmlRawSizeMax == longestRaw);

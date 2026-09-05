@@ -12,9 +12,9 @@
 
 namespace markdown {
 
-using base::SeqStrAdvance;
-using base::SeqStrAt;
+using base::SeqStrFirst;
 using base::SeqStrings;
+using base::SeqStrNext;
 using base::Str;
 
 // The maximum size of a scheme in an autolink: `mailto`.

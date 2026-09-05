@@ -3287,15 +3287,12 @@ static JSValue NativeShowFpsMonitor(JSContext* ctx, JSValueConst, int argc,
         if (ok && present && !FpsAnchorFromName(anchor, &request.anchor)) {
             StrBuilder names;
             bool first = true;
-            int offset = 0;
             SeqStrings all = FpsAnchorNames();
-            while (offset >= 0) {
-                Str name = SeqStrAt(all, offset);
-                if (!name) break;
+            for (Str name = SeqStrFirst(all); name.len > 0;
+                 name = SeqStrNext(name)) {
                 if (!first) names.Append(StrL(", "));
                 first = false;
                 names.Append(name);
-                SeqStrAdvance(all, offset);
             }
             Str list = names.TakeStr();
             JSValue thrown = JS_ThrowTypeError(
@@ -4310,29 +4307,22 @@ static void AppendThemeColor(StrBuilder* out, Str name, bool comma) {
 }
 
 static void AppendThemeColors(StrBuilder* out) {
-    int offset = 0;
     int index = 0;
-    while (offset >= 0) {
-        Str name = SeqStrAt(shell::ThemeColorTokenNames(), offset);
-        if (!name) break;
+    SeqStrings names = shell::ThemeColorTokenNames();
+    for (Str name = SeqStrFirst(names); name.len > 0; name = SeqStrNext(name)) {
         AppendThemeColor(out, name, index++ > 0);
-        SeqStrAdvance(shell::ThemeColorTokenNames(), offset);
     }
 }
 
 static void AppendThemeScale(StrBuilder* out, SeqStrings names,
                              bool (*value)(Str, float*)) {
-    int offset = 0;
     int index = 0;
-    while (offset >= 0) {
-        Str name = SeqStrAt(names, offset);
-        if (!name) break;
+    for (Str name = SeqStrFirst(names); name.len > 0; name = SeqStrNext(name)) {
         float number = 0;
         if (value(name, &number)) {
             if (index++) out->AppendChar(',');
             out->Append(fmt("\"%s\":%g", name, number));
         }
-        SeqStrAdvance(names, offset);
     }
 }
 
@@ -4429,10 +4419,7 @@ static bool SetThemeRadius(RadiusTokens* radius, Str name, float value) {
 static bool ReadThemeColors(JSContext* ctx, JSValueConst object,
                             ColorTokens* colors) {
     SeqStrings names = shell::ThemeColorTokenNames();
-    int offset = 0;
-    while (offset >= 0) {
-        Str name = SeqStrAt(names, offset);
-        if (!name) break;
+    for (Str name = SeqStrFirst(names); name.len > 0; name = SeqStrNext(name)) {
         JSValue property = JS_UNDEFINED;
         if (!ThemeRequiredProperty(ctx, object, name.s, &property,
                                    "theme tokens.colors")) {
@@ -4463,7 +4450,6 @@ static bool ReadThemeColors(JSContext* ctx, JSValueConst object,
         }
         ShellErrorClear(&error);
         SetThemeColor(colors, name, ShellThemeRgba(color));
-        SeqStrAdvance(names, offset);
     }
     return true;
 }
@@ -4471,10 +4457,7 @@ static bool ReadThemeColors(JSContext* ctx, JSValueConst object,
 static bool ReadThemeScale(JSContext* ctx, JSValueConst object,
                            SeqStrings names, const char* container,
                            SpacingTokens* spacing, RadiusTokens* radius) {
-    int offset = 0;
-    while (offset >= 0) {
-        Str name = SeqStrAt(names, offset);
-        if (!name) break;
+    for (Str name = SeqStrFirst(names); name.len > 0; name = SeqStrNext(name)) {
         JSValue property = JS_UNDEFINED;
         if (!ThemeRequiredProperty(ctx, object, name.s, &property, container)) {
             return false;
@@ -4494,7 +4477,6 @@ static bool ReadThemeScale(JSContext* ctx, JSValueConst object,
             SetThemeSpacing(spacing, name, (float)number);
         else
             SetThemeRadius(radius, name, (float)number);
-        SeqStrAdvance(names, offset);
     }
     return true;
 }

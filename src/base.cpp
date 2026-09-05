@@ -1309,34 +1309,21 @@ Str StrReplaceAll(Str value, Str from, Str to) {
 
 // ─── sequential strings ───────────────────────────────────────────────────
 //
-// See `SeqStrings` in base.h. Ported from SumatraPDF's `src/base/Str.cpp`;
-// what changes is that a string here is a `Str` rather than a `char*`, so a
-// caller comparing one does not walk it a second time to find its length.
+// See `SeqStrings` in base.h. Ported from SumatraPDF's `src/base/Base.cpp`.
 
-Str SeqStrAt(SeqStrings strs, int off) {
-    if (!strs || off < 0 || !strs[off]) {
+Str SeqStrFirst(SeqStrings strs) {
+    if (!strs || !strs[0]) {
         return {};
     }
-    return Str(strs + off);
+    return Str(strs);
 }
 
-bool SeqStrAdvance(SeqStrings strs, int& off, int* idxInOut) {
-    if (!strs || off < 0 || !strs[off]) {
-        off = -1;
-        if (idxInOut) {
-            *idxInOut = -1;
-        }
-        return false;
+Str SeqStrNext(Str s) {
+    if (s.len == 0) {
+        return {};
     }
-    off += (int)strlen(strs + off) + 1;
-    if (!strs[off]) {
-        off = -1;
-        return false;
-    }
-    if (idxInOut) {
-        (*idxInOut)++;
-    }
-    return true;
+    const char* next = s.s + s.len + 1;
+    return next[0] ? Str(next) : Str{};
 }
 
 // Compare before advancing so a lookup does not strlen every candidate first.
@@ -1381,23 +1368,17 @@ Str SeqStrByIndex(SeqStrings strs, int idx) {
     if (idx < 0) {
         return {};
     }
-    int off = 0;
-    while (idx > 0) {
-        if (!SeqStrAdvance(strs, off)) {
-            return {};
-        }
+    Str s = SeqStrFirst(strs);
+    while (idx > 0 && s.len > 0) {
+        s = SeqStrNext(s);
         idx--;
     }
-    return SeqStrAt(strs, off);
+    return s;
 }
 
 int SeqStrCount(SeqStrings strs) {
-    if (!strs || !strs[0]) {
-        return 0;
-    }
-    int off = 0;
-    int n = 1;
-    while (SeqStrAdvance(strs, off)) {
+    int n = 0;
+    for (Str s = SeqStrFirst(strs); s.len > 0; s = SeqStrNext(s)) {
         n++;
     }
     return n;

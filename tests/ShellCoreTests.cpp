@@ -3597,15 +3597,11 @@ static void ScriptsSwitchOnARootOwnedPerformanceHud() {
     // list the valid ones back at the author.
     FpsAnchor named = FpsAnchor::TopRight;
     utassert(!FpsAnchorFromName(StrL("middle"), &named));
-    int offset = 0;
     int anchors = 0;
     SeqStrings all = FpsAnchorNames();
-    while (offset >= 0) {
-        Str name = SeqStrAt(all, offset);
-        if (!name) break;
+    for (Str name = SeqStrFirst(all); name.len > 0; name = SeqStrNext(name)) {
         utassert(FpsAnchorFromName(name, &named));
         anchors++;
-        SeqStrAdvance(all, offset);
     }
     utassert(anchors == 8);
     utassert(!ShellRootFpsMonitorVisible(&cx));

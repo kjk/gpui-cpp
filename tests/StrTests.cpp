@@ -33,6 +33,17 @@ static void ComparisonUsesBytesThenLength() {
 
 static void SequentialStringLookupsAvoidLengthPrepass() {
     static const char values[] = "Alpha\0beta\0longer value\0";
+    Str item = base::SeqStrFirst(values);
+    utassert(base::StrEq(item, StrL("Alpha")));
+    item = base::SeqStrNext(item);
+    utassert(base::StrEq(item, StrL("beta")));
+    item = base::SeqStrNext(item);
+    utassert(base::StrEq(item, StrL("longer value")));
+    item = base::SeqStrNext(item);
+    utassert(item.len == 0);
+    utassert(base::SeqStrFirst(nullptr).len == 0);
+    utassert(base::SeqStrNext({}).len == 0);
+
     utassert(base::SeqStrIndex(values, StrL("Alpha")) == 0);
     utassert(base::SeqStrIndex(values, StrL("beta")) == 1);
     utassert(base::SeqStrIndex(values, StrL("BETA")) == -1);

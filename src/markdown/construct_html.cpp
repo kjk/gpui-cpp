@@ -27,13 +27,9 @@ static const uint8_t kHtmlComplete = 7;
 // The name lists are SeqStrings runs. Tag names are ASCII by CommonMark;
 // base's case-insensitive slice comparison avoids a folded copy.
 static bool NamesContainI(SeqStrings names, Str name) {
-    int off = 0;
-    while (names[off]) {
-        if (base::StrEqI(SeqStrAt(names, off), name)) {
+    for (Str item = SeqStrFirst(names); item.len > 0; item = SeqStrNext(item)) {
+        if (base::StrEqI(item, name)) {
             return true;
-        }
-        if (!SeqStrAdvance(names, off)) {
-            break;
         }
     }
     return false;

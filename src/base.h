@@ -1725,14 +1725,14 @@ Str StrReplaceAll(Str value, Str from, Str to);
 // pointer — and reading it is a linear scan, which the L1 cache is good at.
 // The trade is that reaching the nth string means walking the ones before it,
 // so this is for tables looked up rarely: a name to an index, an index back
-// to a name. Ported from SumatraPDF's `src/base/Str.h`.
+// to a name. Ported from SumatraPDF's `src/base/Base.h`.
 using SeqStrings = const char*;
 
-// The string at a byte offset into the run, or {} at its end.
-Str SeqStrAt(SeqStrings strs, int off);
-// Step `off` past the string it names, and `idx` with it when one is given.
-// False at the end of the run, and `off` is left at -1.
-bool SeqStrAdvance(SeqStrings strs, int& off, int* idxInOut = nullptr);
+// The first string in the run, or {} for an empty/null run.
+Str SeqStrFirst(SeqStrings strs);
+// The string after one returned by SeqStrFirst/SeqStrNext, or {} at the end.
+// Its known length makes advancing a pointer addition rather than a scan.
+Str SeqStrNext(Str s);
 // Which string in the run this is, or -1. `IS` ignores case.
 int SeqStrIndex(SeqStrings strs, Str toFind);
 int SeqStrIndexIS(SeqStrings strs, Str toFind);
