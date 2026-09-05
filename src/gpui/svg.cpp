@@ -1496,7 +1496,7 @@ bool SvgViewBox(Str assetPath, Size* out) {
 }
 
 bool SvgDrawOps(PaintCtx* ctx, const uint8_t* ops, int len, float x, float y,
-                float w, float h, Rgba color, float turns) {
+                float w, float h, Rgba color, float turns, bool grayscale) {
     if (!ctx || !ctx->rt || w <= 0 || h <= 0 || !ops || len <= 0) {
         return false;
     }
@@ -1507,6 +1507,7 @@ bool SvgDrawOps(PaintCtx* ctx, const uint8_t* ops, int len, float x, float y,
     t.h = h;
     t.color = color;
     t.turns = turns;
+    t.grayscale = grayscale;
     return ExecuteDrawOps(ctx, ops, len, t);
 }
 

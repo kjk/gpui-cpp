@@ -129,7 +129,8 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
                 float dx, float dy);
 void PathRealize(PaintCtx* ctx, Path* p);
 
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius);
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius, bool grayscale);
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip, float clipW);
 

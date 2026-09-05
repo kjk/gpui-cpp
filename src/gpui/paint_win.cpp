@@ -1357,6 +1357,7 @@ struct RenderImage {
     int h = 0;
     uint8_t* bgra = nullptr;
     ID2D1Bitmap* bmp = nullptr;
+    ID2D1Bitmap* grayBmp = nullptr;
     // The render target `bmp` belongs to. D2D bitmaps are device resources
     // and do not survive it. Use its generation rather than its address: a
     // newly allocated target may occupy the same address as the old one.
@@ -1435,6 +1436,7 @@ void RenderImageRelease(RenderImage* img) {
         return;
     }
     Rel(&img->bmp);
+    Rel(&img->grayBmp);
     Free(nullptr, img->bgra);
     delete img;
 }
@@ -1473,65 +1475,110 @@ Size RenderImageSizePx(const RenderImage* img) {
     return {(float)img->w, (float)img->h};
 }
 
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
+static ID2D1Bitmap* ImageBitmap(PaintCtx* ctx, RenderImage* img,
+                                bool grayscale) {
+    if (img->bmpTargetGeneration != ctx->rt->generation) {
+        Rel(&img->bmp);
+        Rel(&img->grayBmp);
+        img->bmpTargetGeneration = 0;
+    }
+    ID2D1Bitmap** out = grayscale ? &img->grayBmp : &img->bmp;
+    if (*out) {
+        return *out;
+    }
+    uint8_t* pixels = img->bgra;
+    uint8_t* gray = nullptr;
+    if (grayscale) {
+        size_t n = (size_t)img->w * (size_t)img->h * 4;
+        if (n > 0x7fffffffu) {
+            return nullptr;
+        }
+        gray = AllocArray<uint8_t>((int)n);
+        if (!gray) {
+            return nullptr;
+        }
+        memcpy(gray, pixels, n);
+        for (size_t i = 0; i < n; i += 4) {
+            uint8_t y = (uint8_t)(((uint32_t)gray[i + 2] * 54 +
+                                   (uint32_t)gray[i + 1] * 183 +
+                                   (uint32_t)gray[i] * 19) >>
+                                  8);
+            gray[i] = y;
+            gray[i + 1] = y;
+            gray[i + 2] = y;
+        }
+        pixels = gray;
+    }
+    D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(
+        DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    D2D1_SIZE_U size = D2D1::SizeU((UINT32)img->w, (UINT32)img->h);
+    UINT32 pitch = (UINT32)img->w * 4;
+    HRESULT hr = ctx->rt->rt->CreateBitmap(size, pixels, pitch, props, out);
+    Free(nullptr, gray);
+    if (FAILED(hr) || !*out) {
+        return nullptr;
+    }
+    img->bmpTargetGeneration = ctx->rt->generation;
+    return *out;
+}
+
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius, bool grayscale) {
     if (scene::Recording()) {
-        scene::RecImageDraw(ctx, img, b, radius);
+        scene::RecImageDraw(ctx, img, bounds, imageBounds, radius, grayscale);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::RenderImageDraw(ctx, img, b, radius);
+        gpuw::RenderImageDraw(ctx, img, bounds, imageBounds, radius, grayscale);
         return;
     }
     if (!ctx || !ctx->rt || !ctx->rt->rt || !img || (!img->bmp && !img->bgra) ||
-        b.w <= 0 || b.h <= 0) {
+        bounds.w <= 0 || bounds.h <= 0 || imageBounds.w <= 0 ||
+        imageBounds.h <= 0) {
         return;
     }
     ID2D1RenderTarget* rt = ctx->rt->rt;
-    if (img->bmp && img->bmpTargetGeneration != ctx->rt->generation) {
-        Rel(&img->bmp);
-        img->bmpTargetGeneration = 0;
+    ID2D1Bitmap* bitmap = ImageBitmap(ctx, img, grayscale);
+    if (!bitmap) {
+        return;
     }
-    if (!img->bmp) {
-        if (!img->bgra) {
-            return;
-        }
-        D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(
-            DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-        D2D1_SIZE_U size = D2D1::SizeU((UINT32)img->w, (UINT32)img->h);
-        UINT32 pitch = (UINT32)img->w * 4;
-        HRESULT hr = rt->CreateBitmap(size, img->bgra, pitch, props, &img->bmp);
-        if (FAILED(hr) || !img->bmp) {
-            return;
-        }
-        img->bmpTargetGeneration = ctx->rt->generation;
-    }
-    D2D1_RECT_F dst = D2D1::RectF(b.x, b.y, b.x + b.w, b.y + b.h);
-    float op = ctx->opacity < 0 ? 0.f : ctx->opacity;
+    D2D1_RECT_F outer = D2D1::RectF(bounds.x, bounds.y, bounds.x + bounds.w,
+                                    bounds.y + bounds.h);
+    D2D1_RECT_F dst =
+        D2D1::RectF(imageBounds.x, imageBounds.y, imageBounds.x + imageBounds.w,
+                    imageBounds.y + imageBounds.h);
+    float op = ctx->opacity < 0 ? 0.f : (ctx->opacity > 1 ? 1.f : ctx->opacity);
+    ID2D1Layer* layer = nullptr;
+    ID2D1RoundedRectangleGeometry* geometry = nullptr;
     if (radius > 0) {
-        // A bitmap brush scaled onto the box, filling a rounded rect: the
-        // corners come out antialiased and nothing has to be clipped.
-        D2D1_BITMAP_BRUSH_PROPERTIES bp = D2D1::BitmapBrushProperties(
-            D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
-            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-        D2D1_BRUSH_PROPERTIES brp = D2D1::BrushProperties(
-            op,
-            D2D1::Matrix3x2F::Scale(img->w > 0 ? b.w / (float)img->w : 1.f,
-                                    img->h > 0 ? b.h / (float)img->h : 1.f) *
-                D2D1::Matrix3x2F::Translation(b.x, b.y));
-        ID2D1BitmapBrush* brush = nullptr;
-        if (SUCCEEDED(rt->CreateBitmapBrush(img->bmp, bp, brp, &brush)) &&
-            brush) {
-            float r = radius;
-            float half = (b.w < b.h ? b.w : b.h) * 0.5f;
-            if (r > half) {
-                r = half;
-            }
-            rt->FillRoundedRectangle(D2D1::RoundedRect(dst, r, r), brush);
-            Rel(&brush);
-            return;
+        float half = (bounds.w < bounds.h ? bounds.w : bounds.h) * 0.5f;
+        float r = radius > half ? half : radius;
+        HRESULT hr = ctx->pa->d2d->CreateRoundedRectangleGeometry(
+            D2D1::RoundedRect(outer, r, r), &geometry);
+        if (SUCCEEDED(hr) && geometry && SUCCEEDED(rt->CreateLayer(&layer)) &&
+            layer) {
+            D2D1_LAYER_PARAMETERS params = {};
+            params.contentBounds = D2D1::InfiniteRect();
+            params.geometricMask = geometry;
+            params.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
+            params.maskTransform = D2D1::IdentityMatrix();
+            params.opacity = 1.f;
+            params.layerOptions = D2D1_LAYER_OPTIONS_NONE;
+            rt->PushLayer(params, layer);
+        } else {
+            rt->PushAxisAlignedClip(outer, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
         }
+    } else {
+        rt->PushAxisAlignedClip(outer, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     }
-    rt->DrawBitmap(img->bmp, dst, op, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    rt->DrawBitmap(bitmap, dst, op, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    if (layer) {
+        rt->PopLayer();
+    } else {
+        rt->PopAxisAlignedClip();
+    }
+    Rel(&geometry);
+    Rel(&layer);
 }
 
 // gpui text_system: padding_top = (line_height - ascent - descent) / 2.

@@ -91,6 +91,7 @@ struct DrawOpsTarget {
     // The colour of every op that did not name one of its own.
     Rgba color = {};
     float turns = 0;
+    bool grayscale = false;
 };
 
 // Walks `data` and paints it. False if there is nothing there to paint.

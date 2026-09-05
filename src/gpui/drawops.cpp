@@ -76,6 +76,13 @@ static uint32_t ColorToU32(Rgba c) {
            ((uint32_t)c.b << 8) | (uint32_t)c.a;
 }
 
+static Rgba Grayscale(Rgba c) {
+    uint8_t gray = (uint8_t)(((uint32_t)c.r * 54 + (uint32_t)c.g * 183 +
+                              (uint32_t)c.b * 19) >>
+                             8);
+    return {gray, gray, gray, c.a};
+}
+
 // ─── the machine ──────────────────────────────────────────────────────────
 
 // Everything the walk carries: where the viewBox lands, the colour and stroke
@@ -283,7 +290,7 @@ bool ExecuteDrawOps(PaintCtx* ctx, const void* data, int dataLen,
     DrawOpsExec e;
     e.ctx = ctx;
     e.t = t;
-    e.color = t.color;
+    e.color = t.grayscale ? Grayscale(t.color) : t.color;
     e.Rescale();
     float ang = t.turns * 2.f * kPi;
     e.ca = t.turns != 0 ? cosf(ang) : 1.f;
@@ -315,9 +322,12 @@ bool ExecuteDrawOps(PaintCtx* ctx, const void* data, int dataLen,
                 // What the op names is the colour outright. The frame's own
                 // opacity is applied under this, by the backend.
                 e.color = ColorFromU32(r.U32());
+                if (t.grayscale) {
+                    e.color = Grayscale(e.color);
+                }
                 break;
             case kOpColorReset:
-                e.color = t.color;
+                e.color = t.grayscale ? Grayscale(t.color) : t.color;
                 break;
             case kOpLine: {
                 float x1 = r.F(), y1 = r.F(), x2 = r.F(), y2 = r.F();

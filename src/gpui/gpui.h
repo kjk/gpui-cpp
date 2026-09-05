@@ -794,6 +794,18 @@ enum class ElKind : uint8_t {
     Image
 };
 
+// How an image's intrinsic size is placed inside the box layout assigned it.
+// This is gpui::ObjectFit, with the CSS object-fit variants GPUI exposes.
+enum class ObjectFit : uint8_t {
+    Fill,
+    Contain,
+    Cover,
+    ScaleDown,
+    None,
+};
+
+Bounds ObjectFitBounds(ObjectFit fit, Bounds bounds, Size imageSize);
+
 // gpui's Display. `div()` is a block container, the way an unstyled HTML
 // element is: children stack down the page at the container's full width, and
 // nothing is stretched or shrunk to make them fit. `flex()` — or either of the
@@ -2134,6 +2146,8 @@ struct El {
     unsigned int selectable : 1 = false;
     unsigned int selJoin : 1 = false;
     unsigned int caretLineEndAffinity : 1 = false;
+    // StyledImage::grayscale.
+    unsigned int imageGrayscale : 1 = false;
 
     // Byte-sized state stays last so none of it creates alignment holes.
     IconName icon = IconName::None;
@@ -2142,6 +2156,8 @@ struct El {
     DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
     DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
     Axis sliderAxis = Axis::Horizontal;
+    // ImageStyle defaults to Contain in Rust.
+    ObjectFit objectFit = ObjectFit::Contain;
     // The bar this box shows. Unnamed, it is the theme's mode.
     ScrollbarMode scrollMode = ScrollbarMode::Always;
     // ScrollableMask axes: horizontal is bit 0, vertical bit 1.
@@ -2193,6 +2209,8 @@ struct El {
     // opacity(f): this element and everything under it, faded together.
     // Nested opacities multiply, as GPUI's do.
     El* Opacity(float f);
+    El* Grayscale(bool grayscale = true);
+    El* ObjectFit(gpui::ObjectFit fit);
     El* H(float v);
     El* SizeFull();
     El* MinH(float v);

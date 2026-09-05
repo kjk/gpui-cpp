@@ -552,6 +552,7 @@ struct RenderImage {
     int refs = 1;
     uint64_t generation = 0;
     CGImageRef image = nullptr;
+    CGImageRef grayImage = nullptr;
     int w = 0;
     int h = 0;
 };
@@ -591,6 +592,9 @@ void RenderImageRelease(RenderImage* img) {
     if (img->image) {
         CGImageRelease(img->image);
     }
+    if (img->grayImage) {
+        CGImageRelease(img->grayImage);
+    }
     delete img;
 }
 
@@ -609,9 +613,41 @@ Size RenderImageSizePx(const RenderImage* img) {
     return {(float)img->w, (float)img->h};
 }
 
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
+static CGImageRef ImageForDraw(RenderImage* img, bool grayscale) {
+    if (!grayscale || img->grayImage) {
+        return grayscale ? img->grayImage : img->image;
+    }
+    size_t bytesPerRow = (size_t)img->w * 2;
+    size_t bytes = bytesPerRow * (size_t)img->h;
+    uint8_t* pixels = AllocArray<uint8_t>(bytes);
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+    CGContextRef cg =
+        pixels && space
+            ? CGBitmapContextCreate(pixels, (size_t)img->w, (size_t)img->h, 8,
+                                    bytesPerRow, space,
+                                    kCGImageAlphaPremultipliedLast)
+            : nullptr;
+    if (cg) {
+        CGContextDrawImage(cg, CGRectMake(0, 0, img->w, img->h), img->image);
+        img->grayImage = CGBitmapContextCreateImage(cg);
+        CGContextRelease(cg);
+    }
+    if (space) {
+        CGColorSpaceRelease(space);
+    }
+    Free(nullptr, pixels);
+    return img->grayImage;
+}
+
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius, bool grayscale) {
     CGContextRef cg = Cg(ctx);
-    if (!cg || !img || !img->image || b.w <= 0 || b.h <= 0) {
+    if (!cg || !img || !img->image || bounds.w <= 0 || bounds.h <= 0 ||
+        imageBounds.w <= 0 || imageBounds.h <= 0) {
+        return;
+    }
+    CGImageRef image = ImageForDraw(img, grayscale);
+    if (!image) {
         return;
     }
     CGContextSaveGState(cg);
@@ -620,19 +656,23 @@ void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     }
     if (radius > 0) {
         // Clipped in the caller's coordinates, before the flip below.
-        float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+        float half = (bounds.w < bounds.h ? bounds.w : bounds.h) * 0.5f;
         CGFloat r = radius > half ? half : radius;
         CGPathRef path = CGPathCreateWithRoundedRect(
-            CGRectMake(b.x, b.y, b.w, b.h), r, r, nullptr);
+            CGRectMake(bounds.x, bounds.y, bounds.w, bounds.h), r, r, nullptr);
         CGContextAddPath(cg, path);
         CGContextClip(cg);
         CGPathRelease(path);
+    } else {
+        CGContextClipToRect(cg,
+                            CGRectMake(bounds.x, bounds.y, bounds.w, bounds.h));
     }
     // The context is y-down for everything else here, and CGContextDrawImage
     // is the one call that reads y-up, so the box is flipped about itself.
-    CGContextTranslateCTM(cg, b.x, b.y + b.h);
+    CGContextTranslateCTM(cg, imageBounds.x, imageBounds.y + imageBounds.h);
     CGContextScaleCTM(cg, 1, -1);
-    CGContextDrawImage(cg, CGRectMake(0, 0, b.w, b.h), img->image);
+    CGContextDrawImage(cg, CGRectMake(0, 0, imageBounds.w, imageBounds.h),
+                       image);
     CGContextRestoreGState(cg);
 }
 

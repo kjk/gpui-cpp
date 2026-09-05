@@ -72,6 +72,9 @@ struct Prim {
     // Extras: radius, stroke width, and either the dash pattern or a
     // gradient's second point.
     float e0 = 0, e1 = 0, e2 = 0, e3 = 0;
+    // kPImage's fitted destination. Its geometry above remains the outer
+    // element bounds used for clipping and damage.
+    Bounds imageBounds = {};
     Bounds mask = {};
     // What this primitive covers, for the damage rectangle. Already clipped
     // to the mask.
@@ -259,23 +262,25 @@ static inline uint64_t Pair(float a, float b) {
 // where nothing can be cached, which is the one case where all of this is a
 // loss rather than a win.
 static uint64_t HashPrim(const Prim& p) {
-    uint64_t w[10];
+    uint64_t w[12];
     w[0] =
         (uint64_t)p.kind | ((uint64_t)p.layer << 8) | ((uint64_t)p.flags << 16);
     w[1] = Pair(p.g0, p.g1);
     w[2] = Pair(p.g2, p.g3);
     w[3] = Pair(p.e0, p.e1);
     w[4] = Pair(p.e2, p.e3);
-    w[5] = Pair(p.mask.x, p.mask.y);
-    w[6] = Pair(p.mask.w, p.mask.h);
+    w[5] = Pair(p.imageBounds.x, p.imageBounds.y);
+    w[6] = Pair(p.imageBounds.w, p.imageBounds.h);
+    w[7] = Pair(p.mask.x, p.mask.y);
+    w[8] = Pair(p.mask.w, p.mask.h);
     uint32_t c0 = 0, c1 = 0;
     memcpy(&c0, &p.color, 4);
     memcpy(&c1, &p.color2, 4);
-    w[7] = ((uint64_t)c1 << 32) | c0;
-    w[8] = p.resourceGeneration;
-    w[9] = (p.path >= 0 && p.path < gPaths.len) ? gPaths[p.path].hash : 0;
+    w[9] = ((uint64_t)c1 << 32) | c0;
+    w[10] = p.resourceGeneration;
+    w[11] = (p.path >= 0 && p.path < gPaths.len) ? gPaths[p.path].hash : 0;
     uint64_t h = kHashSeed;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 12; i++) {
         h ^= w[i];
         h *= 0x100000001b3ull;
         h ^= h >> 29;
@@ -685,13 +690,16 @@ void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
     }
 }
 
-void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
-    Prim* p = Emit(ctx, kPImage, b);
-    p->g0 = b.x;
-    p->g1 = b.y;
-    p->g2 = b.w;
-    p->g3 = b.h;
+void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                  Bounds imageBounds, float radius, bool grayscale) {
+    Prim* p = Emit(ctx, kPImage, bounds);
+    p->g0 = bounds.x;
+    p->g1 = bounds.y;
+    p->g2 = bounds.w;
+    p->g3 = bounds.h;
     p->e0 = radius;
+    p->e1 = grayscale ? 1.f : 0.f;
+    p->imageBounds = imageBounds;
     RenderImageRetain(img);
     p->ref = img;
     p->resourceGeneration = RenderImageGeneration(img);
@@ -1246,7 +1254,8 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
                 break;
             case kPImage:
                 RenderImageDraw(ctx, (RenderImage*)p.ref,
-                                Bounds{p.g0, p.g1, p.g2, p.g3}, p.e0);
+                                Bounds{p.g0, p.g1, p.g2, p.g3}, p.imageBounds,
+                                p.e0, p.e1 != 0);
                 break;
             case kPText:
                 TextLayoutDraw(ctx, (TextLayout*)p.ref, p.g0, p.g1, p.color,

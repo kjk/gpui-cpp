@@ -3004,8 +3004,21 @@ static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img) {
     return srv;
 }
 
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
-    if (!gB.target || !img || b.w <= 0 || b.h <= 0) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius, bool grayscale) {
+    if (!gB.target || !img || bounds.w <= 0 || bounds.h <= 0 ||
+        imageBounds.w <= 0 || imageBounds.h <= 0) {
+        return;
+    }
+    float x0 = imageBounds.x > bounds.x ? imageBounds.x : bounds.x;
+    float y0 = imageBounds.y > bounds.y ? imageBounds.y : bounds.y;
+    float x1 = imageBounds.x + imageBounds.w;
+    float y1 = imageBounds.y + imageBounds.h;
+    float bx1 = bounds.x + bounds.w;
+    float by1 = bounds.y + bounds.h;
+    x1 = x1 < bx1 ? x1 : bx1;
+    y1 = y1 < by1 ? y1 : by1;
+    if (x1 <= x0 || y1 <= y0) {
         return;
     }
     EnsureQuadPhase();
@@ -3030,20 +3043,30 @@ void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
         }
     }
     Inst i = {};
-    i.rect[0] = b.x;
-    i.rect[1] = b.y;
-    i.rect[2] = b.w;
-    i.rect[3] = b.h;
+    i.rect[0] = x0;
+    i.rect[1] = y0;
+    i.rect[2] = x1 - x0;
+    i.rect[3] = y1 - y0;
     float op = ctx->opacity < 0 ? 0 : (ctx->opacity > 1 ? 1 : ctx->opacity);
     i.color[3] = op;
     i.misc[2] = (float)kQuadImage;
-    // The shader rounds a quad's corners off `misc[0]`, which is what an
-    // avatar's picture needs.
-    float half = (b.w < b.h ? b.w : b.h) * 0.5f;
-    i.misc[0] = radius > half ? half : (radius > 0 ? radius : 0.f);
-    i.uv[2] = 1.f;
-    i.uv[3] = 1.f;
+    // When ObjectFit leaves letterbox space the image does not reach the
+    // outer corners. Fill, Cover and an oversized None do, and are rounded
+    // against that visible outer box.
+    bool covers = x0 == bounds.x && y0 == bounds.y && x1 == bx1 && y1 == by1;
+    float half = (bounds.w < bounds.h ? bounds.w : bounds.h) * 0.5f;
+    i.misc[0] =
+        covers ? (radius > half ? half : (radius > 0 ? radius : 0.f)) : 0.f;
+    i.misc[1] = grayscale ? 1.f : 0.f;
+    i.uv[0] = (x0 - imageBounds.x) / imageBounds.w;
+    i.uv[1] = (y0 - imageBounds.y) / imageBounds.h;
+    i.uv[2] = (x1 - imageBounds.x) / imageBounds.w;
+    i.uv[3] = (y1 - imageBounds.y) / imageBounds.h;
     memcpy(i.clip, gB.clip, sizeof(i.clip));
+    if (i.clip[0] < bounds.x) i.clip[0] = bounds.x;
+    if (i.clip[1] < bounds.y) i.clip[1] = bounds.y;
+    if (i.clip[2] > bx1) i.clip[2] = bx1;
+    if (i.clip[3] > by1) i.clip[3] = by1;
     Push(i);
     FlushQuads();
     gB.image = nullptr;
@@ -3422,7 +3445,7 @@ void PathFillGradient(PaintCtx*, Path*, float, float, float, float, Rgba, Rgba,
                       float, float) {}
 void PathStroke(PaintCtx*, Path*, float, Rgba, bool, float, float) {}
 void PathRealize(PaintCtx*, Path*) {}
-void RenderImageDraw(PaintCtx*, RenderImage*, Bounds, float) {}
+void RenderImageDraw(PaintCtx*, RenderImage*, Bounds, Bounds, float, bool) {}
 void TextLayoutDraw(PaintCtx*, TextLayout*, float, float, Rgba, bool, float) {}
 static FrameStats gEmptyStats;
 const FrameStats& LastFrameStats() {

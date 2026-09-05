@@ -556,6 +556,7 @@ struct RenderImage {
     int refs = 1;
     uint64_t generation = 0;
     cairo_surface_t* surface = nullptr;
+    cairo_surface_t* graySurface = nullptr;
     int w = 0;
     int h = 0;
 };
@@ -614,6 +615,9 @@ void RenderImageRelease(RenderImage* img) {
     if (img->surface) {
         cairo_surface_destroy(img->surface);
     }
+    if (img->graySurface) {
+        cairo_surface_destroy(img->graySurface);
+    }
     delete img;
 }
 
@@ -632,29 +636,73 @@ Size RenderImageSizePx(const RenderImage* img) {
     return {(float)img->w, (float)img->h};
 }
 
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
+static cairo_surface_t* ImageSurface(RenderImage* img, bool grayscale) {
+    if (!grayscale || img->graySurface) {
+        return grayscale ? img->graySurface : img->surface;
+    }
+    cairo_surface_flush(img->surface);
+    unsigned char* src = cairo_image_surface_get_data(img->surface);
+    int srcStride = cairo_image_surface_get_stride(img->surface);
+    cairo_surface_t* gray =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, img->w, img->h);
+    if (!src || cairo_surface_status(gray) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(gray);
+        return nullptr;
+    }
+    unsigned char* dst = cairo_image_surface_get_data(gray);
+    int dstStride = cairo_image_surface_get_stride(gray);
+    for (int y = 0; y < img->h; y++) {
+        for (int x = 0; x < img->w; x++) {
+            unsigned char* s = src + y * srcStride + x * 4;
+            unsigned char* d = dst + y * dstStride + x * 4;
+            uint8_t v = (uint8_t)(((uint32_t)s[2] * 54 + (uint32_t)s[1] * 183 +
+                                   (uint32_t)s[0] * 19) >>
+                                  8);
+            d[0] = v;
+            d[1] = v;
+            d[2] = v;
+            d[3] = s[3];
+        }
+    }
+    cairo_surface_mark_dirty(gray);
+    img->graySurface = gray;
+    return gray;
+}
+
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius, bool grayscale) {
     cairo_t* cr = Cr(ctx);
     if (!cr || !img || !img->surface || img->w <= 0 || img->h <= 0 ||
-        b.w <= 0 || b.h <= 0) {
+        bounds.w <= 0 || bounds.h <= 0 || imageBounds.w <= 0 ||
+        imageBounds.h <= 0) {
+        return;
+    }
+    cairo_surface_t* surface = ImageSurface(img, grayscale);
+    if (!surface) {
         return;
     }
     cairo_save(cr);
     if (radius > 0) {
         // The rounded box is in the caller's coordinates, so it goes on
         // before the scale that maps the picture onto it.
-        float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+        float half = (bounds.w < bounds.h ? bounds.w : bounds.h) * 0.5f;
         double r = radius > half ? half : radius;
         cairo_new_path(cr);
-        cairo_arc(cr, b.x + b.w - r, b.y + r, r, -kPi / 2, 0);
-        cairo_arc(cr, b.x + b.w - r, b.y + b.h - r, r, 0, kPi / 2);
-        cairo_arc(cr, b.x + r, b.y + b.h - r, r, kPi / 2, kPi);
-        cairo_arc(cr, b.x + r, b.y + r, r, kPi, kPi * 1.5);
+        cairo_arc(cr, bounds.x + bounds.w - r, bounds.y + r, r, -kPi / 2, 0);
+        cairo_arc(cr, bounds.x + bounds.w - r, bounds.y + bounds.h - r, r, 0,
+                  kPi / 2);
+        cairo_arc(cr, bounds.x + r, bounds.y + bounds.h - r, r, kPi / 2, kPi);
+        cairo_arc(cr, bounds.x + r, bounds.y + r, r, kPi, kPi * 1.5);
         cairo_close_path(cr);
         cairo_clip(cr);
+    } else {
+        cairo_rectangle(cr, bounds.x, bounds.y, bounds.w, bounds.h);
+        cairo_clip(cr);
     }
-    cairo_translate(cr, b.x, b.y);
-    cairo_scale(cr, b.w / (double)img->w, b.h / (double)img->h);
-    cairo_set_source_surface(cr, img->surface, 0, 0);
+    cairo_translate(cr, imageBounds.x, imageBounds.y);
+    cairo_scale(cr, imageBounds.w / (double)img->w,
+                imageBounds.h / (double)img->h);
+    cairo_set_source_surface(cr, surface, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
     cairo_rectangle(cr, 0, 0, img->w, img->h);
     cairo_clip(cr);

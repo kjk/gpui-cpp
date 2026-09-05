@@ -146,6 +146,29 @@ static void RecordedImagesSurviveCacheEviction() {
 #endif
 }
 
+static void ObjectFitMatchesGpuiGeometry() {
+    TestSuite("image object fit");
+    Bounds box{10, 20, 100, 100};
+    Size wide{200, 100};
+    Bounds fill = ObjectFitBounds(ObjectFit::Fill, box, wide);
+    utassert(fill.x == 10 && fill.y == 20 && fill.w == 100 && fill.h == 100);
+    Bounds contain = ObjectFitBounds(ObjectFit::Contain, box, wide);
+    utassert(contain.x == 10 && contain.y == 45 && contain.w == 100 &&
+             contain.h == 50);
+    Bounds cover = ObjectFitBounds(ObjectFit::Cover, box, wide);
+    utassert(cover.x == -40 && cover.y == 20 && cover.w == 200 &&
+             cover.h == 100);
+    Bounds none = ObjectFitBounds(ObjectFit::None, box, wide);
+    utassert(none.x == -40 && none.y == 20 && none.w == 200 && none.h == 100);
+    Bounds scaledDown =
+        ObjectFitBounds(ObjectFit::ScaleDown, box, Size{20, 10});
+    utassert(scaledDown.x == 50 && scaledDown.y == 65 && scaledDown.w == 20 &&
+             scaledDown.h == 10);
+    Bounds large = ObjectFitBounds(ObjectFit::ScaleDown, box, wide);
+    utassert(large.x == contain.x && large.y == contain.y &&
+             large.w == contain.w && large.h == contain.h);
+}
+
 static void Direct2dImagesSurviveTargetRecreation() {
 #if GPUI_OS_WINDOWS
     TestSuite("Direct2D image target recreation");
@@ -175,6 +198,12 @@ static void Direct2dImagesSurviveTargetRecreation() {
         utassert(PaintTargetEndOffscreen(&paint, second));
         utassert(first[2] > 0 && first[3] > 0);
         utassert(memcmp(first, second, sizeof(first)) == 0);
+        uint8_t gray[4] = {};
+        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
+        RenderImageDraw(&paint, image, Bounds{0, 0, 1, 1}, Bounds{0, 0, 1, 1},
+                        0, true);
+        utassert(PaintTargetEndOffscreen(&paint, gray));
+        utassert(gray[0] == gray[1] && gray[1] == gray[2] && gray[3] > 0);
     }
     AppFree(owner);
 #endif
@@ -261,6 +290,7 @@ static void D3d12ImageDescriptorsAreReusable() {
 }
 
 void TestScene() {
+    ObjectFitMatchesGpuiGeometry();
     RecordedImagesSurviveCacheEviction();
     Direct2dImagesSurviveTargetRecreation();
     WindowsDecodePreservesSourceDimensions();

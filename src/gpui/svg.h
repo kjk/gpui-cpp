@@ -30,7 +30,8 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
 // the same for it; a picture is whatever shape its viewBox says, and the box
 // an image element was laid out into already has that shape.
 bool SvgDrawOps(PaintCtx* ctx, const uint8_t* ops, int len, float x, float y,
-                float w, float h, Rgba color, float turns = 0);
+                float w, float h, Rgba color, float turns = 0,
+                bool grayscale = false);
 
 // The same icon, drawn into a square of pixels instead of onto a window:
 // `outBgra` takes px * px * 4 bytes of premultiplied BGRA, top down. What a

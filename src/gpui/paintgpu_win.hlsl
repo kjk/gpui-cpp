@@ -94,6 +94,15 @@ PSOut PSQuad(VSOut v) {
     if (kind == 5) {
         // Already premultiplied: WIC decoded it that way.
         float4 t = gImage.Sample(gSamp, v.uv) * v.color.a;
+        if (v.misc.y > 0.5) {
+            float gray = dot(t.rgb, float3(0.2126, 0.7152, 0.0722));
+            t.rgb = gray.xxx;
+        }
+        if (v.misc.x > 0.0) {
+            float r = min(v.misc.x, min(v.halfsz.x, v.halfsz.y));
+            float d = sdRound(v.local, v.halfsz, r);
+            t *= saturate(0.5 - d);
+        }
         if (t.a <= 0.0) {
             discard;
         }

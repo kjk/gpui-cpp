@@ -409,6 +409,33 @@ El* ImageEl(Arena* a, Str src, Str alt) {
     return e;
 }
 
+Bounds ObjectFitBounds(ObjectFit fit, Bounds bounds, Size imageSize) {
+    if (bounds.w <= 0 || bounds.h <= 0 || imageSize.w <= 0 ||
+        imageSize.h <= 0) {
+        return {};
+    }
+    if (fit == ObjectFit::Fill) {
+        return bounds;
+    }
+    float sx = bounds.w / imageSize.w;
+    float sy = bounds.h / imageSize.h;
+    float scale = 1.f;
+    if (fit == ObjectFit::Cover) {
+        scale = sx > sy ? sx : sy;
+    } else if (fit == ObjectFit::Contain) {
+        scale = sx < sy ? sx : sy;
+    } else if (fit == ObjectFit::ScaleDown) {
+        scale = sx < sy ? sx : sy;
+        if (scale > 1.f) {
+            scale = 1.f;
+        }
+    }
+    float w = imageSize.w * scale;
+    float h = imageSize.h * scale;
+    return {bounds.x + (bounds.w - w) * 0.5f, bounds.y + (bounds.h - h) * 0.5f,
+            w, h};
+}
+
 El* ButtonEl(Arena* a, int clickId, Str label, BtnKind kind) {
     return ButtonSmall(a, clickId, label, kind, false);
 }
@@ -1350,6 +1377,16 @@ El* El::ScrollMask(Axis axis) {
 
 El* El::Opacity(float f) {
     style.opacity = f < 0 ? 0 : (f > 1 ? 1 : f);
+    return this;
+}
+
+El* El::Grayscale(bool grayscale) {
+    imageGrayscale = grayscale;
+    return this;
+}
+
+El* El::ObjectFit(gpui::ObjectFit fit) {
+    objectFit = fit;
     return this;
 }
 
@@ -5957,19 +5994,33 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         int opsLen = 0;
         const uint8_t* ops =
             img ? nullptr : ImageVectorForSrc(e->imgSrc, &opsLen);
+        Bounds bounds = e->Bounds();
+        bool drewSvg = false;
         if (img) {
-            RenderImageDraw(ctx, img, e->Bounds(), e->style.radius);
-        } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
-                              e->style.hasColor
-                                  ? e->style.color
-                                  : RuntimeStyleNow(ctx->app).foreground,
-                              0)) {
+            Bounds imageBounds =
+                ObjectFitBounds(e->objectFit, bounds, RenderImageSizePx(img));
+            RenderImageDraw(ctx, img, bounds, imageBounds, e->style.radius,
+                            e->imageGrayscale);
+        } else if (ops) {
+            Size imageSize = {};
+            if (DrawOpsViewBox(ops, opsLen, &imageSize)) {
+                Bounds imageBounds =
+                    ObjectFitBounds(e->objectFit, bounds, imageSize);
+                CanvasPushClip(ctx, bounds.x, bounds.y, bounds.w, bounds.h);
+                drewSvg = SvgDrawOps(
+                    ctx, ops, opsLen, imageBounds.x, imageBounds.y,
+                    imageBounds.w, imageBounds.h,
+                    e->style.hasColor ? e->style.color
+                                      : RuntimeStyleNow(ctx->app).foreground,
+                    0, e->imageGrayscale);
+                CanvasPopClip(ctx);
+            }
+        }
+        if (drewSvg) {
             // An SVG is not a bitmap for any of the three backends to decode;
             // it is the vector the icon renderer already walks, and a picture
-            // with colours of its own keeps them. Into the whole box, not a
-            // square inside it: an image element is laid out at the picture's
-            // own aspect, so the box is already the shape to draw into.
-        } else if (e->text.s && e->text.len > 0) {
+            // with colours of its own keeps them.
+        } else if (!img && e->text.s && e->text.len > 0) {
             // The alt text, in the color the text around it uses.
             float font =
                 e->laidFont > 0

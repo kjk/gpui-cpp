@@ -307,8 +307,15 @@ Size RenderImageSizePx(const RenderImage* img);
 // the plain rectangle. It is a parameter rather than a clip because a clip
 // here is axis-aligned only, and the four backends all have a cheap way to
 // fill a rounded rect with a picture.
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b,
-                     float radius = 0);
+// `bounds` is the element's content mask; `imageBounds` is ObjectFit's
+// placement of the intrinsic image inside it.
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius = 0,
+                     bool grayscale = false);
+inline void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                            float radius = 0) {
+    RenderImageDraw(ctx, img, bounds, bounds, radius, false);
+}
 
 // ─── shaped text ──────────────────────────────────────────────────────────
 //

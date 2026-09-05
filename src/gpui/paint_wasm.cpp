@@ -581,16 +581,19 @@ EM_JS(int, GpJsImageStatus, (int id), {
 });
 
 EM_JS(void, GpJsImageDraw,
-      (int id, float x, float y, float w, float h, float alpha, float r), {
+      (int id, float x, float y, float w, float h, float imageX, float imageY,
+       float imageW, float imageH, float alpha, float r, int grayscale), {
     const G = globalThis.__gpui;
     const c = G.cur, e = G.images[id];
     if (!c || !e || e.w <= 0 || e.h <= 0) {
         return;
     }
-    const prev = c.globalAlpha;
+    c.save();
     c.globalAlpha = alpha;
+    if (grayscale) {
+        c.filter = "grayscale(1)";
+    }
     if (r > 0) {
-        c.save();
         c.beginPath();
         c.moveTo(x + r, y);
         c.arcTo(x + w, y, x + w, y + h, r);
@@ -599,12 +602,13 @@ EM_JS(void, GpJsImageDraw,
         c.arcTo(x, y, x + w, y, r);
         c.closePath();
         c.clip();
+    } else {
+        c.beginPath();
+        c.rect(x, y, w, h);
+        c.clip();
     }
-    c.drawImage(e.img, x, y, w, h);
-    if (r > 0) {
-        c.restore();
-    }
-    c.globalAlpha = prev;
+    c.drawImage(e.img, imageX, imageY, imageW, imageH);
+    c.restore();
 });
 
 EM_JS(void, GpJsImageFree, (int id), {
@@ -1238,14 +1242,18 @@ Size RenderImageSizePx(const RenderImage* img) {
     return {(float)GpJsImageW(img->js), (float)GpJsImageH(img->js)};
 }
 
-void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
-    if (!ctx || !ctx->rt || !img || !img->js || b.w <= 0 || b.h <= 0) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds bounds,
+                     Bounds imageBounds, float radius, bool grayscale) {
+    if (!ctx || !ctx->rt || !img || !img->js || bounds.w <= 0 ||
+        bounds.h <= 0 || imageBounds.w <= 0 || imageBounds.h <= 0) {
         return;
     }
     float a = ctx->opacity < 0 ? 0 : (ctx->opacity > 1 ? 1 : ctx->opacity);
-    float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+    float half = (bounds.w < bounds.h ? bounds.w : bounds.h) * 0.5f;
     float r = radius > half ? half : (radius > 0 ? radius : 0.f);
-    GpJsImageDraw(img->js, b.x, b.y, b.w, b.h, a, r);
+    GpJsImageDraw(img->js, bounds.x, bounds.y, bounds.w, bounds.h,
+                  imageBounds.x, imageBounds.y, imageBounds.w, imageBounds.h, a,
+                  r, grayscale ? 1 : 0);
 }
 
 // ─── shaped text ──────────────────────────────────────────────────────────
