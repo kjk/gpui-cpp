@@ -383,8 +383,15 @@ static void TestHtmlImage(Arena* a) {
     utassert(ImageRunOf(Child(nosrc, 0)) == nullptr);
 }
 
-// gpui/image.h: what a src may name. A URL is somewhere this tree cannot
-// reach, so it never reaches the cache.
+// gpui/image.h: local paths use assets and URLs remain network resources.
+static bool TestImageAssetLoad(void*, Str, Vec<uint8_t>*) {
+    return false;
+}
+
+static bool TestImageAssetExists(void*, Str path) {
+    return base::StrEq(path, StrL("story/logo.svg"));
+}
+
 static void TestImageSrc() {
     utassert(ImageSrcIsLocal(StrL("logo.png")));
     utassert(ImageSrcIsLocal(StrL("icons/logo.png")));
@@ -392,6 +399,22 @@ static void TestImageSrc() {
     utassert(!ImageSrcIsLocal(StrL("https://example.com/a.png")));
     utassert(!ImageSrcIsLocal(StrL("http://example.com/a.png")));
     utassert(!ImageSrcIsLocal(StrL("")));
+
+    AssetsClear();
+    int sourceMarker = 1;
+    int source = AssetsAddSource(&sourceMarker, TestImageAssetLoad,
+                                 TestImageAssetExists);
+    utassert(source != 0);
+    Arena* a = ArenaNew();
+    utassert(base::StrEq(ImageAssetFor(a, StrL("story/logo.svg")),
+                         StrL("story/logo.svg")));
+    // Rust sends a URI to its HTTP client. A coincidentally matching asset
+    // basename must not replace it.
+    utassert(!ImageAssetFor(a, StrL("https://example.com/logo.svg")));
+    ArenaDelete(a);
+    ImageCacheClear();
+    AssetsClear();
+    AssetsAddDefaultRoots({});
 }
 
 // ─── SelectionFormat::Source ──────────────────────────────────────────────

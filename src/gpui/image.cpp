@@ -176,41 +176,7 @@ Str ImageAssetFor(Arena* a, Str src) {
 }
 
 static Str ImageAssetResolve(Arena* a, Str src) {
-    if (ImageSrcIsLocal(src)) {
-        return AssetsExists(src) ? StrDup(a, src) : Str{};
-    }
-    int slash = -1;
-    for (int i = src.len - 1; i >= 0; i--) {
-        if (src.s[i] == '/') {
-            slash = i;
-            break;
-        }
-    }
-    if (slash < 0 || slash + 1 >= src.len) {
-        return {};
-    }
-    Str name(src.s + slash + 1, src.len - slash - 1);
-    // A query string is not part of the name.
-    for (int i = 0; i < name.len; i++) {
-        if (name.s[i] == '?' || name.s[i] == '#') {
-            name.len = i;
-            break;
-        }
-    }
-    if (name.len <= 0) {
-        return {};
-    }
-    if (AssetsExists(name)) {
-        return StrDup(a, name);
-    }
-    const char* dirs[] = {"story/", "images/"};
-    for (const char* d : dirs) {
-        Str p = StrDup(a, fmt("%s%s", Str(d), name));
-        if (AssetsExists(p)) {
-            return p;
-        }
-    }
-    return {};
+    return ImageSrcIsLocal(src) && AssetsExists(src) ? StrDup(a, src) : Str{};
 }
 
 // ─── what the bytes are ───────────────────────────────────────────────────
@@ -246,8 +212,8 @@ static SrcBytes BytesForSrc(Str src, Vec<uint8_t>* owned,
     if (DataUriBytes(src, owned)) {
         return SrcBytes::Yes;
     }
-    // A shipped asset first, network second — an application that bundled
-    // the picture means that one, and says so by shipping it.
+    // Local sources go through the asset system. A URI goes through the HTTP
+    // client, matching GPUI's ImageSource::Resource dispatch.
     Str asset = ImageAssetFor(GetTempArena(), src);
     if (asset.s && AssetsLoad(asset, owned) && owned->len > 0) {
         return SrcBytes::Yes;

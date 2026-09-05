@@ -180,6 +180,31 @@ static void Direct2dImagesSurviveTargetRecreation() {
 #endif
 }
 
+static void WindowsDecodePreservesSourceDimensions() {
+#if GPUI_OS_WINDOWS
+    TestSuite("Windows image source dimensions");
+    App* owner = AppNew();
+    PaintApp* app = owner ? owner->paint : nullptr;
+    utassert(app);
+    if (!app) {
+        return;
+    }
+    // A uniform 1921 x 1 PNG. The platform decoder must keep its dimensions;
+    // object-fit and the element's bounds decide how it is displayed.
+    const char* png =
+        "iVBORw0KGgoAAAANSUhEUgAAB4EAAAABCAYAAADQK9gLAAAAIElEQVR42u3DAQkAAAwE"
+        "oetf+tdjKFhtqqqqqqqqqv54kiLz0TdbQJkAAAAASUVORK5CYII=";
+    RenderImage* image =
+        ImageForSrc(app, fmt("data:image/png;base64,%s", Str(png)));
+    utassert(image);
+    if (image) {
+        Size size = RenderImageSizePx(image);
+        utassert(size.w == 1921 && size.h == 1);
+    }
+    AppFree(owner);
+#endif
+}
+
 static void D3d12ImageDescriptorsAreReusable() {
 #if GPUI_OS_WINDOWS && WIN_BACKEND_D3D12
     TestSuite("D3D12 image descriptor reuse");
@@ -235,6 +260,7 @@ static void D3d12ImageDescriptorsAreReusable() {
 void TestScene() {
     RecordedImagesSurviveCacheEviction();
     Direct2dImagesSurviveTargetRecreation();
+    WindowsDecodePreservesSourceDimensions();
     D3d12ImageDescriptorsAreReusable();
     FrameComparisonBelongsToOnePaintContext();
     TextLayoutsHaveStableGenerations();

@@ -1403,38 +1403,10 @@ RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         hr = conv->GetSize(&w, &h);
     }
     if (SUCCEEDED(hr) && w > 0 && h > 0) {
-        IWICBitmapSource* source = conv;
-        IWICBitmapScaler* scaler = nullptr;
-        // Clamp maximum dimensions to 1920 (sufficient for 1080p display
-        // presentation) to prevent gigantic multi-megapixel screenshots from
-        // ballooning memory.
-        const UINT kMaxDim = 1920;
-        if (w > kMaxDim || h > kMaxDim) {
-            UINT targetW = w;
-            UINT targetH = h;
-            if (w >= h) {
-                targetW = kMaxDim;
-                targetH = (UINT)((uint64_t)h * kMaxDim / w);
-                if (targetH == 0) targetH = 1;
-            } else {
-                targetH = kMaxDim;
-                targetW = (UINT)((uint64_t)w * kMaxDim / h);
-                if (targetW == 0) targetW = 1;
-            }
-            if (SUCCEEDED(wic->CreateBitmapScaler(&scaler))) {
-                if (SUCCEEDED(
-                        scaler->Initialize(conv, targetW, targetH,
-                                           WICBitmapInterpolationModeFant))) {
-                    source = scaler;
-                    w = targetW;
-                    h = targetH;
-                }
-            }
-        }
         UINT stride = w * 4;
         UINT size = stride * h;
         auto* px = (uint8_t*)Alloc(nullptr, (int)size);
-        if (px && SUCCEEDED(source->CopyPixels(nullptr, stride, size, px))) {
+        if (px && SUCCEEDED(conv->CopyPixels(nullptr, stride, size, px))) {
             img = new RenderImage();
             img->generation = PaintResourceGenerationNew();
             img->w = (int)w;
@@ -1443,7 +1415,6 @@ RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         } else {
             Free(nullptr, px);
         }
-        Rel(&scaler);
     }
     Rel(&conv);
     Rel(&frame);

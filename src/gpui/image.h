@@ -14,11 +14,6 @@
      - a `data:` URI, base64 or percent-encoded
      - an http(s) URL, fetched asynchronously by sys/http.h
 
-   A remote src prefers a shipped asset over the network: `ImageAssetFor`
-   looks the URL's last path segment up in the asset roots first, so an
-   application that bundled the picture beside the document shows that one and
-   makes no request. Only a URL nothing local answers is fetched.
-
    Fetching is asynchronous; desktop decode and local file reads run on the
    main thread. A fetch that has not landed yet answers null, the
    element measures and paints its alt text for those frames, and the window
@@ -46,15 +41,11 @@ RenderImage* ImageForSrc(PaintApp* pa, Str src);
 const uint8_t* ImageVectorForSrc(Str src, int* lenOut);
 
 // Whether `src` names something on this machine — an asset path or a data:
-// URI. An http(s) URL answers false; that is the question `ImageAssetFor`
-// then asks differently.
+// URI. An http(s) URL answers false.
 bool ImageSrcIsLocal(Str src);
 
-// The asset a `src` names, when the application ships one. A local path is
-// itself; a remote URL is its last path segment looked for in the asset roots,
-// which is what lets a document written for the web show the picture an
-// application bundled beside it rather than fetching one. Answers an empty
-// Str when nothing local matches.
+// The asset a local `src` names, when the application ships one. A URI is a
+// network resource and answers empty, even if an asset has the same basename.
 Str ImageAssetFor(Arena* a, Str src);
 
 // Drop every decoded image and every fetched body. AppFree calls it; a test
