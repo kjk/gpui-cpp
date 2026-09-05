@@ -86,6 +86,22 @@ static void ReplaceAllHandlesEmptyAndMissingMatches() {
                          StrL("heo")));
 }
 
+// Nothing to allocate is an empty Str, not an allocation of nothing — and a
+// negative length asks for close to 2^64 bytes once it is widened, so it is
+// the same answer rather than a terminator written at a negative offset.
+static void AllocStrTempRefusesNothingAndLessThanNothing() {
+    TempStr none = AllocStrTemp(0);
+    utassert(none.s == nullptr && none.len == 0);
+    TempStr negative = AllocStrTemp(-1);
+    utassert(negative.s == nullptr && negative.len == 0);
+    TempStr huge = AllocStrTemp(-1000000);
+    utassert(huge.s == nullptr && huge.len == 0);
+
+    // And one byte is one byte, terminated.
+    TempStr one = AllocStrTemp(1);
+    utassert(one.s != nullptr && one.len == 1 && one.s[1] == 0);
+}
+
 static void PrefixSuffixAndFindHelpersHandleBoundaries() {
     Str text = StrL("Alpha beta");
     utassert(base::StrStartsWith(text, "Alpha"));
@@ -220,6 +236,7 @@ void TestStr() {
     StartsWithAnyChecksFirstCharInSet();
     ReplaceAllReplacesNonOverlappingMatches();
     ReplaceAllHandlesEmptyAndMissingMatches();
+    AllocStrTempRefusesNothingAndLessThanNothing();
     PrefixSuffixAndFindHelpersHandleBoundaries();
     TrimAsciiReturnsASlice();
     BuilderBorrowsThenGrowsLikeAVec();

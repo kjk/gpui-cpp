@@ -652,11 +652,16 @@ void DestroyTempArena() {
 
 // allocate null-terminated string
 TempStr AllocStrTemp(int size) {
-    if (size == 0) {
+    // A negative size would ask the arena for close to 2^64 bytes and then
+    // terminate at a negative offset from whatever came back.
+    if (size <= 0) {
         return {};
     }
     Arena* arena = GetTempArena();
     char* res = (char*)arena->Push((uint64_t)size + 1, 1, false);
+    if (!res) {
+        return {};
+    }
     res[size] = 0;
     return Str(res, size);
 }
