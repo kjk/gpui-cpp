@@ -250,6 +250,8 @@ struct ImageCacheSlot {
     // A vector picture instead: the draw-op stream, ours to free.
     uint8_t* ops = nullptr;
     int opsLen = 0;
+    double loadingAt = 0;
+    bool pending = false;
     bool tried = false;
 };
 
@@ -269,6 +271,8 @@ static void ImageSlotFree(ImageCacheSlot* s) {
         s->ops = nullptr;
     }
     s->opsLen = 0;
+    s->loadingAt = 0;
+    s->pending = false;
     if (s->src.s) {
         StrFree(s->src);
         s->src = {};
@@ -302,7 +306,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
         return nullptr;
     }
     ImageCacheSlot* hit = ImageSlotFind(src);
-    if (hit) {
+    if (hit && !hit->pending) {
         return hit;
     }
 
@@ -311,7 +315,16 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
     int borrowedLen = 0;
     SrcBytes got = BytesForSrc(src, &owned, &borrowed, &borrowedLen);
     if (got == SrcBytes::Pending) {
-        return nullptr;
+        if (!hit) {
+            hit = &gImageCache[gImageCacheNext];
+            gImageCacheNext = (gImageCacheNext + 1) % kImageCacheSlots;
+            ImageSlotFree(hit);
+            hit->src = StrDup(src);
+            hit->tried = true;
+            hit->pending = true;
+            hit->loadingAt = TimeNow();
+        }
+        return hit;
     }
     const uint8_t* bytes = owned.len > 0 ? owned.els : borrowed;
     int len = owned.len > 0 ? owned.len : borrowedLen;
@@ -343,18 +356,62 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
         }
     }
 
-    ImageCacheSlot* slot = &gImageCache[gImageCacheNext];
-    gImageCacheNext = (gImageCacheNext + 1) % kImageCacheSlots;
-    ImageSlotFree(slot);
-    slot->src = StrDup(src);
+    ImageCacheSlot* slot = hit;
+    if (!slot) {
+        slot = &gImageCache[gImageCacheNext];
+        gImageCacheNext = (gImageCacheNext + 1) % kImageCacheSlots;
+        ImageSlotFree(slot);
+        slot->src = StrDup(src);
+        slot->tried = true;
+    }
     slot->img = img;
     slot->ops = ops;
     slot->opsLen = opsLen;
-    slot->tried = true;
+    slot->pending = false;
+    if (img && RenderImageStatusGet(img) == RenderImageStatus::Loading &&
+        slot->loadingAt == 0) {
+        slot->loadingAt = TimeNow();
+    }
     if (HttpUrlIsRemote(src)) {
         HttpFetchDrop(src);
     }
     return slot;
+}
+
+ImageLoadState ImageSrcState(PaintApp* pa, Str src, double* loadingSeconds) {
+    if (loadingSeconds) {
+        *loadingSeconds = 0;
+    }
+    if (!src.s || src.len <= 0) {
+        return ImageLoadState::Failed;
+    }
+    ImageCacheSlot* s = ImageSlotFor(pa, src);
+    if (!s || s->pending) {
+        if (s && loadingSeconds && s->loadingAt > 0) {
+            *loadingSeconds = TimeNow() - s->loadingAt;
+        }
+        return ImageLoadState::Loading;
+    }
+    if (s->ops) {
+        return ImageLoadState::Ready;
+    }
+    if (!s->img) {
+        return ImageLoadState::Failed;
+    }
+    RenderImageStatus status = RenderImageStatusGet(s->img);
+    if (status == RenderImageStatus::Loading) {
+        if (loadingSeconds && s->loadingAt > 0) {
+            *loadingSeconds = TimeNow() - s->loadingAt;
+        }
+        return ImageLoadState::Loading;
+    }
+    if (status == RenderImageStatus::Failed) {
+        RenderImageRelease(s->img);
+        s->img = nullptr;
+        return ImageLoadState::Failed;
+    }
+    s->loadingAt = 0;
+    return ImageLoadState::Ready;
 }
 
 RenderImage* ImageForSrc(PaintApp* pa, Str src) {

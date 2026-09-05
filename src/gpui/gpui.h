@@ -804,6 +804,12 @@ enum class ObjectFit : uint8_t {
     None,
 };
 
+enum class ImageLoadState : uint8_t {
+    Loading,
+    Ready,
+    Failed,
+};
+
 Bounds ObjectFitBounds(ObjectFit fit, Bounds bounds, Size imageSize);
 
 // gpui's Display. `div()` is a block container, the way an unstyled HTML
@@ -1997,6 +2003,11 @@ struct El {
     El* first = nullptr;
     El* last = nullptr;
     El* next = nullptr;
+    // StyledImage::with_loading / with_fallback. Both are frame elements;
+    // imageReplacement names the one selected during PrepareEl.
+    El* imageLoading = nullptr;
+    El* imageFallback = nullptr;
+    El* imageReplacement = nullptr;
     // The highlighted runs inside this text, in order. The array is the
     // caller's — the frame arena, in practice — and outlives the frame the
     // element was built in.
@@ -2158,6 +2169,7 @@ struct El {
     Axis sliderAxis = Axis::Horizontal;
     // ImageStyle defaults to Contain in Rust.
     ObjectFit objectFit = ObjectFit::Contain;
+    ImageLoadState imageLoadState = ImageLoadState::Loading;
     // The bar this box shows. Unnamed, it is the theme's mode.
     ScrollbarMode scrollMode = ScrollbarMode::Always;
     // ScrollableMask axes: horizontal is bit 0, vertical bit 1.
@@ -2211,6 +2223,8 @@ struct El {
     El* Opacity(float f);
     El* Grayscale(bool grayscale = true);
     El* ObjectFit(gpui::ObjectFit fit);
+    El* WithLoading(El* loading);
+    El* WithFallback(El* fallback);
     El* H(float v);
     El* SizeFull();
     El* MinH(float v);

@@ -15,10 +15,11 @@
      - an http(s) URL, fetched asynchronously by sys/http.h
 
    Fetching is asynchronous; desktop decode and local file reads run on the
-   main thread. A fetch that has not landed yet answers null, the
-   element measures and paints its alt text for those frames, and the window
-   keeps repainting while `HttpFetchPending` is non-zero — so the picture
-   appears when it arrives rather than the frame freezing until it does. */
+   main thread. A fetch that has not landed yet is Loading, a final miss or
+   decode error is Failed, and the image element chooses its distinct loading
+   or fallback replacement from that state. The window keeps repainting while
+   `HttpFetchPending` is non-zero, so the picture appears when it arrives
+   rather than the frame freezing until it does. */
 
 #include "gpui/gpui.h"
 
@@ -33,6 +34,12 @@ struct RenderImage;
 // by the cache; do not release it. Retain it explicitly if it must survive
 // cache eviction.
 RenderImage* ImageForSrc(PaintApp* pa, Str src);
+
+// Rust's Option<Result<Arc<RenderImage>, _>> expressed as a state. The
+// loading duration starts with the first request for this source and lets an
+// Img delay its loading replacement by LOADING_DELAY.
+ImageLoadState ImageSrcState(PaintApp* pa, Str src,
+                             double* loadingSeconds = nullptr);
 
 // The draw-ops for a src that is a vector picture rather than a bitmap — a
 // local or shipped `.svg`, or one fetched from the network. None of the three

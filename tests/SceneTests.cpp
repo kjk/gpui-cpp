@@ -169,6 +169,29 @@ static void ObjectFitMatchesGpuiGeometry() {
              large.w == contain.w && large.h == contain.h);
 }
 
+static void FailedImagesLayOutTheirFallback() {
+    TestSuite("image fallback layout");
+    App* owner = AppNew();
+    Arena* arena = ArenaNew();
+    PaintCtx paint = {};
+    paint.pa = owner ? owner->paint : nullptr;
+    paint.app = owner;
+    paint.viewW = 100;
+    paint.viewH = 100;
+    El* fallback = Div(arena)->W(30)->H(40);
+    El* image = ImageEl(arena, StrL("data:image/png,not-an-image"))
+                    ->WithLoading(Div(arena)->W(10)->H(20))
+                    ->WithFallback(fallback);
+    El* root = Div(arena)->FlexCol()->ItemsStart()->Child(image);
+    LayoutEl(&paint, root, 0, 0, 100, 100, 14, Rgba{});
+    utassert(image->imageLoadState == ImageLoadState::Failed);
+    utassert(image->imageReplacement == fallback);
+    utassert(image->first == fallback && image->last == fallback);
+    utassert(image->w == 30 && image->h == 40);
+    ArenaDelete(arena);
+    AppFree(owner);
+}
+
 static void Direct2dImagesSurviveTargetRecreation() {
 #if GPUI_OS_WINDOWS
     TestSuite("Direct2D image target recreation");
@@ -291,6 +314,7 @@ static void D3d12ImageDescriptorsAreReusable() {
 
 void TestScene() {
     ObjectFitMatchesGpuiGeometry();
+    FailedImagesLayOutTheirFallback();
     RecordedImagesSurviveCacheEviction();
     Direct2dImagesSurviveTargetRecreation();
     WindowsDecodePreservesSourceDimensions();

@@ -1390,6 +1390,16 @@ El* El::ObjectFit(gpui::ObjectFit fit) {
     return this;
 }
 
+El* El::WithLoading(El* loading) {
+    imageLoading = loading;
+    return this;
+}
+
+El* El::WithFallback(El* fallback) {
+    imageFallback = fallback;
+    return this;
+}
+
 El* El::ScrollMode(ScrollbarMode m) {
     scrollModeSet = true;
     scrollMode = m;
@@ -3004,6 +3014,9 @@ static Size LayoutImageSize(PaintCtx* ctx, El* e, float wSpec, float hSpec,
                             float availW, float font) {
     Size px = ImageNaturalSize(ctx, e);
     if (px.w <= 0 || px.h <= 0) {
+        if (e->imageLoadState == ImageLoadState::Loading) {
+            return {wSpec > 0 ? wSpec : 0, hSpec > 0 ? hSpec : 0};
+        }
         Size text =
             MeasureText(ctx, e->text, font, availW > 0 ? availW : 0,
                         e->style.wrap, ElTextWeight(e), e->style.lineHeight);
@@ -3310,6 +3323,9 @@ static taffy::SizeF LayoutMeasure(taffy::SizeFOpt known, taffy::SizeAvail avail,
 // A childless Div is still a box with a size; only these kinds have content
 // of their own to measure.
 static bool ElIsMeasured(const El* e) {
+    if (e->kind == ElKind::Image && e->imageReplacement) {
+        return false;
+    }
     switch (e->kind) {
         case ElKind::Text:
         case ElKind::Icon:
@@ -3357,6 +3373,28 @@ static void ResolveImageStyle(PaintCtx* ctx, El* e) {
     }
 }
 
+static void ResolveImageReplacement(PaintCtx* ctx, El* e) {
+    double loadingSeconds = 0;
+    e->imageLoadState =
+        ImageSrcState(ctx ? ctx->pa : nullptr, e->imgSrc, &loadingSeconds);
+    if (e->imageLoadState == ImageLoadState::Loading) {
+        // GPUI waits 200 ms before showing the loading element, avoiding a
+        // flash for images already close to ready.
+        if (e->imageLoading && loadingSeconds >= 0.2) {
+            e->imageReplacement = e->imageLoading;
+        } else if (e->imageLoading && ctx) {
+            ctx->wantsAnimFrame = true;
+        }
+    } else if (e->imageLoadState == ImageLoadState::Failed) {
+        e->imageReplacement = e->imageFallback;
+    }
+    if (e->imageReplacement) {
+        e->imageReplacement->next = nullptr;
+        e->first = e->imageReplacement;
+        e->last = e->imageReplacement;
+    }
+}
+
 // The style refinement, the inspector's live edit, the inherited font and the
 // inherited color, resolved once per element before anything is measured.
 // The old engine did this on the way down its own recursion.
@@ -3392,6 +3430,9 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
         StyleApplyFields(&e->style, states->dragOver, states->dragOverSet);
     }
     StyleOverrideApply(e);
+    if (e->kind == ElKind::Image) {
+        ResolveImageReplacement(ctx, e);
+    }
 
     // An explicit size is in DIPs at the default font size and scales with
     // it; an inherited one has been scaled already, by the root or by
@@ -3450,7 +3491,7 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
         e->style.width = font > 0 ? font : 16.f;
         e->style.height = font > 0 ? font : 16.f;
     }
-    if (e->kind == ElKind::Image) {
+    if (e->kind == ElKind::Image && !e->imageReplacement) {
         ResolveImageStyle(ctx, e);
     }
 
@@ -5985,7 +6026,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             CanvasPopClip(ctx);
         }
         PaintCaret(ctx, e, font);
-    } else if (e->kind == ElKind::Image) {
+    } else if (e->kind == ElKind::Image && !e->imageReplacement) {
         // image.h resolves the src: the asset an application shipped, the
         // data: URI, or the body a worker thread fetched. A fetch still
         // running answers nothing, and the alt text below stands in until it
@@ -6020,7 +6061,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             // An SVG is not a bitmap for any of the three backends to decode;
             // it is the vector the icon renderer already walks, and a picture
             // with colours of its own keeps them.
-        } else if (!img && e->text.s && e->text.len > 0) {
+        } else if (!img && e->imageLoadState == ImageLoadState::Failed &&
+                   e->text.s && e->text.len > 0) {
             // The alt text, in the color the text around it uses.
             float font =
                 e->laidFont > 0
