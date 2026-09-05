@@ -186,6 +186,10 @@ static void ObjectFitMatchesGpuiGeometry() {
 }
 
 static void FailedImagesLayOutTheirFallback() {
+#if !GPUI_OS_WASM
+    // The browser decodes a picture on its own time, so a source that will
+    // never decode is still Loading when the layout runs — and node, which
+    // is where the wasm suite runs, has no Image to hand the bytes to at all.
     TestSuite("image fallback layout");
     App owner;
     PaintApp* app = PaintAppNew();
@@ -212,6 +216,7 @@ static void FailedImagesLayOutTheirFallback() {
     ArenaDelete(arena);
     ImageCacheClear();
     PaintAppFree(app);
+#endif
 }
 
 static void ImageSourceVariantsResolveWithoutCopyingOwners() {
