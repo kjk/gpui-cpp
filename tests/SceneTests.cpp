@@ -180,9 +180,62 @@ static void Direct2dImagesSurviveTargetRecreation() {
 #endif
 }
 
+static void D3d12ImageDescriptorsAreReusable() {
+#if GPUI_OS_WINDOWS && WIN_BACKEND_D3D12
+    TestSuite("D3D12 image descriptor reuse");
+    char d3d12[] = "__paint=d3d12";
+    utassert(WinPaintOptionsTakeArg(Str(d3d12)));
+    App* owner = AppNew();
+    PaintApp* app = owner ? owner->paint : nullptr;
+    utassert(app);
+    if (!app) {
+        return;
+    }
+    const char* png =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAA"
+        "H/iZk9HQAAAABJRU5ErkJggg==";
+    RenderImage* first = nullptr;
+    for (int i = 0; i < 140; i++) {
+        RenderImage* image = ImageForSrc(
+            app, fmt("data:image/png;descriptor=%d;base64,%s", i, Str(png)));
+        utassert(image);
+        if (!image) {
+            continue;
+        }
+        if (i == 0) {
+            first = image;
+            RenderImageRetain(first);
+        }
+        uint8_t pixel[4] = {};
+        PaintCtx paint = {};
+        paint.pa = app;
+        paint.opacity = 1;
+        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
+        RenderImageDraw(&paint, image, Bounds{0, 0, 1, 1});
+        utassert(PaintTargetEndOffscreen(&paint, pixel));
+        utassert(pixel[2] > 0 && pixel[3] > 0);
+    }
+    if (first) {
+        uint8_t pixel[4] = {};
+        PaintCtx paint = {};
+        paint.pa = app;
+        paint.opacity = 1;
+        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
+        RenderImageDraw(&paint, first, Bounds{0, 0, 1, 1});
+        utassert(PaintTargetEndOffscreen(&paint, pixel));
+        utassert(pixel[2] > 0 && pixel[3] > 0);
+        RenderImageRelease(first);
+    }
+    AppFree(owner);
+    char restore[] = "__paint=d2d";
+    WinPaintOptionsTakeArg(Str(restore));
+#endif
+}
+
 void TestScene() {
     RecordedImagesSurviveCacheEviction();
     Direct2dImagesSurviveTargetRecreation();
+    D3d12ImageDescriptorsAreReusable();
     FrameComparisonBelongsToOnePaintContext();
     TextLayoutsHaveStableGenerations();
     PathPlacementRemainsPartOfTheFrameHash();

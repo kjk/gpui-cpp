@@ -393,9 +393,10 @@ struct D12Pipelines {
 };
 
 struct D12ImageSlot {
-    const RenderImage* img = nullptr;
+    uint64_t imageGeneration = 0;
     ID3D12Resource* tex = nullptr;
     int descriptor = -1;
+    uint64_t usedInCommands = 0;
 };
 
 struct D12Gpu {
@@ -413,7 +414,8 @@ struct D12Gpu {
     D3D12_RESOURCE_STATES atlasState = D3D12_RESOURCE_STATE_COPY_DEST;
     D12Pipelines pipes[4] = {};
     D12ImageSlot images[kD12ImageSlots] = {};
-    int imageCount = 0;
+    int imageNext = 0;
+    uint64_t commandGeneration = 0;
     IDWriteFactory* dwrite = nullptr;
     bool ready = false;
 };
@@ -1318,6 +1320,10 @@ static bool D12MakeOffscreenSurfaces(D12Target* t) {
 }
 
 static bool D12BeginCommands(D12Target* t) {
+    gD12.commandGeneration++;
+    if (gD12.commandGeneration == 0) {
+        gD12.commandGeneration++;
+    }
     t->frameIx = t->offscreen ? 0 : (int)t->swap->GetCurrentBackBufferIndex();
     D12Frame* f = &t->frames[t->frameIx];
     D12Wait(f->fenceValue);
@@ -2726,7 +2732,7 @@ void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c, bool roundCaps,
 constexpr int kImageSlots = 32;
 
 struct ImageSlot {
-    const RenderImage* img = nullptr;
+    uint64_t imageGeneration = 0;
     ID3D11ShaderResourceView* srv = nullptr;
 };
 
@@ -2741,7 +2747,7 @@ static void FreeD3d11Gpu(bool removed) {
     }
     for (int i = 0; i < kImageSlots; i++) {
         Rel(&gImages[i].srv);
-        gImages[i].img = nullptr;
+        gImages[i].imageGeneration = 0;
     }
     gImageNext = 0;
     Rel(&g->white);
@@ -2777,7 +2783,7 @@ static void FreeD3d12Gpu(bool removed) {
             D12Wait(value);
         }
     }
-    for (int i = 0; i < g->imageCount; i++) {
+    for (int i = 0; i < kD12ImageSlots; i++) {
         Rel(&g->images[i].tex);
     }
     for (int i = 0; i < 4; i++) {
@@ -2843,20 +2849,43 @@ static void RecoverDevice(PaintCtx* ctx, bool removed) {
 }
 
 static int D12ImageDescriptor(const RenderImage* img) {
-    for (int i = 0; i < gD12.imageCount; i++) {
-        if (gD12.images[i].img == img) {
+    uint64_t generation = RenderImageGeneration(img);
+    for (int i = 0; i < kD12ImageSlots; i++) {
+        if (gD12.images[i].imageGeneration == generation) {
+            gD12.images[i].usedInCommands = gD12.commandGeneration;
             return gD12.images[i].descriptor;
         }
-    }
-    if (gD12.imageCount >= kD12ImageSlots) {
-        return -1;
     }
     const uint8_t* bgra = nullptr;
     int w = 0, h = 0;
     if (!PaintImagePixels(img, &bgra, &w, &h) || !bgra || w <= 0 || h <= 0) {
         return -1;
     }
-    D12ImageSlot* slot = &gD12.images[gD12.imageCount];
+    D12ImageSlot* slot = nullptr;
+    int slotIx = -1;
+    for (int i = 0; i < kD12ImageSlots; i++) {
+        int ix = (gD12.imageNext + i) % kD12ImageSlots;
+        D12ImageSlot* candidate = &gD12.images[ix];
+        if (!candidate->tex ||
+            candidate->usedInCommands != gD12.commandGeneration) {
+            slot = candidate;
+            slotIx = ix;
+            break;
+        }
+    }
+    // A descriptor referenced by the open command list cannot be rewritten.
+    // This only fails when one frame uses more distinct images than the heap.
+    if (!slot) {
+        return -1;
+    }
+    if (slot->tex) {
+        // Submitted lists share this shader-visible heap. Wait through the
+        // most recently submitted list before replacing its resource and SRV.
+        D12Wait(gD12.nextFence > 1 ? gD12.nextFence - 1 : 0);
+        Rel(&slot->tex);
+    }
+    slot->imageGeneration = 0;
+    slot->descriptor = 1 + slotIx;
     D3D12_HEAP_PROPERTIES heap = D12Heap(D3D12_HEAP_TYPE_DEFAULT);
     D3D12_RESOURCE_DESC td = D12Texture(w, h, DXGI_FORMAT_B8G8R8A8_UNORM, 1,
                                         D3D12_RESOURCE_FLAG_NONE);
@@ -2871,8 +2900,8 @@ static int D12ImageDescriptor(const RenderImage* img) {
         Rel(&slot->tex);
         return -1;
     }
-    slot->img = img;
-    slot->descriptor = 1 + gD12.imageCount;
+    slot->imageGeneration = generation;
+    slot->usedInCommands = gD12.commandGeneration;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     sv.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -2880,13 +2909,14 @@ static int D12ImageDescriptor(const RenderImage* img) {
     sv.Texture2D.MipLevels = 1;
     gD12.dev
         ->CreateShaderResourceView(slot->tex, &sv, D12SrvCpu(slot->descriptor));
-    gD12.imageCount++;
+    gD12.imageNext = (slotIx + 1) % kD12ImageSlots;
     return slot->descriptor;
 }
 
 static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img) {
+    uint64_t generation = RenderImageGeneration(img);
     for (int i = 0; i < kImageSlots; i++) {
-        if (gImages[i].img == img) {
+        if (gImages[i].imageGeneration == generation) {
             return gImages[i].srv;
         }
     }
@@ -2920,7 +2950,7 @@ static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img) {
     ImageSlot* s = &gImages[gImageNext];
     gImageNext = (gImageNext + 1) % kImageSlots;
     Rel(&s->srv);
-    s->img = img;
+    s->imageGeneration = generation;
     s->srv = srv;
     return srv;
 }
