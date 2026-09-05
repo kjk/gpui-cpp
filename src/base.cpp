@@ -13,6 +13,7 @@
 namespace base {
 
 static int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
+static int VscprintfUtf8(const char* fmt, va_list args);
 
 float StrToFloatUnchecked(Str s) {
     if (!s.s || s.len <= 0) {
@@ -1654,6 +1655,8 @@ struct Fmt {
     int currPercArgNo = 0;
     StrBuilder res;
 
+    // Scratch for one conversion. A field too wide for it is written
+    // straight into `res` instead, so this is a fast path and not a limit.
     char buf[256] = {};
 };
 
@@ -1917,41 +1920,60 @@ static bool ParseFormat(Fmt& o, Str fmtStr) {
     return true;
 }
 
-// format a single value into a caller-provided buffer via snprintf,
-// NUL-terminating even on truncation. Avoids allocating (assuming vsnprintf
-// doesn't allocate). Answers what it wrote, so a caller appending the result
-// does not have to walk the buffer again.
-static Str bufFmt(Str buf, const char* fmt, ...) {
+// Format one conversion onto the answer via snprintf. The 256-byte scratch
+// buffer takes all but the widest fields in one pass; a field that does not
+// fit is written straight into the answer instead, so a width says what it
+// says rather than being cut to the size of the buffer.
+static bool appendConv(Fmt& fmt, const char* spec, ...) {
     va_list args;
-    va_start(args, fmt);
-    int n = VsnprintfUtf8(buf, fmt, args);
+    va_start(args, spec);
+    va_list retry;
+    va_copy(retry, args);
+    Str bufS(fmt.buf, (int)dimof(fmt.buf));
+    int n = VsnprintfUtf8(bufS, spec, args);
     va_end(args);
-    buf.s[buf.len - 1] = 0;
-    // vsnprintf answers the length it wanted, which is more than it wrote
-    // when the buffer was too small — and MSVC's answers -1 in that case
-    // rather than the length. Either way the terminator says what landed.
-    if (n < 0 || n >= buf.len) {
-        n = (int)strlen(buf.s);
+    fmt.buf[dimof(fmt.buf) - 1] = 0;
+    if (n >= 0 && n < bufS.len) {
+        va_end(retry);
+        return fmt.res.Append(Str(fmt.buf, n));
     }
-    return Str(buf.s, n);
+
+    // Wider than the scratch buffer. MSVC's vsnprintf answers -1 rather than
+    // the length it wanted, so the length is asked for separately.
+    va_list write;
+    va_copy(write, retry);
+    int need = VscprintfUtf8(spec, retry);
+    va_end(retry);
+    bool ok = false;
+    StrBuilder& res = fmt.res;
+    int at = res.len;
+    if (need >= 0 && need < INT_MAX - at - 1 && res.Reserve(at + need + 1)) {
+        Str dst(res.els + at, need + 1);
+        if (VsnprintfUtf8(dst, spec, write) == need) {
+            res.len = at + need;
+            StrBuilderTerminate(res);
+            ok = true;
+        }
+    }
+    va_end(write);
+    return ok;
 }
 
 // default formatting for {n} positional and %v: format by the arg's runtime
 // type
 static bool evalDefault(Fmt& fmt, const FmtArg& arg) {
-    Str buf(fmt.buf, (int)dimof(fmt.buf));
     switch (arg.t) {
         case FmtArg::Kind::Char:
             return fmt.res.AppendChar(arg.c);
         case FmtArg::Kind::Int:
-            return fmt.res.Append(bufFmt(buf, "%lld", (long long)arg.i));
+            return appendConv(fmt, "%lld", (long long)arg.i);
         case FmtArg::Kind::Ptr:
-            return fmt.res.Append(bufFmt(buf, "%p", arg.ptr));
+            return appendConv(fmt, "%p", arg.ptr);
         case FmtArg::Kind::Float:
             // Note: %G, unlike %f, avoids trailing '0'
-            return fmt.res.Append(bufFmt(buf, "%G", (double)arg.f));
+            return appendConv(fmt, "%G", (double)arg.f);
         case FmtArg::Kind::Double:
-            return fmt.res.Append(bufFmt(buf, "%G", arg.d));
+            return appendConv(fmt, "%G", arg.d);
         case FmtArg::Kind::Str:
             return fmt.res.Append(arg.str);
         default:
@@ -1977,8 +1999,6 @@ static int64_t argToI64(const FmtArg& arg) {
 // 32/64-bit value width matches printf. %s padding/truncation is done by hand
 // to avoid relying on the Str being NUL-terminated.
 static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
-    Str bufS(fmt.buf, (int)dimof(fmt.buf));
-
     if (inst.conv == 's' || inst.conv == 'S') {
         Str sv = arg.str;
         int slen = sv.len;
@@ -2016,9 +2036,6 @@ static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     }
     char conv = inst.conv;
     int64_t ival = argToI64(arg);
-    // what bufFmt wrote, for the two cases that reach it from either side of
-    // an if.
-    Str out;
     bool ok = true;
     switch (conv) {
         case 'd':
@@ -2028,13 +2045,12 @@ static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 fbuf[k++] = 'l';
                 fbuf[k++] = 'd';
                 fbuf[k] = 0;
-                out = bufFmt(bufS, fbuf, (long long)ival);
+                ok = appendConv(fmt, fbuf, (long long)ival);
             } else {
                 fbuf[k++] = 'd';
                 fbuf[k] = 0;
-                out = bufFmt(bufS, fbuf, (int)ival);
+                ok = appendConv(fmt, fbuf, (int)ival);
             }
-            ok = fmt.res.Append(out);
             break;
         case 'u':
         case 'o':
@@ -2045,19 +2061,18 @@ static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 fbuf[k++] = 'l';
                 fbuf[k++] = conv;
                 fbuf[k] = 0;
-                out = bufFmt(bufS, fbuf, (unsigned long long)ival);
+                ok = appendConv(fmt, fbuf, (unsigned long long)ival);
             } else {
                 fbuf[k++] = conv;
                 fbuf[k] = 0;
-                out =
-                    bufFmt(bufS, fbuf, (unsigned int)(unsigned long long)ival);
+                ok = appendConv(fmt, fbuf,
+                                (unsigned int)(unsigned long long)ival);
             }
-            ok = fmt.res.Append(out);
             break;
         case 'c':
             fbuf[k++] = 'c';
             fbuf[k] = 0;
-            ok = fmt.res.Append(bufFmt(bufS, fbuf, (int)ival));
+            ok = appendConv(fmt, fbuf, (int)ival);
             break;
         case 'f':
         case 'F':
@@ -2070,7 +2085,7 @@ static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             fbuf[k++] = conv;
             fbuf[k] = 0;
             double dv = (arg.t == FmtArg::Kind::Double) ? arg.d : (double)arg.f;
-            ok = fmt.res.Append(bufFmt(bufS, fbuf, dv));
+            ok = appendConv(fmt, fbuf, dv);
         } break;
         case 'p': {
             // flags/width are uncommon (and platform-specific) for %p; emit
@@ -2078,7 +2093,7 @@ static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             const void* pv = (arg.t == FmtArg::Kind::Ptr)
                                  ? arg.ptr
                                  : (const void*)(intptr_t)ival;
-            ok = fmt.res.Append(bufFmt(bufS, "%p", pv));
+            ok = appendConv(fmt, "%p", pv);
         } break;
         default:
             break;
@@ -2192,6 +2207,20 @@ static _locale_t GetUtf8FormatLocale() {
     return l.loc;
 }
 #endif
+
+// How long the formatted output will be, which vsnprintf answers on the
+// platforms whose vsnprintf reports it and MSVC keeps in its own call.
+static int VscprintfUtf8(const char* fmt, va_list args) {
+#if defined(_MSC_VER)
+    _locale_t loc = GetUtf8FormatLocale();
+    if (loc) {
+        return _vscprintf_l(fmt, loc, args);
+    }
+    return _vscprintf(fmt, args);
+#else
+    return vsnprintf(nullptr, 0, fmt, args);
+#endif
+}
 
 // The format string is a plain const char* because this is a thin wrapper
 // around vsnprintf and is almost always called with a string literal.

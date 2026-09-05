@@ -130,17 +130,27 @@ static void AFormatThatDoesNotHoldUpAnswersNothing() {
 }
 
 static void OutputLongerThanTheScratchBuffer() {
-    // Every conversion but %s goes through a 256-byte buffer in Fmt. A
-    // conversion that overruns it truncates rather than overruns, and what
-    // is appended is what landed — 255 characters and the terminator.
+    // Every conversion but %s goes through a 256-byte buffer in Fmt. A field
+    // too wide for it is written straight into the answer instead, so the
+    // width says what it says.
     Str s = fmt("%500d", 1);
-    utassert(s.len == 255);
-    utassert(s.s[0] == ' ' && s.s[254] == ' ');
+    utassert(s.len == 500);
+    utassert(s.s[0] == ' ' && s.s[498] == ' ' && s.s[499] == '1');
 
-    // The truncation is of one conversion, not of the format: what follows
-    // it is still appended.
+    // What follows the wide field is still appended after it.
     Str after = fmt("%500d|", 1);
-    utassert(after.len == 256 && after.s[255] == '|');
+    utassert(after.len == 501 && after.s[500] == '|');
+
+    // And a precision, which is the other way to outgrow the buffer.
+    Str precise = fmt("%.400f", 0.5);
+    utassert(precise.len == 402);
+    utassert(precise.s[0] == '0' && precise.s[1] == '.' && precise.s[2] == '5');
+
+    // Two of them in one format, so the second is not written over the
+    // first: the answer grows, it is not a buffer being reused.
+    Str both = fmt("%300d;%300d", 1, 2);
+    utassert(both.len == 601 && both.s[300] == ';');
+    utassert(both.s[299] == '1' && both.s[600] == '2');
 
     // And what outlives the frame is a copy in an arena of the caller's:
     // fmt() answers temp-arena memory and nothing else.
