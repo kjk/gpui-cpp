@@ -383,33 +383,33 @@ static Date PresetDate(const DateRangePreset& preset) {
     return preset.value.IntoDate();
 }
 
-static void AppendDateNumber(Arena* a, StrBuilder* out, int value, int digits) {
+static void AppendDateNumber(StrBuilder* out, int value, int digits) {
     if (digits == 2) {
-        StrBuilderAppend(a, *out, fmt("%02d", value));
+        out->Append(fmt("%02d", value));
     } else if (digits == 3) {
-        StrBuilderAppend(a, *out, fmt("%03d", value));
+        out->Append(fmt("%03d", value));
     } else if (digits == 4) {
-        StrBuilderAppend(a, *out, fmt("%04d", value));
+        out->Append(fmt("%04d", value));
     } else {
-        StrBuilderAppend(a, *out, fmt("%d", value));
+        out->Append(fmt("%d", value));
     }
 }
 
-static void AppendDateNumeric(Arena* a, StrBuilder* out, int value, int digits,
+static void AppendDateNumeric(StrBuilder* out, int value, int digits,
                               char defaultPad, char modifier) {
     char pad = modifier == '-'   ? 0
                : modifier == '_' ? ' '
                : modifier == '0' ? '0'
                                  : defaultPad;
     if (!pad || digits <= 1) {
-        AppendDateNumber(a, out, value, 1);
+        AppendDateNumber(out, value, 1);
         return;
     }
     // fmt() takes a literal width, while this date pattern supplies it at
     // runtime, so build the concrete format before rendering the value.
     // Keep output padding.
     TempStr format = pad == '0' ? fmt("%%0%dd", digits) : fmt("%%%dd", digits);
-    StrBuilderAppend(a, *out, fmt(format.s, value));
+    out->Append(fmt(format.s, value));
 }
 
 static int DateYearDay(LocalDate date) {
@@ -446,7 +446,7 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
     static const char* longDays[] = {"Sunday",    "Monday",   "Tuesday",
                                      "Wednesday", "Thursday", "Friday",
                                      "Saturday"};
-    StrBuilder out;
+    StrBuilder out(a);
     int weekday = CalendarWeekday(date.year, date.month, date.day);
     int yearDay = DateYearDay(date);
     int isoYear = 0, isoWeek = 0;
@@ -454,7 +454,7 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
     for (int i = 0; i < pattern.len; i++) {
         char ch = pattern.s[i];
         if (ch != '%' || i + 1 >= pattern.len) {
-            StrBuilderAppendChar(a, out, ch);
+            out.AppendChar(ch);
             continue;
         }
         char directive = pattern.s[++i];
@@ -466,105 +466,101 @@ Str DatePickerFormatDate(Arena* a, Str pattern, LocalDate date) {
         }
         switch (directive) {
             case '%':
-                StrBuilderAppendChar(a, out, '%');
+                out.AppendChar('%');
                 break;
             case 'Y':
-                AppendDateNumeric(a, &out, date.year, 4, '0', modifier);
+                AppendDateNumeric(&out, date.year, 4, '0', modifier);
                 break;
             case 'y':
-                AppendDateNumeric(a, &out, date.year % 100, 2, '0', modifier);
+                AppendDateNumeric(&out, date.year % 100, 2, '0', modifier);
                 break;
             case 'C':
-                AppendDateNumeric(a, &out, date.year / 100, 2, '0', modifier);
+                AppendDateNumeric(&out, date.year / 100, 2, '0', modifier);
                 break;
             case 'q':
-                AppendDateNumeric(a, &out, (date.month - 1) / 3 + 1, 1, 0,
+                AppendDateNumeric(&out, (date.month - 1) / 3 + 1, 1, 0,
                                   modifier);
                 break;
             case 'm':
-                AppendDateNumeric(a, &out, date.month, 2, '0', modifier);
+                AppendDateNumeric(&out, date.month, 2, '0', modifier);
                 break;
             case 'b':
             case 'h':
-                StrBuilderAppend(a, out, Str(shortMonths[date.month]));
+                out.Append(Str(shortMonths[date.month]));
                 break;
             case 'B':
-                StrBuilderAppend(a, out, Str(longMonths[date.month]));
+                out.Append(Str(longMonths[date.month]));
                 break;
             case 'd':
-                AppendDateNumeric(a, &out, date.day, 2, '0', modifier);
+                AppendDateNumeric(&out, date.day, 2, '0', modifier);
                 break;
             case 'e':
-                AppendDateNumeric(a, &out, date.day, 2, ' ', modifier);
+                AppendDateNumeric(&out, date.day, 2, ' ', modifier);
                 break;
             case 'j':
-                AppendDateNumeric(a, &out, yearDay, 3, '0', modifier);
+                AppendDateNumeric(&out, yearDay, 3, '0', modifier);
                 break;
             case 'a':
-                StrBuilderAppend(a, out, Str(shortDays[weekday]));
+                out.Append(Str(shortDays[weekday]));
                 break;
             case 'A':
-                StrBuilderAppend(a, out, Str(longDays[weekday]));
+                out.Append(Str(longDays[weekday]));
                 break;
             case 'w':
-                AppendDateNumeric(a, &out, weekday, 1, 0, modifier);
+                AppendDateNumeric(&out, weekday, 1, 0, modifier);
                 break;
             case 'u':
-                AppendDateNumeric(a, &out, weekday ? weekday : 7, 1, 0,
-                                  modifier);
+                AppendDateNumeric(&out, weekday ? weekday : 7, 1, 0, modifier);
                 break;
             case 'U':
-                AppendDateNumeric(a, &out, (yearDay - 1 + 7 - weekday) / 7, 2,
-                                  '0', modifier);
+                AppendDateNumeric(&out, (yearDay - 1 + 7 - weekday) / 7, 2, '0',
+                                  modifier);
                 break;
             case 'W': {
                 int mondayWeekday = (weekday + 6) % 7;
-                AppendDateNumeric(a, &out,
-                                  (yearDay - 1 + 7 - mondayWeekday) / 7, 2, '0',
-                                  modifier);
+                AppendDateNumeric(&out, (yearDay - 1 + 7 - mondayWeekday) / 7,
+                                  2, '0', modifier);
                 break;
             }
             case 'G':
-                AppendDateNumeric(a, &out, isoYear, 4, '0', modifier);
+                AppendDateNumeric(&out, isoYear, 4, '0', modifier);
                 break;
             case 'g':
-                AppendDateNumeric(a, &out, isoYear % 100, 2, '0', modifier);
+                AppendDateNumeric(&out, isoYear % 100, 2, '0', modifier);
                 break;
             case 'V':
-                AppendDateNumeric(a, &out, isoWeek, 2, '0', modifier);
+                AppendDateNumeric(&out, isoWeek, 2, '0', modifier);
                 break;
             case 'F':
-                StrBuilderAppend(
-                    a, out,
+                out.Append(
                     fmt("%04d-%02d-%02d", date.year, date.month, date.day));
                 break;
             case 'D':
             case 'x':
-                StrBuilderAppend(a, out,
-                                 fmt("%02d/%02d/%02d", date.month, date.day,
-                                     date.year % 100));
+                out.Append(fmt("%02d/%02d/%02d", date.month, date.day,
+                               date.year % 100));
                 break;
             case 'v':
-                AppendDateNumeric(a, &out, date.day, 2, ' ', modifier);
-                StrBuilderAppendChar(a, out, '-');
-                StrBuilderAppend(a, out, Str(shortMonths[date.month]));
-                StrBuilderAppendChar(a, out, '-');
-                AppendDateNumeric(a, &out, date.year, 4, '0', modifier);
+                AppendDateNumeric(&out, date.day, 2, ' ', modifier);
+                out.AppendChar('-');
+                out.Append(Str(shortMonths[date.month]));
+                out.AppendChar('-');
+                AppendDateNumeric(&out, date.year, 4, '0', modifier);
                 break;
             case 't':
-                StrBuilderAppendChar(a, out, '\t');
+                out.AppendChar('\t');
                 break;
             case 'n':
-                StrBuilderAppendChar(a, out, '\n');
+                out.AppendChar('\n');
                 break;
             default:
                 // Keep an unsupported chrono directive visible and stable.
-                StrBuilderAppendChar(a, out, '%');
-                StrBuilderAppendChar(a, out, directive);
+                out.AppendChar('%');
+                out.AppendChar(directive);
                 break;
         }
     }
-    return StrBuilderTakeStr(a, out);
+    return out.TakeStr();
 }
 
 Str DatePickerFormatValue(Arena* a, Str pattern, Date date) {

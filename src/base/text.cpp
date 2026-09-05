@@ -1360,8 +1360,8 @@ static Str SrcIndent(Arena* a, Str s) {
 // The nesting is that function's: code innermost, then italic, bold,
 // strikethrough, underline, highlight, and the link outermost.
 static Str SrcMarkPre(Arena* a, uint8_t marks) {
-    StrBuilder out;
-    auto put = [&](const char* text) { StrBuilderAppend(a, out, Str(text)); };
+    StrBuilder out(a);
+    auto put = [&](const char* text) { out.Append(Str(text)); };
     if (marks & MdLink) {
         put("[");
     }
@@ -1383,12 +1383,12 @@ static Str SrcMarkPre(Arena* a, uint8_t marks) {
     if (marks & MdCode) {
         put("`");
     }
-    return StrBuilderTakeStr(a, out);
+    return out.TakeStr();
 }
 
 static Str SrcMarkPost(Arena* a, uint8_t marks, Str href) {
-    StrBuilder out;
-    auto put = [&](const char* text) { StrBuilderAppend(a, out, Str(text)); };
+    StrBuilder out(a);
+    auto put = [&](const char* text) { out.Append(Str(text)); };
     if (marks & MdCode) {
         put("`");
     }
@@ -1407,7 +1407,7 @@ static Str SrcMarkPost(Arena* a, uint8_t marks, Str href) {
     if (marks & MdHighlight) {
         put("==");
     }
-    Str tail = StrBuilderTakeStr(a, out);
+    Str tail = out.TakeStr();
     if (marks & MdLink) {
         // Rust writes the title too when the link carries one; MdRun keeps
         // only the url, which is what the parse fold kept.

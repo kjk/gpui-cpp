@@ -59,13 +59,13 @@ static int EncodeUtf8(char* out, uint32_t cp) {
     return 4;
 }
 
-static void AppendCp(Arena* a, StrBuilder& out, uint32_t cp) {
+static void AppendCp(StrBuilder& out, uint32_t cp) {
     if (cp == 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
         cp = 0xfffd;
     }
     char bytes[4];
     int n = EncodeUtf8(bytes, cp);
-    StrBuilderAppend(a, out, Str(bytes, n));
+    out.Append(Str(bytes, n));
 }
 
 static ArenaStr Decode(Arena* a, Str value) {
@@ -78,11 +78,11 @@ static ArenaStr Decode(Arena* a, Str value) {
     }
     if (!needsDecode) return ArenaStrDup(a, value);
 
-    StrBuilder out;
-    StrBuilderReserve(a, out, value.len);
+    StrBuilder out(a);
+    out.Reserve(value.len);
     for (int i = 0; i < value.len;) {
         if (value.s[i] != '&') {
-            StrBuilderAppendChar(a, out, value.s[i++]);
+            out.AppendChar(value.s[i++]);
             continue;
         }
         int start = i++;
@@ -107,11 +107,11 @@ static ArenaStr Decode(Arena* a, Str value) {
             }
             if (i == digits) {
                 i = start + 1;
-                StrBuilderAppendChar(a, out, '&');
+                out.AppendChar('&');
                 continue;
             }
             if (i < value.len && value.s[i] == ';') i++;
-            AppendCp(a, out, cp);
+            AppendCp(out, cp);
             continue;
         }
         int end = i;
@@ -128,14 +128,14 @@ static ArenaStr Decode(Arena* a, Str value) {
         }
         if (!decoded.s) {
             i = start + 1;
-            StrBuilderAppendChar(a, out, '&');
+            out.AppendChar('&');
             continue;
         }
-        StrBuilderAppend(a, out, decoded);
+        out.Append(decoded);
         i += used;
         if (i < value.len && value.s[i] == ';') i++;
     }
-    return ArenaStrDup(a, StrBuilderTakeStr(a, out));
+    return ArenaStrDup(a, out.TakeStr());
 }
 
 struct Lex {
@@ -402,19 +402,19 @@ Str AttrValue(Arena* a, const Node* node, Str name) {
     return AttributeValue(a, Attr(a, node, name));
 }
 
-static void WriteEscaped(Arena* a, StrBuilder& out, Str value, bool attribute) {
+static void WriteEscaped(StrBuilder& out, Str value, bool attribute) {
     for (int i = 0; i < value.len; i++) {
         char c = value.s[i];
         if (c == '&')
-            StrBuilderAppend(a, out, StrL("&amp;"));
+            out.Append(StrL("&amp;"));
         else if (c == '<')
-            StrBuilderAppend(a, out, StrL("&lt;"));
+            out.Append(StrL("&lt;"));
         else if (c == '>' && !attribute)
-            StrBuilderAppend(a, out, StrL("&gt;"));
+            out.Append(StrL("&gt;"));
         else if (c == '"' && attribute)
-            StrBuilderAppend(a, out, StrL("&quot;"));
+            out.Append(StrL("&quot;"));
         else
-            StrBuilderAppendChar(a, out, c);
+            out.AppendChar(c);
     }
 }
 
@@ -423,25 +423,25 @@ static void Write(Arena* a, StrBuilder& out, const Node* node, bool include) {
     if (include && node->kind == NodeKind::Text) {
         const Node* parent = NodeParent(a, node);
         if (parent && SeqStrContainsI(kRawElements, NodeName(a, parent)))
-            StrBuilderAppend(a, out, NodeData(a, node));
+            out.Append(NodeData(a, node));
         else
-            WriteEscaped(a, out, NodeData(a, node), false);
+            WriteEscaped(out, NodeData(a, node), false);
     } else if (include && node->kind == NodeKind::Comment) {
-        StrBuilderAppend(a, out, StrL("<!--"));
-        StrBuilderAppend(a, out, NodeData(a, node));
-        StrBuilderAppend(a, out, StrL("-->"));
+        out.Append(StrL("<!--"));
+        out.Append(NodeData(a, node));
+        out.Append(StrL("-->"));
     } else if (include && element) {
-        StrBuilderAppendChar(a, out, '<');
-        StrBuilderAppend(a, out, NodeName(a, node));
+        out.AppendChar('<');
+        out.Append(NodeName(a, node));
         for (const Attribute* at = NodeAttrs(a, node); at;
              at = AttributeNext(a, at)) {
-            StrBuilderAppendChar(a, out, ' ');
-            StrBuilderAppend(a, out, AttributeName(a, at));
-            StrBuilderAppend(a, out, StrL("=\""));
-            WriteEscaped(a, out, AttributeValue(a, at), true);
-            StrBuilderAppendChar(a, out, '"');
+            out.AppendChar(' ');
+            out.Append(AttributeName(a, at));
+            out.Append(StrL("=\""));
+            WriteEscaped(out, AttributeValue(a, at), true);
+            out.AppendChar('"');
         }
-        StrBuilderAppendChar(a, out, '>');
+        out.AppendChar('>');
     }
     for (const Node* child = NodeFirst(a, node); child;
          child = NodeNext(a, child)) {
@@ -449,17 +449,17 @@ static void Write(Arena* a, StrBuilder& out, const Node* node, bool include) {
     }
     if (include && element &&
         !SeqStrContainsI(kVoidElements, NodeName(a, node))) {
-        StrBuilderAppend(a, out, StrL("</"));
-        StrBuilderAppend(a, out, NodeName(a, node));
-        StrBuilderAppendChar(a, out, '>');
+        out.Append(StrL("</"));
+        out.Append(NodeName(a, node));
+        out.AppendChar('>');
     }
 }
 
 Str Serialize(Arena* a, const Node* node, SerializeOptions options) {
     if (!a || !node) return {};
-    StrBuilder out;
+    StrBuilder out(a);
     Write(a, out, node, options.includeNode);
-    return StrBuilderTakeStr(a, out);
+    return out.TakeStr();
 }
 
 } // namespace html5ever

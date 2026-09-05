@@ -15,19 +15,17 @@
 static constexpr int kHtmlBytes = 1024 * 1024;
 
 static Str BuildLargeHtml(Arena* a) {
-    StrBuilder out;
-    StrBuilderReserve(a, out, kHtmlBytes + 4096);
-    StrBuilderAppend(
-        a, out,
-        StrL("<!doctype html><html><head><title>Large document</title>"
-             "</head><body><main id=content class=article>"));
+    StrBuilder out(a);
+    out.Reserve(kHtmlBytes + 4096);
+    out
+        .Append(StrL("<!doctype html><html><head><title>Large document</title>"
+                     "</head><body><main id=content class=article>"));
     int section = 0;
     while (out.len < kHtmlBytes) {
         TempStr n = fmt("%d", section++);
-        StrBuilderAppend(a, out, StrL("<section data-section=\""));
-        StrBuilderAppend(a, out, n);
-        StrBuilderAppend(
-            a, out,
+        out.Append(StrL("<section data-section=\""));
+        out.Append(n);
+        out.Append(
             StrL("\"><h2>Parser &amp; memory benchmark</h2>"
                  "<p class=lead>This is a <strong>large</strong> HTML "
                  "document with <a href=\"/docs?q=one&amp;x=two\">links</a>, "
@@ -40,8 +38,8 @@ static Str BuildLargeHtml(Arena* a) {
                  "<tr><td>two</td><td>456</td></tr></tbody></table>"
                  "<!-- retained comment --></section>"));
     }
-    StrBuilderAppend(a, out, StrL("</main></body></html>"));
-    return StrBuilderTakeStr(a, out);
+    out.Append(StrL("</main></body></html>"));
+    return out.TakeStr();
 }
 
 struct HtmlCase {

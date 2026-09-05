@@ -15,12 +15,12 @@ static void SetError(ShellError* error, Str message) {
 }
 
 static Str Join(Arena* arena, Str left, Str right) {
-    StrBuilder path;
-    StrBuilderAppend(arena, path, left);
+    StrBuilder path(arena);
+    path.Append(left);
     if (left && left.s[left.len - 1] != '/' && left.s[left.len - 1] != '\\')
-        StrBuilderAppendChar(arena, path, GPUI_OS_WINDOWS ? '\\' : '/');
-    StrBuilderAppend(arena, path, right);
-    return StrBuilderTakeStr(arena, path);
+        path.AppendChar(GPUI_OS_WINDOWS ? '\\' : '/');
+    path.Append(right);
+    return path.TakeStr();
 }
 
 static const char* JsonTypeName(const JsonValue* value) {

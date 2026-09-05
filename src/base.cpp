@@ -1408,12 +1408,12 @@ static void StrBuilderTerminate(StrBuilder& b) {
 
 // VecReserve marks arena storage as owned. Flip the sign so ~Vec leaves the
 // arena's block alone, using the same representation as a lent buffer.
-static char* StrBuilderEnsureCap(Arena* a, StrBuilder& b, int needed) {
-    char* els = VecReserve(a, b, needed);
+static char* StrBuilderEnsureCap(StrBuilder& b, int needed) {
+    char* els = VecReserve(b.a, b, needed);
     if (!els) {
         return nullptr;
     }
-    if (a && b.cap > 0) {
+    if (b.a && b.cap > 0) {
         b.cap = -b.cap;
     }
     return els;
@@ -1437,42 +1437,34 @@ void StrBuilderUseExternalBuffer(StrBuilder& b, Str buf) {
     }
 }
 
-bool StrBuilderReserve(Arena* a, StrBuilder& b, int cap) {
-    if (!StrBuilderEnsureCap(a, b, cap)) {
+bool StrBuilder::Reserve(int capacity) {
+    if (!StrBuilderEnsureCap(*this, capacity)) {
         return false;
     }
-    StrBuilderTerminate(b);
-    return true;
-}
-
-bool StrBuilderAppendChar(Arena* a, StrBuilder& b, char c) {
-    if (!StrBuilderEnsureCap(a, b, b.len + 1)) {
-        return false;
-    }
-    b.els[b.len++] = c;
-    StrBuilderTerminate(b);
-    return true;
-}
-
-bool StrBuilderAppend(Arena* a, StrBuilder& b, Str src) {
-    if (StrIsNull(src) || 0 == src.len) {
-        return true;
-    }
-    if (!StrBuilderEnsureCap(a, b, b.len + src.len)) {
-        return false;
-    }
-    memcpy(b.els + b.len, src.s, (size_t)src.len);
-    b.len += src.len;
-    StrBuilderTerminate(b);
+    StrBuilderTerminate(*this);
     return true;
 }
 
 bool StrBuilder::AppendChar(char c) {
-    return StrBuilderAppendChar(nullptr, *this, c);
+    if (!StrBuilderEnsureCap(*this, len + 1)) {
+        return false;
+    }
+    els[len++] = c;
+    StrBuilderTerminate(*this);
+    return true;
 }
 
 bool StrBuilder::Append(Str src) {
-    return StrBuilderAppend(nullptr, *this, src);
+    if (StrIsNull(src) || 0 == src.len) {
+        return true;
+    }
+    if (!StrBuilderEnsureCap(*this, len + src.len)) {
+        return false;
+    }
+    memcpy(els + len, src.s, (size_t)src.len);
+    len += src.len;
+    StrBuilderTerminate(*this);
+    return true;
 }
 
 char StrBuilder::RemoveAt(int idx, int count) {
@@ -1490,27 +1482,23 @@ char StrBuilder::RemoveLast() {
 // without duplicate allocation. Note: since Vec over-allocates, this
 // is likely to use more memory than strictly necessary, but in most cases
 // it doesn't matter
-Str StrBuilderTakeStr(Arena* a, StrBuilder& b) {
-    int n = b.len;
-    char* res = b.els;
-    if (!b.els || n == 0) {
-        b.Reset();
+Str StrBuilder::TakeStr() {
+    int n = len;
+    char* res = els;
+    if (!els || n == 0) {
+        Reset();
         return Str{};
     }
-    if (IsNotOurHeapBlock(b)) {
+    if (IsNotOurHeapBlock(*this)) {
         // Lent and arena blocks stay with their owner, so copy the result out.
-        res = (char*)MemDup(a, b.els, (size_t)n + kPadding);
+        res = (char*)MemDup(a, els, (size_t)n + kPadding);
     } else {
         // Hand the heap allocation to the caller and start over.
-        b.els = nullptr;
-        b.cap = 0;
+        els = nullptr;
+        cap = 0;
     }
-    b.Reset();
+    Reset();
     return Str(res, n);
-}
-
-Str StrBuilder::TakeStr() {
-    return StrBuilderTakeStr(nullptr, *this);
 }
 
 char StrBuilder::LastChar() const {
@@ -1586,12 +1574,8 @@ struct Inst {
 };
 
 struct Fmt {
-    Fmt() = default;
+    explicit Fmt(Arena* a) : res(a) {}
     ~Fmt() = default;
-
-    // Where res grows from; null is the heap. StrBuilder carries no allocator,
-    // so it is passed to every growing operation.
-    Arena* a = nullptr;
 
     bool Eval(const FmtArg** args, int nArgs);
 
@@ -1886,24 +1870,23 @@ static void evalDefault(Fmt& fmt, const FmtArg& arg) {
     Str buf(fmt.buf, (int)dimof(fmt.buf));
     switch (arg.t) {
         case FmtArg::Kind::Char:
-            StrBuilderAppendChar(fmt.a, fmt.res, arg.c);
+            fmt.res.AppendChar(arg.c);
             break;
         case FmtArg::Kind::Int:
-            StrBuilderAppend(fmt.a, fmt.res,
-                             bufFmt(buf, "%lld", (long long)arg.i));
+            fmt.res.Append(bufFmt(buf, "%lld", (long long)arg.i));
             break;
         case FmtArg::Kind::Ptr:
-            StrBuilderAppend(fmt.a, fmt.res, bufFmt(buf, "%p", arg.ptr));
+            fmt.res.Append(bufFmt(buf, "%p", arg.ptr));
             break;
         case FmtArg::Kind::Float:
             // Note: %G, unlike %f, avoids trailing '0'
-            StrBuilderAppend(fmt.a, fmt.res, bufFmt(buf, "%G", (double)arg.f));
+            fmt.res.Append(bufFmt(buf, "%G", (double)arg.f));
             break;
         case FmtArg::Kind::Double:
-            StrBuilderAppend(fmt.a, fmt.res, bufFmt(buf, "%G", arg.d));
+            fmt.res.Append(bufFmt(buf, "%G", arg.d));
             break;
         case FmtArg::Kind::Str:
-            StrBuilderAppend(fmt.a, fmt.res, arg.str);
+            fmt.res.Append(arg.str);
             break;
         default:
             break;
@@ -1940,13 +1923,13 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
         pad = std::max(pad, 0);
         if (!inst.leftJust) {
             for (int j = 0; j < pad; j++) {
-                StrBuilderAppendChar(fmt.a, fmt.res, ' ');
+                fmt.res.AppendChar(' ');
             }
         }
-        StrBuilderAppend(fmt.a, fmt.res, Str(sv.s, slen));
+        fmt.res.Append(Str(sv.s, slen));
         if (inst.leftJust) {
             for (int j = 0; j < pad; j++) {
-                StrBuilderAppendChar(fmt.a, fmt.res, ' ');
+                fmt.res.AppendChar(' ');
             }
         }
         return;
@@ -1978,7 +1961,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 fbuf[k] = 0;
                 out = bufFmt(bufS, fbuf, (int)ival);
             }
-            StrBuilderAppend(fmt.a, fmt.res, out);
+            fmt.res.Append(out);
             break;
         case 'u':
         case 'o':
@@ -1996,12 +1979,12 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 out =
                     bufFmt(bufS, fbuf, (unsigned int)(unsigned long long)ival);
             }
-            StrBuilderAppend(fmt.a, fmt.res, out);
+            fmt.res.Append(out);
             break;
         case 'c':
             fbuf[k++] = 'c';
             fbuf[k] = 0;
-            StrBuilderAppend(fmt.a, fmt.res, bufFmt(bufS, fbuf, (int)ival));
+            fmt.res.Append(bufFmt(bufS, fbuf, (int)ival));
             break;
         case 'f':
         case 'F':
@@ -2014,7 +1997,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             fbuf[k++] = conv;
             fbuf[k] = 0;
             double dv = (arg.t == FmtArg::Kind::Double) ? arg.d : (double)arg.f;
-            StrBuilderAppend(fmt.a, fmt.res, bufFmt(bufS, fbuf, dv));
+            fmt.res.Append(bufFmt(bufS, fbuf, dv));
         } break;
         case 'p': {
             // flags/width are uncommon (and platform-specific) for %p; emit
@@ -2022,7 +2005,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             const void* pv = (arg.t == FmtArg::Kind::Ptr)
                                  ? arg.ptr
                                  : (const void*)(intptr_t)ival;
-            StrBuilderAppend(fmt.a, fmt.res, bufFmt(bufS, "%p", pv));
+            fmt.res.Append(bufFmt(bufS, "%p", pv));
         } break;
         default:
             break;
@@ -2039,7 +2022,7 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
         auto& inst = instructions[n];
 
         if (inst.t == FmtArg::Kind::RawStr) {
-            StrBuilderAppend(a, res, Str(format.s + inst.rawOff, inst.sLen));
+            res.Append(Str(format.s + inst.rawOff, inst.sLen));
             continue;
         }
 
@@ -2092,9 +2075,8 @@ static Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args,
         }
     }
 
-    Fmt f;
+    Fmt f(a);
     // Format directly into the caller's arena so there are no heap allocations.
-    f.a = a;
     bool ok = ParseFormat(f, Str(fmt));
     if (!ok) {
         return {};
@@ -2103,7 +2085,7 @@ static Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args,
     if (!ok) {
         return {};
     }
-    return StrBuilderTakeStr(f.a, f.res);
+    return f.res.TakeStr();
 }
 
 TempStr FormatTempArgs(const char* fmt, const FmtArg** args, int nArgs) {

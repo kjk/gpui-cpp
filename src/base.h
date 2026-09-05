@@ -1749,12 +1749,16 @@ int SeqStrCount(SeqStrings strs);
 void StrLowerAscii(char* s);
 
 // A Vec<char> that always keeps a NUL after the last char, so the storage is
-// also a C string. Vec supplies the fields, operator[], begin/end and the
-// destructor; only what needs the terminator or an arena is left here.
+// also a C string. The builder carries its allocator because every operation
+// on one must use the same ownership model: null grows on the heap, otherwise
+// storage belongs to the arena.
 struct StrBuilder : Vec<char> {
+    Arena* a = nullptr;
+
+    explicit StrBuilder(Arena* arena = nullptr) : a(arena) {}
+
     void Reset(Str s = {});
-    // These grow on the heap. To grow from an arena use the StrBuilderAppend*()
-    // free functions below, which take the allocator like VecPush() does.
+    bool Reserve(int cap);
     bool AppendChar(char c);
     bool Append(Str src);
     char RemoveAt(int idx, int count = 1);
@@ -1766,11 +1770,6 @@ struct StrBuilder : Vec<char> {
 // Lend b a buffer to start in. One byte is held back for the NUL; growing
 // past it allocates and copies, leaving the caller's storage alone.
 void StrBuilderUseExternalBuffer(StrBuilder& b, Str buf);
-// Pre-allocate cap chars. Arena storage remains owned by the arena.
-bool StrBuilderReserve(Arena* a, StrBuilder& b, int cap);
-bool StrBuilderAppendChar(Arena* a, StrBuilder& b, char c);
-bool StrBuilderAppend(Arena* a, StrBuilder& b, Str s);
-Str StrBuilderTakeStr(Arena* a, StrBuilder& b);
 
 struct FmtArg {
     enum class Kind : uint8_t {

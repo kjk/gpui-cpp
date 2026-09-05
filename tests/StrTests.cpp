@@ -139,15 +139,15 @@ static void BuilderBorrowsThenGrowsLikeAVec() {
 
 static void BuilderArenaStorageStaysWithTheArena() {
     Arena* a = ArenaNew();
-    StrBuilder b;
-    utassert(StrBuilderReserve(a, b, 4));
+    StrBuilder b(a);
+    utassert(b.Reserve(4));
     char* first = b.els;
     utassert(first && b.cap < 0);
-    utassert(StrBuilderAppend(a, b, StrL("a string longer than reserve")));
+    utassert(b.Append(StrL("a string longer than reserve")));
     utassert(b.cap < 0 && b.els != first);
     char* storage = b.els;
 
-    Str result = StrBuilderTakeStr(a, b);
+    Str result = b.TakeStr();
     utassert(base::StrEq(result, StrL("a string longer than reserve")));
     utassert(result.s != storage);
     utassert(b.els == storage && b.cap < 0 && b.len == 0);

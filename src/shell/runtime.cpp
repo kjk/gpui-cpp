@@ -1103,16 +1103,16 @@ static int Interrupt(JSRuntime*, void* opaque) {
 
 static Str ExceptionText(Arena* arena, JSContext* ctx) {
     JSValue exception = JS_GetException(ctx);
-    StrBuilder out;
+    StrBuilder out(arena);
     size_t messageLen = 0;
     const char* message = JS_ToCStringLen(ctx, &messageLen, exception);
     Str messageText;
     if (message) {
         messageText = StrDup(arena, Str(message, (int)messageLen));
-        StrBuilderAppend(arena, out, messageText);
+        out.Append(messageText);
         JS_FreeCString(ctx, message);
     } else {
-        StrBuilderAppend(arena, out, StrL("JavaScript exception"));
+        out.Append(StrL("JavaScript exception"));
     }
     if (JS_IsError(exception)) {
         JSValue stack = JS_GetPropertyStr(ctx, exception, "stack");
@@ -1122,12 +1122,11 @@ static Str ExceptionText(Arena* arena, JSContext* ctx) {
             if (text && stackLen > 0) {
                 Str stackText(text, (int)stackLen);
                 if (!messageText || !StrStartsWith(stackText, messageText)) {
-                    StrBuilderAppendChar(arena, out, '\n');
-                    StrBuilderAppend(arena, out, stackText);
+                    out.AppendChar('\n');
+                    out.Append(stackText);
                 } else if ((int)stackLen > (int)messageLen) {
-                    StrBuilderAppend(arena, out,
-                                     Str(text + messageLen,
-                                         (int)stackLen - (int)messageLen));
+                    out.Append(Str(text + messageLen,
+                                   (int)stackLen - (int)messageLen));
                 }
                 JS_FreeCString(ctx, text);
             }
@@ -1135,7 +1134,7 @@ static Str ExceptionText(Arena* arena, JSContext* ctx) {
         JS_FreeValue(ctx, stack);
     }
     JS_FreeValue(ctx, exception);
-    return StrBuilderTakeStr(arena, out);
+    return out.TakeStr();
 }
 
 static bool CaptureException(ShellRuntimeImpl* impl, ShellError* error) {
@@ -10405,19 +10404,19 @@ static const float kShellWheelNotch = 48.f;
 // and `win` on every platform, so a binding and the event it produces agree by
 // construction. The modifier order is GPUI's own, so a chord round-trips.
 static Str ScriptKeystroke(Arena* arena, const KeyEvent& event) {
-    StrBuilder out;
-    if (event.function) StrBuilderAppend(arena, out, StrL("fn-"));
-    if (event.ctrl) StrBuilderAppend(arena, out, StrL("ctrl-"));
-    if (event.alt) StrBuilderAppend(arena, out, StrL("alt-"));
-    if (event.platform) StrBuilderAppend(arena, out, StrL("cmd-"));
-    if (event.shift) StrBuilderAppend(arena, out, StrL("shift-"));
+    StrBuilder out(arena);
+    if (event.function) out.Append(StrL("fn-"));
+    if (event.ctrl) out.Append(StrL("ctrl-"));
+    if (event.alt) out.Append(StrL("alt-"));
+    if (event.platform) out.Append(StrL("cmd-"));
+    if (event.shift) out.Append(StrL("shift-"));
     Str key = event.vk ? KeyName(event.vk) : Str{};
     if (key) {
-        StrBuilderAppend(arena, out, key);
+        out.Append(key);
     } else if (event.ch) {
-        StrBuilderAppend(arena, out, ShellUtf8Temp(event.ch));
+        out.Append(ShellUtf8Temp(event.ch));
     }
-    return StrBuilderTakeStr(arena, out);
+    return out.TakeStr();
 }
 
 static JSValue JsModifiers(JSContext* ctx, bool shift, bool control, bool alt,

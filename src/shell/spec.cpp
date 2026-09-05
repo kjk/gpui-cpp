@@ -488,46 +488,44 @@ bool SpecArena::ClaimVirtualItems(uint64_t count, uint64_t limit) {
     return true;
 }
 
-static void Indent(Arena* a, StrBuilder* out, int depth) {
-    for (int i = 0; i < depth; i++) StrBuilderAppend(a, *out, StrL("  "));
+static void Indent(StrBuilder* out, int depth) {
+    for (int i = 0; i < depth; i++) out->Append(StrL("  "));
 }
 
-static void AppendBridged(Arena* a, StrBuilder* out, const Bridged& value) {
+static void AppendBridged(StrBuilder* out, const Bridged& value) {
     switch (value.kind) {
         case BridgedKind::Nil:
-            StrBuilderAppend(a, *out, StrL("nil"));
+            out->Append(StrL("nil"));
             break;
         case BridgedKind::Bool:
-            StrBuilderAppend(a, *out,
-                             value.boolean ? StrL("true") : StrL("false"));
+            out->Append(value.boolean ? StrL("true") : StrL("false"));
             break;
         case BridgedKind::Number:
-            StrBuilderAppend(a, *out, fmt("%g", value.number));
+            out->Append(fmt("%g", value.number));
             break;
         case BridgedKind::String:
-            StrBuilderAppendChar(a, *out, '"');
-            StrBuilderAppend(a, *out, value.string);
-            StrBuilderAppendChar(a, *out, '"');
+            out->AppendChar('"');
+            out->Append(value.string);
+            out->AppendChar('"');
             break;
     }
 }
 
-static void AppendArgs(Arena* a, StrBuilder* out, const SpecOp& op) {
-    StrBuilderAppendChar(a, *out, '(');
+static void AppendArgs(StrBuilder* out, const SpecOp& op) {
+    out->AppendChar('(');
     for (int i = 0; i < op.argCount; i++) {
-        if (i) StrBuilderAppend(a, *out, StrL(", "));
-        AppendBridged(a, out, op.args[i]);
+        if (i) out->Append(StrL(", "));
+        AppendBridged(out, op.args[i]);
     }
-    StrBuilderAppendChar(a, *out, ')');
+    out->AppendChar(')');
 }
 
-void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
-                          int depth) const {
+void SpecArena::WriteTree(StrBuilder* out, SpecId id, int depth) const {
     const SpecNode* node = Node(id);
     if (!node) return;
     const Component& component = node->component;
-    Indent(a, out, depth);
-    StrBuilderAppend(a, *out, Str(ComponentName(component)));
+    Indent(out, depth);
+    out->Append(Str(ComponentName(component)));
     switch (component.kind) {
         case ComponentKind::Text:
         case ComponentKind::Button:
@@ -561,20 +559,18 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
         case ComponentKind::Combobox:
         case ComponentKind::HResizable:
         case ComponentKind::VResizable:
-            StrBuilderAppend(a, *out, StrL(" \""));
-            StrBuilderAppend(a, *out, component.text);
-            StrBuilderAppendChar(a, *out, '"');
+            out->Append(StrL(" \""));
+            out->Append(component.text);
+            out->AppendChar('"');
             break;
         case ComponentKind::TableRow:
         case ComponentKind::TableHead:
         case ComponentKind::TableCell:
-            StrBuilderAppend(
-                a, *out, fmt(" \"%s\" #%u", component.text, component.index));
+            out->Append(fmt(" \"%s\" #%u", component.text, component.index));
             break;
         case ComponentKind::DatePicker:
-            StrBuilderAppend(a, *out,
-                             fmt(" \"%s\" #%llu", component.text,
-                                 (unsigned long long)component.handle));
+            out->Append(fmt(" \"%s\" #%llu", component.text,
+                            (unsigned long long)component.handle));
             break;
         case ComponentKind::ChildView:
         case ComponentKind::Input:
@@ -585,15 +581,13 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
         case ComponentKind::SliderTrack:
         case ComponentKind::SliderIndicator:
         case ComponentKind::SliderThumb:
-            StrBuilderAppend(
-                a, *out, fmt(" #%llu", (unsigned long long)component.handle));
+            out->Append(fmt(" #%llu", (unsigned long long)component.handle));
             break;
         case ComponentKind::VVirtualList:
         case ComponentKind::HVirtualList:
             if (component.virtualList) {
-                StrBuilderAppend(a, *out,
-                                 fmt(" \"%s\" ×%d", component.virtualList->id,
-                                     component.virtualList->sizeCount));
+                out->Append(fmt(" \"%s\" ×%d", component.virtualList->id,
+                                component.virtualList->sizeCount));
             }
             break;
         default:
@@ -602,62 +596,62 @@ void SpecArena::WriteTree(Arena* a, StrBuilder* out, SpecId id,
 
     for (const SpecOp& op : node->ops) {
         if (op.kind == SpecOpKind::NullaryStyle) {
-            StrBuilderAppend(a, *out, StrL(" ."));
-            StrBuilderAppend(a, *out, op.name);
+            out->Append(StrL(" ."));
+            out->Append(op.name);
         } else if (op.kind == SpecOpKind::ParamStyle) {
-            StrBuilderAppend(a, *out, StrL(" ."));
-            StrBuilderAppend(a, *out, op.name);
-            AppendArgs(a, out, op);
+            out->Append(StrL(" ."));
+            out->Append(op.name);
+            AppendArgs(out, op);
         } else if (op.kind == SpecOpKind::Method) {
-            StrBuilderAppend(a, *out, StrL(" :"));
-            StrBuilderAppend(a, *out, op.name);
-            AppendArgs(a, out, op);
+            out->Append(StrL(" :"));
+            out->Append(op.name);
+            AppendArgs(out, op);
         } else if (op.kind == SpecOpKind::Callback) {
-            StrBuilderAppend(a, *out, StrL(" :"));
-            StrBuilderAppend(a, *out, op.name);
-            StrBuilderAppend(a, *out, StrL("(fn)"));
+            out->Append(StrL(" :"));
+            out->Append(op.name);
+            out->Append(StrL("(fn)"));
         } else if (op.kind == SpecOpKind::ActionCallback) {
-            StrBuilderAppend(a, *out, StrL(" :on_action("));
-            StrBuilderAppend(a, *out, op.name);
-            StrBuilderAppend(a, *out, StrL(", fn)"));
+            out->Append(StrL(" :on_action("));
+            out->Append(op.name);
+            out->Append(StrL(", fn)"));
         } else if (op.kind == SpecOpKind::StateStyle) {
-            StrBuilderAppend(a, *out, StrL(" :"));
-            StrBuilderAppend(a, *out, op.name);
-            StrBuilderAppendChar(a, *out, '(');
+            out->Append(StrL(" :"));
+            out->Append(op.name);
+            out->AppendChar('(');
             const SpecNode* state = Node(op.node);
             if (state) {
                 for (const SpecOp& stateOp : state->ops) {
                     if (stateOp.kind == SpecOpKind::NullaryStyle ||
                         stateOp.kind == SpecOpKind::ParamStyle) {
-                        StrBuilderAppend(a, *out, StrL("."));
-                        StrBuilderAppend(a, *out, stateOp.name);
+                        out->Append(StrL("."));
+                        out->Append(stateOp.name);
                         if (stateOp.kind == SpecOpKind::ParamStyle)
-                            AppendArgs(a, out, stateOp);
+                            AppendArgs(out, stateOp);
                     }
                 }
             } else {
-                StrBuilderAppendChar(a, *out, '?');
+                out->AppendChar('?');
             }
-            StrBuilderAppendChar(a, *out, ')');
+            out->AppendChar(')');
         }
     }
-    StrBuilderAppendChar(a, *out, '\n');
+    out->AppendChar('\n');
 
     for (const SpecOp& op : node->ops) {
         if (op.kind != SpecOpKind::Slot) continue;
-        Indent(a, out, depth + 1);
-        StrBuilderAppendChar(a, *out, '@');
-        StrBuilderAppend(a, *out, op.name);
-        StrBuilderAppendChar(a, *out, '\n');
-        WriteTree(a, out, op.node, depth + 2);
+        Indent(out, depth + 1);
+        out->AppendChar('@');
+        out->Append(op.name);
+        out->AppendChar('\n');
+        WriteTree(out, op.node, depth + 2);
     }
-    for (SpecId child : node->children) WriteTree(a, out, child, depth + 1);
+    for (SpecId child : node->children) WriteTree(out, child, depth + 1);
 }
 
 Str SpecArena::DebugTree(Arena* into, SpecId root) const {
-    StrBuilder out;
-    WriteTree(into, &out, root, 0);
-    return StrBuilderTakeStr(into, out);
+    StrBuilder out(into);
+    WriteTree(&out, root, 0);
+    return out.TakeStr();
 }
 
 } // namespace gpui::shell

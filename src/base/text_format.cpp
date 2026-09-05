@@ -148,11 +148,11 @@ static const html5ever::Node* FirstElement(Arena* a,
 
 Str HtmlAttrValue(Arena* a, Str attrs, const char* name) {
     if (!a || !attrs.s || !name) return {};
-    StrBuilder source;
-    StrBuilderAppend(a, source, StrL("<x "));
-    StrBuilderAppend(a, source, attrs);
-    StrBuilderAppendChar(a, source, '>');
-    Str html = StrBuilderTakeStr(a, source);
+    StrBuilder source(a);
+    source.Append(StrL("<x "));
+    source.Append(attrs);
+    source.AppendChar('>');
+    Str html = source.TakeStr();
     html5ever::Node* doc = html5ever::ParseFragment(a, html);
     return html5ever::AttrValue(a, FirstElement(a, doc), Str((char*)name));
 }
