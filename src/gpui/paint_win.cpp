@@ -181,6 +181,7 @@ struct PaintApp {
 // Only the offscreen target, which has to hand its pixels back as a DIB, still
 // uses a DC render target.
 struct PaintTarget {
+    uint64_t generation = 0;
     ID2D1DCRenderTarget* dcRt = nullptr;
     IDXGISwapChain1* swap = nullptr;
     ID2D1DeviceContext* dc = nullptr;
@@ -399,6 +400,7 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     }
     if (!ctx->rt) {
         auto* t = new PaintTarget();
+        t->generation = PaintResourceGenerationNew();
         t->hwnd = hwnd;
         DXGI_SWAP_CHAIN_DESC1 desc = {};
         desc.Width = (UINT)pxW;
@@ -534,6 +536,7 @@ bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
     // A target of its own: the window's ignores alpha, and this one must not.
     PaintTargetFree(ctx);
     auto* t = new PaintTarget();
+    t->generation = PaintResourceGenerationNew();
     D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -1351,8 +1354,9 @@ struct RenderImage {
     uint8_t* bgra = nullptr;
     ID2D1Bitmap* bmp = nullptr;
     // The render target `bmp` belongs to. D2D bitmaps are device resources
-    // and do not survive it.
-    ID2D1RenderTarget* bmpRt = nullptr;
+    // and do not survive it. Use its generation rather than its address: a
+    // newly allocated target may occupy the same address as the old one.
+    uint64_t bmpTargetGeneration = 0;
 };
 
 RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
@@ -1504,8 +1508,9 @@ void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
         return;
     }
     ID2D1RenderTarget* rt = ctx->rt->rt;
-    if (img->bmp && img->bmpRt != rt) {
+    if (img->bmp && img->bmpTargetGeneration != ctx->rt->generation) {
         Rel(&img->bmp);
+        img->bmpTargetGeneration = 0;
     }
     if (!img->bmp) {
         if (!img->bgra) {
@@ -1519,9 +1524,7 @@ void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
         if (FAILED(hr) || !img->bmp) {
             return;
         }
-        img->bmpRt = rt;
-        Free(nullptr, img->bgra);
-        img->bgra = nullptr;
+        img->bmpTargetGeneration = ctx->rt->generation;
     }
     D2D1_RECT_F dst = D2D1::RectF(b.x, b.y, b.x + b.w, b.y + b.h);
     float op = ctx->opacity < 0 ? 0.f : ctx->opacity;

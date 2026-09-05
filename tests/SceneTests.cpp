@@ -146,8 +146,43 @@ static void RecordedImagesSurviveCacheEviction() {
 #endif
 }
 
+static void Direct2dImagesSurviveTargetRecreation() {
+#if GPUI_OS_WINDOWS
+    TestSuite("Direct2D image target recreation");
+    App* owner = AppNew();
+    PaintApp* app = owner ? owner->paint : nullptr;
+    utassert(app);
+    if (!app) {
+        return;
+    }
+    const char* png =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAA"
+        "H/iZk9HQAAAABJRU5ErkJggg==";
+    RenderImage* image =
+        ImageForSrc(app, fmt("data:image/png;base64,%s", Str(png)));
+    utassert(image);
+    if (image) {
+        uint8_t first[4] = {};
+        uint8_t second[4] = {};
+        PaintCtx paint = {};
+        paint.pa = app;
+        paint.opacity = 1;
+        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
+        RenderImageDraw(&paint, image, Bounds{0, 0, 1, 1});
+        utassert(PaintTargetEndOffscreen(&paint, first));
+        utassert(PaintTargetBeginOffscreen(&paint, 1, 1));
+        RenderImageDraw(&paint, image, Bounds{0, 0, 1, 1});
+        utassert(PaintTargetEndOffscreen(&paint, second));
+        utassert(first[2] > 0 && first[3] > 0);
+        utassert(memcmp(first, second, sizeof(first)) == 0);
+    }
+    AppFree(owner);
+#endif
+}
+
 void TestScene() {
     RecordedImagesSurviveCacheEviction();
+    Direct2dImagesSurviveTargetRecreation();
     FrameComparisonBelongsToOnePaintContext();
     TextLayoutsHaveStableGenerations();
     PathPlacementRemainsPartOfTheFrameHash();
