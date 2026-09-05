@@ -102,6 +102,28 @@ static void AllocStrTempRefusesNothingAndLessThanNothing() {
     utassert(one.s != nullptr && one.len == 1 && one.s[1] == 0);
 }
 
+// The answer's length is a product — one difference per match — and a wide
+// enough replacement overflows it. That must not size a buffer the copy then
+// writes past, so a replacement that cannot be expressed is not made.
+static void ReplaceAllRefusesALengthItCannotHold() {
+    TempStr many = AllocStrTemp(30000);
+    for (int i = 0; i < many.len; i++) {
+        many.s[i] = 'a';
+    }
+    TempStr wide = AllocStrTemp(100000);
+    for (int i = 0; i < wide.len; i++) {
+        wide.s[i] = 'b';
+    }
+    // Thirty thousand matches, each a hundred thousand bytes wider: three
+    // billion, which is not an int.
+    Str answer = base::StrReplaceAll(many, StrL("a"), wide);
+    utassert(answer.s == many.s && answer.len == many.len);
+
+    // The same shape below the limit is still replaced.
+    Str fits = base::StrReplaceAll(StrL("aaa"), StrL("a"), StrL("bb"));
+    utassert(base::StrEq(fits, StrL("bbbbbb")));
+}
+
 static void PrefixSuffixAndFindHelpersHandleBoundaries() {
     Str text = StrL("Alpha beta");
     utassert(base::StrStartsWith(text, "Alpha"));
@@ -237,6 +259,7 @@ void TestStr() {
     ReplaceAllReplacesNonOverlappingMatches();
     ReplaceAllHandlesEmptyAndMissingMatches();
     AllocStrTempRefusesNothingAndLessThanNothing();
+    ReplaceAllRefusesALengthItCannotHold();
     PrefixSuffixAndFindHelpersHandleBoundaries();
     TrimAsciiReturnsASlice();
     BuilderBorrowsThenGrowsLikeAVec();

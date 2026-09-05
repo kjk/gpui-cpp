@@ -1320,7 +1320,15 @@ Str StrReplaceAll(Str value, Str from, Str to) {
     if (count == 0) {
         return value;
     }
-    int resultLen = value.len + count * (to.len - from.len);
+    // Every match costs the difference between the two, which is a product
+    // and overflows an int long before the arena runs out: a wrapped length
+    // sizes the buffer while the loop below writes the real one.
+    int64_t grown = (int64_t)value.len +
+                    (int64_t)count * ((int64_t)to.len - (int64_t)from.len);
+    if (grown < 0 || grown > (int64_t)INT_MAX - 1) {
+        return value;
+    }
+    int resultLen = (int)grown;
     Str result = AllocStrTemp(resultLen + 1);
     if (!result.s) {
         return value;
