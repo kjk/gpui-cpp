@@ -810,6 +810,42 @@ enum class ImageLoadState : uint8_t {
     Failed,
 };
 
+struct PaintApp;
+struct RenderImage;
+
+enum class ImageSourceKind : uint8_t {
+    Resource,
+    Render,
+    Image,
+    Custom,
+};
+
+// Rust's custom ImageSource closure returns Option<Result<Arc<RenderImage>>>.
+// The callback expresses that as a state and writes a borrowed image for
+// Ready. Its owner must keep that image alive through the frame; recorded
+// scenes retain it when they need it longer.
+using ImageSourceLoader = ImageLoadState (*)(PaintApp* paint, void* user,
+                                             RenderImage** image);
+
+// A frame-local, non-owning image source. Resource strings and encoded bytes
+// are borrowed until the element has been painted. Render and Custom images
+// are borrowed from their caller, matching Entity handles elsewhere in this
+// API; RenderImageRetain gives a caller explicit longer ownership.
+struct ImageSource {
+    Str resource = {};
+    const uint8_t* bytes = nullptr;
+    RenderImage* render = nullptr;
+    ImageSourceLoader loader = nullptr;
+    void* user = nullptr;
+    int bytesLen = 0;
+    ImageSourceKind kind = ImageSourceKind::Resource;
+
+    static ImageSource FromResource(Str resource);
+    static ImageSource FromRender(RenderImage* image);
+    static ImageSource FromImage(const uint8_t* bytes, int len);
+    static ImageSource FromCustom(ImageSourceLoader loader, void* user);
+};
+
 Bounds ObjectFitBounds(ObjectFit fit, Bounds bounds, Size imageSize);
 
 // gpui's Display. `div()` is a block container, the way an unstyled HTML
@@ -1899,9 +1935,9 @@ struct El {
     Str text;
     Str iconPath;
     AccessibilityInfo accessibility = {};
-    // ElKind::Image: what the document called the image. gpui/image.h says
-    // what that may name.
-    Str imgSrc;
+    // ElKind::Image: resource, decoded render image, encoded Image bytes, or
+    // a custom loader, matching gpui::ImageSource.
+    ImageSource imageSource;
     Func0 onClick;
 
     // Keep every entity Listener together. El is copied and walked as
@@ -2511,6 +2547,7 @@ El* IconEl(Arena* a, IconName name, float size);
 // scaled down to fit the width it is given — object_fit(Contain) with
 // max_w(relative(1.)), which is how node.rs renders a markdown image.
 El* ImageEl(Arena* a, Str src, Str alt = {});
+El* ImageEl(Arena* a, ImageSource source, Str alt = {});
 El* ProgressEl(Arena* a, float value01to100, float barW, float barH);
 El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
             Rgba fillBot, int tickMargin);

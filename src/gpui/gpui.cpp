@@ -402,11 +402,45 @@ El* IconEl(Arena* a, IconName name, float size) {
 }
 
 El* ImageEl(Arena* a, Str src, Str alt) {
+    return ImageEl(a, ImageSource::FromResource(src), alt);
+}
+
+El* ImageEl(Arena* a, ImageSource source, Str alt) {
     El* e = NewEl(a, ElKind::Image);
-    e->imgSrc = src;
+    e->imageSource = source;
     e->text = alt;
     e->style.flexShrink = 0;
     return e;
+}
+
+ImageSource ImageSource::FromResource(Str resource) {
+    ImageSource source;
+    source.kind = ImageSourceKind::Resource;
+    source.resource = resource;
+    return source;
+}
+
+ImageSource ImageSource::FromRender(RenderImage* image) {
+    ImageSource source;
+    source.kind = ImageSourceKind::Render;
+    source.render = image;
+    return source;
+}
+
+ImageSource ImageSource::FromImage(const uint8_t* bytes, int len) {
+    ImageSource source;
+    source.kind = ImageSourceKind::Image;
+    source.bytes = bytes;
+    source.bytesLen = len;
+    return source;
+}
+
+ImageSource ImageSource::FromCustom(ImageSourceLoader loader, void* user) {
+    ImageSource source;
+    source.kind = ImageSourceKind::Custom;
+    source.loader = loader;
+    source.user = user;
+    return source;
 }
 
 Bounds ObjectFitBounds(ObjectFit fit, Bounds bounds, Size imageSize) {
@@ -2997,12 +3031,13 @@ static void MoveEl(El* c, float cx, float cy) {
 // or a vector's viewBox. Zero when there is nothing to measure — a fetch
 // still running, a missing asset, a format the platform does not read.
 static Size ImageNaturalSize(PaintCtx* ctx, El* e) {
-    RenderImage* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
+    RenderImage* img = ImageForSource(ctx ? ctx->pa : nullptr, e->imageSource);
     if (img) {
         return RenderImageSizePx(img);
     }
     int opsLen = 0;
-    const uint8_t* ops = ImageVectorForSrc(e->imgSrc, &opsLen);
+    const uint8_t* ops =
+        ImageVectorForSource(ctx ? ctx->pa : nullptr, e->imageSource, &opsLen);
     Size vb = {};
     if (ops && DrawOpsViewBox(ops, opsLen, &vb)) {
         return vb;
@@ -3375,8 +3410,8 @@ static void ResolveImageStyle(PaintCtx* ctx, El* e) {
 
 static void ResolveImageReplacement(PaintCtx* ctx, El* e) {
     double loadingSeconds = 0;
-    e->imageLoadState =
-        ImageSrcState(ctx ? ctx->pa : nullptr, e->imgSrc, &loadingSeconds);
+    e->imageLoadState = ImageSourceState(ctx ? ctx->pa : nullptr,
+                                         e->imageSource, &loadingSeconds);
     if (e->imageLoadState == ImageLoadState::Loading) {
         // GPUI waits 200 ms before showing the loading element, avoiding a
         // flash for images already close to ready.
@@ -6031,16 +6066,17 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // data: URI, or the body a worker thread fetched. PrepareEl has
         // already selected a delayed loading view or a failed-load fallback;
         // only the ready image reaches this branch.
-        RenderImage* img = ImageForSrc(ctx->pa, e->imgSrc);
+        RenderImage* img = ImageForSource(ctx->pa, e->imageSource);
         int opsLen = 0;
         const uint8_t* ops =
-            img ? nullptr : ImageVectorForSrc(e->imgSrc, &opsLen);
+            img ? nullptr
+                : ImageVectorForSource(ctx->pa, e->imageSource, &opsLen);
         Bounds bounds = e->Bounds();
         bool drewSvg = false;
         if (img) {
             bool wantsAnimation = false;
-            int frameIndex = ImageFrameIndex(e->imgSrc, img, PlatReduceMotion(),
-                                             &wantsAnimation);
+            int frameIndex =
+                ImageFrameIndex(img, PlatReduceMotion(), &wantsAnimation);
             if (wantsAnimation) {
                 ctx->wantsAnimFrame = true;
             }

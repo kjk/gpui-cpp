@@ -251,8 +251,6 @@ struct ImageCacheSlot {
     uint8_t* ops = nullptr;
     int opsLen = 0;
     double loadingAt = 0;
-    double lastFrameAt = 0;
-    int frameIndex = 0;
     bool pending = false;
     bool tried = false;
 };
@@ -262,6 +260,29 @@ constexpr int kImageCacheSlots = 32;
 
 static ImageCacheSlot gImageCache[kImageCacheSlots];
 static int gImageCacheNext = 0;
+
+struct EncodedImageSlot {
+    uint64_t hash = 0;
+    int bytesLen = 0;
+    RenderImage* img = nullptr;
+    uint8_t* ops = nullptr;
+    int opsLen = 0;
+    bool tried = false;
+};
+
+constexpr int kEncodedImageSlots = 16;
+static EncodedImageSlot gEncodedImages[kEncodedImageSlots];
+static int gEncodedImageNext = 0;
+
+struct ImageClock {
+    uint64_t key = 0;
+    double at = 0;
+    int frameIndex = 0;
+};
+
+constexpr int kImageClockSlots = 64;
+static ImageClock gLoadingClocks[kImageClockSlots];
+static ImageClock gAnimationClocks[kImageClockSlots];
 
 static void ImageSlotFree(ImageCacheSlot* s) {
     if (s->img) {
@@ -274,8 +295,6 @@ static void ImageSlotFree(ImageCacheSlot* s) {
     }
     s->opsLen = 0;
     s->loadingAt = 0;
-    s->lastFrameAt = 0;
-    s->frameIndex = 0;
     s->pending = false;
     if (s->src.s) {
         StrFree(s->src);
@@ -284,14 +303,63 @@ static void ImageSlotFree(ImageCacheSlot* s) {
     s->tried = false;
 }
 
+static void EncodedSlotFree(EncodedImageSlot* s) {
+    if (s->img) {
+        RenderImageRelease(s->img);
+    }
+    Free(nullptr, s->ops);
+    *s = {};
+}
+
 void ImageCacheClear() {
     for (int i = 0; i < kImageCacheSlots; i++) {
         ImageSlotFree(&gImageCache[i]);
     }
+    for (int i = 0; i < kEncodedImageSlots; i++) {
+        EncodedSlotFree(&gEncodedImages[i]);
+    }
     gImageCacheNext = 0;
+    gEncodedImageNext = 0;
+    for (int i = 0; i < kImageClockSlots; i++) {
+        gLoadingClocks[i] = {};
+        gAnimationClocks[i] = {};
+    }
     AssetResolveClear();
     SvgCacheClear();
     HttpFetchClear();
+}
+
+static uint64_t ImageBytesHash(const uint8_t* bytes, int len) {
+    uint64_t hash = 1469598103934665603ull;
+    for (int i = 0; bytes && i < len; i++) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ull;
+    }
+    return hash ? hash : 1;
+}
+
+static void DecodeImageBytes(PaintApp* pa, const uint8_t* bytes, int len,
+                             RenderImage** imgOut, uint8_t** opsOut,
+                             int* opsLenOut) {
+    *imgOut = nullptr;
+    *opsOut = nullptr;
+    *opsLenOut = 0;
+    if (!bytes || len <= 0) {
+        return;
+    }
+    if (LooksLikeSvg(bytes, len)) {
+        DrawOpsBuilder builder;
+        if (SvgToDrawOps(Str((char*)bytes, len), &builder) &&
+            builder.data.len > 0) {
+            *opsOut = AllocArray<uint8_t>(builder.data.len);
+            if (*opsOut) {
+                memcpy(*opsOut, builder.data.els, (size_t)builder.data.len);
+                *opsLenOut = builder.data.len;
+            }
+        }
+    } else if (pa) {
+        *imgOut = RenderImageDecode(pa, bytes, len);
+    }
 }
 
 static ImageCacheSlot* ImageSlotFind(Str src) {
@@ -337,18 +405,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
     uint8_t* ops = nullptr;
     int opsLen = 0;
     if (got == SrcBytes::Yes && bytes && len > 0) {
-        if (LooksLikeSvg(bytes, len)) {
-            DrawOpsBuilder b;
-            if (SvgToDrawOps(Str((char*)bytes, len), &b) && b.data.len > 0) {
-                ops = AllocArray<uint8_t>(b.data.len);
-                if (ops) {
-                    memcpy(ops, b.data.els, (size_t)b.data.len);
-                    opsLen = b.data.len;
-                }
-            }
-        } else if (pa) {
-            img = RenderImageDecode(pa, bytes, len);
-        } else {
+        if (!pa && !LooksLikeSvg(bytes, len)) {
             // ImageVectorForSrc probes a one-dimension image before layout so
             // an SVG can supply its aspect ratio. A bitmap is not a failed
             // vector decode: leave it uncached so ImageForSrc can hand the
@@ -358,6 +415,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
             VecReset(owned);
             return nullptr;
         }
+        DecodeImageBytes(pa, bytes, len, &img, &ops, &opsLen);
     }
 
     ImageCacheSlot* slot = hit;
@@ -380,6 +438,70 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
         HttpFetchDrop(src);
     }
     return slot;
+}
+
+static EncodedImageSlot* EncodedSlotFor(PaintApp* pa,
+                                        const ImageSource& source) {
+    if (!source.bytes || source.bytesLen <= 0) {
+        return nullptr;
+    }
+    uint64_t hash = ImageBytesHash(source.bytes, source.bytesLen);
+    for (int i = 0; i < kEncodedImageSlots; i++) {
+        EncodedImageSlot* slot = &gEncodedImages[i];
+        if (slot->tried && slot->hash == hash &&
+            slot->bytesLen == source.bytesLen) {
+            return slot;
+        }
+    }
+    if (!pa && !LooksLikeSvg(source.bytes, source.bytesLen)) {
+        return nullptr;
+    }
+    EncodedImageSlot* slot = &gEncodedImages[gEncodedImageNext];
+    gEncodedImageNext = (gEncodedImageNext + 1) % kEncodedImageSlots;
+    EncodedSlotFree(slot);
+    slot->hash = hash;
+    slot->bytesLen = source.bytesLen;
+    slot->tried = true;
+    DecodeImageBytes(pa, source.bytes, source.bytesLen, &slot->img, &slot->ops,
+                     &slot->opsLen);
+    return slot;
+}
+
+static uint64_t ImageSourceKey(const ImageSource& source) {
+    uint64_t key = ((uint64_t)source.kind + 1) * 0x9e3779b97f4a7c15ull;
+    switch (source.kind) {
+        case ImageSourceKind::Resource:
+            key ^= ImageBytesHash((const uint8_t*)source.resource.s,
+                                  source.resource.len);
+            break;
+        case ImageSourceKind::Render:
+            key ^= RenderImageGeneration(source.render);
+            break;
+        case ImageSourceKind::Image:
+            key ^= ImageBytesHash(source.bytes, source.bytesLen);
+            break;
+        case ImageSourceKind::Custom:
+            key ^= (uint64_t)(uintptr_t)source.loader;
+            key ^= (uint64_t)(uintptr_t)source.user * 0xc2b2ae3d27d4eb4full;
+            break;
+    }
+    return key ? key : 1;
+}
+
+static ImageClock* ClockFor(ImageClock* clocks, uint64_t key) {
+    int empty = -1;
+    for (int i = 0; i < kImageClockSlots; i++) {
+        if (clocks[i].key == key) {
+            return &clocks[i];
+        }
+        if (!clocks[i].key && empty < 0) {
+            empty = i;
+        }
+    }
+    int at = empty >= 0 ? empty : (int)(key % kImageClockSlots);
+    clocks[at] = {};
+    clocks[at].key = key;
+    return &clocks[at];
 }
 
 ImageLoadState ImageSrcState(PaintApp* pa, Str src, double* loadingSeconds) {
@@ -418,7 +540,68 @@ ImageLoadState ImageSrcState(PaintApp* pa, Str src, double* loadingSeconds) {
     return ImageLoadState::Ready;
 }
 
-int ImageFrameIndex(Str src, RenderImage* image, bool reducedMotion,
+ImageLoadState ImageSourceState(PaintApp* pa, const ImageSource& source,
+                                double* loadingSeconds) {
+    if (loadingSeconds) {
+        *loadingSeconds = 0;
+    }
+    ImageLoadState state = ImageLoadState::Failed;
+    switch (source.kind) {
+        case ImageSourceKind::Resource:
+            state = ImageSrcState(pa, source.resource, nullptr);
+            break;
+        case ImageSourceKind::Render:
+            if (source.render) {
+                RenderImageStatus status = RenderImageStatusGet(source.render);
+                state = status == RenderImageStatus::Ready
+                            ? ImageLoadState::Ready
+                            : (status == RenderImageStatus::Loading
+                                   ? ImageLoadState::Loading
+                                   : ImageLoadState::Failed);
+            }
+            break;
+        case ImageSourceKind::Image: {
+            EncodedImageSlot* slot = EncodedSlotFor(pa, source);
+            if (slot && slot->ops) {
+                state = ImageLoadState::Ready;
+            } else if (slot && slot->img) {
+                RenderImageStatus status = RenderImageStatusGet(slot->img);
+                state = status == RenderImageStatus::Ready
+                            ? ImageLoadState::Ready
+                            : (status == RenderImageStatus::Loading
+                                   ? ImageLoadState::Loading
+                                   : ImageLoadState::Failed);
+            }
+            break;
+        }
+        case ImageSourceKind::Custom: {
+            RenderImage* image = nullptr;
+            if (source.loader) {
+                state = source.loader(pa, source.user, &image);
+                if (state == ImageLoadState::Ready && !image) {
+                    state = ImageLoadState::Failed;
+                }
+            }
+            break;
+        }
+    }
+    uint64_t key = ImageSourceKey(source);
+    ImageClock* clock = ClockFor(gLoadingClocks, key);
+    if (state == ImageLoadState::Loading) {
+        double now = TimeNow();
+        if (clock->at <= 0) {
+            clock->at = now;
+        }
+        if (loadingSeconds) {
+            *loadingSeconds = now - clock->at;
+        }
+    } else {
+        *clock = {};
+    }
+    return state;
+}
+
+int ImageFrameIndex(RenderImage* image, bool reducedMotion,
                     bool* wantsAnimation) {
     if (wantsAnimation) {
         *wantsAnimation = false;
@@ -427,37 +610,35 @@ int ImageFrameIndex(Str src, RenderImage* image, bool reducedMotion,
     if (count <= 1) {
         return 0;
     }
-    ImageCacheSlot* slot = ImageSlotFind(src);
-    if (!slot || slot->img != image) {
-        return 0;
-    }
-    if (slot->frameIndex < 0 || slot->frameIndex >= count) {
-        slot->frameIndex = 0;
+    ImageClock* clock =
+        ClockFor(gAnimationClocks, RenderImageGeneration(image));
+    if (clock->frameIndex < 0 || clock->frameIndex >= count) {
+        clock->frameIndex = 0;
     }
     if (reducedMotion) {
-        slot->lastFrameAt = 0;
-        return slot->frameIndex;
+        clock->at = 0;
+        return clock->frameIndex;
     }
     if (wantsAnimation) {
         *wantsAnimation = true;
     }
     double now = TimeNow();
-    if (slot->lastFrameAt <= 0) {
-        slot->lastFrameAt = now;
-        return slot->frameIndex;
+    if (clock->at <= 0) {
+        clock->at = now;
+        return clock->frameIndex;
     }
-    double elapsed = now - slot->lastFrameAt;
+    double elapsed = now - clock->at;
     for (int advances = 0; advances < count * 2; advances++) {
-        int delay = RenderImageFrameDurationMs(image, slot->frameIndex);
+        int delay = RenderImageFrameDurationMs(image, clock->frameIndex);
         double seconds = (delay > 0 ? delay : 100) / 1000.0;
         if (elapsed < seconds) {
             break;
         }
         elapsed -= seconds;
-        slot->lastFrameAt += seconds;
-        slot->frameIndex = (slot->frameIndex + 1) % count;
+        clock->at += seconds;
+        clock->frameIndex = (clock->frameIndex + 1) % count;
     }
-    return slot->frameIndex;
+    return clock->frameIndex;
 }
 
 RenderImage* ImageForSrc(PaintApp* pa, Str src) {
@@ -475,6 +656,29 @@ RenderImage* ImageForSrc(PaintApp* pa, Str src) {
         return nullptr;
     }
     return status == RenderImageStatus::Ready ? s->img : nullptr;
+}
+
+RenderImage* ImageForSource(PaintApp* pa, const ImageSource& source) {
+    if (!pa) {
+        return nullptr;
+    }
+    if (source.kind == ImageSourceKind::Resource) {
+        return ImageForSrc(pa, source.resource);
+    }
+    RenderImage* image = nullptr;
+    if (source.kind == ImageSourceKind::Render) {
+        image = source.render;
+    } else if (source.kind == ImageSourceKind::Image) {
+        EncodedImageSlot* slot = EncodedSlotFor(pa, source);
+        image = slot ? slot->img : nullptr;
+    } else if (source.kind == ImageSourceKind::Custom && source.loader) {
+        if (source.loader(pa, source.user, &image) != ImageLoadState::Ready) {
+            image = nullptr;
+        }
+    }
+    return image && RenderImageStatusGet(image) == RenderImageStatus::Ready
+               ? image
+               : nullptr;
 }
 
 const uint8_t* ImageVectorForSrc(Str src, int* lenOut) {
@@ -497,6 +701,27 @@ const uint8_t* ImageVectorForSrc(Str src, int* lenOut) {
         *lenOut = s->opsLen;
     }
     return s->ops;
+}
+
+const uint8_t* ImageVectorForSource(PaintApp* pa, const ImageSource& source,
+                                    int* lenOut) {
+    if (lenOut) {
+        *lenOut = 0;
+    }
+    if (source.kind == ImageSourceKind::Resource) {
+        return ImageVectorForSrc(source.resource, lenOut);
+    }
+    if (source.kind != ImageSourceKind::Image) {
+        return nullptr;
+    }
+    EncodedImageSlot* slot = EncodedSlotFor(pa, source);
+    if (!slot || !slot->ops) {
+        return nullptr;
+    }
+    if (lenOut) {
+        *lenOut = slot->opsLen;
+    }
+    return slot->ops;
 }
 
 } // namespace gpui

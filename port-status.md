@@ -12,8 +12,9 @@ and wasm. The work left is depth, not breadth.
 
 ## Known gaps vs Rust
 
-- **Image loading uses a bounded process cache.** `src/gpui/image.cpp` keeps
-  32 sources rather than Rust's configurable App/entity caches. Decoded
+- **Image loading uses bounded process caches.** `src/gpui/image.cpp` keeps
+  32 resources and 16 encoded `Image` values rather than Rust's configurable
+  App/entity caches. Decoded
   `RenderImage` data uses explicit main-thread retain/release rather than
   `Arc`; recorded scenes retain their images through replay. Desktop local
   reads and decoding are synchronous and use platform decoders. Windows WIC,
