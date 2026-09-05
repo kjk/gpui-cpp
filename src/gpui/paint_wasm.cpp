@@ -12,9 +12,9 @@
    Two things this cannot do that the hosted backends can, both because the
    platform underneath is asynchronous where Paint.h is not:
 
-   - `ImageDecode` answers before the picture has been decoded. The browser
-     will not decode one synchronously, so the Image comes back with a size of
-     zero and fills itself in later; the load calls back into the window,
+   - `RenderImageDecode` answers before the picture has been decoded. The
+   browser will not decode one synchronously, so the Image comes back with a
+   size of zero and fills itself in later; the load calls back into the window,
      which repaints. gpui/image.h caches the Image itself, not its size, so
      the second frame is correct. SVG never goes through here — src/gpui/svg.h
      turns it into draw ops, which is most of what this tree draws.
@@ -540,7 +540,7 @@ EM_JS(int, GpJsImageDecode, (const uint8_t* bytes, int len), {
     // the heap grows, and the decode outlives this call.
     const copy = new Uint8Array(HEAPU8.subarray(bytes, bytes + len));
     const url = URL.createObjectURL(new Blob([copy]));
-    const rec = {img: new Image(), w: 0, h: 0, url: url};
+    const rec = {img: new RenderImage(), w: 0, h: 0, url: url};
     rec.img.onload = function() {
         rec.w = rec.img.naturalWidth;
         rec.h = rec.img.naturalHeight;
@@ -1162,12 +1162,13 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
 
 // ─── images ───────────────────────────────────────────────────────────────
 
-struct Image {
+struct RenderImage {
+    int refs = 1;
     uint64_t generation = 0;
     int js = 0;
 };
 
-Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     (void)pa;
     if (!bytes || len <= 0) {
         return nullptr;
@@ -1176,14 +1177,20 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     if (!id) {
         return nullptr;
     }
-    auto* img = new Image();
+    auto* img = new RenderImage();
     img->generation = PaintResourceGenerationNew();
     img->js = id;
     return img;
 }
 
-void ImageFree(Image* img) {
-    if (!img) {
+void RenderImageRetain(RenderImage* img) {
+    if (img) {
+        img->refs++;
+    }
+}
+
+void RenderImageRelease(RenderImage* img) {
+    if (!img || --img->refs != 0) {
         return;
     }
     if (img->js) {
@@ -1192,21 +1199,21 @@ void ImageFree(Image* img) {
     delete img;
 }
 
-uint64_t ImageGeneration(const Image* img) {
+uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
 }
 
 // Zero until the browser has decoded it. The caller lays the picture out at
 // nothing for a frame and draws again when GpJsImageDecode's onload wakes the
 // window.
-Size ImageSizePx(const Image* img) {
+Size RenderImageSizePx(const RenderImage* img) {
     if (!img || !img->js) {
         return {};
     }
     return {(float)GpJsImageW(img->js), (float)GpJsImageH(img->js)};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     if (!ctx || !ctx->rt || !img || !img->js || b.w <= 0 || b.h <= 0) {
         return;
     }

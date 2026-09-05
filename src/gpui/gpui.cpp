@@ -2950,9 +2950,9 @@ static void MoveEl(El* c, float cx, float cy) {
 // or a vector's viewBox. Zero when there is nothing to measure — a fetch
 // still running, a missing asset, a format the platform does not read.
 static Size ImageNaturalSize(PaintCtx* ctx, El* e) {
-    Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
+    RenderImage* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
     if (img) {
-        return ImageSizePx(img);
+        return RenderImageSizePx(img);
     }
     int opsLen = 0;
     const uint8_t* ops = ImageVectorForSrc(e->imgSrc, &opsLen);
@@ -5953,12 +5953,12 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // data: URI, or the body a worker thread fetched. A fetch still
         // running answers nothing, and the alt text below stands in until it
         // lands.
-        Image* img = ImageForSrc(ctx->pa, e->imgSrc);
+        RenderImage* img = ImageForSrc(ctx->pa, e->imgSrc);
         int opsLen = 0;
         const uint8_t* ops =
             img ? nullptr : ImageVectorForSrc(e->imgSrc, &opsLen);
         if (img) {
-            ImageDraw(ctx, img, e->Bounds(), e->style.radius);
+            RenderImageDraw(ctx, img, e->Bounds(), e->style.radius);
         } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
                               e->style.hasColor
                                   ? e->style.color

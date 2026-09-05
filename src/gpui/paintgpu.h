@@ -73,9 +73,10 @@ void* PaintSharedDxgiFactory(PaintApp* pa);
 void PaintSharedD3dDeviceReset(PaintApp* pa);
 // IDWriteFactory*.
 void* PaintSharedDwrite(PaintApp* pa);
-// The premultiplied BGRA WIC decoded, which is what ImageDecode keeps. False
-// when the image never decoded.
-bool PaintImagePixels(const Image* img, const uint8_t** bgra, int* w, int* h);
+// The premultiplied BGRA WIC decoded, which is what RenderImageDecode keeps.
+// False when the image never decoded.
+bool PaintImagePixels(const RenderImage* img, const uint8_t** bgra, int* w,
+                      int* h);
 // IDWriteTextLayout*. TextLayout is wrapped so its stable scene generation
 // can live beside the native object.
 void* PaintTextLayoutNative(TextLayout* tl);
@@ -85,8 +86,8 @@ void* PaintTextLayoutNative(TextLayout* tl);
 // One name for one name with Paint.h, so paint_win.cpp's dispatch is a line
 // per entry point and the two implementations never have to agree on
 // anything else. Everything Paint.h declares that is *not* here is shared:
-// PaintAppNew / Free, ImageDecode / Free / SizePx, and every TextLayout call
-// but Draw.
+// PaintAppNew / Free, RenderImageDecode / Free / SizePx, and every TextLayout
+// call but Draw.
 
 namespace gpuw {
 
@@ -125,7 +126,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
                 float dx, float dy);
 void PathRealize(PaintCtx* ctx, Path* p);
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius);
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius);
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip, float clipW);
 

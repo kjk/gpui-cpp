@@ -1343,7 +1343,8 @@ static int WideOffToUtf8(Str s, int woff) {
 // a lost device, so the bitmap is rebuilt beside it when the target it was
 // made for is no longer the one being drawn into.
 
-struct Image {
+struct RenderImage {
+    int refs = 1;
     uint64_t generation = 0;
     int w = 0;
     int h = 0;
@@ -1354,7 +1355,7 @@ struct Image {
     ID2D1RenderTarget* bmpRt = nullptr;
 };
 
-Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     (void)pa;
     if (!bytes || len <= 0) {
         return nullptr;
@@ -1369,7 +1370,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     IWICBitmapDecoder* dec = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
     IWICFormatConverter* conv = nullptr;
-    Image* img = nullptr;
+    RenderImage* img = nullptr;
     hr = wic->CreateStream(&stream);
     if (SUCCEEDED(hr)) {
         hr = stream->InitializeFromMemory((BYTE*)bytes, (DWORD)len);
@@ -1426,7 +1427,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         UINT size = stride * h;
         auto* px = (uint8_t*)Alloc(nullptr, (int)size);
         if (px && SUCCEEDED(source->CopyPixels(nullptr, stride, size, px))) {
-            img = new Image();
+            img = new RenderImage();
             img->generation = PaintResourceGenerationNew();
             img->w = (int)w;
             img->h = (int)h;
@@ -1444,8 +1445,14 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     return img;
 }
 
-void ImageFree(Image* img) {
-    if (!img) {
+void RenderImageRetain(RenderImage* img) {
+    if (img) {
+        img->refs++;
+    }
+}
+
+void RenderImageRelease(RenderImage* img) {
+    if (!img || --img->refs != 0) {
         return;
     }
     Rel(&img->bmp);
@@ -1453,13 +1460,14 @@ void ImageFree(Image* img) {
     delete img;
 }
 
-uint64_t ImageGeneration(const Image* img) {
+uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
 }
 
 // The GPU backend makes its own texture out of the same pixels rather than a
 // second D2D bitmap.
-bool PaintImagePixels(const Image* img, const uint8_t** bgra, int* w, int* h) {
+bool PaintImagePixels(const RenderImage* img, const uint8_t** bgra, int* w,
+                      int* h) {
     if (!img || !img->bgra || img->w <= 0 || img->h <= 0) {
         return false;
     }
@@ -1475,20 +1483,20 @@ bool PaintImagePixels(const Image* img, const uint8_t** bgra, int* w, int* h) {
     return true;
 }
 
-Size ImageSizePx(const Image* img) {
+Size RenderImageSizePx(const RenderImage* img) {
     if (!img) {
         return {};
     }
     return {(float)img->w, (float)img->h};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     if (scene::Recording()) {
         scene::RecImageDraw(ctx, img, b, radius);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::ImageDraw(ctx, img, b, radius);
+        gpuw::RenderImageDraw(ctx, img, b, radius);
         return;
     }
     if (!ctx || !ctx->rt || !ctx->rt->rt || !img || (!img->bmp && !img->bgra) ||

@@ -280,7 +280,7 @@ static SrcBytes BytesForSrc(Str src, Vec<uint8_t>* owned,
 
 struct ImageCacheSlot {
     Str src = {};
-    Image* img = nullptr;
+    RenderImage* img = nullptr;
     // A vector picture instead: the draw-op stream, ours to free.
     uint8_t* ops = nullptr;
     int opsLen = 0;
@@ -295,7 +295,7 @@ static int gImageCacheNext = 0;
 
 static void ImageSlotFree(ImageCacheSlot* s) {
     if (s->img) {
-        ImageFree(s->img);
+        RenderImageRelease(s->img);
         s->img = nullptr;
     }
     if (s->ops) {
@@ -349,7 +349,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
     const uint8_t* bytes = owned.len > 0 ? owned.els : borrowed;
     int len = owned.len > 0 ? owned.len : borrowedLen;
 
-    Image* img = nullptr;
+    RenderImage* img = nullptr;
     uint8_t* ops = nullptr;
     int opsLen = 0;
     if (got == SrcBytes::Yes && bytes && len > 0) {
@@ -363,7 +363,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
                 }
             }
         } else if (pa) {
-            img = ImageDecode(pa, bytes, len);
+            img = RenderImageDecode(pa, bytes, len);
         } else {
             // ImageVectorForSrc probes a one-dimension image before layout so
             // an SVG can supply its aspect ratio. A bitmap is not a failed
@@ -390,7 +390,7 @@ static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
     return slot;
 }
 
-Image* ImageForSrc(PaintApp* pa, Str src) {
+RenderImage* ImageForSrc(PaintApp* pa, Str src) {
     if (!pa) {
         return nullptr;
     }

@@ -5,9 +5,9 @@
    GPUI resolves `img(source)` through its asset system: a path goes to the
    AssetSource, a URL to the http client, and the bytes are decoded by the
    `image` crate and cached in the window's image cache. Here the decode is
-   the platform's (paint.h ImageDecode) and this is the rest of it — what a
-   src may name, and one cache so a document with the same image twice
-   decodes it once.
+   the platform's (paint.h RenderImageDecode) and this is the rest of it — what
+   a src may name, and one cache so a document with the same image twice decodes
+   it once.
 
    What a src may name:
      - an asset path, resolved through gpui/assets.h the way an icon is
@@ -19,7 +19,8 @@
    application that bundled the picture beside the document shows that one and
    makes no request. Only a URL nothing local answers is fetched.
 
-   Nothing here blocks. A fetch that has not landed yet answers null, the
+   Fetching is asynchronous; desktop decode and local file reads run on the
+   main thread. A fetch that has not landed yet answers null, the
    element measures and paints its alt text for those frames, and the window
    keeps repainting while `HttpFetchPending` is non-zero — so the picture
    appears when it arrives rather than the frame freezing until it does. */
@@ -29,13 +30,13 @@
 namespace gpui {
 
 // paint.h owns it — one decoded bitmap, in whatever shape the backend keeps.
-struct Image;
+struct RenderImage;
 
 // The decoded image for `src`, or null when there is nothing to draw yet: a
 // fetch still running, a missing asset, a vector picture (see below), or a
 // format this platform does not decode. The result is owned by the cache; do
-// not free it.
-Image* ImageForSrc(PaintApp* pa, Str src);
+// not release it. Retain it explicitly if it must survive cache eviction.
+RenderImage* ImageForSrc(PaintApp* pa, Str src);
 
 // The draw-ops for a src that is a vector picture rather than a bitmap — a
 // local or shipped `.svg`, or one fetched from the network. None of the three

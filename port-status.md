@@ -12,6 +12,13 @@ and wasm. The work left is depth, not breadth.
 
 ## Known gaps vs Rust
 
+- **Image loading uses a bounded process cache.** `src/gpui/image.cpp` keeps
+  32 sources rather than Rust's configurable App/entity caches. Decoded
+  `RenderImage` data uses explicit main-thread retain/release rather than
+  `Arc`; recorded scenes retain their images through replay. Desktop local
+  reads and decoding are synchronous and use platform decoders (PNG-only
+  on Linux); animation and configurable object fitting remain unported.
+
 - **No language server.** Every seam in `input/editor/lsp` is ported —
   completion, resolve, ghost text, hover, code actions, document colours,
   semantic tokens, go-to-definition — but there is no JSON-RPC, no child

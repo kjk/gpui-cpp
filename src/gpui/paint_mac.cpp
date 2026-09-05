@@ -548,14 +548,15 @@ static int U16OffToUtf8(Str s, int u16off) {
 // framework the build does not already link. ImageIO would do the same job
 // one layer down.
 
-struct Image {
+struct RenderImage {
+    int refs = 1;
     uint64_t generation = 0;
     CGImageRef image = nullptr;
     int w = 0;
     int h = 0;
 };
 
-Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     (void)pa;
     if (!bytes || len <= 0) {
         return nullptr;
@@ -569,7 +570,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     if (!cg) {
         return nullptr;
     }
-    auto* img = new Image();
+    auto* img = new RenderImage();
     img->generation = PaintResourceGenerationNew();
     img->image = CGImageRetain(cg);
     img->w = (int)CGImageGetWidth(cg);
@@ -577,8 +578,14 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     return img;
 }
 
-void ImageFree(Image* img) {
-    if (!img) {
+void RenderImageRetain(RenderImage* img) {
+    if (img) {
+        img->refs++;
+    }
+}
+
+void RenderImageRelease(RenderImage* img) {
+    if (!img || --img->refs != 0) {
         return;
     }
     if (img->image) {
@@ -587,18 +594,18 @@ void ImageFree(Image* img) {
     delete img;
 }
 
-uint64_t ImageGeneration(const Image* img) {
+uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
 }
 
-Size ImageSizePx(const Image* img) {
+Size RenderImageSizePx(const RenderImage* img) {
     if (!img) {
         return {};
     }
     return {(float)img->w, (float)img->h};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !img || !img->image || b.w <= 0 || b.h <= 0) {
         return;

@@ -95,7 +95,59 @@ static void PathPlacementRemainsPartOfTheFrameHash() {
     scene::Free(&paint);
 }
 
+// Rust's Arc<RenderImage> keeps decoded pixels alive independently of the
+// loading cache. Exercise that contract across cache eviction and two scenes.
+static void RecordedImagesSurviveCacheEviction() {
+#if !GPUI_OS_WASM
+    TestSuite("scene image ownership");
+    App* owner = AppNew();
+    PaintApp* app = owner ? owner->paint : nullptr;
+    utassert(app);
+    if (!app) return;
+    PaintCtx first = {};
+    PaintCtx second = {};
+    first.pa = second.pa = app;
+    first.viewW = second.viewW = 100;
+    first.viewH = second.viewH = 100;
+    const char* png =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAA"
+        "H/iZk9HQAAAABJRU5ErkJggg==";
+    RenderImage* image =
+        ImageForSrc(app, fmt("data:image/png;base64,%s", Str(png)));
+    utassert(image);
+    if (image) {
+        uint64_t generation = RenderImageGeneration(image);
+        scene::FrameBegin(&first);
+        scene::RecImageDraw(&first, image, Bounds{0, 0, 1, 1}, 0);
+        for (int i = 0; i < 40; i++) {
+            RenderImage* next = ImageForSrc(
+                app, fmt("data:image/png;tag=%d;base64,%s", i, Str(png)));
+            utassert(next);
+            if (next)
+                scene::RecImageDraw(&first, next, Bounds{(float)i, 0, 1, 1}, 0);
+        }
+        Bounds damage = {};
+        scene::FrameEnd(&first, &damage);
+        scene::FrameBegin(&second);
+        scene::RecImageDraw(&second, image, Bounds{0, 0, 1, 1}, 0);
+        scene::FrameEnd(&second, &damage);
+        ImageCacheClear();
+        utassert(RenderImageGeneration(image) == generation);
+        utassert(RenderImageSizePx(image).w == 1);
+        scene::FrameBegin(&first); // Release only this scene's ownership.
+        scene::FrameEnd(&first, &damage);
+        utassert(RenderImageGeneration(image) == generation);
+        utassert(RenderImageSizePx(image).h == 1);
+    }
+    scene::Free(&first);
+    scene::Free(&second);
+    ImageCacheClear();
+    AppFree(owner);
+#endif
+}
+
 void TestScene() {
+    RecordedImagesSurviveCacheEviction();
     FrameComparisonBelongsToOnePaintContext();
     TextLayoutsHaveStableGenerations();
     PathPlacementRemainsPartOfTheFrameHash();

@@ -550,9 +550,10 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps,
 // the rest (hard rule 3: X11, cairo and Pango are the system libraries the
 // Linux build has). So on Linux a JPEG in a document comes out as its alt
 // text, where Windows and macOS decode it — a difference the caller cannot
-// see beyond ImageDecode returning null.
+// see beyond RenderImageDecode returning null.
 
-struct Image {
+struct RenderImage {
+    int refs = 1;
     uint64_t generation = 0;
     cairo_surface_t* surface = nullptr;
     int w = 0;
@@ -577,7 +578,7 @@ static cairo_status_t PngReadFn(void* closure, unsigned char* out,
     return CAIRO_STATUS_SUCCESS;
 }
 
-Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     (void)pa;
     if (!bytes || len <= 0) {
         return nullptr;
@@ -592,7 +593,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
         cairo_surface_destroy(surface);
         return nullptr;
     }
-    auto* img = new Image();
+    auto* img = new RenderImage();
     img->generation = PaintResourceGenerationNew();
     img->surface = surface;
     img->w = cairo_image_surface_get_width(surface);
@@ -600,8 +601,14 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     return img;
 }
 
-void ImageFree(Image* img) {
-    if (!img) {
+void RenderImageRetain(RenderImage* img) {
+    if (img) {
+        img->refs++;
+    }
+}
+
+void RenderImageRelease(RenderImage* img) {
+    if (!img || --img->refs != 0) {
         return;
     }
     if (img->surface) {
@@ -610,18 +617,18 @@ void ImageFree(Image* img) {
     delete img;
 }
 
-uint64_t ImageGeneration(const Image* img) {
+uint64_t RenderImageGeneration(const RenderImage* img) {
     return img ? img->generation : 0;
 }
 
-Size ImageSizePx(const Image* img) {
+Size RenderImageSizePx(const RenderImage* img) {
     if (!img) {
         return {};
     }
     return {(float)img->w, (float)img->h};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     cairo_t* cr = Cr(ctx);
     if (!cr || !img || !img->surface || img->w <= 0 || img->h <= 0 ||
         b.w <= 0 || b.h <= 0) {

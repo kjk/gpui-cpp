@@ -150,7 +150,7 @@ void RecPathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
 void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
                    bool roundCaps);
 
-void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius);
+void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius);
 void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                  bool clip, float clipW);
 

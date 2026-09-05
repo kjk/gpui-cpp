@@ -274,18 +274,21 @@ void PathRealize(PaintCtx* ctx, Path* p);
 // Linux reads PNG and nothing else. gpui/image.h caches what comes back and
 // is what the element tree talks to.
 
-struct Image;
+struct RenderImage;
 
 // Decode `bytes`. Null when the format is not one this platform reads, which
 // the caller shows as the image's alt text.
-Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len);
-void ImageFree(Image* img);
+RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len);
+// Decode returns one owning reference. Retain/Release are main-thread only,
+// the explicit counterpart of Rust's Arc<RenderImage>. GPU storage is separate.
+void RenderImageRetain(RenderImage* img);
+void RenderImageRelease(RenderImage* img);
 // Monotonic identity assigned when the resource is made. Unlike its address,
 // this is never reused while the process runs, so retained-frame hashes do
 // not confuse a new allocation with the object that previously occupied it.
-uint64_t ImageGeneration(const Image* img);
+uint64_t RenderImageGeneration(const RenderImage* img);
 // The image's own size in pixels.
-Size ImageSizePx(const Image* img);
+Size RenderImageSizePx(const RenderImage* img);
 // Draw it scaled into `b`. The caller has already picked the box, so this is
 // a straight stretch — object_fit is decided above.
 // `radius` rounds the corners the picture is drawn into, which is what an
@@ -293,7 +296,8 @@ Size ImageSizePx(const Image* img);
 // the plain rectangle. It is a parameter rather than a clip because a clip
 // here is axis-aligned only, and the four backends all have a cheap way to
 // fill a rounded rect with a picture.
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius = 0);
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b,
+                     float radius = 0);
 
 // ─── shaped text ──────────────────────────────────────────────────────────
 //

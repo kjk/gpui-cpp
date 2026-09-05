@@ -393,7 +393,7 @@ struct D12Pipelines {
 };
 
 struct D12ImageSlot {
-    const Image* img = nullptr;
+    const RenderImage* img = nullptr;
     ID3D12Resource* tex = nullptr;
     int descriptor = -1;
 };
@@ -2726,7 +2726,7 @@ void PathStroke(PaintCtx* ctx, Path* path, float stroke, Rgba c, bool roundCaps,
 constexpr int kImageSlots = 32;
 
 struct ImageSlot {
-    const Image* img = nullptr;
+    const RenderImage* img = nullptr;
     ID3D11ShaderResourceView* srv = nullptr;
 };
 
@@ -2842,7 +2842,7 @@ static void RecoverDevice(PaintCtx* ctx, bool removed) {
     }
 }
 
-static int D12ImageDescriptor(const Image* img) {
+static int D12ImageDescriptor(const RenderImage* img) {
     for (int i = 0; i < gD12.imageCount; i++) {
         if (gD12.images[i].img == img) {
             return gD12.images[i].descriptor;
@@ -2884,7 +2884,7 @@ static int D12ImageDescriptor(const Image* img) {
     return slot->descriptor;
 }
 
-static ID3D11ShaderResourceView* ImageSrv(const Image* img) {
+static ID3D11ShaderResourceView* ImageSrv(const RenderImage* img) {
     for (int i = 0; i < kImageSlots; i++) {
         if (gImages[i].img == img) {
             return gImages[i].srv;
@@ -2925,7 +2925,7 @@ static ID3D11ShaderResourceView* ImageSrv(const Image* img) {
     return srv;
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
+void RenderImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     if (!gB.target || !img || b.w <= 0 || b.h <= 0) {
         return;
     }
@@ -3342,7 +3342,7 @@ void PathFillGradient(PaintCtx*, Path*, float, float, float, float, Rgba, Rgba,
                       float, float) {}
 void PathStroke(PaintCtx*, Path*, float, Rgba, bool, float, float) {}
 void PathRealize(PaintCtx*, Path*) {}
-void ImageDraw(PaintCtx*, Image*, Bounds, float) {}
+void RenderImageDraw(PaintCtx*, RenderImage*, Bounds, float) {}
 void TextLayoutDraw(PaintCtx*, TextLayout*, float, float, Rgba, bool, float) {}
 static FrameStats gEmptyStats;
 const FrameStats& LastFrameStats() {

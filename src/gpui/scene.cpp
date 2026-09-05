@@ -79,8 +79,8 @@ struct Prim {
     Rgba color = {};
     Rgba color2 = {};
     int32_t path = -1;
-    // Image* or TextLayout*, both of which outlive the frame in a cache above
-    // this layer.
+    // RenderImage* is retained by cur; prev holds comparison data only.
+    // TextLayout* is borrowed from the text cache.
     void* ref = nullptr;
     // Monotonic identity from the resource, unlike an address that an
     // allocator may hand to a different resource after this frame.
@@ -366,6 +366,15 @@ static Prim* Emit(PaintCtx* ctx, uint8_t kind, Bounds bbox) {
     return &gCur[gCur.len - 1];
 }
 
+static void ReleaseImages(State* s) {
+    for (Prim& p : s->cur) {
+        if (p.kind == kPImage && p.ref) {
+            RenderImageRelease((RenderImage*)p.ref);
+            p.ref = nullptr;
+        }
+    }
+}
+
 void FrameBegin(PaintCtx* ctx) {
     gActive = StateFor(ctx, true);
     if (!gActive) {
@@ -373,6 +382,7 @@ void FrameBegin(PaintCtx* ctx) {
     }
     gRecording = true;
     gSkipPresent = false;
+    ReleaseImages(gActive);
     VecClear(gCur);
     VecClear(gPaths);
     VecClear(gVerbs);
@@ -675,15 +685,16 @@ void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
     }
 }
 
-void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
+void RecImageDraw(PaintCtx* ctx, RenderImage* img, Bounds b, float radius) {
     Prim* p = Emit(ctx, kPImage, b);
     p->g0 = b.x;
     p->g1 = b.y;
     p->g2 = b.w;
     p->g3 = b.h;
     p->e0 = radius;
+    RenderImageRetain(img);
     p->ref = img;
-    p->resourceGeneration = ImageGeneration(img);
+    p->resourceGeneration = RenderImageGeneration(img);
 }
 
 void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
@@ -861,6 +872,7 @@ void Free(PaintCtx* ctx) {
     gActive = s;
     s->recording = false;
     CacheClear();
+    ReleaseImages(s);
     VecReset(s->cur);
     VecReset(s->prev);
     VecReset(s->paths);
@@ -1131,7 +1143,9 @@ bool FrameEnd(PaintCtx* ctx, Bounds* damage) {
     // it was drawn: what is on screen did not change either way.
     VecClear(gPrev);
     for (int i = 0; i < gCur.len; i++) {
-        VecAppend(gPrev, gCur[i]);
+        Prim previous = gCur[i];
+        previous.ref = nullptr; // Only the hash and bounds survive this frame.
+        VecAppend(gPrev, previous);
     }
     gPrevFrameHash = frameHash;
     gHavePrev = true;
@@ -1231,8 +1245,8 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
                 CanvasEllipse(ctx, p.g0, p.g1, p.g2, p.g3, p.e1, p.color);
                 break;
             case kPImage:
-                ImageDraw(ctx, (Image*)p.ref, Bounds{p.g0, p.g1, p.g2, p.g3},
-                          p.e0);
+                RenderImageDraw(ctx, (RenderImage*)p.ref,
+                                Bounds{p.g0, p.g1, p.g2, p.g3}, p.e0);
                 break;
             case kPText:
                 TextLayoutDraw(ctx, (TextLayout*)p.ref, p.g0, p.g1, p.color,
