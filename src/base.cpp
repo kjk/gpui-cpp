@@ -1938,30 +1938,24 @@ static Str bufFmt(Str buf, const char* fmt, ...) {
 
 // default formatting for {n} positional and %v: format by the arg's runtime
 // type
-static void evalDefault(Fmt& fmt, const FmtArg& arg) {
+static bool evalDefault(Fmt& fmt, const FmtArg& arg) {
     Str buf(fmt.buf, (int)dimof(fmt.buf));
     switch (arg.t) {
         case FmtArg::Kind::Char:
-            fmt.res.AppendChar(arg.c);
-            break;
+            return fmt.res.AppendChar(arg.c);
         case FmtArg::Kind::Int:
-            fmt.res.Append(bufFmt(buf, "%lld", (long long)arg.i));
-            break;
+            return fmt.res.Append(bufFmt(buf, "%lld", (long long)arg.i));
         case FmtArg::Kind::Ptr:
-            fmt.res.Append(bufFmt(buf, "%p", arg.ptr));
-            break;
+            return fmt.res.Append(bufFmt(buf, "%p", arg.ptr));
         case FmtArg::Kind::Float:
             // Note: %G, unlike %f, avoids trailing '0'
-            fmt.res.Append(bufFmt(buf, "%G", (double)arg.f));
-            break;
+            return fmt.res.Append(bufFmt(buf, "%G", (double)arg.f));
         case FmtArg::Kind::Double:
-            fmt.res.Append(bufFmt(buf, "%G", arg.d));
-            break;
+            return fmt.res.Append(bufFmt(buf, "%G", arg.d));
         case FmtArg::Kind::Str:
-            fmt.res.Append(arg.str);
-            break;
+            return fmt.res.Append(arg.str);
         default:
-            break;
+            return true;
     }
 }
 
@@ -1982,7 +1976,7 @@ static int64_t argToI64(const FmtArg& arg) {
 // delegating to snprintf (bufFmt), normalizing the length modifier so the
 // 32/64-bit value width matches printf. %s padding/truncation is done by hand
 // to avoid relying on the Str being NUL-terminated.
-static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
+static bool evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     Str bufS(fmt.buf, (int)dimof(fmt.buf));
 
     if (inst.conv == 's' || inst.conv == 'S') {
@@ -1995,16 +1989,22 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
         pad = std::max(pad, 0);
         if (!inst.leftJust) {
             for (int j = 0; j < pad; j++) {
-                fmt.res.AppendChar(' ');
+                if (!fmt.res.AppendChar(' ')) {
+                    return false;
+                }
             }
         }
-        fmt.res.Append(Str(sv.s, slen));
+        if (!fmt.res.Append(Str(sv.s, slen))) {
+            return false;
+        }
         if (inst.leftJust) {
             for (int j = 0; j < pad; j++) {
-                fmt.res.AppendChar(' ');
+                if (!fmt.res.AppendChar(' ')) {
+                    return false;
+                }
             }
         }
-        return;
+        return true;
     }
 
     // build "%" + flags+width+precision into fbuf
@@ -2019,6 +2019,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     // what bufFmt wrote, for the two cases that reach it from either side of
     // an if.
     Str out;
+    bool ok = true;
     switch (conv) {
         case 'd':
         case 'i':
@@ -2033,7 +2034,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 fbuf[k] = 0;
                 out = bufFmt(bufS, fbuf, (int)ival);
             }
-            fmt.res.Append(out);
+            ok = fmt.res.Append(out);
             break;
         case 'u':
         case 'o':
@@ -2051,12 +2052,12 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 out =
                     bufFmt(bufS, fbuf, (unsigned int)(unsigned long long)ival);
             }
-            fmt.res.Append(out);
+            ok = fmt.res.Append(out);
             break;
         case 'c':
             fbuf[k++] = 'c';
             fbuf[k] = 0;
-            fmt.res.Append(bufFmt(bufS, fbuf, (int)ival));
+            ok = fmt.res.Append(bufFmt(bufS, fbuf, (int)ival));
             break;
         case 'f':
         case 'F':
@@ -2069,7 +2070,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             fbuf[k++] = conv;
             fbuf[k] = 0;
             double dv = (arg.t == FmtArg::Kind::Double) ? arg.d : (double)arg.f;
-            fmt.res.Append(bufFmt(bufS, fbuf, dv));
+            ok = fmt.res.Append(bufFmt(bufS, fbuf, dv));
         } break;
         case 'p': {
             // flags/width are uncommon (and platform-specific) for %p; emit
@@ -2077,11 +2078,12 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             const void* pv = (arg.t == FmtArg::Kind::Ptr)
                                  ? arg.ptr
                                  : (const void*)(intptr_t)ival;
-            fmt.res.Append(bufFmt(bufS, "%p", pv));
+            ok = fmt.res.Append(bufFmt(bufS, "%p", pv));
         } break;
         default:
             break;
     }
+    return ok;
 }
 
 bool Fmt::Eval(const FmtArg** args, int nArgs) {
@@ -2094,7 +2096,10 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
         auto& inst = instructions[n];
 
         if (inst.t == FmtArg::Kind::RawStr) {
-            res.Append(Str(format.s + inst.rawOff, inst.sLen));
+            if (!res.Append(Str(format.s + inst.rawOff, inst.sLen))) {
+                isOk = false;
+                return false;
+            }
             continue;
         }
 
@@ -2110,10 +2115,15 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
             return false;
         }
 
-        if (inst.t == FmtArg::Kind::Any) {
-            evalDefault(*this, arg);
-        } else {
-            evalPercInst(*this, inst, arg);
+        // An append that could not allocate has to be told apart from one
+        // that worked, or Eval answers true over a string missing the middle
+        // of it.
+        bool appended = (inst.t == FmtArg::Kind::Any)
+                            ? evalDefault(*this, arg)
+                            : evalPercInst(*this, inst, arg);
+        if (!appended) {
+            isOk = false;
+            return false;
         }
     }
     return true;
