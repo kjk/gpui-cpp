@@ -1409,7 +1409,11 @@ static void StrBuilderTerminate(StrBuilder& b) {
 // VecReserve marks arena storage as owned. Flip the sign so ~Vec leaves the
 // arena's block alone, using the same representation as a lent buffer.
 static char* StrBuilderEnsureCap(StrBuilder& b, int needed) {
-    char* els = VecReserve(b.a, b, needed);
+    // StrBuilder adds its allocator after the Vec base, so it is not a
+    // standard-layout type. Give VecReserve the base subobject its offset
+    // checks are written for.
+    Vec<char>& storage = b;
+    char* els = VecReserve(b.a, storage, needed);
     if (!els) {
         return nullptr;
     }
