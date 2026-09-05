@@ -1429,6 +1429,14 @@ RenderImage* RenderImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     IWICImagingFactory* wic = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
+    if (hr == CO_E_NOTINITIALIZED) {
+        // Decoding is the one thing here that needs COM, and it can run on a
+        // thread the window layer never initialized: a fetch's worker, or the
+        // test suite, which makes a PaintApp and no window at all.
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                              CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
+    }
     if (FAILED(hr) || !wic) {
         return nullptr;
     }

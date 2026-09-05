@@ -14,6 +14,7 @@ static bool RecordClear(PaintCtx* paint, Rgba color) {
     return scene::FrameEnd(paint, &damage);
 }
 
+#if !GPUI_OS_WASM
 struct CustomImageSourceTest {
     RenderImage* image = nullptr;
     int calls = 0;
@@ -26,6 +27,7 @@ static ImageLoadState LoadCustomImage(PaintApp*, void* user,
     *image = test->image;
     return test->image ? ImageLoadState::Ready : ImageLoadState::Loading;
 }
+#endif
 
 static void FrameComparisonBelongsToOnePaintContext() {
     TestSuite("scene window ownership");
@@ -113,8 +115,9 @@ static void PathPlacementRemainsPartOfTheFrameHash() {
 static void RecordedImagesSurviveCacheEviction() {
 #if !GPUI_OS_WASM
     TestSuite("scene image ownership");
-    App* owner = AppNew();
-    PaintApp* app = owner ? owner->paint : nullptr;
+    // A PaintApp is all the image table needs; AppNew would also want a
+    // display, and CI has none.
+    PaintApp* app = PaintAppNew();
     utassert(app);
     if (!app) return;
     PaintCtx first = {};
@@ -155,7 +158,7 @@ static void RecordedImagesSurviveCacheEviction() {
     scene::Free(&first);
     scene::Free(&second);
     ImageCacheClear();
-    AppFree(owner);
+    PaintAppFree(app);
 #endif
 }
 
@@ -184,11 +187,16 @@ static void ObjectFitMatchesGpuiGeometry() {
 
 static void FailedImagesLayOutTheirFallback() {
     TestSuite("image fallback layout");
-    App* owner = AppNew();
+    App owner;
+    PaintApp* app = PaintAppNew();
+    utassert(app);
+    if (!app) {
+        return;
+    }
     Arena* arena = ArenaNew();
     PaintCtx paint = {};
-    paint.pa = owner ? owner->paint : nullptr;
-    paint.app = owner;
+    paint.pa = app;
+    paint.app = &owner;
     paint.viewW = 100;
     paint.viewH = 100;
     El* fallback = Div(arena)->W(30)->H(40);
@@ -202,7 +210,8 @@ static void FailedImagesLayOutTheirFallback() {
     utassert(image->first == fallback && image->last == fallback);
     utassert(image->w == 30 && image->h == 40);
     ArenaDelete(arena);
-    AppFree(owner);
+    ImageCacheClear();
+    PaintAppFree(app);
 }
 
 static void ImageSourceVariantsResolveWithoutCopyingOwners() {
@@ -215,8 +224,7 @@ static void ImageSourceVariantsResolveWithoutCopyingOwners() {
         0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
         0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00,
         0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
-    App* owner = AppNew();
-    PaintApp* app = owner ? owner->paint : nullptr;
+    PaintApp* app = PaintAppNew();
     utassert(app);
     if (!app) {
         return;
@@ -235,7 +243,8 @@ static void ImageSourceVariantsResolveWithoutCopyingOwners() {
     utassert(ImageSourceState(app, custom) == ImageLoadState::Ready);
     utassert(ImageForSource(app, custom) == decoded);
     utassert(loader.calls == 2);
-    AppFree(owner);
+    ImageCacheClear();
+    PaintAppFree(app);
 #endif
 }
 
