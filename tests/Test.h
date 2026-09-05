@@ -122,6 +122,7 @@ void TestClick();
 void TestVec();
 void TestElementId();
 void TestHoverCard();
+void TestArena();
 void TestArenaVec();
 void TestDrawOps();
 void TestHttp();
